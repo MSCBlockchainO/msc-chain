@@ -1,0 +1,441 @@
+CHAIN config loaded: chain_id=91938 moniker=Mainnet-Node-1 genesis_path=genesis.json genesis_hash=2529673d9a1bc5343e62e20d53cc463f07f9be61815d00ee7e2105f0a85a00ab
+P2P config loaded: listen= external= seeds=4 persistent=4 persist_peer_id_refresh=false
+P2P config loaded: persist_peer_id_refresh=false (explicit)
+P2P config loaded: prune_localhost_on_refused=true (explicit)
+P2P config loaded: prune_localhost_refused_failures=3 (explicit)
+CONSENSUS config loaded: propose=3s prevote=1s precommit=1s commit=5s min_block_interval=4s recompute_pause=4s weak_subjectivity_depth=2048 max_future_gap=256 validator_set_commitment_v2_height=1 validator_set_hash_v3_height=0 deterministic_tx_order=true round_timeout=2s round_max=0 round_skew=1 barrier_relax=1m0s barrier_drop=1 barrier_retry_mode=per_block exec_quorum_emergency=true exec_quorum_emergency_stall=8s penalty_mode=converged_only invalid_proposer_q=4 exec_mismatch_q=3 exec_mismatch_slash=5 propose_requires_sync_ready=true post_block_safe_mode=true safe_mode_min=2s safe_mode_max=8s safe_mode_history=32 safe_mode_live_quorum_bps=6700
+CONSENSUS config loaded: weak_subjectivity_depth=2048 (explicit)
+CONSENSUS config loaded: max_future_block_gap=256 (explicit)
+CONSENSUS config loaded: validator_set_commitment_v2_height=1 (explicit)
+CONSENSUS config loaded: enforce_deterministic_tx_order=true (explicit)
+CONSENSUS config loaded: proposer_round_timeout_seconds=2 (explicit)
+CONSENSUS config loaded: proposer_round_max_skew=1 (explicit)
+CONSENSUS config loaded: transition_barrier_relax_seconds=60 (explicit)
+CONSENSUS config loaded: transition_barrier_max_drop=1 (explicit)
+CONSENSUS config loaded: transition_barrier_retry_mode=per_block (explicit)
+CONSENSUS config loaded: exec_quorum_emergency_enabled=true (explicit)
+CONSENSUS config loaded: exec_quorum_emergency_stall_seconds=8 (explicit)
+CONSENSUS config loaded: penalty_enforce_mode=converged_only (explicit)
+CONSENSUS config loaded: invalid_proposer_quarantine_after=4 (explicit)
+CONSENSUS config loaded: exec_mismatch_quarantine_after=3 (explicit)
+CONSENSUS config loaded: exec_mismatch_slash_after=5 (explicit)
+CONSENSUS config loaded: propose_requires_sync_ready=true (explicit)
+CONSENSUS config loaded: core_pending_excluded_from_proposer=true (explicit)
+CONSENSUS config loaded: core_activation_effective_height_buffer=64 (explicit)
+CONSENSUS config loaded: post_block_safe_mode_enabled=true (explicit)
+CONSENSUS config loaded: post_block_safe_mode_min_seconds=2 (explicit)
+CONSENSUS config loaded: post_block_safe_mode_max_seconds=8 (explicit)
+CONSENSUS config loaded: post_block_safe_mode_history_blocks=32 (explicit)
+CONSENSUS config loaded: post_block_safe_mode_live_quorum_bps=6700 (explicit)
+RPC config loaded: addr=127.0.0.1:26657 cors=[*] tls_cert=false tls_key=false auth_read=false auth_submit=false token_full=false token_read=false token_submit=false
+VALIDATOR config loaded: dynamic=true deterministic=true equal_chance=true active_set=5 min_active=4 min_stake=100 cap=0.0500 uptime_window=1000 recovery=0.30 long_uptime=0.95 require_stake=true core_stake_exempt=true onboarding_grace_blocks=64 onboarding_max_new_slots=1 onboarding_strict_activation=true activation_delay=5 activation_model_v2_height=0 inactive_remove_blocks=8 rotation_window=50 banned=0 inactivity_penalty=true burn_bps=100 jail=500 cooldown=50 inactive_permanent=false heartbeat_ttl=25s grace=10s drift_blocks=8 rejoin_heartbeats=3 rejoin_signed=1 rejoin_window=16 fail_on_key_unavailable=true allow_identity_rotation=false active_set_mode=adaptive_committee max_active_committee=512 adaptive_log_mult=16 committee_rotation=32 activity_window=64 min_signed=1 heartbeat_scope=committee_only required_key_fingerprint= backup_required=true backup_dir=secure-backups backup_max_age_h=24 restore_on_missing=true allow_env_password_in_production=true password_mode=file_or_prompt
+VALIDATOR config loaded: equal_chance_selection=true (explicit)
+VALIDATOR config loaded: require_stake=true (explicit)
+VALIDATOR config loaded: core_stake_exempt=true (explicit)
+VALIDATOR config loaded: inactivity_penalty_enabled=true (explicit)
+VALIDATOR config loaded: inactivity_penalty_burn_bps=100 (explicit)
+VALIDATOR config loaded: inactivity_penalty_jail_blocks=500 (explicit)
+VALIDATOR config loaded: inactivity_penalty_cooldown_blocks=50 (explicit)
+VALIDATOR config loaded: permanent_remove_on_inactive=false (explicit)
+VALIDATOR config loaded: liveness_heartbeat_ttl_seconds=25 (explicit)
+VALIDATOR config loaded: liveness_grace_seconds=10 (explicit)
+VALIDATOR config loaded: liveness_max_height_drift_blocks=8 (explicit)
+VALIDATOR config loaded: rejoin_required_heartbeats=3 (explicit)
+VALIDATOR config loaded: rejoin_required_signed_blocks=1 (explicit)
+VALIDATOR config loaded: rejoin_window_blocks=16 (explicit)
+VALIDATOR config loaded: fail_on_key_unavailable=true (explicit)
+VALIDATOR config loaded: allow_identity_rotation_on_existing_chain=false (explicit)
+VALIDATOR config loaded: active_set_mode=adaptive_committee (explicit)
+VALIDATOR config loaded: max_active_committee=512 (explicit)
+VALIDATOR config loaded: adaptive_committee_log_multiplier=16 (explicit)
+VALIDATOR config loaded: committee_rotation_blocks=32 (explicit)
+VALIDATOR config loaded: selection_activity_window_blocks=64 (explicit)
+VALIDATOR config loaded: selection_min_signed_blocks=1 (explicit)
+VALIDATOR config loaded: onboarding_grace_blocks=64 (explicit)
+VALIDATOR config loaded: onboarding_max_new_slots=1 (explicit)
+VALIDATOR config loaded: onboarding_strict_activation=true (explicit)
+VALIDATOR config loaded: validator_set_activation_model_v2_height=0 (explicit)
+VALIDATOR config loaded: validator_set_autoheal_mode=validator_quorum (explicit)
+VALIDATOR config loaded: validator_set_autoheal_trusted_only_on_mismatch=true (explicit)
+VALIDATOR config loaded: validator_set_autoheal_near_tip_force_after=2 (explicit)
+VALIDATOR config loaded: validator_set_autoheal_pause_seconds=6 (explicit)
+VALIDATOR config loaded: onboarding_bootstrap_lane_enabled=true (explicit)
+VALIDATOR config loaded: onboarding_bootstrap_max_new_slots=1 (explicit)
+VALIDATOR config loaded: onboarding_bootstrap_require_stake=true (explicit)
+VALIDATOR config loaded: onboarding_bootstrap_require_not_jailed=true (explicit)
+VALIDATOR config loaded: heartbeat_scope=committee_only (explicit)
+VALIDATOR config loaded: required_key_fingerprint= (explicit)
+VALIDATOR config loaded: key_backup_required=true (explicit)
+VALIDATOR config loaded: key_backup_dir=secure-backups (explicit)
+VALIDATOR config loaded: key_backup_max_age_hours=24 (explicit)
+VALIDATOR config loaded: key_restore_allowed_on_missing=true (explicit)
+VALIDATOR config loaded: allow_env_password_in_production=true (explicit)
+VALIDATOR config loaded: core_env_password_allowed=true (explicit)
+VALIDATOR config loaded: core_password_file= (explicit)
+VALIDATOR config loaded: password_mode=file_or_prompt (explicit)
+PROMO config loaded: obs=50 dcs=0.8500 uptime=98.00% div=70.00% div_epochs=20 srp=0.9000 srp_alpha=0.15 rate=1/100 test=false
+NET config loaded: disable_dht=false block_public_peers=false diversity=true max_subnet=8 v4=24 v6=64 self_heal=true interval=5s min_peers=3 stall=20s autonat=false relay=false hole_punch=false
+NET config loaded: mdns=true
+NET config loaded: peer_diversity_enabled=true (explicit)
+NET config loaded: peer_diversity_max_per_subnet=8 (explicit)
+NET config loaded: peer_diversity_ipv4_prefix=24 (explicit)
+NET config loaded: peer_diversity_ipv6_prefix=64 (explicit)
+SYNC config loaded: snapshot_threshold_blocks=2000 (explicit)
+SYNC config loaded: fresh_join_fallback_block_replay_enabled=true (explicit)
+SYNC config loaded: snapshot_publish_new_node_threshold_blocks=50 (explicit)
+SYNC config loaded: snapshot_publish_lag_threshold_blocks=20 (explicit)
+SYNC config loaded: snapshot_publish_reannounce_cooldown_seconds=12 (explicit)
+SYNC config loaded: snapshot_warmup_seconds=10 (explicit)
+SYNC config loaded: fast_block_sync_max_blocks=256 (explicit)
+SYNC config loaded: restart_snapshot_grace_blocks=256 (explicit)
+SYNC config loaded: delta_replay_max_blocks=50000 (explicit)
+SYNC config loaded: delta_replay_batch_blocks=1024 (explicit)
+SYNC config loaded: delta_replay_verify_workers=8 (explicit)
+SYNC config loaded: direct_gossip_max_blocks=128 (explicit)
+SYNC config loaded: range_fetch_max_blocks=50000 (explicit)
+SYNC config loaded: snapshot_delta_max_blocks=10000000 (explicit)
+SYNC config loaded: snapshot_chunk_size_bytes=1048576 (explicit)
+SYNC config loaded: snapshot_parallel_chunks=8 (explicit)
+SYNC config loaded: sync_stall_seconds=180 (explicit)
+SYNC config loaded: sync_peer_timeout_seconds=15 (explicit)
+SYNC config loaded: snapshot_anchor_timeout_seconds=10 (explicit)
+SYNC config loaded: snapshot_anchor_max_retries=6 (explicit)
+SYNC config loaded: checkpoint_interval_blocks=32 (explicit)
+SYNC config loaded: snapshot_checkpoint_domain=MSC_SNAPSHOT_V1 (explicit)
+SYNC config loaded: snapshot_checkpoint_v2_height=0 (explicit)
+SYNC config loaded: snapshot_session_ttl_seconds=0 (explicit)
+SYNC config loaded: snapshot_quorum_apply_watchdog_seconds=15 (explicit)
+SYNC config loaded: snapshot_session_reset_watchdog_seconds=60 (explicit)
+SYNC config loaded: snapshot_invalid_proof_quarantine_after=3 (explicit)
+SYNC config loaded: history_mode=background (explicit)
+SYNC config loaded: trusted_snapshot_require_checkpoint_proof=true (explicit)
+EVM config ignored: stack hard-disabled in this build
+DTL config loaded: contract_runtime_removed=true contracts_v2=false compat_rpc_subset=false v2_activation_height=0 logs_index_enabled=true oracle_min_signers=3 oracle_staleness=120 lending_accrual_interval=1 beacon_delay=8 router_enabled=true router_max_hops=4 router_deadline_max_blocks=30 router_max_price_impact_bps=3000 router_quote_max_paths=16 defi_farm_enabled=true gamefi_season_enabled=true gamefi_reward_token=MSC
+WARN dtl.solidity_like_runtime_enabled ignored: contract runtime removed
+DTL config loaded: contracts_v2_enabled=false (explicit)
+DTL config loaded: compat_rpc_subset_enabled=false (explicit)
+DTL config loaded: v2_activation_height=0 (explicit)
+DTL config loaded: logs_index_enabled=true (explicit)
+DTL config loaded: oracle_min_signers=3 (explicit)
+DTL config loaded: oracle_max_staleness_blocks=120 (explicit)
+DTL config loaded: lending_accrual_interval_blocks=1 (explicit)
+DTL config loaded: game_beacon_delay_blocks=8 (explicit)
+WARN dtl.max_contract_call_depth ignored: contract runtime removed
+WARN dtl.bytecode_runtime_enabled ignored: contract runtime removed
+WARN dtl.bytecode_activation_height ignored: contract runtime removed
+WARN dtl.bytecode_max_size ignored: contract runtime removed
+WARN dtl.bytecode_require_canonical ignored: contract runtime removed
+DTL config loaded: router_enabled=true (explicit)
+DTL config loaded: router_max_hops=4 (explicit)
+DTL config loaded: router_deadline_max_blocks=30 (explicit)
+DTL config loaded: router_max_price_impact_bps=3000 (explicit)
+DTL config loaded: router_quote_max_paths=16 (explicit)
+DTL config loaded: defi_farm_enabled=true (explicit)
+DTL config loaded: gamefi_season_enabled=true (explicit)
+DTL config loaded: gamefi_reward_token=MSC (explicit)
+DTL config loaded: gamefi_season_length_blocks=43200 (explicit)
+DTL config loaded: gamefi_claim_grace_blocks=21600 (explicit)
+DTL config loaded: gamefi_fee_share_from_pool_bps=2500 (explicit)
+DTL config loaded: gamefi_fee_share_from_lending_bps=2000 (explicit)
+DTL config loaded: gamefi_duel_win_points=100 (explicit)
+DTL config loaded: gamefi_tournament_win_points=600 (explicit)
+DTL config loaded: gamefi_tournament_participation_points=80 (explicit)
+DTL config loaded: farm_min_stake_blocks=50 (explicit)
+DTL config loaded: farm_lp_points_per_block=1 (explicit)
+DTL config loaded: farm_max_multiplier_bps=30000 (explicit)
+DTL config loaded: gamefi_max_reward_per_account_per_season=1000000 (explicit)
+[DTL-CONTRACT-RUNTIME] removed=true
+TOKENOMICS config loaded: allow_treasury_ops=false
+TOKENOMICS config loaded: random_user_reward_enabled=true
+TOKENOMICS config loaded: random_user_reward_chance_bps=2500
+TOKENOMICS config loaded: emission_enabled=true
+TOKENOMICS config loaded: emission_min_reward=2
+TOKENOMICS config loaded: emission_max_reward=4
+TOKENOMICS config loaded: work_block_reward_enabled=true
+TOKENOMICS config loaded: work_block_base_reward=2
+TOKENOMICS config loaded: emission_jackpot_chance_bps=100
+TOKENOMICS config loaded: emission_base_chance_bps=10000
+TOKENOMICS config loaded: emission_high_chance_after_blocks=1105840
+TOKENOMICS config loaded: emission_high_chance_bps=10000
+TOKENOMICS config loaded: emission_halving_interval_blocks=1105840
+TOKENOMICS config loaded: emission_treasury_bps=2000
+TOKENOMICS config loaded: emission_validator_bps=7200
+TOKENOMICS config loaded: emission_burn_bps=800
+TOKENOMICS config loaded: emission_interval_mode=false
+TOKENOMICS config loaded: emission_gap_min_blocks=4
+TOKENOMICS config loaded: emission_gap_max_blocks=6
+TOKENOMICS config loaded: emission_validator_to_proposer=false
+TOKENOMICS config loaded: supply_burn_floor=62000000
+TOKENOMICS config loaded: unified_team_reward_enabled=true
+TOKENOMICS config loaded: unified_team_reward_treasury_bps=2000
+TOKENOMICS config loaded: unified_team_reward_proposer_bps=3500
+TOKENOMICS config loaded: unified_team_reward_validator_bps=4500
+AUTH config loaded: require_wallet=true open_browser=true timeout=600s challenge_ttl=180s token_ttl=86400s core=[A B C D]
+CORE config loaded: registry_path=core_validators.json (explicit)
+CORE config loaded: registry_enforcement=warn (explicit)
+CORE config loaded: registry_min_signatures=0 (explicit)
+CORE config loaded: registry_reload_seconds=10 (explicit)
+STORAGE config loaded: key_env=MSC_DB_ENCRYPTION_KEY key_file= key_hex=false key_b64=false
+STORAGE runtime: db_encryption=false
+2026/05/22 13:19:19 RPC address resolved: 127.0.0.1:26801 (source=cli)
+===============================================
+===============================================
+Node ID     : A
+Mode        : full
+Role        : validator
+Data Dir    : data\sync-gap-live-20260522-131918\A
+Listen Port : 7301
+===============================================
+2026/05/22 13:19:19 [KEY-RESTORE] validator=A source=backup result=failed error=GetFileAttributesEx C:\Users\Mohammad Talha\OneDrive\Desktop\msc-chain\data\sync-gap-live-20260522-131918\A\node_A\secure-backups\validator.sec.bak: The system cannot find the path specified.
+2026/05/22 13:19:19 [WARN] validator key auto-create override MSC_ALLOW_VALIDATOR_KEY_CREATE=1 for A; new key changes peer ID. Update p2p.persistent_peers/peers.json and remove override after bootstrap
+2026/05/22 13:19:19 validator key created & encrypted
+2026/05/22 13:19:19 [KEY-AUDIT] validator=A backup_present=true backup_age_s=0 integrity=true
+2026/05/22 13:19:19 [IDENTITY] key_loaded=true validator=A fingerprint=e3d06cf9a6bb0826 expected= match=true source=generated mode=strict
+2026/05/22 13:19:19 SECURITY: storage DB encryption is disabled. Configure [storage] encryption key and OS disk encryption (BitLocker/LUKS/FileVault).
+2026/05/22 13:19:19 ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Genesis loaded from genesis.json (authoritative)
+2026/05/22 13:19:19 [AUTOHEAL] startup_recovery_applied height=0 frozen_sets=1
+Validator A: wallet auth not required by current policy
+2026/05/22 13:19:19 EVM/VM routes removed permanently. DTL JSON-RPC available at /rpc
+2026/05/22 13:19:19 [SYNC-PIPELINE] stage=live_consensus
+Ã¢ÂÂ³ Waiting for sync completion before consensus start (height=0 finalized=0)
+===============================================
+===============================================
+Peer ID  : n/a
+Height   : 0
+Peers    : 0
+===============================================
+msc[A]> 2026/05/22 13:19:19 [WARN] interactive CLI input closed; node keeps running: EOF
+2026/05/22 13:19:19 [P2P-ID] identity key=data\sync-gap-live-20260522-131918\A\node_A\p2p_identity.key peer_id=12D3KooWDsfBUwSDR2gqcpdNtTSKUjSGRqS68RjdqhNR8rTUJbUo
+Ã°Å¸Å’Â LibP2P host initialized
+Ã°Å¸â€ â€ PeerID: 12D3KooWDsfBUwSDR2gqcpdNtTSKUjSGRqS68RjdqhNR8rTUJbUo
+Ã°Å¸â€œÂ Listening addresses:
+  /ip4/127.0.0.1/tcp/7301/p2p/12D3KooWDsfBUwSDR2gqcpdNtTSKUjSGRqS68RjdqhNR8rTUJbUo
+P2P stack: discovery=DNS seeds + DHT + mDNS, transport=QUIC, security=Noise, messaging=GossipSub, NAT=UPnP + Relay
+Ã°Å¸â€œÅ  Host info: Addrs=1 DHT=true
+mDNS auto-disabled on Windows (set MSC_FORCE_MDNS=1 to force-enable)
+ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¡ PubSub topics initialized (MSC)
+   msc-block        block propagation
+   msc-tx           mempool ingress
+   msc-consensus    exec/commit/snapshot
+   msc-validator    validator gossip
+   msc-snapshot-meta snapshot manifest metadata
+   msc-snapshot-chunk snapshot chunk availability
+   msc-snapshot-proof snapshot anchor proofs
+Ã°Å¸â€Â§ Network protocols configured
+Ã¢Å“â€¦ Listening for transactions...
+2026/05/22 13:19:19 [SNAPSHOT-PUBLISH-REQUIRED] validator=A policy=strict_snapshot_only
+Ã¢Å“â€¦ Listening for blocks...
+Validator heartbeat: A | reported_height=0 | finalized_height=0 | local_exec_epoch=1
+2026/05/22 13:19:19 [SNAPSHOT-PUBLISH-REQUIRED] validator=A height=0 error=committed tip unavailable
+Heartbeat sent: A finalized=0 epoch=1
+Attempting to connect to 4 peers
+Failed to connect to peer /ip4/127.0.0.1/tcp/7004/p2p/12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W: connection failed: failed to dial: failed to dial 12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W: all dials failed
+  * [/ip4/127.0.0.1/tcp/7004] dial backoff
+Consensus started for node A | mode=validator vote=true propose=true
+Failed to connect to peer /ip4/127.0.0.1/tcp/7002/p2p/12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk: connection failed: failed to dial: failed to dial 12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk: all dials failed
+  * [/ip4/127.0.0.1/tcp/7002] dial backoff
+Failed to connect to peer /ip4/127.0.0.1/tcp/7003/p2p/12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8: connection failed: failed to dial: failed to dial 12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8: all dials failed
+  * [/ip4/127.0.0.1/tcp/7003] dial backoff
+Failed to connect to peer /ip4/127.0.0.1/tcp/7001/p2p/12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg: connection failed: failed to dial: failed to dial 12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg: all dials failed
+  * [/ip4/127.0.0.1/tcp/7001] dial backoff
+Ã°Å¸â€â€ž Bootstrapping DHT...
+Ã¢Å“â€¦ DHT bootstrap complete
+Ã°Å¸â€Â Starting DHT peer discovery...
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+Dial backoff active; skipping peer 12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk
+Dial backoff active; skipping peer 12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W
+Dial backoff active; skipping peer 12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg
+Dial backoff active; skipping peer 12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:19:27 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:19:31.3117247+05:30
+2026/05/22 13:19:29 [OK] goroutine pressure normalized: 147 (degrade mode off)
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+Failed to connect to peer /ip4/127.0.0.1/tcp/7004/p2p/12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W: connection failed: failed to dial: failed to dial 12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W: all dials failed
+  * [/ip4/127.0.0.1/tcp/7004] dial tcp4 127.0.0.1:7004: connectex: No connection could be made because the target machine actively refused it.
+Failed to connect to peer /ip4/127.0.0.1/tcp/7003/p2p/12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8: connection failed: failed to dial: failed to dial 12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8: all dials failed
+  * [/ip4/127.0.0.1/tcp/7003] dial tcp4 127.0.0.1:7003: connectex: No connection could be made because the target machine actively refused it.
+Failed to connect to peer /ip4/127.0.0.1/tcp/7001/p2p/12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg: connection failed: failed to dial: failed to dial 12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg: all dials failed
+  * [/ip4/127.0.0.1/tcp/7001] dial tcp4 127.0.0.1:7001: connectex: No connection could be made because the target machine actively refused it.
+Failed to connect to peer /ip4/127.0.0.1/tcp/7002/p2p/12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk: connection failed: failed to dial: failed to dial 12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk: all dials failed
+  * [/ip4/127.0.0.1/tcp/7002] dial tcp4 127.0.0.1:7002: connectex: No connection could be made because the target machine actively refused it.
+2026/05/22 13:19:31 [SNAPSHOT-PUBLISH-REQUIRED] validator=A height=0 error=committed tip unavailable
+Validator heartbeat: A | reported_height=0 | finalized_height=0 | local_exec_epoch=1
+Heartbeat sent: A finalized=0 epoch=1
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:19:33 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:19:37.311381+05:30
+[CONSENSUS] height=0 vhash=cda45a02 validators=4
+[STATUS] height=0 finalized=0 peers=0 validators=1 strict_live=1 heartbeat_live=1 out_of_drift=0 drift_limit=8 syncing=false sync_complete=true execution_ready=true execution_reason=ready gossip=false gossip_pipeline=gossip_transport_partial consensus_running=true mode=validator vote=true propose=true role=validator validator_state=active warmup_seconds=0 ready=false reason=waiting_quorum_1_of_3 snapshot_source=none expected_source=frozen expected_hash=cda45a02 resolved_source=genesis_bootstrap resolved_hash= next_source=carry_forward next_hash=cda45a02 got_hash= authority=frozen hash_mode=legacy
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+Dial backoff active; skipping peer 12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8
+Dial backoff active; skipping peer 12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk
+Dial backoff active; skipping peer 12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W
+Dial backoff active; skipping peer 12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:19:39 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:19:43.3117761+05:30
+2026/05/22 13:19:39 [OK] goroutine pressure normalized: 147 (degrade mode off)
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+Dial backoff active; skipping peer 12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk
+Dial backoff active; skipping peer 12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg
+Dial backoff active; skipping peer 12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W
+Dial backoff active; skipping peer 12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8
+2026/05/22 13:19:43 [SNAPSHOT-PUBLISH-REQUIRED] validator=A height=0 error=committed tip unavailable
+Attempting to connect to 4 peers
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+Validator heartbeat: A | reported_height=0 | finalized_height=0 | local_exec_epoch=1
+Heartbeat sent: A finalized=0 epoch=1
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:19:45 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:19:49.3109055+05:30
+Dial backoff active; skipping peer 12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8
+Dial backoff active; skipping peer 12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg
+Dial backoff active; skipping peer 12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk
+Dial backoff active; skipping peer 12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W
+[CONSENSUS] height=0 vhash=cda45a02 validators=4
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[STATUS] height=0 finalized=0 peers=0 validators=1 strict_live=1 heartbeat_live=1 out_of_drift=0 drift_limit=8 syncing=false sync_complete=true execution_ready=true execution_reason=ready gossip=false gossip_pipeline=gossip_transport_partial consensus_running=true mode=validator vote=true propose=true role=validator validator_state=active warmup_seconds=0 ready=false reason=waiting_quorum_1_of_3 snapshot_source=none expected_source=frozen expected_hash=cda45a02 resolved_source=genesis_bootstrap resolved_hash= next_source=carry_forward next_hash=cda45a02 got_hash= authority=frozen hash_mode=legacy
+2026/05/22 13:19:49 [OK] goroutine pressure normalized: 147 (degrade mode off)
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+Dial backoff active; skipping peer 12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg
+Dial backoff active; skipping peer 12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W
+Dial backoff active; skipping peer 12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8
+Dial backoff active; skipping peer 12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:19:51 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:19:55.313028+05:30
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+Dial backoff active; skipping peer 12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+2026/05/22 13:19:55 [SNAPSHOT-PUBLISH-REQUIRED] validator=A height=0 error=committed tip unavailable
+Dial backoff active; skipping peer 12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg
+Dial backoff active; skipping peer 12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8
+Dial backoff active; skipping peer 12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:19:57 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:20:01.3109844+05:30
+Validator heartbeat: A | reported_height=0 | finalized_height=0 | local_exec_epoch=1
+Heartbeat sent: A finalized=0 epoch=1
+2026/05/22 13:19:59 [OK] goroutine pressure normalized: 147 (degrade mode off)
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+Dial backoff active; skipping peer 12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk
+Dial backoff active; skipping peer 12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg
+Dial backoff active; skipping peer 12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8
+2026/05/22 13:20:01 [WARN] pruning localhost peer after 3 refused dials: peer=12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W addr=/ip4/127.0.0.1/tcp/7004
+?? Peer forgotten: 12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W reason=dial_refused_localhost
+Failed to connect to peer /ip4/127.0.0.1/tcp/7004/p2p/12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W: connection failed: failed to dial: failed to dial 12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W: all dials failed
+  * [/ip4/127.0.0.1/tcp/7004] dial tcp4 127.0.0.1:7004: connectex: No connection could be made because the target machine actively refused it.
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:20:03 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:20:07.3111901+05:30
+[CONSENSUS] height=0 vhash=cda45a02 validators=4
+[STATUS] height=0 finalized=0 peers=0 validators=1 strict_live=1 heartbeat_live=1 out_of_drift=0 drift_limit=8 syncing=false sync_complete=true execution_ready=true execution_reason=ready gossip=false gossip_pipeline=gossip_transport_partial consensus_running=true mode=validator vote=true propose=true role=validator validator_state=active warmup_seconds=0 ready=false reason=waiting_quorum_1_of_3 snapshot_source=none expected_source=frozen expected_hash=cda45a02 resolved_source=genesis_bootstrap resolved_hash= next_source=carry_forward next_hash=cda45a02 got_hash= authority=frozen hash_mode=legacy
+Attempting to connect to 3 peers
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+2026/05/22 13:20:04 [WARN] pruning localhost peer after 3 refused dials: peer=12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg addr=/ip4/127.0.0.1/tcp/7001
+?? Peer forgotten: 12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg reason=dial_refused_localhost
+Failed to connect to peer /ip4/127.0.0.1/tcp/7001/p2p/12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg: connection failed: failed to dial: failed to dial 12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg: all dials failed
+  * [/ip4/127.0.0.1/tcp/7001] dial tcp4 127.0.0.1:7001: connectex: No connection could be made because the target machine actively refused it.
+2026/05/22 13:20:05 [WARN] pruning localhost peer after 3 refused dials: peer=12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8 addr=/ip4/127.0.0.1/tcp/7003
+?? Peer forgotten: 12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8 reason=dial_refused_localhost
+Failed to connect to peer /ip4/127.0.0.1/tcp/7003/p2p/12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8: connection failed: failed to dial: failed to dial 12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8: all dials failed
+  * [/ip4/127.0.0.1/tcp/7003] dial tcp4 127.0.0.1:7003: connectex: No connection could be made because the target machine actively refused it.
+2026/05/22 13:20:05 [WARN] pruning localhost peer after 3 refused dials: peer=12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk addr=/ip4/127.0.0.1/tcp/7002
+?? Peer forgotten: 12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk reason=dial_refused_localhost
+Failed to connect to peer /ip4/127.0.0.1/tcp/7002/p2p/12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk: connection failed: failed to dial: failed to dial 12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk: all dials failed
+  * [/ip4/127.0.0.1/tcp/7002] dial tcp4 127.0.0.1:7002: connectex: No connection could be made because the target machine actively refused it.
+2026/05/22 13:20:07 [SNAPSHOT-PUBLISH-REQUIRED] validator=A height=0 error=committed tip unavailable
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:20:09 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:20:13.3111076+05:30
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+2026/05/22 13:20:09 [OK] goroutine pressure normalized: 147 (degrade mode off)
+Validator heartbeat: A | reported_height=0 | finalized_height=0 | local_exec_epoch=1
+Heartbeat sent: A finalized=0 epoch=1
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:20:15 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:20:19.3113721+05:30
+[CONSENSUS] height=0 vhash=cda45a02 validators=4
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[STATUS] height=0 finalized=0 peers=0 validators=1 strict_live=1 heartbeat_live=1 out_of_drift=0 drift_limit=8 syncing=false sync_complete=true execution_ready=true execution_reason=ready gossip=false gossip_pipeline=gossip_transport_partial consensus_running=true mode=validator vote=true propose=true role=validator validator_state=active warmup_seconds=0 ready=false reason=waiting_quorum_1_of_3 snapshot_source=none expected_source=frozen expected_hash=cda45a02 resolved_source=genesis_bootstrap resolved_hash= next_source=carry_forward next_hash=cda45a02 got_hash= authority=frozen hash_mode=legacy
+2026/05/22 13:20:19 [OK] goroutine pressure normalized: 147 (degrade mode off)
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+2026/05/22 13:20:19 map stats: seen_blocks=0 seen_txs=0 fork_heights=0 fork_blocks=0 exec_results_keys=0 exec_results_total=0 pending_blocks=0 queued_exec_votes_keys=0 queued_exec_votes_total=0 accepted_proposal=0 exec_broadcasted_epochs=0 exec_broadcasted_keys=0 exec_signer_seen_epochs=0 exec_signer_seen_total=0 exec_broadcasted_by_val_epochs=0 exec_broadcasted_by_val_total=0 exec_rebroadcast_epochs=0 validator_status=4 candidates=0 peer_state=0 peers_connected=0 peers_connecting=0 peer_suspect=0 allowed_peers=0 pending_validators=0 pending_removals=0 queued_validator_updates=0 height_report_epochs=0 height_report_total=0 misbehavior_validators=0 misbehavior_total=0 exec_mismatch_tracked=0 exec_vote_replay_cache=0
+2026/05/22 13:20:19 [SNAPSHOT-PUBLISH-REQUIRED] validator=A height=0 error=committed tip unavailable
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:20:21 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:20:25.3128625+05:30
+Validator heartbeat: A | reported_height=0 | finalized_height=0 | local_exec_epoch=1
+Heartbeat sent: A finalized=0 epoch=1
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:20:27 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:20:31.3110889+05:30
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+2026/05/22 13:20:29 [OK] goroutine pressure normalized: 147 (degrade mode off)
+2026/05/22 13:20:31 [SNAPSHOT-PUBLISH-REQUIRED] validator=A height=0 error=committed tip unavailable
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:20:33 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:20:37.3127533+05:30
+[CONSENSUS] height=0 vhash=cda45a02 validators=4
+[STATUS] height=0 finalized=0 peers=0 validators=1 strict_live=1 heartbeat_live=1 out_of_drift=0 drift_limit=8 syncing=false sync_complete=true execution_ready=true execution_reason=ready gossip=false gossip_pipeline=gossip_transport_partial consensus_running=true mode=validator vote=true propose=true role=validator validator_state=active warmup_seconds=0 ready=false reason=waiting_quorum_1_of_3 snapshot_source=none expected_source=frozen expected_hash=cda45a02 resolved_source=genesis_bootstrap resolved_hash= next_source=carry_forward next_hash=cda45a02 got_hash= authority=frozen hash_mode=legacy
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+Validator heartbeat: A | reported_height=0 | finalized_height=0 | local_exec_epoch=1
+Heartbeat sent: A finalized=0 epoch=1
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:20:39 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:20:43.311117+05:30
+2026/05/22 13:20:39 [OK] goroutine pressure normalized: 147 (degrade mode off)
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+2026/05/22 13:20:43 [SNAPSHOT-PUBLISH-REQUIRED] validator=A height=0 error=committed tip unavailable
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:20:45 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:20:49.3115533+05:30
+Validator heartbeat: A | reported_height=0 | finalized_height=0 | local_exec_epoch=1
+Heartbeat sent: A finalized=0 epoch=1
+[CONSENSUS] height=0 vhash=cda45a02 validators=4
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[STATUS] height=0 finalized=0 peers=0 validators=1 strict_live=1 heartbeat_live=1 out_of_drift=0 drift_limit=8 syncing=false sync_complete=true execution_ready=true execution_reason=ready gossip=false gossip_pipeline=gossip_transport_partial consensus_running=true mode=validator vote=true propose=true role=validator validator_state=active warmup_seconds=0 ready=false reason=waiting_quorum_1_of_3 snapshot_source=none expected_source=frozen expected_hash=cda45a02 resolved_source=genesis_bootstrap resolved_hash= next_source=carry_forward next_hash=cda45a02 got_hash= authority=frozen hash_mode=legacy
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+2026/05/22 13:20:49 [OK] goroutine pressure normalized: 147 (degrade mode off)
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:20:51 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:20:55.3125556+05:30
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+2026/05/22 13:20:55 [SNAPSHOT-PUBLISH-REQUIRED] validator=A height=0 error=committed tip unavailable
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:20:57 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:21:01.3140148+05:30
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+2026/05/22 13:20:59 [OK] goroutine pressure normalized: 147 (degrade mode off)
+Validator heartbeat: A | reported_height=0 | finalized_height=0 | local_exec_epoch=1
+Heartbeat sent: A finalized=0 epoch=1
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:21:03 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:21:07.3132138+05:30
+[CONSENSUS] height=0 vhash=cda45a02 validators=4
+[STATUS] height=0 finalized=0 peers=0 validators=1 strict_live=1 heartbeat_live=1 out_of_drift=0 drift_limit=8 syncing=false sync_complete=true execution_ready=true execution_reason=ready gossip=false gossip_pipeline=gossip_transport_partial consensus_running=true mode=validator vote=true propose=true role=validator validator_state=active warmup_seconds=0 ready=false reason=waiting_quorum_1_of_3 snapshot_source=none expected_source=frozen expected_hash=cda45a02 resolved_source=genesis_bootstrap resolved_hash= next_source=carry_forward next_hash=cda45a02 got_hash= authority=frozen hash_mode=legacy
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle
+2026/05/22 13:21:07 [SNAPSHOT-PUBLISH-REQUIRED] validator=A height=0 error=committed tip unavailable
+[CONSENSUS-RESUME] reason=live_quorum_unavailable height=1
+[LIVENESS] scope=consensus height=1 live=1 required=3 heartbeat_live=1 out_of_drift=0 committee=4 reasons={inactive=3} sample=[B:inactive,C:inactive,D:inactive]
+2026/05/22 13:21:09 [LIVENESS-PAUSE] height=1 live=1 required=3 action=recompute_pause
+[CONSENSUS-PAUSE] reason=live_quorum_unavailable height=1 hold_until=2026-05-22T13:21:13.3129849+05:30
+2026/05/22 13:21:09 [OK] goroutine pressure normalized: 147 (degrade mode off)
+Ã¢Å¡Â Ã¯Â¸Â No connected peers Ã¢â‚¬â€ PubSub mesh idle

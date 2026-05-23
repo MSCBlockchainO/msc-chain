@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "root": "runtime-data\\mainnet-chaos-restart-20260523\\D\\node_D",
+  "state_db": "runtime-data\\mainnet-chaos-restart-20260523\\D\\node_D\\state.db",
+  "block_db": "runtime-data\\mainnet-chaos-restart-20260523\\D\\node_D\\blocks.db",
+  "snapshot_db": "runtime-data\\mainnet-chaos-restart-20260523\\D\\node_D\\snapshot.db",
+  "tx_db": "runtime-data\\mainnet-chaos-restart-20260523\\D\\node_D\\tx.db",
+  "meta_db": "runtime-data\\mainnet-chaos-restart-20260523\\D\\node_D\\meta.db",
+  "block_files": "runtime-data\\mainnet-chaos-restart-20260523\\D\\node_D\\blocks",
+  "snapshot_files": "runtime-data\\mainnet-chaos-restart-20260523\\D\\node_D\\snapshots",
+  "checkpoints": "runtime-data\\mainnet-chaos-restart-20260523\\D\\node_D\\state_checkpoints",
+  "archive": "runtime-data\\mainnet-chaos-restart-20260523\\D\\node_D\\cold-storage",
+  "updated_at_unix": 1779528253
+}

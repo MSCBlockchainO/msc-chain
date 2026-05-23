@@ -1,0 +1,13 @@
+{
+    "run_id":  "mainnet-chaos-20260521-115324",
+    "passed":  false,
+    "warning_count":  7,
+    "samples":  10,
+    "max_finalized":  3213,
+    "max_no_progress_seconds":  93,
+    "max_finalized_lag_blocks":  1072,
+    "events_path":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\mainnet-chaos-20260521-115324\\events.jsonl",
+    "log_dir":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\mainnet-chaos-20260521-115324",
+    "node_count":  10,
+    "duration_seconds":  180
+}

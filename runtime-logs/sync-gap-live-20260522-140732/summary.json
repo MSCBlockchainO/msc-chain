@@ -1,0 +1,52 @@
+{
+    "passed":  true,
+    "log_root":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\sync-gap-live-20260522-140732",
+    "data_root":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\data\\sync-gap-live-20260522-140732",
+    "results":  [
+                    {
+                        "phase":  "fresh_full_initial_gap",
+                        "gap_blocks":  2,
+                        "target_height":  2,
+                        "caught_up":  true,
+                        "catchup_seconds":  69,
+                        "full_chain_height":  46,
+                        "full_finalized_height":  46,
+                        "full_peers":  4,
+                        "full_syncing":  false,
+                        "full_sync_complete":  true,
+                        "full_sync_stage":  "idle",
+                        "full_sync_action":  "up_to_date",
+                        "full_network_lag_blocks":  0
+                    },
+                    {
+                        "phase":  "small_gap",
+                        "gap_blocks":  2,
+                        "target_height":  56,
+                        "caught_up":  true,
+                        "catchup_seconds":  80,
+                        "full_chain_height":  210,
+                        "full_finalized_height":  210,
+                        "full_peers":  4,
+                        "full_syncing":  false,
+                        "full_sync_complete":  true,
+                        "full_sync_stage":  "idle",
+                        "full_sync_action":  "up_to_date",
+                        "full_network_lag_blocks":  0
+                    },
+                    {
+                        "phase":  "large_gap",
+                        "gap_blocks":  30,
+                        "target_height":  240,
+                        "caught_up":  true,
+                        "catchup_seconds":  8,
+                        "full_chain_height":  249,
+                        "full_finalized_height":  249,
+                        "full_peers":  4,
+                        "full_syncing":  false,
+                        "full_sync_complete":  true,
+                        "full_sync_stage":  "idle",
+                        "full_sync_action":  "up_to_date",
+                        "full_network_lag_blocks":  0
+                    }
+                ]
+}

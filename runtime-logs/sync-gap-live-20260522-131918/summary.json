@@ -1,0 +1,27 @@
+{
+    "passed":  true,
+    "log_root":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\sync-gap-live-20260522-131918",
+    "data_root":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\data\\sync-gap-live-20260522-131918",
+    "results":  [
+                    {
+                        "phase":  "small_gap",
+                        "gap_blocks":  0,
+                        "target_height":  0,
+                        "caught_up":  true,
+                        "catchup_seconds":  0,
+                        "full_finalized_height":  0,
+                        "full_peers":  0,
+                        "full_syncing":  false
+                    },
+                    {
+                        "phase":  "large_gap",
+                        "gap_blocks":  0,
+                        "target_height":  0,
+                        "caught_up":  true,
+                        "catchup_seconds":  0,
+                        "full_finalized_height":  0,
+                        "full_peers":  0,
+                        "full_syncing":  false
+                    }
+                ]
+}

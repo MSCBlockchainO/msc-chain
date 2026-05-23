@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "kind": "msc_recovery_backup_v1",
+  "node_id": "B",
+  "chain_id": "91938",
+  "height": 100,
+  "snapshot_hash": "696e7289b57812fb7d1800bd878fe883df57f5d1cabd767f4ae483195de03a3d",
+  "state_root": "9bb5f272e7edbe10c013eba1fe1251e4e9831c2f65a251419aefbcd4628b3f56",
+  "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+  "validator_registry_hash": "902cfb0d32446147fa5483f36c4879734f7472372e284c5bf8629e17dcb494c8",
+  "finalized_height": 100,
+  "finalized_hash": "2f1540be60e6b2a639ef8c225afa8f1c145536f6c83733920ad176075a1fd8e9",
+  "epoch_anchor_hash": "8e8ca99b849f743c3de6817034350c9986dd8217f7022b965d4b368fdd9d3ad4",
+  "finality_root": "26fff566e3dc494d920975b04b3405f2ba386234e6ad1db742ccb44c292f7db8",
+  "created_at_unix": 1779524499,
+  "reason": "storage_manager:post_commit_finalized_epoch",
+  "backup_dir": "data\\B\\node_B\\backups\\backup_00000000000000000100_20260523T082139.646151700Z",
+  "snapshot_manifest": {
+    "height": 100,
+    "snapshot_hash": "696e7289b57812fb7d1800bd878fe883df57f5d1cabd767f4ae483195de03a3d",
+    "state_root": "9bb5f272e7edbe10c013eba1fe1251e4e9831c2f65a251419aefbcd4628b3f56",
+    "state_merkle_root": "3716176fbd66c102b6f0c65f69c4bf0e2588e81be93dfbedd2eaa0aa00a4d73d",
+    "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+    "validator_registry_hash": "902cfb0d32446147fa5483f36c4879734f7472372e284c5bf8629e17dcb494c8",
+    "finalized_height": 100,
+    "finalized_hash": "2f1540be60e6b2a639ef8c225afa8f1c145536f6c83733920ad176075a1fd8e9",
+    "epoch_anchor_hash": "8e8ca99b849f743c3de6817034350c9986dd8217f7022b965d4b368fdd9d3ad4",
+    "finality_root": "26fff566e3dc494d920975b04b3405f2ba386234e6ad1db742ccb44c292f7db8",
+    "chunk_size": 1048576,
+    "chunk_count": 1,
+    "chunk_hashes": [
+      "8e3e6df99a0cf7f5299d82cfc86623bc9e20ab957578dbe0dfba844b88ee5e6c"
+    ],
+    "checkpoint_proof": {
+      "B": "d1b73599b5559ae490f68afc5746392e43c5ee98af569607ab87e9326db26b454776938f7b48edca370c0371227d8242b4c75cf92f4e1789f82427e154f20b04"
+    }
+  },
+  "storage_layout": {
+    "version": 1,
+    "root": "data\\B\\node_B",
+    "state_db": "data\\B\\node_B\\state.db",
+    "block_db": "data\\B\\node_B\\blocks.db",
+    "snapshot_db": "data\\B\\node_B\\snapshot.db",
+    "tx_db": "data\\B\\node_B\\tx.db",
+    "meta_db": "data\\B\\node_B\\meta.db",
+    "block_files": "data\\B\\node_B\\blocks",
+    "snapshot_files": "data\\B\\node_B\\snapshots",
+    "checkpoints": "data\\B\\node_B\\state_checkpoints",
+    "archive": "data\\B\\node_B\\cold-storage",
+    "updated_at_unix": 1779524499
+  },
+  "state_checkpoint": {
+    "version": "state_checkpoint_v1",
+    "domain": "MSC_STATE_CHECKPOINT_V1",
+    "height": 100,
+    "state_root": "9bb5f272e7edbe10c013eba1fe1251e4e9831c2f65a251419aefbcd4628b3f56",
+    "finality_root": "26fff566e3dc494d920975b04b3405f2ba386234e6ad1db742ccb44c292f7db8",
+    "epoch_anchor_hash": "8e8ca99b849f743c3de6817034350c9986dd8217f7022b965d4b368fdd9d3ad4",
+    "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+    "validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+    "finalized_validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+    "finalized_validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+    "block_hash": "2f1540be60e6b2a639ef8c225afa8f1c145536f6c83733920ad176075a1fd8e9",
+    "finality_certificate_hash": "bb60da4d01f4b544566b8722913ec6e406a95985432fa7ef2a13f21fbcd569e8",
+    "created_at_unix": 1779524498
+  },
+  "files": [
+    {
+      "path": "snapshot.json",
+      "sha256": "8e3e6df99a0cf7f5299d82cfc86623bc9e20ab957578dbe0dfba844b88ee5e6c",
+      "size": 10984,
+      "required": true
+    },
+    {
+      "path": "snapshot_manifest.json",
+      "sha256": "a64560e2baa432cf2b24963b1cddc0f6e0a1b4d8448d83224cfe76801dc59d5a",
+      "size": 1073,
+      "required": true
+    },
+    {
+      "path": "storage_layout.json",
+      "sha256": "c02e8bfa094dc0b8d6f800e6e40e210ae39386b9b0e60161d0b97d7ac14d0f01",
+      "size": 489,
+      "required": false
+    },
+    {
+      "path": "state_checkpoint.json",
+      "sha256": "c9c10dbbb0abba802b08bc7875cba59b9edec142cf24bf742c39154c71bcf65e",
+      "size": 960,
+      "required": false
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+    "passed":  true,
+    "log_root":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\sync-gap-live-20260522-142504",
+    "data_root":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\data\\sync-gap-live-20260522-142504",
+    "peer_addrs":  [
+                       "/ip4/127.0.0.1/tcp/7001/p2p/12D3KooWLBEJj79fZwhc2cLKDEYRe7Cg77DcCQ92ZGUFzwQhgbaC",
+                       "/ip4/127.0.0.1/tcp/7002/p2p/12D3KooWP33pmTEYZjB1Jq1YxK2hGf3i2CCjiTzU7n33BA4WNzyn",
+                       "/ip4/127.0.0.1/tcp/7003/p2p/12D3KooWGU2nSy2r9bnGu5sGvMrqx7NVKkXYMhBY6VuGRH4EwKCr",
+                       "/ip4/127.0.0.1/tcp/7004/p2p/12D3KooWDme5pChVfyy6hpJazjG9moHz5cjTc5wSF4N9YU6BiEpU",
+                       "/ip4/127.0.0.1/tcp/7005/p2p/12D3KooWPpMPj4CyPc63wNzdKNDUs2CLJELhTdbdfzGhBYmMGpLu"
+                   ],
+    "results":  [
+                    {
+                        "phase":  "fresh_full_initial_gap",
+                        "gap_blocks":  1,
+                        "target_height":  1,
+                        "caught_up":  true,
+                        "catchup_seconds":  62,
+                        "full_chain_height":  58,
+                        "full_finalized_height":  58,
+                        "full_peers":  4,
+                        "full_syncing":  false,
+                        "full_sync_complete":  true,
+                        "full_sync_stage":  "idle",
+                        "full_sync_action":  "up_to_date",
+                        "full_network_lag_blocks":  0
+                    },
+                    {
+                        "phase":  "small_gap",
+                        "gap_blocks":  3,
+                        "target_height":  63,
+                        "caught_up":  true,
+                        "catchup_seconds":  35,
+                        "full_chain_height":  136,
+                        "full_finalized_height":  136,
+                        "full_peers":  4,
+                        "full_syncing":  false,
+                        "full_sync_complete":  true,
+                        "full_sync_stage":  "idle",
+                        "full_sync_action":  "up_to_date",
+                        "full_network_lag_blocks":  0
+                    },
+                    {
+                        "phase":  "large_gap",
+                        "gap_blocks":  31,
+                        "target_height":  167,
+                        "caught_up":  true,
+                        "catchup_seconds":  6,
+                        "full_chain_height":  167,
+                        "full_finalized_height":  167,
+                        "full_peers":  4,
+                        "full_syncing":  false,
+                        "full_sync_complete":  true,
+                        "full_sync_stage":  "idle",
+                        "full_sync_action":  "up_to_date",
+                        "full_network_lag_blocks":  0
+                    }
+                ]
+}

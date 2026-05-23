@@ -1,0 +1,63 @@
+{
+    "passed":  true,
+    "log_root":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\sync-gap-live-20260522-141608",
+    "data_root":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\data\\sync-gap-live-20260522-141608",
+    "peer_addrs":  [
+                       "/ip4/127.0.0.1/tcp/7001/p2p/12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg",
+                       "/ip4/127.0.0.1/tcp/7001/p2p/12D3KooWHqFmL9P8RkkBctwJykXkgA8vyFNKVNw5MxvmaoycHUKp",
+                       "/ip4/127.0.0.1/tcp/7002/p2p/12D3KooWCk1mRxygvy5j8AxSz7NJeEzb8tve8miiGeDGd2b1eoGw",
+                       "/ip4/127.0.0.1/tcp/7002/p2p/12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk",
+                       "/ip4/127.0.0.1/tcp/7003/p2p/12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8",
+                       "/ip4/127.0.0.1/tcp/7003/p2p/12D3KooWDKCEsbPrX8ktNoYgoECKkQ2Ah3fGuUdAhpwTsztz93R6",
+                       "/ip4/127.0.0.1/tcp/7004/p2p/12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W",
+                       "/ip4/127.0.0.1/tcp/7004/p2p/12D3KooWKrjP18NY64sDBLtuexzLipt9PyDULeQgVyv3bki6cf3m",
+                       "/ip4/127.0.0.1/tcp/7005/p2p/12D3KooWDyMfzb1W7eVraegtuNmRMqg74q2geZeRDq1YZR5owLkZ"
+                   ],
+    "results":  [
+                    {
+                        "phase":  "fresh_full_initial_gap",
+                        "gap_blocks":  2,
+                        "target_height":  2,
+                        "caught_up":  true,
+                        "catchup_seconds":  60,
+                        "full_chain_height":  90,
+                        "full_finalized_height":  90,
+                        "full_peers":  4,
+                        "full_syncing":  false,
+                        "full_sync_complete":  true,
+                        "full_sync_stage":  "idle",
+                        "full_sync_action":  "up_to_date",
+                        "full_network_lag_blocks":  0
+                    },
+                    {
+                        "phase":  "small_gap",
+                        "gap_blocks":  8,
+                        "target_height":  105,
+                        "caught_up":  true,
+                        "catchup_seconds":  8,
+                        "full_chain_height":  106,
+                        "full_finalized_height":  106,
+                        "full_peers":  4,
+                        "full_syncing":  false,
+                        "full_sync_complete":  true,
+                        "full_sync_stage":  "idle",
+                        "full_sync_action":  "up_to_date",
+                        "full_network_lag_blocks":  0
+                    },
+                    {
+                        "phase":  "large_gap",
+                        "gap_blocks":  30,
+                        "target_height":  136,
+                        "caught_up":  true,
+                        "catchup_seconds":  63,
+                        "full_chain_height":  252,
+                        "full_finalized_height":  252,
+                        "full_peers":  4,
+                        "full_syncing":  false,
+                        "full_sync_complete":  true,
+                        "full_sync_stage":  "idle",
+                        "full_sync_action":  "up_to_date",
+                        "full_network_lag_blocks":  0
+                    }
+                ]
+}

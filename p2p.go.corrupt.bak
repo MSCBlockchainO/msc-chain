@@ -1,0 +1,1762 @@
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"math/rand"
+	"net"
+	"net/http"
+	"os"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ipfs/go-cid"
+	"github.com/libp2p/go-libp2p"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	lpcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	mdns "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
+	connmgr "github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
+	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
+	libp2pwebrtc "github.com/libp2p/go-libp2p/p2p/transport/webrtc"
+	libp2pwebsocket "github.com/libp2p/go-libp2p/p2p/transport/websocket"
+	"github.com/multiformats/go-multihash"
+	"golang.org/x/time/rate"
+
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
+)
+
+const (
+	peerSuspectTimeout        = 2 * time.Minute
+	peerFlapWindow            = 5 * time.Minute
+	peerFlapThreshold         = 5
+	peerQuarantineFor         = 5 * time.Minute
+	peerQuarantineForProtocol = 30 * time.Minute
+	peerQuarantineForMismatch = 1 * time.Hour
+	peerHelloCooldown         = 30 * time.Second
+	peerSuspectInterval       = 20 * time.Second
+	syncCooldown              = 30 * time.Second
+	peerMinHold               = 30 * time.Second
+	peerGraftCooldown         = 30 * time.Second
+	dialBackoffStep1          = 5 * time.Second
+	dialBackoffStep2          = 30 * time.Second
+	dialBackoffStep3          = 2 * time.Minute
+	dialBackoffMax            = 5 * time.Minute
+)
+
+func (n *Node) configPeerListsSnapshot() ([]string, []string) {
+	if n == nil || n.Config == nil {
+		return nil, nil
+	}
+	n.configMu.RLock()
+	persistent := append([]string{}, n.Config.PersistentPeers...)
+	seeds := append([]string{}, n.Config.Seeds...)
+	n.configMu.RUnlock()
+	return persistent, seeds
+}
+
+func (n *Node) persistentPeersSnapshot() []string {
+	persistent, _ := n.configPeerListsSnapshot()
+	return persistent
+}
+
+func (n *Node) seedsSnapshot() []string {
+	_, seeds := n.configPeerListsSnapshot()
+	return seeds
+}
+
+func (n *Node) setPersistentPeers(peers []string) {
+	if n == nil || n.Config == nil {
+		return
+	}
+	n.configMu.Lock()
+	n.Config.PersistentPeers = append([]string{}, peers...)
+	n.configMu.Unlock()
+}
+
+func (n *Node) setSeedPeers(peers []string) {
+	if n == nil || n.Config == nil {
+		return
+	}
+	n.configMu.Lock()
+	n.Config.Seeds = append([]string{}, peers...)
+	n.configMu.Unlock()
+}
+
+func (n *Node) setConfigPeerLists(persistent []string, seeds []string) {
+	if n == nil || n.Config == nil {
+		return
+	}
+	n.configMu.Lock()
+	n.Config.PersistentPeers = append([]string{}, persistent...)
+	n.Config.Seeds = append([]string{}, seeds...)
+	n.configMu.Unlock()
+}
+
+func (n *Node) logPubSubStatus() {
+	// =====================================================
+	// 0ï¸âƒ£ HARD GUARD â€” PUBSUB NOT INITIALIZED
+	// =====================================================
+	if n.PubSub == nil {
+		fmt.Println("ðŸ“Š PubSub: Not initialized")
+		return
+	}
+	// =====================================================
+	// 1ï¸âƒ£ CANONICAL TOPIC SET (CONSENSUS + DATA PLANE)
+	// =====================================================
+	topics := []string{
+		"msc-blocks",
+		"msc-transactions",
+		"msc-validators",
+	}
+
+	fmt.Println("ðŸ“Š PubSub Mesh Status:")
+	hasConnections := false
+
+	// =====================================================
+	// 2ï¸âƒ£ INSPECT EACH TOPIC MESH
+	// =====================================================
+	for _, topicName := range topics {
+
+		// ðŸ”‘ libp2p contract:
+		// ListPeers(topic) -> []peer.ID (NO error return)
+		peers := n.PubSub.ListPeers(topicName)
+
+		fmt.Printf("  %s: %d peers\n", topicName, len(peers))
+
+		if len(peers) > 0 {
+			hasConnections = true
+		}
+	}
+}
+
+/*
+legacy consensus removed
+
+	func (n *Node) BroadcastProposal(block Block) {
+		if ResultGossipOnly {
+			return
+		}
+		if DebugConsensus {
+			fmt.Printf("ðŸ“¢ Publishing proposal | height=%d proposer=%s hash=%s\n",
+				block.ID, ShortID(block.Proposer), block.BlockHash[:8])
+		}
+
+		// Build message
+		msg := Message{
+			Type: MsgProposeBlock,
+			Data: MustJSON(block),
+		}
+
+		data, err := json.Marshal(msg)
+		if err != nil {
+			if DebugConsensus {
+				fmt.Println("âŒ Proposal marshal failed:", err)
+			}
+			return
+		}
+
+		// Track publishing attempts
+		published := false
+		var publishErr error
+
+		// =====================================================
+		// TRY PRIMARY TOPICS
+		// =====================================================
+
+		// 1. Try ProposalTopic first (most specific)
+		if n.ProposalTopic != nil {
+			publishErr = n.ProposalTopic.Publish(context.Background(), data)
+			if publishErr == nil {
+				if DebugConsensus {
+					fmt.Printf("âœ… Proposal published to proposal topic | height=%d\n", block.ID)
+				}
+				published = true
+			} else {
+				if DebugConsensus {
+					fmt.Printf("âš ï¸ ProposalTopic publish failed: %v\n", publishErr)
+				}
+			}
+		} else if DebugConsensus {
+			fmt.Println("âš ï¸ ProposalTopic is nil")
+		}
+
+		// 2. Fallback to BlockTopic (if ProposalTopic failed or is nil)
+		if !published && n.TopicBlocks != nil {
+			publishErr = n.TopicBlocks.Publish(context.Background(), data)
+			if publishErr == nil {
+				if DebugConsensus {
+					fmt.Printf("âœ… Proposal published via blocks topic (fallback) | height=%d\n", block.ID)
+				}
+				published = true
+			} else {
+				if DebugConsensus {
+					fmt.Printf("âš ï¸ BlockTopic publish failed: %v\n", publishErr)
+				}
+			}
+		} else if !published && DebugConsensus {
+			fmt.Println("âš ï¸ TopicBlocks is nil")
+		}
+
+		// =====================================================
+		// EMERGENCY FALLBACKS
+		// =====================================================
+		if !published {
+			// 3. Try direct stream to known validators
+			if n.Host != nil && len(n.Host.Network().Peers()) > 0 {
+				if DebugConsensus {
+					fmt.Printf("ðŸ”„ Trying direct stream to %d peers\n", len(n.Host.Network().Peers()))
+				}
+
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+
+				// Send to first 3 peers
+				peers := n.Host.Network().Peers()
+				sentCount := 0
+				for i, pid := range peers {
+					if i >= 3 { // Limit to 3 peers
+						break
+					}
+
+					if err := n.sendToPeerLibp2p(ctx, pid, msg); err == nil {
+						sentCount++
+						if DebugConsensus {
+							fmt.Printf("  âœ“ Sent to peer %s\n", pid.String()[:8])
+						}
+					}
+				}
+
+				if sentCount > 0 {
+					published = true
+					if DebugConsensus {
+						fmt.Printf("âœ… Proposal sent via direct streams to %d peers\n", sentCount)
+					}
+				}
+			}
+
+			// 4. Last resort: create temporary topic
+			if !published && n.PubSub != nil {
+				if topic, err := n.PubSub.Join("msc-proposals-fallback"); err == nil {
+					if err := topic.Publish(context.Background(), data); err == nil {
+						published = true
+						if DebugConsensus {
+							fmt.Printf("âœ… Proposal published via temporary fallback topic\n")
+						}
+					}
+					topic.Close()
+				}
+			}
+		}
+
+		// =====================================================
+		// FINAL STATUS
+		// =====================================================
+		if !published {
+			if DebugConsensus {
+				fmt.Printf("âŒ Could not publish proposal for height %d (no available method)\n", block.ID)
+
+				// Debug info
+				fmt.Printf("   Debug: ProposalTopic=%v, TopicBlocks=%v, PubSub=%v, Host=%v\n",
+					n.ProposalTopic != nil, n.TopicBlocks != nil, n.PubSub != nil, n.Host != nil)
+
+				if n.Host != nil {
+					fmt.Printf("   Connected peers: %d\n", len(n.Host.Network().Peers()))
+				}
+			}
+		} else if DebugConsensus {
+			fmt.Printf("ðŸ“¤ Proposal successfully broadcast | height=%d\n", block.ID)
+		}
+	}
+
+	func (n *Node) listenProposals(ctx context.Context) {
+		// Result-gossip consensus: proposals are ignored.
+		if ResultGossipOnly {
+			return
+		}
+
+		// =====================================================
+		// ðŸ“¡ SUBSCRIPTION INITIALIZATION
+		// =====================================================
+		var sub *pubsub.Subscription
+		var err error
+
+		// Priority 1: Use ProposalTopic if available
+		if n.ProposalTopic != nil {
+			sub, err = n.ProposalTopic.Subscribe(
+				pubsub.WithBufferSize(1024),
+			)
+			if err != nil {
+				if DebugNet {
+					fmt.Printf("âŒ ProposalTopic subscribe failed: %v\n", err)
+				}
+				// Fall through to PubSub
+			}
+		}
+
+		// Priority 2: Fallback to direct PubSub subscription
+		if sub == nil {
+			sub, err = n.PubSub.Subscribe("msc-proposals")
+			if err != nil {
+				if DebugNet {
+					fmt.Printf("âŒ Failed to subscribe to proposals: %v\n", err)
+				}
+				return
+			}
+		}
+
+		defer func() {
+			if sub != nil {
+				sub.Cancel()
+			}
+		}()
+
+		if DebugNet {
+			fmt.Println("âœ… Listening for proposals...")
+		}
+
+		// =====================================================
+		// ðŸ”„ MESSAGE PROCESSING LOOP
+		// =====================================================
+		for {
+			select {
+			case <-ctx.Done():
+				if DebugNet {
+					fmt.Println("ðŸ›‘ Proposal listener stopped")
+				}
+				return
+
+			case <-n.shutdownCh:
+				if DebugNet {
+					fmt.Println("ðŸ›‘ Proposal listener (shutdown)")
+				}
+				return
+
+			default:
+				// =================================================
+				// ðŸ“¨ RECEIVE MESSAGE
+				// =================================================
+				msg, err := sub.Next(ctx)
+				if err != nil {
+					if err == context.Canceled {
+						return
+					}
+					if DebugNet {
+						fmt.Printf("âš ï¸ Proposal subscription error: %v\n", err)
+					}
+					// Continue to next message
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
+
+				// =================================================
+				// ðŸ™… SELF-MESSAGE FILTERING
+				// =================================================
+				if msg.ReceivedFrom == n.Host.ID() {
+					if DebugConsensus {
+						fmt.Println("â­ï¸ Ignoring self-proposal")
+					}
+					continue
+				}
+
+				// =================================================
+				// ðŸ§© MESSAGE PARSING (MULTI-FORMAT SUPPORT)
+				// =================================================
+				var block Block
+				var parseErr error
+
+				// Try parsing as Message wrapper first
+				var m Message
+				if err := json.Unmarshal(msg.Data, &m); err == nil && m.Type == MsgProposeBlock {
+					// Message wrapper format
+					parseErr = json.Unmarshal(m.Data, &block)
+				} else {
+					// Try direct Block format
+					parseErr = json.Unmarshal(msg.Data, &block)
+				}
+
+				if parseErr != nil {
+					if DebugNet {
+						fmt.Printf("âš ï¸ Failed to parse proposal: %v\n", parseErr)
+						fmt.Printf("   Raw data: %s\n", string(msg.Data)[:min(100, len(msg.Data))])
+					}
+					continue
+				}
+
+				// =================================================
+				// ðŸŽ¯ BASIC VALIDATION
+				// =================================================
+				if block.ID == 0 || block.Proposer == "" {
+					if DebugNet {
+						fmt.Println("âš ï¸ Invalid proposal: missing required fields")
+					}
+					continue
+				}
+
+				// =================================================
+				// ðŸ“Š DEBUG LOGGING
+				// =================================================
+				if DebugConsensus {
+					fmt.Printf("ðŸ“¦ Proposal received | height=%d proposer=%s from=%s\n",
+						block.ID, ShortID(block.Proposer), msg.ReceivedFrom)
+
+					// Additional debug info
+					if len(block.Transactions) > 0 {
+						fmt.Printf("   TX count: %d, Hash: %s\n",
+							len(block.Transactions), block.BlockHash[:8])
+					}
+				}
+
+				// =================================================
+				// ðŸš€ PROCESS PROPOSAL
+				// =================================================
+				n.HandleProposal(block)
+
+				// =================================================
+				// â¸ï¸ RATE LIMITING (OPTIONAL)
+				// =================================================
+				// Small delay to prevent CPU spike
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}
+
+	func (n *Node) BroadcastVote(vote BlockVote) {
+		if ResultGossipOnly {
+			return
+		}
+
+		msg := Message{
+			Type: MsgBlockVote,
+			Data: MustJSON(vote),
+		}
+
+		data, _ := json.Marshal(msg)
+		_ = n.VoteTopic.Publish(context.Background(), data)
+	}
+*/
+func (n *Node) BroadcastLeaderBlock(block Block) {
+	if n.TopicBlocks == nil && n.PubSub == nil {
+		return
+	}
+
+	msg := Message{
+		Type: MsgLeaderBlock,
+		Data: MustJSON(block),
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	if n.TopicBlocks != nil {
+		_ = n.TopicBlocks.Publish(context.Background(), data)
+		return
+	}
+
+	_ = n.PubSub.Publish("msc-blocks", data)
+}
+
+func (n *Node) handleTransactionGossip(sub *pubsub.Subscription) {
+	for {
+		_, err := sub.Next(context.Background())
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (n *Node) handleValidatorGossip(sub *pubsub.Subscription) {
+	for {
+		_, err := sub.Next(context.Background())
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (n *Node) handleBlockGossip(sub *pubsub.Subscription) {
+	ctx := context.Background()
+
+	for {
+		msg, err := sub.Next(ctx)
+		if err != nil {
+			if DebugNet {
+				fmt.Println("âŒ Block gossip read error:", err)
+			}
+			return
+		}
+
+		// Ignore self-published messages
+		if msg.ReceivedFrom == n.Host.ID() {
+			continue
+		}
+
+		// Ignore non-JSON payloads (e.g., pubsub mesh keepalive)
+		if len(msg.Data) == 0 || msg.Data[0] != '{' {
+			continue
+		}
+
+		// Leader blocks are wrapped in Message
+		var wrapped Message
+		if err := json.Unmarshal(msg.Data, &wrapped); err == nil && wrapped.Type != "" {
+			if wrapped.Type == MsgLeaderBlock {
+				var block Block
+				if err := json.Unmarshal(wrapped.Data, &block); err == nil {
+					n.handleLeaderBlock(block)
+				}
+			}
+			if ResultGossipOnly {
+				continue
+			}
+		}
+
+		if ResultGossipOnly {
+			continue
+		}
+
+		var block Block
+		if err := json.Unmarshal(msg.Data, &block); err != nil {
+			if DebugNet {
+				fmt.Println("âŒ Invalid block gossip payload")
+			}
+			continue
+		}
+
+		if DebugConsensus {
+			fmt.Printf(
+				"ðŸ“¦ Block received via gossip | height=%d from=%s\n",
+				block.ID,
+				msg.ReceivedFrom.String(),
+			)
+		}
+
+		// Pass into blockchain
+		n.ReceiveBlock(block, n.Blockchain)
+		n.ProcessQueuedBlocks()
+	}
+}
+
+func (n *Node) requestBlocksFromPeer(
+	pid peer.ID,
+	from, to uint64,
+	wantSnapshot bool,
+	snapshotHeight uint64,
+) ([]Block, *StateSnapshot, *ExecPoolSnapshot, error) {
+	if n.Host == nil {
+		return nil, nil, nil, fmt.Errorf("host not initialized")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s, err := n.Host.NewStream(ctx, pid, BlockSyncProtocol)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer s.Close()
+
+	_ = s.SetDeadline(time.Now().Add(30 * time.Second))
+	enc := json.NewEncoder(s)
+	dec := json.NewDecoder(s)
+
+	req := BlockRequest{
+		From:           from,
+		To:             to,
+		WantSnapshot:   wantSnapshot,
+		SnapshotHeight: snapshotHeight,
+	}
+	if err := enc.Encode(req); err != nil {
+		return nil, nil, nil, err
+	}
+
+	var resp BlockResponse
+	if err := dec.Decode(&resp); err != nil {
+		return nil, nil, nil, err
+	}
+	return resp.Blocks, resp.Snapshot, resp.ExecPool, nil
+}
+
+func (n *Node) sendBlockAck(pid peer.ID, height uint64) {
+	if n.Host == nil || height == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s, err := n.Host.NewStream(ctx, pid, "/msc/consensus/1.0.0")
+	if err != nil {
+		n.recordDialFailure(pid.String())
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "protocols not supported") || strings.Contains(errMsg, "protocol not supported") {
+			n.disconnectPeerID(pid.String(), "consensus_protocol_mismatch")
+		}
+		return
+	}
+	defer s.Close()
+
+	msg := Message{
+		Type: MsgBlockAck,
+		Data: MustJSON(BlockAck{Height: height}),
+	}
+	data, _ := json.Marshal(msg)
+	_, _ = s.Write(append(data, '\n'))
+}
+
+func (n *Node) broadcastExecutionResult(heightHint uint64, execHash string, txMerkle string) {
+	n.broadcastExecutionResultInternal(heightHint, execHash, txMerkle, false)
+}
+
+func (n *Node) broadcastExecutionResultInternal(heightHint uint64, execHash string, txMerkle string, force bool) {
+	if n.ValidatorTopic == nil {
+		return
+	}
+	if heightHint == 0 {
+		heightHint = n.currentEpoch()
+	}
+	if !n.canParticipateAsValidator() {
+		// Rule 2: candidates cannot publish execution hashes.
+		return
+	}
+	if !force {
+		if !n.markExecBroadcastedByValidator(heightHint) {
+			return
+		}
+		if !n.markExecBroadcasted(heightHint, execHash, txMerkle) {
+			return
+		}
+	}
+
+	sigBytes := execResultSignBytes(heightHint, execHash, txMerkle)
+	signature := ""
+	if len(n.ValidatorKey.PrivateKey) == ed25519.PrivateKeySize {
+		sig := ed25519.Sign(n.ValidatorKey.PrivateKey, sigBytes)
+		signature = hex.EncodeToString(sig)
+	}
+
+	msg := Message{
+		Type: MsgExecutionResult,
+		Data: MustJSON(ExecutionResultMsg{
+			HeightHint: heightHint,
+			ExecHash:   execHash,
+			TxMerkle:   txMerkle,
+			Signer:     n.ID,
+			Signature:  signature,
+		}),
+	}
+
+	data, _ := json.Marshal(msg)
+	_ = n.ValidatorTopic.Publish(context.Background(), data)
+
+}
+
+func (n *Node) shouldRebroadcastExec(epoch uint64, cooldown time.Duration) bool {
+	if epoch == 0 {
+		return false
+	}
+	if cooldown <= 0 {
+		cooldown = 15 * time.Second
+	}
+	n.execRebroadcastMu.Lock()
+	defer n.execRebroadcastMu.Unlock()
+	if n.execRebroadcastAt == nil {
+		n.execRebroadcastAt = make(map[uint64]time.Time)
+	}
+	if last, ok := n.execRebroadcastAt[epoch]; ok {
+		if time.Since(last) < cooldown {
+			return false
+		}
+	}
+	n.execRebroadcastAt[epoch] = time.Now()
+	return true
+}
+
+func (n *Node) markExecBroadcasted(epoch uint64, execHash string, txMerkle string) bool {
+	key := execBroadcastKey(execHash, txMerkle)
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+	if n.execBroadcasted == nil {
+		n.execBroadcasted = make(map[uint64]map[string]bool)
+	}
+	if _, ok := n.execBroadcasted[epoch]; !ok {
+		n.execBroadcasted[epoch] = make(map[string]bool)
+	}
+	if n.execBroadcasted[epoch][key] {
+		return false
+	}
+	n.execBroadcasted[epoch][key] = true
+	n.trimConsensusCachesLocked(committedHeight)
+	return true
+}
+
+func (n *Node) markExecBroadcastedByValidator(epoch uint64) bool {
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+	if n.execBroadcastedByValidator == nil {
+		n.execBroadcastedByValidator = make(map[uint64]map[string]bool)
+	}
+	if _, ok := n.execBroadcastedByValidator[epoch]; !ok {
+		n.execBroadcastedByValidator[epoch] = make(map[string]bool)
+	}
+	if n.execBroadcastedByValidator[epoch][n.ID] {
+		return false
+	}
+	n.execBroadcastedByValidator[epoch][n.ID] = true
+	n.trimConsensusCachesLocked(committedHeight)
+	return true
+}
+
+func (n *Node) markExecSignerSeen(epoch uint64, signer string) bool {
+	if epoch == 0 || signer == "" {
+		return false
+	}
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+	if n.execSignerSeen == nil {
+		n.execSignerSeen = make(map[uint64]map[string]bool)
+	}
+	if _, ok := n.execSignerSeen[epoch]; !ok {
+		n.execSignerSeen[epoch] = make(map[string]bool)
+	}
+	if n.execSignerSeen[epoch][signer] {
+		return false
+	}
+	n.execSignerSeen[epoch][signer] = true
+	n.trimConsensusCachesLocked(committedHeight)
+	return true
+}
+
+func execResultKey(epoch uint64, execHash string, txMerkle string) string {
+	return fmt.Sprintf("%d:%s:%s", epoch, execHash, txMerkle)
+}
+
+func execBroadcastKey(execHash string, txMerkle string) string {
+	return fmt.Sprintf("%s:%s", execHash, txMerkle)
+}
+
+func execResultSignBytes(heightHint uint64, execHash string, txMerkle string) []byte {
+	return []byte(fmt.Sprintf("%d|%s|%s", heightHint, execHash, txMerkle))
+}
+
+func recordExecResultGlobal(epoch uint64, execHash string, txMerkle string, res ExecutionResult) (int, bool, bool) {
+	if epoch == 0 || execHash == "" || res.Signer == "" {
+		return 0, false, false
+	}
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+
+	if frozenHash, ok := ExecPool.frozen[epoch]; ok && frozenHash != "" && frozenHash != execHash {
+		if byHash, ok := ExecPool.pool[epoch][frozenHash]; ok {
+			return len(byHash), false, false
+		}
+		return 0, false, false
+	}
+
+	if _, ok := ExecPool.pool[epoch]; !ok {
+		ExecPool.pool[epoch] = make(map[string]map[string]ExecutionResult)
+	}
+	if _, ok := ExecPool.txMerkle[epoch]; !ok {
+		ExecPool.txMerkle[epoch] = make(map[string]string)
+	}
+	if _, ok := ExecPool.signers[epoch]; !ok {
+		ExecPool.signers[epoch] = make(map[string]bool)
+	}
+	if _, ok := ExecPool.choice[epoch]; !ok {
+		ExecPool.choice[epoch] = make(map[string]string)
+	}
+
+	if existing, ok := ExecPool.txMerkle[epoch][execHash]; ok && existing != "" && existing != txMerkle {
+		return len(ExecPool.pool[epoch][execHash]), false, false
+	}
+	if _, ok := ExecPool.txMerkle[epoch][execHash]; !ok {
+		ExecPool.txMerkle[epoch][execHash] = txMerkle
+	}
+
+	choice := execBroadcastKey(execHash, txMerkle)
+	if prev, exists := ExecPool.choice[epoch][res.Signer]; exists {
+		if prev != choice {
+			// Signed equivocation proof: same signer, same epoch, different exec vote.
+			return 0, false, true
+		}
+		if byHash, ok := ExecPool.pool[epoch][execHash]; ok {
+			return len(byHash), false, false
+		}
+		return 0, false, false
+	}
+
+	if ExecPool.signers[epoch][res.Signer] {
+		if byHash, ok := ExecPool.pool[epoch][execHash]; ok {
+			return len(byHash), false, false
+		}
+		return 0, false, false
+	}
+
+	ExecPool.choice[epoch][res.Signer] = choice
+	ExecPool.signers[epoch][res.Signer] = true
+
+	if _, ok := ExecPool.pool[epoch][execHash]; !ok {
+		ExecPool.pool[epoch][execHash] = make(map[string]ExecutionResult)
+	}
+	if _, ok := ExecPool.pool[epoch][execHash][res.Signer]; !ok {
+		ExecPool.pool[epoch][execHash][res.Signer] = res
+	}
+
+	return len(ExecPool.pool[epoch][execHash]), true, false
+}
+
+func freezeExecPool(epoch uint64, execHash string) {
+	if epoch == 0 || execHash == "" {
+		return
+	}
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+	if ExecPool.frozen == nil {
+		ExecPool.frozen = make(map[uint64]string)
+	}
+	if _, ok := ExecPool.frozen[epoch]; !ok {
+		ExecPool.frozen[epoch] = execHash
+	}
+}
+
+func getExecResultsGlobal(epoch uint64, execHash string, txMerkle string) ([]ExecutionResult, []string, int, bool) {
+	if epoch == 0 || execHash == "" {
+		return nil, nil, 0, false
+	}
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+
+	byHash, ok := ExecPool.pool[epoch]
+	if !ok {
+		return nil, nil, 0, false
+	}
+	resultsMap, ok := byHash[execHash]
+	if !ok {
+		return nil, nil, 0, false
+	}
+	if txMerkle != "" {
+		if expected, ok := ExecPool.txMerkle[epoch][execHash]; ok && expected != "" && expected != txMerkle {
+			return nil, nil, 0, false
+		}
+	}
+
+	results := make([]ExecutionResult, 0, len(resultsMap))
+	signers := make([]string, 0, len(resultsMap))
+	for _, r := range resultsMap {
+		results = append(results, r)
+		if r.Signer != "" {
+			signers = append(signers, r.Signer)
+		}
+	}
+
+	return results, signers, len(resultsMap), true
+}
+
+func getExecCountGlobal(epoch uint64, execHash string, txMerkle string) int {
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+
+	if epoch == 0 || execHash == "" {
+		return 0
+	}
+	byHash, ok := ExecPool.pool[epoch]
+	if !ok {
+		return 0
+	}
+	resultsMap, ok := byHash[execHash]
+	if !ok {
+		return 0
+	}
+	if txMerkle != "" {
+		if expected, ok := ExecPool.txMerkle[epoch][execHash]; ok && expected != "" && expected != txMerkle {
+			return 0
+		}
+	}
+	return len(resultsMap)
+}
+
+func clearExecPoolUpTo(height uint64) {
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+
+	for h := range ExecPool.pool {
+		if h <= height {
+			delete(ExecPool.pool, h)
+		}
+	}
+	for h := range ExecPool.txMerkle {
+		if h <= height {
+			delete(ExecPool.txMerkle, h)
+		}
+	}
+	for h := range ExecPool.frozen {
+		if h <= height {
+			delete(ExecPool.frozen, h)
+		}
+	}
+	for h := range ExecPool.signers {
+		if h <= height {
+			delete(ExecPool.signers, h)
+		}
+	}
+	for h := range ExecPool.choice {
+		if h <= height {
+			delete(ExecPool.choice, h)
+		}
+	}
+}
+
+func buildExecPoolSnapshot(epoch uint64) *ExecPoolSnapshot {
+	if epoch == 0 {
+		return nil
+	}
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+
+	byHash, ok := ExecPool.pool[epoch]
+	if !ok || len(byHash) == 0 {
+		return nil
+	}
+
+	hashes := make(map[string][]string, len(byHash))
+	for hash, resMap := range byHash {
+		signers := make([]string, 0, len(resMap))
+		for signer := range resMap {
+			signers = append(signers, signer)
+		}
+		sort.Strings(signers)
+		hashes[hash] = signers
+	}
+
+	txMerkle := make(map[string]string)
+	if tm, ok := ExecPool.txMerkle[epoch]; ok {
+		for hash, merkle := range tm {
+			txMerkle[hash] = merkle
+		}
+	}
+
+	return &ExecPoolSnapshot{
+		Epoch:    epoch,
+		Hashes:   hashes,
+		TxMerkle: txMerkle,
+	}
+}
+
+func (n *Node) mergeExecPoolSnapshot(snapshot ExecPoolSnapshot) {
+	if snapshot.Epoch == 0 {
+		return
+	}
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	if snapshot.Epoch <= committedHeight {
+		return
+	}
+	// Accept only current epoch to avoid stale pollution.
+	if snapshot.Epoch != n.currentEpoch() {
+		return
+	}
+	for hash, signers := range snapshot.Hashes {
+		txMerkle := ""
+		if snapshot.TxMerkle != nil {
+			txMerkle = snapshot.TxMerkle[hash]
+		}
+		for _, signer := range signers {
+			if !n.isValidatorInSetForHeight(signer, snapshot.Epoch) {
+				continue
+			}
+			_, _, _ = recordExecResultGlobal(snapshot.Epoch, hash, txMerkle, ExecutionResult{
+				Height:     snapshot.Epoch,
+				Signer:     signer,
+				ResultHash: hash,
+				TxMerkle:   txMerkle,
+			})
+		}
+	}
+}
+
+func (n *Node) currentEpoch() uint64 {
+	h := n.Blockchain.Height()
+	n.commitMu.Lock()
+	if n.committedHeight > h {
+		h = n.committedHeight
+	}
+	n.commitMu.Unlock()
+	return h + 1
+}
+
+func recordProposedBlock(height uint64, proposer string, blockHash string) (bool, bool, string) {
+	proposer = normalizeValidatorID(proposer)
+	if height == 0 || proposer == "" || blockHash == "" {
+		return false, false, ""
+	}
+
+	proposedBlocksMu.Lock()
+	defer proposedBlocksMu.Unlock()
+
+	if ProposedBlocks == nil {
+		ProposedBlocks = make(map[uint64]map[string]string)
+	}
+	if _, ok := ProposedBlocks[height]; !ok {
+		ProposedBlocks[height] = make(map[string]string)
+	}
+
+	if prev, ok := ProposedBlocks[height][proposer]; ok {
+		if prev == blockHash {
+			return false, false, prev
+		}
+		return false, true, prev
+	}
+	ProposedBlocks[height][proposer] = blockHash
+
+	const keepWindow = uint64(512)
+	if height > keepWindow {
+		cutoff := height - keepWindow
+		for h := range ProposedBlocks {
+			if h < cutoff {
+				delete(ProposedBlocks, h)
+			}
+		}
+	}
+
+	return true, false, ""
+}
+
+func penalizeSignedProposal(n *Node, block Block, reason string) {
+	if n == nil || block.ID == 0 || block.Proposer == "" {
+		return
+	}
+	n.RecordMisbehavior(block.Proposer, reason, int(block.ID), block.BlockHash)
+	SlashValidator(block.Proposer, reason, int(block.ID))
+}
+
+func (n *Node) verifyLeaderBlock(block Block) bool {
+	if block.ID == 0 {
+		return false
+	}
+	epoch := n.currentEpoch()
+	if block.ID != epoch {
+		return false
+	}
+
+	if len(block.Signature) == 0 || !VerifyBlockSignature(block) {
+		if DebugConsensus {
+			fmt.Printf("Invalid proposer signature at height %d | proposer=%s\n",
+				block.ID, ShortID(block.Proposer))
+		}
+		return false
+	}
+
+	_, equivocated, prevHash := recordProposedBlock(block.ID, block.Proposer, block.BlockHash)
+	if equivocated {
+		if DebugConsensus {
+			fmt.Printf("Double proposal detected at height %d | proposer=%s prev=%s got=%s\n",
+				block.ID, ShortID(block.Proposer), ShortHash(prevHash), ShortHash(block.BlockHash))
+		}
+		penalizeSignedProposal(n, block, "double_proposal")
+		n.requestConsensusRecomputePause(block.ID, "double_proposal")
+		return false
+	}
+
+	if block.ValidatorSetHash != "" {
+		expectedHash := n.expectedValidatorSetHash(block.ID)
+		if expectedHash != "" && block.ValidatorSetHash != expectedHash {
+			if n.tryRepairValidatorSetHash(block.ID, block.ValidatorSetHash) {
+				expectedHash = n.expectedValidatorSetHash(block.ID)
+			}
+		}
+		if expectedHash != "" && block.ValidatorSetHash != expectedHash {
+			if DebugConsensus {
+				fmt.Printf("âŒ Validator set hash mismatch at height %d | expected=%s got=%s\n",
+					block.ID, expectedHash[:8], block.ValidatorSetHash[:8])
+			}
+			n.requestConsensusRecomputePause(block.ID, "validator_set_hash_mismatch")
+			localHeight := n.Blockchain.Height()
+			if n.recordValidatorSetMismatch(block.ID, expectedHash, block.ValidatorSetHash) {
+				if shouldForceSnapshotResyncForValidatorSetMismatch(localHeight, block.ID) {
+					n.forceSnapshotResyncNow(block.ID, "validator-set-hash-mismatch-autoheal")
+				} else {
+					n.maybeForceNearTipValidatorSetResync(localHeight, block.ID, "validator-set-hash-mismatch-autoheal")
+				}
+			}
+			// Near-tip mismatch should still drive regular catch-up.
+			n.maybeSyncToBestObservedHeight("validator_set_mismatch")
+			return false
+		}
+	}
+
+	validators := n.GetConsensusValidators(int(block.ID))
+	expectedLeader := LeaderForHeight(block.ID, validators)
+	if expectedLeader == "" || block.Proposer != expectedLeader {
+		if DebugConsensus {
+			fmt.Printf("Invalid proposer at height %d | expected=%s got=%s\n",
+				block.ID, ShortID(expectedLeader), ShortID(block.Proposer))
+		}
+		penalizeSignedProposal(n, block, "invalid_proposer")
+		n.requestConsensusRecomputePause(block.ID, "invalid_proposer")
+		// Production safety: proposer mismatch near tip should not force snapshot
+		// rollback loops. Use regular heartbeat-driven sync instead.
+		n.maybeSyncToBestObservedHeight("invalid_proposer")
+		return false
+	}
+
+	last := n.Blockchain.LastBlock()
+	if block.PrevHash != last.BlockHash {
+		return false
+	}
+	if HashBlock(block) != block.BlockHash {
+		penalizeSignedProposal(n, block, "invalid_block")
+		return false
+	}
+	if err := VerifyMempoolRoot(block); err != nil {
+		penalizeSignedProposal(n, block, "invalid_block")
+		return false
+	}
+	expectedRoot := n.ExecuteBlockAndGetStateRoot(block)
+	if expectedRoot == "" || expectedRoot != block.StateRoot {
+		penalizeSignedProposal(n, block, "invalid_block")
+		return false
+	}
+	return true
+}
+
+func (n *Node) handleLeaderBlock(block Block) {
+	if !n.verifyLeaderBlock(block) {
+		return
+	}
+
+	if !n.storeLeaderBlock(block) {
+		return
+	}
+	n.replayQueuedExecutionVotes()
+	if n.consensusRecomputePauseActive() {
+		// Validator-set recompute barrier: do not emit votes while paused.
+		return
+	}
+
+	if !n.canParticipateAsValidator() {
+		// Rule 2: candidate/observer nodes do not vote/propose execution hashes.
+		return
+	}
+
+	execHash := block.StateRoot
+	if execHash == "" {
+		execHash = n.ExecuteBlockAndGetStateRoot(block)
+	}
+	if execHash == "" || execHash != block.StateRoot {
+		return
+	}
+
+	n.setLogicalTick(block.ID, TickExec)
+	n.broadcastExecutionResult(block.ID, execHash, block.MempoolRoot)
+}
+
+func (n *Node) setLogicalTick(epoch uint64, tick uint64) {
+	n.logicalMu.Lock()
+	n.logicalClock = LogicalClock{Epoch: epoch, Tick: tick}
+	n.logicalMu.Unlock()
+}
+
+func leaderFromExecHash(execHash string, epoch uint64, validators []string) string {
+	if len(validators) == 0 {
+		return ""
+	}
+
+	sort.Strings(validators)
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s:%d", execHash, epoch)))
+	idx := binary.BigEndian.Uint64(sum[:8]) % uint64(len(validators))
+	return validators[idx]
+}
+
+func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle string, results []ExecutionResult, signers []string) bool {
+	if n.consensusRecomputePauseActive() {
+		return false
+	}
+	leaderBlock, ok := n.getLeaderBlock(epoch)
+	if !ok || leaderBlock.ID != epoch {
+		return false
+	}
+	if n.Blockchain.Height() >= epoch {
+		return false
+	}
+	if txMerkle != "" && leaderBlock.MempoolRoot != txMerkle {
+		return false
+	}
+	if txMerkle == "" && leaderBlock.MempoolRoot != "" {
+		return false
+	}
+
+	expected := leaderBlock.StateRoot
+	if expected == "" {
+		expected = n.ExecuteBlockAndGetStateRoot(leaderBlock)
+	}
+	if expected == "" || expected != execHash {
+		return false
+	}
+
+	final := leaderBlock
+	final.BlockTime = LogicalTimeForEpochTick(epoch, TickFinalize)
+	final.Timestamp = int64(SystemTimeUnits(final.BlockTime))
+	final.StateRoot = execHash
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Signer < results[j].Signer
+	})
+	sort.Strings(signers)
+	final.ExecutionResults = results
+	final.Signatures = signers
+	final.BlockHash = HashBlock(final)
+
+	for i := range final.ExecutionResults {
+		final.ExecutionResults[i].BlockHash = final.BlockHash
+		final.ExecutionResults[i].Height = final.ID
+		final.ExecutionResults[i].TxMerkle = txMerkle
+	}
+
+	before := n.Blockchain.Height()
+	n.ReceiveBlock(final, n.Blockchain)
+	n.setLogicalTick(epoch, TickFinalize)
+	after := n.Blockchain.Height()
+	if after > before && ResultGossipOnly && n.Consensus != nil {
+		n.hardResetConsensus(epoch + 1)
+		n.Consensus.mu.Lock()
+		n.Consensus.Paused = false
+		n.Consensus.Syncing = false
+		n.Consensus.SyncTarget = 0
+		n.Consensus.syncInFlight = false
+		n.Consensus.mu.Unlock()
+	}
+	if after > before {
+		n.clearLeaderBlock(epoch)
+	}
+	return true
+}
+
+func (n *Node) handleExecutionResultMsg(res ExecutionResultMsg) {
+	n.processExecutionResultMsg(res, true)
+}
+
+func (n *Node) queueExecResult(res ExecutionResultMsg) {
+	res.Signer = normalizeValidatorID(res.Signer)
+	if res.HeightHint == 0 || res.Signer == "" || res.ExecHash == "" {
+		return
+	}
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	key := fmt.Sprintf("%d", res.HeightHint)
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+
+	if n.queuedExecVotes == nil {
+		n.queuedExecVotes = make(map[string][]ExecutionResultMsg)
+	}
+	// Avoid duplicate queued entries from the same signer for the same hash.
+	for _, existing := range n.queuedExecVotes[key] {
+		if existing.Signer == res.Signer &&
+			existing.ExecHash == res.ExecHash &&
+			existing.TxMerkle == res.TxMerkle {
+			return
+		}
+	}
+	n.queuedExecVotes[key] = append(n.queuedExecVotes[key], res)
+	n.trimConsensusCachesLocked(committedHeight)
+}
+
+func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool) {
+	res.Signer = normalizeValidatorID(res.Signer)
+	_ = allowQueue
+	if res.Signer == "" || res.ExecHash == "" {
+		return
+	}
+
+	if res.HeightHint == 0 {
+		// Height hint is mandatory to scope execution votes per epoch.
+		return
+	}
+	if n.consensusRecomputePauseActive() {
+		if allowQueue {
+			n.queueExecResult(res)
+		}
+		return
+	}
+	if n.Consensus != nil {
+		n.Consensus.mu.Lock()
+		syncing := n.Consensus.Syncing
+		n.Consensus.mu.Unlock()
+		if syncing {
+			if allowQueue {
+				n.queueExecResult(res)
+			}
+			return
+		}
+	}
+	epoch := n.currentEpoch()
+	// Future-epoch execution votes are expected during late join/catch-up.
+	// Queue them instead of misclassifying as "non-active validator".
+	if res.HeightHint != epoch {
+		if allowQueue && res.HeightHint > epoch {
+			n.queueExecResult(res)
+		}
+		return
+	}
+	// Only validators can send execution votes.
+	validators := n.GetConsensusValidators(int(res.HeightHint))
+	if len(validators) == 0 {
+		if allowQueue {
+			n.queueExecResult(res)
+		}
+		return
+	}
+	allowed := false
+	for _, v := range validators {
+		if v == res.Signer {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		if DebugConsensus {
+			fmt.Printf("Ignoring exec hash from non-active validator %s @ epoch %d\n",
+				ShortID(res.Signer), res.HeightHint)
+		}
+		return
+	}
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	if res.HeightHint <= committedHeight {
+		return
+	}
+
+	// Enforce validator identity with signature.
+	if res.Signature == "" {
+		return
+	}
+	pub, ok := ValidatorPubKeys[res.Signer]
+	if !ok || len(pub) != ed25519.PublicKeySize {
+		if allowQueue {
+			n.queueExecResult(res)
+		}
+		return
+	}
+	sig, err := hex.DecodeString(res.Signature)
+	if err != nil {
+		return
+	}
+	if !ed25519.Verify(pub, execResultSignBytes(res.HeightHint, res.ExecHash, res.TxMerkle), sig) {
+		return
+	}
+
+	leaderBlock, ok := n.getLeaderBlock(epoch)
+	if !ok {
+		if allowQueue {
+			n.queueExecResult(res)
+		}
+		return
+	}
+	if res.TxMerkle != leaderBlock.MempoolRoot {
+		return
+	}
+	targetEpoch := res.HeightHint
+	expected := leaderBlock.StateRoot
+	if expected == "" {
+		expected = n.ExecuteBlockAndGetStateRoot(leaderBlock)
+	}
+	if expected == "" {
+		return
+	}
+	if res.ExecHash != expected {
+		if DebugConsensus {
+			fmt.Printf("Invalid execution vote from %s @ epoch %d | expected=%s got=%s\n",
+				ShortID(res.Signer), targetEpoch, ShortHash(expected), ShortHash(res.ExecHash))
+		}
+		n.RecordMisbehavior(res.Signer, "exec_mismatch", int(targetEpoch), res.ExecHash)
+		SlashValidator(res.Signer, "exec_mismatch", int(targetEpoch))
+		return
+	}
+	if !n.markExecSignerSeen(targetEpoch, res.Signer) {
+		return
+	}
+
+	// If we haven't broadcast yet for this epoch+hash and our local execution matches,
+	// broadcast our execution result to help convergence.
+	if n.canParticipateAsValidator() {
+		localHash := expected
+		if localHash == "" {
+			localHash = n.ExecuteBlockAndGetStateRoot(leaderBlock)
+		}
+		if localHash != "" && localHash == res.ExecHash {
+			n.setLogicalTick(epoch, TickExec)
+			n.broadcastExecutionResult(epoch, res.ExecHash, leaderBlock.MempoolRoot)
+		}
+	}
+
+	// Refresh validator liveness on any execution result
+	n.validatorMu.Lock()
+	if st, ok := n.validatorStatus[res.Signer]; ok {
+		st.LastSeen = time.Now()
+		st.Active = true
+	} else {
+		n.validatorStatus[res.Signer] = &ValidatorStatus{
+			LastSeen: time.Now(),
+			Active:   true,
+		}
+	}
+	n.validatorMu.Unlock()
+
+	if DebugConsensus {
+		fmt.Printf("[EXEC-HASH] hint=%d from=%s exec=%s\n",
+			res.HeightHint, res.Signer, ShortHash(res.ExecHash))
+	}
+
+	storedCount, ok, equivocation := recordExecResultGlobal(targetEpoch, res.ExecHash, res.TxMerkle, ExecutionResult{
+		Height:     targetEpoch,
+		Signer:     res.Signer,
+		ResultHash: res.ExecHash,
+		TxMerkle:   res.TxMerkle,
+	})
+	if equivocation {
+		if DebugConsensus {
+			fmt.Printf("Execution equivocation detected from %s @ epoch %d\n", ShortID(res.Signer), targetEpoch)
+		}
+		n.RecordMisbehavior(res.Signer, "exec_equivocation", int(targetEpoch), res.ExecHash)
+		SlashValidator(res.Signer, "exec_equivocation", int(targetEpoch))
+		return
+	}
+	if !ok {
+		return
+	}
+
+	if DebugConsensus {
+		fmt.Printf("Execution hash received: %s @ epoch %d\n",
+			ShortID(res.Signer), targetEpoch)
+	}
+
+	// Only finalize for the current epoch; future epochs are stored.
+	if targetEpoch != epoch {
+		return
+	}
+	n.setLogicalTick(epoch, TickVote)
+
+	epochValidators := n.GetConsensusValidators(int(epoch))
+	total := len(epochValidators)
+	required := execQuorumRequired(total)
+	if total == 0 || required == 0 {
+		return
+	}
+	if DebugConsensus {
+		fmt.Printf("[EXEC-POOL] epoch=%d hash=%s voters=%d/%d\n",
+			epoch, ShortHash(res.ExecHash), storedCount, total)
+		fmt.Printf("[EXEC-QUORUM] epoch=%d required=%d total=%d votes=%d\n",
+			epoch, required, total, storedCount)
+	}
+
+	if storedCount < required {
+		return
+	}
+
+	results, signers, _, ok := getExecResultsGlobal(targetEpoch, res.ExecHash, res.TxMerkle)
+	if !ok {
+		return
+	}
+
+	if DebugConsensus {
+		fmt.Printf("âœ… Execution quorum reached (hash=%s votes=%d/%d)\n",
+			ShortHash(res.ExecHash), storedCount, total)
+	}
+
+	freezeExecPool(epoch, res.ExecHash)
+	_ = n.finalizeExecutionResult(epoch, res.ExecHash, res.TxMerkle, results, signers)
+}
+
+func (n *Node) recordCandidateExecutionResult(res ExecutionResultMsg) bool {
+	if res.Signer == "" || res.ExecHash == "" || res.HeightHint == 0 {
+		return false
+	}
+	n.candidateMu.RLock()
+	cand, ok := n.candidates[res.Signer]
+	if !ok || cand == nil || cand.PermanentBan {
+		n.candidateMu.RUnlock()
+		return false
+	}
+	if cand.BanUntil > 0 && res.HeightHint < cand.BanUntil {
+		n.candidateMu.RUnlock()
+		return false
+	}
+	pub := cand.PubKey
+	n.candidateMu.RUnlock()
+
+	if len(pub) != ed25519.PublicKeySize || res.Signature == "" {
+		return false
+	}
+	sig, err := hex.DecodeString(res.Signature)
+	if err != nil {
+		return false
+	}
+	if !ed25519.Verify(pub, execResultSignBytes(res.HeightHint, res.ExecHash, res.TxMerkle), sig) {
+		return false
+	}
+
+	expected := ""
+	if res.HeightHint == n.currentEpoch() {
+		leaderBlock, ok := n.getLeaderBlock(res.HeightHint)
+		if ok {
+			if res.TxMerkle != leaderBlock.MempoolRoot {
+				return false
+			}
+			expected = leaderBlock.StateRoot
+			if expected == "" {
+				expected = n.ExecuteBlockAndGetStateRoot(leaderBlock)
+			}
+		}
+	} else {
+		if block, ok := n.Blockchain.GetBlock(res.HeightHint); ok {
+			if res.TxMerkle != block.MempoolRoot {
+				return false
+			}
+			expected = block.StateRoot
+		}
+	}
+
+	n.candidateMu.Lock()
+	cand, ok = n.candidates[res.Signer]
+	if !ok || cand == nil {
+		n.candidateMu.Unlock()
+		return false
+	}
+	if cand.ExecHashes == nil {
+		cand.ExecHashes = make(map[uint64]string)
+	}
+	if existing, ok := cand.ExecHashes[res.HeightHint]; ok && existing != res.ExecHash {
+		if res.Signer == "F" || res.Signer == "G" {
+			fmt.Printf("DBG candidate %s exec_equivocation height=%d existing=%s new=%s\n",
+				res.Signer,
+				res.HeightHint,
+				ShortHash(existing),
+				ShortHash(res.ExecHash),
+			)
+		}
+		n.recordCandidateMisbehaviorLocked(res.Signer, cand, res.HeightHint, "exec_equivocation")
+		n.candidateMu.Unlock()
+		return false
+	}
+	if expected != "" && res.ExecHash != expected {
+		if res.Signer == "F" || res.Signer == "G" {
+			fmt.Printf("DBG candidate %s exec_mismatch height=%d expected=%s got=%s\n",
+				res.Signer,
+				res.HeightHint,
+				ShortHash(expected),
+				ShortHash(res.ExecHash),
+			)
+		}
+		n.recordCandidateMisbehaviorLocked(res.Signer, cand, res.HeightHint, "exec_mismatch")
+		n.candidateMu.Unlock()
+		return false
+	}
+	cand.ExecHashes[res.HeightHint] = res.ExecHash
+	if res.Signer == "F" || res.Signer == "G" {
+		fmt.Printf("DBG candidate %s exec_hash_stored height=%d hash=%s expected_known=%t\n",
+			res.Signer,
+			res.HeightHint,
+			ShortHash(res.ExecHash),
+			expected != "",
+		)
+	}
+	pending := false
+	if cand.PendingMatch != nil {
+		pending = cand.PendingMatch[res.HeightHint]
+	}
+	n.candidateMu.Unlock()
+
+	if pending {
+		var expected string
+		n.Blockchain.mu.RLock()
+		if res.HeightHint < uint64(len(n.Blockchain.Blocks)) {
+			block := n.Blockchain.Blocks[res.HeightHint]
+			if block.ID == res.HeightHint {
+				expected = block.StateRoot
+			}
+		}
+		n.Blockchain.mu.RUnlock()
+		if expected != "" {
+			n.candidateMu.Lock()
+			cand, ok = n.candidates[res.Signer]
+			if ok && cand != nil && cand.PendingMatch != nil && cand.PendingMatch[res.HeightHint] {
+				if res.ExecHash == expected {
+					cand.MatchedEpochs++
+				} else {
+					n.recordCandidateMisbehaviorLocked(res.Signer, cand, res.HeightHint, "exec_mismatch_late")
+				}
+				delete(cand.PendingMatch, res.HeightHint)
+			}
+			n.candidateMu.Unlock()
+		}
+	}
+
+	return true
+}
+
+func (n *Node) replayQueuedExecutionVotes() {
+	n.execResultsMu.Lock()
+	if len(n.queuedExecVotes) == 0 {
+		n.execResultsMu.Unlock()
+		n.tryFinalizeFromStoredResults()
+		return
+	}
+	queued := n.queuedExecVotes
+	n.queuedExecVotes = make(map[string][]ExecutionResultMsg)
+	n.execResultsMu.Unlock()
+
+	for _, msgs := range queued {
+		for _, msg := range msgs {
+			n.processExecutionResultMsg(msg, true)
+		}
+	}
+	n.tryFinalizeFromStoredResults()
+}
+
+func (n *Node) tryFinalizeFromStoredResults() {
+	if n.consensusRecomputePauseActive() {
+		return
+	}
+	epoch := n.currentEpoch()
+	leaderBlock, ok := n.getLeaderBlock(epoch)
+	if !ok || leaderBlock.ID != epoch {
+		return
+	}
+	execHash := leaderBlock.StateRoot
+	if execHash == "" {
+		execHash = n.ExecuteBlockAndGetStateRoot(leaderBlock)
+	}
+	if execHash == "" {
+		return
+	}
+	txMerkle := leaderBlock.MempoolRoot
+	validators := n.GetConsensusValidators(int(epoch))
+	total := len(validators)
+	required := execQuorumRequired(total)
+	if total == 0 || required == 0 {
+		return
+	}
+	count := getExecCountGlobal(epoch, execHash, txMerkle)
+	if count < required {
+		return
+	}
+
+	results, signers, _, ok := getExecResultsGlobal(epoch, execHash, txMerkle)
+	if !ok {
+		return
+	}
+
+	freezeExecPool(epoch, execHash)
+	_ = n.finalizeExecutionResult(epoch, execHash, txMerkle, results, signers)
+}
+
+func (n *Node) hasFinalExecutionResult(epoch uint64, execHash string, txMerkle string) bool {
+	if execHash == "" {
+		return false
+	}
+	count := getExecCountGlobal(epoch, execHash, txMerkle)
+	validators := n.GetConsensusValidators(int(epoch))
+	total := len(validators)
+	required := execQuorumRequired(total)
+	if total == 0 || required == 0 {
+		return false
+	}
+	return count >= required
+}
+
+func (n *Node) handleCommitMsg(cm CommitMsg) {
+	// Commit messages are ignored in result-gossip consensus.
+	_ = cm
+}
+
+func (n *Node) BroadcastBlock(block Block) {
+	if ResultGossipOnly {
+		return
+	}
+	if n.TopicBlocks == nil {
+		fmt.Println("âŒ TopicBlocks not initialized")
+		return
+	}
+
+	data, _ := json.Marshal(block)
+
+	if err := n.TopicBlocks.Publish(context.Background(), data); err != nil {
+		fmt.Println("âŒ Block publish failed:", err)
+		return
+	}
+
+	if DebugConsensus {
+		fmt.Printf("ðŸ“¦ Block published | height=%d\n", block.ID)
+	}
+}
+
+func (n *Node) DiscoverPeers() {
+	ctx := context.Background()
+	seeds := n.seedsSnapshot()
+
+	for _, seed := range seeds {
+		seedAddr, err := ma.NewMultiaddr(seed)
+		if err != nil {
+			continue
+		}
+
+		seedInfo, err := peer.AddrInfoFromP2pAddr(seedAddr)
+		if err != nil {
+			continue
+		}
+		if n.Host != nil && seedInfo.ID == n.Host.ID() {
+			continue
+		}
+
+		if !n.canDialPeerID(seedInfo.ID.String()) {
+			continue
+		}
+		if err := n.Host.Connect(ctx, *seedInfo); err == nil {
+			n.Host.ConnManager().TagPeer(seedInfo.ID, "bootstrap", 100)
+
+			if DebugNet {
+				fmt.Println("ðŸ”— Connected to seed:", seedInfo.ID.String())
+			}
+			n.recordDialSuccess(seedInfo.ID.String())
+		} else {
+			errLower := strings.ToLower(err.Error())
+			if strings.Contains(errLower, "peer id mismatch") ||
+				strings.Contains(errLower, "dial to self attempted") {
+				if n.refreshPeerIDMismatch(seed, seedInfo.ID.String(), err) {
+					continue
+				}
+				n.forgetPeer(seedInfo.ID.String(), "peer_id_mismatch")
+			}
+			n.recordDialFailure(seedInfo.ID.String())
+		}
+	}
+}
+
+
+
+

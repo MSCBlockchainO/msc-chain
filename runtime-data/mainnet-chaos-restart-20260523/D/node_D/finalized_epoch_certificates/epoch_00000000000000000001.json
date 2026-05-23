@@ -1,0 +1,43 @@
+{
+  "version": "finality_epoch_v1",
+  "domain": "MSC_FINALIZED_EPOCH_V1",
+  "epoch": 1,
+  "height": 1,
+  "block_hash": "54f43d6b1f13a5ee9c2ba6a0285a957c44da46b74a87ad834ddb50161ae4b9cb",
+  "state_root": "0e0b06ba49abadd2e73984a29960072acaf9a6328cde3d6869f5034395e060ba",
+  "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+  "validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+  "epoch_anchor_hash": "234f70c036051ed8a6f3ba31b0b7cefdf68645ed56e5efb32b273ee3568b98f9",
+  "finality_root": "45340a10fa429a8cdbdba57955d1ea9d946864b46c1ab87a24655f27f5048cd8",
+  "consensus_mode": "NORMAL",
+  "quorum_policy_version": "v1_consensus_ready_degraded",
+  "active_ready_count": 4,
+  "required_quorum": 3,
+  "strict_quorum": 3,
+  "finalized_validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+  "finalized_validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+  "signers": [
+    "B",
+    "C",
+    "D"
+  ],
+  "signatures": [
+    {
+      "validator": "B",
+      "signature": "970ad533d1109dc1a1f47ce092ff64914dd704270e790cb43122eaa01b67fd21b9019887aac65bea00d6d14c11a7667b406f721390750399ffc5e173648a6602"
+    },
+    {
+      "validator": "C",
+      "signature": "feeb4aca247c894193e87de066e4274d47ec87f6f9ec0d9e5de13931c700d0738ea0a10a389df82f3f90f46e940608f86cf1f576df38f0ecebc075e276e4000e"
+    },
+    {
+      "validator": "D",
+      "signature": "ee05207f798c890acdef2a3fcbc6ac9c09c5a74e301e5cf3d576ef62e68fed8a3c877e2d7109c9ee05b0087d475331cc55d0b800203e2634493e035f2fb82b09"
+    }
+  ],
+  "execution_result_signatures": {
+    "B": "970ad533d1109dc1a1f47ce092ff64914dd704270e790cb43122eaa01b67fd21b9019887aac65bea00d6d14c11a7667b406f721390750399ffc5e173648a6602",
+    "C": "feeb4aca247c894193e87de066e4274d47ec87f6f9ec0d9e5de13931c700d0738ea0a10a389df82f3f90f46e940608f86cf1f576df38f0ecebc075e276e4000e",
+    "D": "ee05207f798c890acdef2a3fcbc6ac9c09c5a74e301e5cf3d576ef62e68fed8a3c877e2d7109c9ee05b0087d475331cc55d0b800203e2634493e035f2fb82b09"
+  }
+}

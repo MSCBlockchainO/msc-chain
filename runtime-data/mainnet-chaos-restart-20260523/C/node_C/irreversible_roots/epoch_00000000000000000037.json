@@ -1,0 +1,10 @@
+{
+  "version": "finality_epoch_v1",
+  "domain": "MSC_FINALIZED_EPOCH_V1",
+  "epoch": 37,
+  "height": 37,
+  "finalized_hash": "02dbbc1e84bf4a23f0d3d57c067dcaf4766d93d801f8ab7f6b200e407947372e",
+  "state_root": "bda536547c301a3681e1e0180ce60bcf67dcaa7d35dd58d18da0cf59c9eaaef3",
+  "finality_root": "13fc2f39f77ab79184c3ac017eaaf443831c7cd13229589781e1051954db7823",
+  "epoch_anchor_hash": "9787397cd47fdc11278e0053397cbd228896b66c54bcf581c91a324238f29862"
+}

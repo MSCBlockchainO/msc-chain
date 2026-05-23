@@ -1,0 +1,34 @@
+[
+    {
+        "target":  "windows/amd64",
+        "test_compiled":  true,
+        "node_compiled":  false,
+        "test_ran":  true,
+        "passed":  true,
+        "log":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\multi-arch-determinism-20260522-170047\\windows-amd64\\determinism.log"
+    },
+    {
+        "target":  "windows/arm64",
+        "test_compiled":  true,
+        "node_compiled":  false,
+        "test_ran":  false,
+        "passed":  true,
+        "log":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\multi-arch-determinism-20260522-170047\\windows-arm64\\determinism.log"
+    },
+    {
+        "target":  "linux/amd64",
+        "test_compiled":  true,
+        "node_compiled":  false,
+        "test_ran":  false,
+        "passed":  true,
+        "log":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\multi-arch-determinism-20260522-170047\\linux-amd64\\determinism.log"
+    },
+    {
+        "target":  "linux/arm64",
+        "test_compiled":  true,
+        "node_compiled":  false,
+        "test_ran":  false,
+        "passed":  true,
+        "log":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\multi-arch-determinism-20260522-170047\\linux-arm64\\determinism.log"
+    }
+]

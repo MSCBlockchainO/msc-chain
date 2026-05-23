@@ -1,0 +1,7 @@
+{
+  "yaml.schemas": {
+    "./.vscode/grafana-datasource.schema.json": [
+      "monitoring/grafana/provisioning/datasources/prometheus.yml"
+    ]
+  }
+}

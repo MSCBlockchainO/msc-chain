@@ -1,0 +1,5 @@
+=== RUN   TestMultiArchitectureReplayVectorMatchesGolden
+    multi_arch_determinism_test.go:245: multi-arch replay runtime=linux/amd64 digest=e2f226d9dbd39d79e982a523553ddc885cf39bf52101d000e49af32b8688ed48 final_height=8 final_block=a6279d29f2a1faf5de93fa88fe7d3c4747981aed1fb6d05debdc26074ecdcc9f final_ledger=259b7b1afae8bd195692ded96a5caac2ae053fa4dde9e8d84b6ce04445840291 manifest=e5e9c763d5bfb0b5de10ac071f5335edbffe22ae34598f5e2d1636f2f6683bb9
+--- PASS: TestMultiArchitectureReplayVectorMatchesGolden (0.20s)
+PASS
+2026/05/22 11:52:49 SECURITY: storage DB encryption is disabled. Configure [storage] encryption key and OS disk encryption (BitLocker/LUKS/FileVault).

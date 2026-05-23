@@ -1,0 +1,11 @@
+{
+    "target":  "linux/386",
+    "test_compiled":  true,
+    "node_compiled":  false,
+    "test_ran":  true,
+    "real_run":  true,
+    "run_method":  "wsl",
+    "status":  "real_run_passed",
+    "passed":  true,
+    "log":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\multi-arch-determinism-20260522-231813\\linux-386\\determinism.log"
+}

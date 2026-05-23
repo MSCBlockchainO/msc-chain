@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "kind": "msc_recovery_backup_v1",
+  "node_id": "A",
+  "chain_id": "91938",
+  "height": 44,
+  "snapshot_hash": "6eb060080491ca5905a62982c4e60ca528e7d717f46291e87ef0e9c87ec23573",
+  "state_root": "62c24f1401da26fc611feb414bb2c1f59a7ed5526e875cd46218bae4cb8e0a17",
+  "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+  "validator_registry_hash": "902cfb0d32446147fa5483f36c4879734f7472372e284c5bf8629e17dcb494c8",
+  "finalized_height": 44,
+  "finalized_hash": "978b942094c3121f2e714f2349e744ab28ce23b4ff8c2fedcf2557eb2416f8f8",
+  "epoch_anchor_hash": "3832090f65f704db4c81f42e4837ee01408e697c86558418ed0cc511f46bbf65",
+  "finality_root": "f5ac14a7261ea5a794a326a2018e569c529e1814f9619ff36e30a818a5df32f2",
+  "created_at_unix": 1779528158,
+  "reason": "storage_manager:post_commit_finalized_epoch",
+  "backup_dir": "runtime-data\\mainnet-smoke-autopeers-20260523b\\A\\node_A\\backups\\backup_00000000000000000044_20260523T092238.337913400Z",
+  "snapshot_manifest": {
+    "height": 44,
+    "snapshot_hash": "6eb060080491ca5905a62982c4e60ca528e7d717f46291e87ef0e9c87ec23573",
+    "state_root": "62c24f1401da26fc611feb414bb2c1f59a7ed5526e875cd46218bae4cb8e0a17",
+    "state_merkle_root": "3716176fbd66c102b6f0c65f69c4bf0e2588e81be93dfbedd2eaa0aa00a4d73d",
+    "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+    "validator_registry_hash": "902cfb0d32446147fa5483f36c4879734f7472372e284c5bf8629e17dcb494c8",
+    "finalized_height": 44,
+    "finalized_hash": "978b942094c3121f2e714f2349e744ab28ce23b4ff8c2fedcf2557eb2416f8f8",
+    "epoch_anchor_hash": "3832090f65f704db4c81f42e4837ee01408e697c86558418ed0cc511f46bbf65",
+    "finality_root": "f5ac14a7261ea5a794a326a2018e569c529e1814f9619ff36e30a818a5df32f2",
+    "chunk_size": 1048576,
+    "chunk_count": 1,
+    "chunk_hashes": [
+      "90883ea73ad2cc2cc9a41f5732967c53b8dfa1e4b68116558dcf007f28b2553f"
+    ],
+    "checkpoint_proof": {
+      "A": "b9d607bfd0a1a7cab66bcff9cbfdd903eabc9e1b6ba6f4b9cd353c1af7a9c25a003cc226bf36c1c1f0dda447b2db929d29bc9994c7809d1415cee11895e33803"
+    }
+  },
+  "storage_layout": {
+    "version": 1,
+    "root": "runtime-data\\mainnet-smoke-autopeers-20260523b\\A\\node_A",
+    "state_db": "runtime-data\\mainnet-smoke-autopeers-20260523b\\A\\node_A\\state.db",
+    "block_db": "runtime-data\\mainnet-smoke-autopeers-20260523b\\A\\node_A\\blocks.db",
+    "snapshot_db": "runtime-data\\mainnet-smoke-autopeers-20260523b\\A\\node_A\\snapshot.db",
+    "tx_db": "runtime-data\\mainnet-smoke-autopeers-20260523b\\A\\node_A\\tx.db",
+    "meta_db": "runtime-data\\mainnet-smoke-autopeers-20260523b\\A\\node_A\\meta.db",
+    "block_files": "runtime-data\\mainnet-smoke-autopeers-20260523b\\A\\node_A\\blocks",
+    "snapshot_files": "runtime-data\\mainnet-smoke-autopeers-20260523b\\A\\node_A\\snapshots",
+    "checkpoints": "runtime-data\\mainnet-smoke-autopeers-20260523b\\A\\node_A\\state_checkpoints",
+    "archive": "runtime-data\\mainnet-smoke-autopeers-20260523b\\A\\node_A\\cold-storage",
+    "updated_at_unix": 1779528158
+  },
+  "state_checkpoint": {
+    "version": "state_checkpoint_v1",
+    "domain": "MSC_STATE_CHECKPOINT_V1",
+    "height": 44,
+    "state_root": "62c24f1401da26fc611feb414bb2c1f59a7ed5526e875cd46218bae4cb8e0a17",
+    "finality_root": "f5ac14a7261ea5a794a326a2018e569c529e1814f9619ff36e30a818a5df32f2",
+    "epoch_anchor_hash": "3832090f65f704db4c81f42e4837ee01408e697c86558418ed0cc511f46bbf65",
+    "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+    "validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+    "finalized_validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+    "finalized_validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+    "block_hash": "978b942094c3121f2e714f2349e744ab28ce23b4ff8c2fedcf2557eb2416f8f8",
+    "finality_certificate_hash": "e5d75b1932b80e46d3f5aa70ae20c541c59e1fad16c99aec7416baffa9a36b64",
+    "created_at_unix": 1779528157
+  },
+  "files": [
+    {
+      "path": "snapshot.json",
+      "sha256": "90883ea73ad2cc2cc9a41f5732967c53b8dfa1e4b68116558dcf007f28b2553f",
+      "size": 9783,
+      "required": true
+    },
+    {
+      "path": "snapshot_manifest.json",
+      "sha256": "99286f859d99a41f769ee83b155a8d33394f36f3dabc67572ee52a63df519a86",
+      "size": 1071,
+      "required": true
+    },
+    {
+      "path": "storage_layout.json",
+      "sha256": "46977c95baa4f3e824beeb2d129422d74a716e4281e8275f074346ce5bbd1298",
+      "size": 919,
+      "required": false
+    },
+    {
+      "path": "state_checkpoint.json",
+      "sha256": "92c34b9635bf46b7586383613ac88605d29befd2d23be5ae9d59ecb85226f2f8",
+      "size": 959,
+      "required": false
+    }
+  ]
+}

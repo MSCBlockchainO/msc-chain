@@ -1,0 +1,17 @@
+{
+    "run_id":  "mainnet-chaos-20260521-235224",
+    "passed":  true,
+    "warning_count":  0,
+    "fork_warning_count":  0,
+    "samples":  1,
+    "max_finalized":  0,
+    "max_no_progress_seconds":  2,
+    "max_finalized_lag_blocks":  0,
+    "max_height_lag_blocks":  0,
+    "events_path":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\mainnet-chaos-20260521-235224\\events.jsonl",
+    "log_dir":  "C:\\Users\\Mohammad Talha\\OneDrive\\Desktop\\msc-chain\\runtime-logs\\mainnet-chaos-20260521-235224",
+    "node_count":  23,
+    "validator_node_count":  0,
+    "duration_seconds":  1,
+    "tier1_survival":  false
+}

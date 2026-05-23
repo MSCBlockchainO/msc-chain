@@ -1,0 +1,59 @@
+{
+  "nodes": [
+    {
+      "id": "A",
+      "role": "validator",
+      "host": "10.0.0.11",
+      "rpc": "http://10.0.0.11:26657",
+      "p2p_port": 7001,
+      "ssh_target": "validator@10.0.0.11",
+      "os": "linux",
+      "data_dir": "/var/lib/msc/A",
+      "node_data_dir": "/var/lib/msc/A/node_A"
+    },
+    {
+      "id": "B",
+      "role": "validator",
+      "host": "10.0.0.12",
+      "rpc": "http://10.0.0.12:26657",
+      "p2p_port": 7001,
+      "ssh_target": "validator@10.0.0.12",
+      "os": "linux",
+      "data_dir": "/var/lib/msc/B",
+      "node_data_dir": "/var/lib/msc/B/node_B"
+    },
+    {
+      "id": "C",
+      "role": "validator",
+      "host": "10.0.0.13",
+      "rpc": "http://10.0.0.13:26657",
+      "p2p_port": 7001,
+      "ssh_target": "validator@10.0.0.13",
+      "os": "linux",
+      "data_dir": "/var/lib/msc/C",
+      "node_data_dir": "/var/lib/msc/C/node_C"
+    },
+    {
+      "id": "D",
+      "role": "validator",
+      "host": "10.0.0.14",
+      "rpc": "http://10.0.0.14:26657",
+      "p2p_port": 7001,
+      "ssh_target": "validator@10.0.0.14",
+      "os": "linux",
+      "data_dir": "/var/lib/msc/D",
+      "node_data_dir": "/var/lib/msc/D/node_D"
+    },
+    {
+      "id": "F",
+      "role": "full",
+      "host": "10.0.0.21",
+      "rpc": "http://10.0.0.21:26657",
+      "p2p_port": 7001,
+      "ssh_target": "validator@10.0.0.21",
+      "os": "linux",
+      "data_dir": "/var/lib/msc/F",
+      "node_data_dir": "/var/lib/msc/F/node_F"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "height": 47,
+  "snapshot_hash": "6bf166cfa7cfa4b78141a1f35cd0c44118d423d9eb11193edeee7e150776d626",
+  "state_root": "9af65fc558a7726093ec97af5542725628c9a3e32ee95da199ad7a6a1816e585",
+  "state_merkle_root": "3716176fbd66c102b6f0c65f69c4bf0e2588e81be93dfbedd2eaa0aa00a4d73d",
+  "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+  "validator_registry_hash": "902cfb0d32446147fa5483f36c4879734f7472372e284c5bf8629e17dcb494c8",
+  "finalized_height": 47,
+  "finalized_hash": "66d8ef714ae0110fa9f1d72a3a9ceb20c982ddebec3e2a1ebf3fd78e0dd43c9a",
+  "epoch_anchor_hash": "6685dbf4b75103e2c27d13f62565af9e01b7dc23c945caf4004e7a9a955482cb",
+  "finality_root": "ab4ba386cf5eae726e9b461560c5231ad9d7c3ec7c49161d75d571686238d493",
+  "chunk_size": 1048576,
+  "chunk_count": 1,
+  "chunk_hashes": [
+    "a05a26d16041d0d5c56c50da493c1c6b927c06030f733c0fd638a7cb41a43846"
+  ],
+  "checkpoint_proof": {
+    "D": "9399d66800b5479f69c234a1f9837d72b53212ee26c2c16654ee67165bbe5a9a8848ec67df7cc89f1c4f9c519d6d126eff0a3e5c3739496c7026996b3c532807"
+  }
+}

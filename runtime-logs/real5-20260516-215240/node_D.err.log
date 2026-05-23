@@ -1,0 +1,8 @@
+mjffhfhk : The term 'mjffhfhk' is not recognized as the name of a cmdlet, function, script file, or operable program. 
+Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:29
++ $env:MSC_VALIDATOR_PASSWORD=mjffhfhk; go run . --mode=full --id=D --p ...
++                             ~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (mjffhfhk:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 

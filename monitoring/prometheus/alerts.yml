@@ -1,0 +1,346 @@
+groups:
+  - name: msc-node-health
+    rules:
+      - alert: MSCNodeDown
+        expr: up{job="msc_nodes", required="true"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC node target down"
+          description: "Prometheus cannot scrape {{ $labels.instance }}."
+
+      - alert: MSCOptionalNodeDown
+        expr: up{job="msc_nodes", required="false"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC optional node target down"
+          description: "Optional node on {{ $labels.instance }} is currently unreachable."
+
+      - alert: MSCNodeNotReady
+        expr: msc_node_ready{job="msc_nodes"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC node not ready"
+          description: "{{ $labels.node_id }} on {{ $labels.instance }} is not ready."
+
+      - alert: MSCFinalityStalled
+        expr: msc_node_ready{job="msc_nodes"} == 1 and changes(msc_node_finalized_height{job="msc_nodes"}[10m]) < 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC finality stalled"
+          description: "{{ $labels.node_id }} finalized height did not change in 10 minutes."
+
+      - alert: MSCPeersLow
+        expr: msc_peers_connected{job="msc_nodes"} < 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC peers low"
+          description: "{{ $labels.node_id }} has low peer count ({{ $value }})."
+
+      - alert: LowPeerCount
+        expr: msc_peers_connected{job="msc_nodes"} < 3
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low peer count"
+          description: "{{ $labels.node_id }} has fewer than 3 connected peers."
+
+      - alert: HighPeerDisconnectRate
+        expr: msc_peer_disconnect_rate_per_minute{job="msc_nodes"} > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High peer disconnect rate"
+          description: "{{ $labels.node_id }} is seeing rapid peer disconnect/quarantine churn."
+
+      - alert: MSCSyncStuck
+        expr: msc_node_syncing{job="msc_nodes"} == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC sync stuck"
+          description: "{{ $labels.node_id }} has been syncing for more than 10 minutes."
+
+      - alert: MSCLiveValidatorsBelowQuorum
+        expr: msc_node_live_validators{job="msc_nodes"} < msc_node_required_quorum{job="msc_nodes"}
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC live validators below quorum"
+          description: "{{ $labels.node_id }} live validators below required quorum."
+
+      - alert: MSCConsensusLagHigh
+        expr: msc_consensus_lag_blocks{job="msc_nodes"} > 50
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC consensus lag high"
+          description: "{{ $labels.node_id }} is behind the observed network best height by {{ $value }} blocks."
+
+      - alert: MSCFinalityLagHigh
+        expr: msc_finality_gap{job="msc_nodes"} > 20
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC finality lag high"
+          description: "{{ $labels.node_id }} local height is far ahead of finalized height."
+
+      - alert: MSCBlockProductionStalled
+        expr: msc_consensus_last_block_age_seconds{job="msc_nodes"} > 60
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC block production stalled"
+          description: "{{ $labels.node_id }} has not observed a committed block for more than 60 seconds."
+
+      - alert: BlockPropagationSlow
+        expr: msc_block_propagation_seconds{job="msc_nodes"} > 10 or msc_block_propagation_max_seconds{job="msc_nodes"} > 20
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Block propagation slow"
+          description: "{{ $labels.node_id }} is observing slow block propagation."
+
+      - alert: MSCQuorumFailure
+        expr: msc_quorum_failures_total{job="msc_nodes"} > 0 or msc_quorum_observed{job="msc_nodes"} < msc_quorum_required{job="msc_nodes"}
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC quorum failure"
+          description: "{{ $labels.node_id }} observed quorum below strict requirement."
+
+      - alert: ConsensusPeerLoss
+        expr: msc_partition_majority_peer_loss{job="msc_nodes"} > 0 or msc_peer_count_drop{job="msc_nodes"} >= 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Consensus peer loss"
+          description: "{{ $labels.node_id }} lost a large portion of its peer view."
+
+      - alert: PartitionRisk
+        expr: msc_partition_risk{job="msc_nodes"} > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Network partition risk"
+          description: "{{ $labels.node_id }} sees peer loss, height divergence, or quorum loss."
+
+      - alert: MSCMempoolBacklogHigh
+        expr: msc_mempool_utilization_ratio{job="msc_nodes"} > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC mempool backlog high"
+          description: "{{ $labels.node_id }} mempool is more than 3 blocks deep."
+
+      - alert: MSCValidatorHealthLow
+        expr: msc_validator_health_ratio{job="msc_nodes"} < 0.67
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC validator health low"
+          description: "{{ $labels.node_id }} live validator ratio is below two-thirds."
+
+      - alert: MSCSnapshotOperationFailures
+        expr: increase(msc_snapshot_failures_total{job="msc_nodes"}[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC snapshot operation failure"
+          description: "{{ $labels.node_id }} reported snapshot create/apply failures."
+
+      - alert: MSCReplayOperationFailures
+        expr: increase(msc_replay_failures_total{job="msc_nodes"}[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC replay operation failure"
+          description: "{{ $labels.node_id }} reported replay/rebuild failures."
+
+      - alert: MSCStorageUsageHigh
+        expr: msc_storage_size_bytes{job="msc_nodes"} > 0 and msc_storage_size_bytes{job="msc_nodes"} > 0.8 * 100 * 1024 * 1024 * 1024
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC storage usage high"
+          description: "{{ $labels.node_id }} local storage is above the validator target warning threshold."
+
+      - alert: MSCRPCRateLimitHigh
+        expr: increase(msc_rpc_rate_limited_total{job="msc_nodes"}[5m]) > 50
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC RPC rate limiting high"
+          description: "{{ $labels.node_id }} is rejecting many RPC requests by rate limit."
+
+      - alert: HighInvalidMessageRate
+        expr: increase(msc_invalid_messages_total{job="msc_nodes"}[5m]) > 25 or increase(msc_peer_resource_drops_total{job="msc_nodes"}[5m]) > 50
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High invalid or resource-exhausting message rate"
+          description: "{{ $labels.node_id }} is rejecting many invalid or quota-exceeding peer messages."
+
+      - alert: MSCRPCBodyRejected
+        expr: increase(msc_rpc_body_rejected_total{job="msc_nodes"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC RPC oversized body rejected"
+          description: "{{ $labels.node_id }} rejected oversized RPC request bodies."
+
+      - alert: MSCRPCUnauthorizedHigh
+        expr: increase(msc_rpc_unauthorized_total{job="msc_nodes"}[5m]) > 20
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC RPC unauthorized requests high"
+          description: "{{ $labels.node_id }} is seeing repeated unauthorized RPC requests."
+
+      - alert: MSCRPCConcurrencyHigh
+        expr: msc_rpc_max_concurrent_requests{job="msc_nodes"} > 0 and msc_rpc_inflight{job="msc_nodes"} > (0.8 * msc_rpc_max_concurrent_requests{job="msc_nodes"})
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC RPC concurrency high"
+          description: "{{ $labels.node_id }} RPC in-flight requests are near configured capacity."
+
+  - name: msc-security
+    rules:
+      - alert: MSCDoubleSignDetected
+        expr: msc_security_validator_double_sign_total{job="msc_nodes"} > 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC double-sign behavior detected"
+          description: "{{ $labels.node_id }} reports double-sign offenses > 0."
+
+      - alert: MSCInvalidExecutionDetected
+        expr: msc_security_validator_bad_execution_total{job="msc_nodes"} > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC invalid execution/block behavior detected"
+          description: "{{ $labels.node_id }} reports bad-execution offenses > 0."
+
+      - alert: MSCForkActivityDetected
+        expr: msc_map_fork_heights{job="msc_nodes"} > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC fork activity detected"
+          description: "{{ $labels.node_id }} is tracking competing forks."
+
+      - alert: MSCCensorshipEvidenceDetected
+        expr: msc_security_censorship_evidence_total{job="msc_nodes"} > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC censorship evidence observed"
+          description: "{{ $labels.node_id }} has censorship evidence in pool."
+
+      - alert: MSCTxAbuseDetected
+        expr: msc_security_tx_abuse_records{job="msc_nodes"} > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC transaction abuse detected"
+          description: "{{ $labels.node_id }} has active tx-abuse records."
+
+      - alert: MSCPeerSuspectDetected
+        expr: msc_map_peer_suspect{job="msc_nodes"} > 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC suspect peers detected"
+          description: "{{ $labels.node_id }} marked peers as suspect (possible eclipse/network attack)."
+
+      - alert: MSCValidatorJailed
+        expr: msc_security_validator_jailed_now_total{job="msc_nodes"} > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC validator jailed"
+          description: "{{ $labels.node_id }} sees one or more validators currently jailed."
+
+      - alert: MSCWeakSubjectivityDisabled
+        expr: msc_security_weak_subjectivity_depth{job="msc_nodes"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC weak-subjectivity disabled"
+          description: "{{ $labels.node_id }} has weak-subjectivity depth set to 0."
+
+      - alert: MSCDeterministicTxOrderDisabled
+        expr: msc_security_deterministic_tx_order_enforced{job="msc_nodes"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC deterministic tx-order disabled"
+          description: "{{ $labels.node_id }} allows proposer tx reordering (higher MEV risk)."
+
+      - alert: MSCCheckpointConflict
+        expr: msc_checkpoint_conflicts_total{job="msc_nodes"} > 0 or msc_finality_conflicts_total{job="msc_nodes"} > 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC checkpoint conflict"
+          description: "{{ $labels.node_id }} observed a finality/checkpoint conflict."
+
+      - alert: MSCReplayDigestMismatch
+        expr: msc_replay_digest_mismatch_total{job="msc_nodes"} > 0 or msc_replay_digest_match{job="msc_nodes"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC replay digest mismatch"
+          description: "{{ $labels.node_id }} reported replay determinism digest mismatch."
+
+      - alert: MSCLongRangeAttackRejected
+        expr: msc_long_range_attack_reject_total{job="msc_nodes"} > 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC long-range attack rejected"
+          description: "{{ $labels.node_id }} rejected an alternative historical chain."

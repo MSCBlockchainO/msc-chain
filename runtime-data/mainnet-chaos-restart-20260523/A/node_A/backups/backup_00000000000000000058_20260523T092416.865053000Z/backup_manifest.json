@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "kind": "msc_recovery_backup_v1",
+  "node_id": "A",
+  "chain_id": "91938",
+  "height": 58,
+  "snapshot_hash": "adabd425a2da5bdf664c41560d73ed623cceffe5ef790b94b686871a00875cf8",
+  "state_root": "d70e304287b2c6e53b728615742c20c12fb2f08a0963780dea751b9c010a9ffd",
+  "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+  "validator_registry_hash": "902cfb0d32446147fa5483f36c4879734f7472372e284c5bf8629e17dcb494c8",
+  "finalized_height": 58,
+  "finalized_hash": "25ab70b170bc0388ecae014d3c99cfa9e298b6027f88c43d8c64fe6457750253",
+  "epoch_anchor_hash": "c1fa9ea663b808046436e1cfb0b9d88e5e2309c5c711ac0c73045c63b6bc8e67",
+  "finality_root": "d8fcb4ec7ab99f4bff6e42d12a8d4cec1aee2650348efad5252fcd4556c940bf",
+  "created_at_unix": 1779528256,
+  "reason": "storage_manager:post_commit_finalized_epoch",
+  "backup_dir": "runtime-data\\mainnet-chaos-restart-20260523\\A\\node_A\\backups\\backup_00000000000000000058_20260523T092416.865053000Z",
+  "snapshot_manifest": {
+    "height": 58,
+    "snapshot_hash": "adabd425a2da5bdf664c41560d73ed623cceffe5ef790b94b686871a00875cf8",
+    "state_root": "d70e304287b2c6e53b728615742c20c12fb2f08a0963780dea751b9c010a9ffd",
+    "state_merkle_root": "3716176fbd66c102b6f0c65f69c4bf0e2588e81be93dfbedd2eaa0aa00a4d73d",
+    "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+    "validator_registry_hash": "902cfb0d32446147fa5483f36c4879734f7472372e284c5bf8629e17dcb494c8",
+    "finalized_height": 58,
+    "finalized_hash": "25ab70b170bc0388ecae014d3c99cfa9e298b6027f88c43d8c64fe6457750253",
+    "epoch_anchor_hash": "c1fa9ea663b808046436e1cfb0b9d88e5e2309c5c711ac0c73045c63b6bc8e67",
+    "finality_root": "d8fcb4ec7ab99f4bff6e42d12a8d4cec1aee2650348efad5252fcd4556c940bf",
+    "chunk_size": 1048576,
+    "chunk_count": 1,
+    "chunk_hashes": [
+      "ea9d2b6a63d53ec413f9ff52f1fad1d0fc563e495b0d09710310f89351391c1a"
+    ],
+    "checkpoint_proof": {
+      "A": "6a7cac5b8d881928368fceae5dd2c394f133713c173eac84e821b51750e74b32cc62fbf8042174aebcf9f09c4b03810da2db67b5030ba3d2ed3b822fef33b30e"
+    }
+  },
+  "storage_layout": {
+    "version": 1,
+    "root": "runtime-data\\mainnet-chaos-restart-20260523\\A\\node_A",
+    "state_db": "runtime-data\\mainnet-chaos-restart-20260523\\A\\node_A\\state.db",
+    "block_db": "runtime-data\\mainnet-chaos-restart-20260523\\A\\node_A\\blocks.db",
+    "snapshot_db": "runtime-data\\mainnet-chaos-restart-20260523\\A\\node_A\\snapshot.db",
+    "tx_db": "runtime-data\\mainnet-chaos-restart-20260523\\A\\node_A\\tx.db",
+    "meta_db": "runtime-data\\mainnet-chaos-restart-20260523\\A\\node_A\\meta.db",
+    "block_files": "runtime-data\\mainnet-chaos-restart-20260523\\A\\node_A\\blocks",
+    "snapshot_files": "runtime-data\\mainnet-chaos-restart-20260523\\A\\node_A\\snapshots",
+    "checkpoints": "runtime-data\\mainnet-chaos-restart-20260523\\A\\node_A\\state_checkpoints",
+    "archive": "runtime-data\\mainnet-chaos-restart-20260523\\A\\node_A\\cold-storage",
+    "updated_at_unix": 1779528256
+  },
+  "state_checkpoint": {
+    "version": "state_checkpoint_v1",
+    "domain": "MSC_STATE_CHECKPOINT_V1",
+    "height": 58,
+    "state_root": "d70e304287b2c6e53b728615742c20c12fb2f08a0963780dea751b9c010a9ffd",
+    "finality_root": "d8fcb4ec7ab99f4bff6e42d12a8d4cec1aee2650348efad5252fcd4556c940bf",
+    "epoch_anchor_hash": "c1fa9ea663b808046436e1cfb0b9d88e5e2309c5c711ac0c73045c63b6bc8e67",
+    "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+    "validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+    "finalized_validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+    "finalized_validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+    "block_hash": "25ab70b170bc0388ecae014d3c99cfa9e298b6027f88c43d8c64fe6457750253",
+    "finality_certificate_hash": "9ff3bdb9f3374a0c7332c563cf68a0eae0fe79198690aed2da1c6e12590aec5b",
+    "created_at_unix": 1779528256
+  },
+  "files": [
+    {
+      "path": "snapshot.json",
+      "sha256": "ea9d2b6a63d53ec413f9ff52f1fad1d0fc563e495b0d09710310f89351391c1a",
+      "size": 10078,
+      "required": true
+    },
+    {
+      "path": "snapshot_manifest.json",
+      "sha256": "c47adf43e5de486513e2af5f6ef3f292903ddca98ab818577fa7ddb3a5e6348f",
+      "size": 1071,
+      "required": true
+    },
+    {
+      "path": "storage_layout.json",
+      "sha256": "10a9ab9a113b17dde44ad87be0fcc7b1ad4cf92120056c03c3ce9c1426222c05",
+      "size": 889,
+      "required": false
+    },
+    {
+      "path": "state_checkpoint.json",
+      "sha256": "69b8554f803932fc6b89edb252c5a3d00978bc1343c1af7fea9e77aa82e28970",
+      "size": 959,
+      "required": false
+    }
+  ]
+}

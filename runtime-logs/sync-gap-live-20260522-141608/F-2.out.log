@@ -1,0 +1,1042 @@
+CHAIN config loaded: chain_id=91938 moniker=Mainnet-Node-1 genesis_path=genesis.json genesis_hash=2529673d9a1bc5343e62e20d53cc463f07f9be61815d00ee7e2105f0a85a00ab
+P2P config loaded: listen= external= seeds=4 persistent=4 persist_peer_id_refresh=false
+P2P config loaded: persist_peer_id_refresh=false (explicit)
+P2P config loaded: prune_localhost_on_refused=true (explicit)
+P2P config loaded: prune_localhost_refused_failures=3 (explicit)
+CONSENSUS config loaded: propose=3s prevote=1s precommit=1s commit=5s min_block_interval=4s recompute_pause=4s weak_subjectivity_depth=2048 max_future_gap=256 validator_set_commitment_v2_height=1 validator_set_hash_v3_height=0 deterministic_tx_order=true round_timeout=2s round_max=0 round_skew=1 barrier_relax=1m0s barrier_drop=1 barrier_retry_mode=per_block exec_quorum_emergency=true exec_quorum_emergency_stall=8s penalty_mode=converged_only invalid_proposer_q=4 exec_mismatch_q=3 exec_mismatch_slash=5 propose_requires_sync_ready=true post_block_safe_mode=true safe_mode_min=2s safe_mode_max=8s safe_mode_history=32 safe_mode_live_quorum_bps=6700
+CONSENSUS config loaded: weak_subjectivity_depth=2048 (explicit)
+CONSENSUS config loaded: max_future_block_gap=256 (explicit)
+CONSENSUS config loaded: validator_set_commitment_v2_height=1 (explicit)
+CONSENSUS config loaded: enforce_deterministic_tx_order=true (explicit)
+CONSENSUS config loaded: proposer_round_timeout_seconds=2 (explicit)
+CONSENSUS config loaded: proposer_round_max_skew=1 (explicit)
+CONSENSUS config loaded: transition_barrier_relax_seconds=60 (explicit)
+CONSENSUS config loaded: transition_barrier_max_drop=1 (explicit)
+CONSENSUS config loaded: transition_barrier_retry_mode=per_block (explicit)
+CONSENSUS config loaded: exec_quorum_emergency_enabled=true (explicit)
+CONSENSUS config loaded: exec_quorum_emergency_stall_seconds=8 (explicit)
+CONSENSUS config loaded: penalty_enforce_mode=converged_only (explicit)
+CONSENSUS config loaded: invalid_proposer_quarantine_after=4 (explicit)
+CONSENSUS config loaded: exec_mismatch_quarantine_after=3 (explicit)
+CONSENSUS config loaded: exec_mismatch_slash_after=5 (explicit)
+CONSENSUS config loaded: propose_requires_sync_ready=true (explicit)
+CONSENSUS config loaded: core_pending_excluded_from_proposer=true (explicit)
+CONSENSUS config loaded: core_activation_effective_height_buffer=64 (explicit)
+CONSENSUS config loaded: post_block_safe_mode_enabled=true (explicit)
+CONSENSUS config loaded: post_block_safe_mode_min_seconds=2 (explicit)
+CONSENSUS config loaded: post_block_safe_mode_max_seconds=8 (explicit)
+CONSENSUS config loaded: post_block_safe_mode_history_blocks=32 (explicit)
+CONSENSUS config loaded: post_block_safe_mode_live_quorum_bps=6700 (explicit)
+RPC config loaded: addr=127.0.0.1:26657 cors=[*] tls_cert=false tls_key=false auth_read=false auth_submit=false token_full=false token_read=false token_submit=false
+VALIDATOR config loaded: dynamic=true deterministic=true equal_chance=true active_set=5 min_active=4 min_stake=100 cap=0.0500 uptime_window=1000 recovery=0.30 long_uptime=0.95 require_stake=true core_stake_exempt=true onboarding_grace_blocks=64 onboarding_max_new_slots=1 onboarding_strict_activation=true activation_delay=5 activation_model_v2_height=0 inactive_remove_blocks=8 rotation_window=50 banned=0 inactivity_penalty=true burn_bps=100 jail=500 cooldown=50 inactive_permanent=false heartbeat_ttl=25s grace=10s drift_blocks=8 rejoin_heartbeats=3 rejoin_signed=1 rejoin_window=16 fail_on_key_unavailable=true allow_identity_rotation=false active_set_mode=adaptive_committee max_active_committee=512 adaptive_log_mult=16 committee_rotation=32 activity_window=64 min_signed=1 heartbeat_scope=committee_only required_key_fingerprint= backup_required=true backup_dir=secure-backups backup_max_age_h=24 restore_on_missing=true allow_env_password_in_production=true password_mode=file_or_prompt
+VALIDATOR config loaded: equal_chance_selection=true (explicit)
+VALIDATOR config loaded: require_stake=true (explicit)
+VALIDATOR config loaded: core_stake_exempt=true (explicit)
+VALIDATOR config loaded: inactivity_penalty_enabled=true (explicit)
+VALIDATOR config loaded: inactivity_penalty_burn_bps=100 (explicit)
+VALIDATOR config loaded: inactivity_penalty_jail_blocks=500 (explicit)
+VALIDATOR config loaded: inactivity_penalty_cooldown_blocks=50 (explicit)
+VALIDATOR config loaded: permanent_remove_on_inactive=false (explicit)
+VALIDATOR config loaded: liveness_heartbeat_ttl_seconds=25 (explicit)
+VALIDATOR config loaded: liveness_grace_seconds=10 (explicit)
+VALIDATOR config loaded: liveness_max_height_drift_blocks=8 (explicit)
+VALIDATOR config loaded: rejoin_required_heartbeats=3 (explicit)
+VALIDATOR config loaded: rejoin_required_signed_blocks=1 (explicit)
+VALIDATOR config loaded: rejoin_window_blocks=16 (explicit)
+VALIDATOR config loaded: fail_on_key_unavailable=true (explicit)
+VALIDATOR config loaded: allow_identity_rotation_on_existing_chain=false (explicit)
+VALIDATOR config loaded: active_set_mode=adaptive_committee (explicit)
+VALIDATOR config loaded: max_active_committee=512 (explicit)
+VALIDATOR config loaded: adaptive_committee_log_multiplier=16 (explicit)
+VALIDATOR config loaded: committee_rotation_blocks=32 (explicit)
+VALIDATOR config loaded: selection_activity_window_blocks=64 (explicit)
+VALIDATOR config loaded: selection_min_signed_blocks=1 (explicit)
+VALIDATOR config loaded: onboarding_grace_blocks=64 (explicit)
+VALIDATOR config loaded: onboarding_max_new_slots=1 (explicit)
+VALIDATOR config loaded: onboarding_strict_activation=true (explicit)
+VALIDATOR config loaded: validator_set_activation_model_v2_height=0 (explicit)
+VALIDATOR config loaded: validator_set_autoheal_mode=validator_quorum (explicit)
+VALIDATOR config loaded: validator_set_autoheal_trusted_only_on_mismatch=true (explicit)
+VALIDATOR config loaded: validator_set_autoheal_near_tip_force_after=2 (explicit)
+VALIDATOR config loaded: validator_set_autoheal_pause_seconds=6 (explicit)
+VALIDATOR config loaded: onboarding_bootstrap_lane_enabled=true (explicit)
+VALIDATOR config loaded: onboarding_bootstrap_max_new_slots=1 (explicit)
+VALIDATOR config loaded: onboarding_bootstrap_require_stake=true (explicit)
+VALIDATOR config loaded: onboarding_bootstrap_require_not_jailed=true (explicit)
+VALIDATOR config loaded: heartbeat_scope=committee_only (explicit)
+VALIDATOR config loaded: required_key_fingerprint= (explicit)
+VALIDATOR config loaded: key_backup_required=true (explicit)
+VALIDATOR config loaded: key_backup_dir=secure-backups (explicit)
+VALIDATOR config loaded: key_backup_max_age_hours=24 (explicit)
+VALIDATOR config loaded: key_restore_allowed_on_missing=true (explicit)
+VALIDATOR config loaded: allow_env_password_in_production=true (explicit)
+VALIDATOR config loaded: core_env_password_allowed=true (explicit)
+VALIDATOR config loaded: core_password_file= (explicit)
+VALIDATOR config loaded: password_mode=file_or_prompt (explicit)
+PROMO config loaded: obs=50 dcs=0.8500 uptime=98.00% div=70.00% div_epochs=20 srp=0.9000 srp_alpha=0.15 rate=1/100 test=false
+NET config loaded: disable_dht=false block_public_peers=false diversity=true max_subnet=8 v4=24 v6=64 self_heal=true interval=5s min_peers=3 stall=20s autonat=false relay=false hole_punch=false
+NET config loaded: mdns=true
+NET config loaded: peer_diversity_enabled=true (explicit)
+NET config loaded: peer_diversity_max_per_subnet=8 (explicit)
+NET config loaded: peer_diversity_ipv4_prefix=24 (explicit)
+NET config loaded: peer_diversity_ipv6_prefix=64 (explicit)
+SYNC config loaded: snapshot_threshold_blocks=2000 (explicit)
+SYNC config loaded: fresh_join_fallback_block_replay_enabled=true (explicit)
+SYNC config loaded: snapshot_publish_new_node_threshold_blocks=50 (explicit)
+SYNC config loaded: snapshot_publish_lag_threshold_blocks=20 (explicit)
+SYNC config loaded: snapshot_publish_reannounce_cooldown_seconds=12 (explicit)
+SYNC config loaded: snapshot_warmup_seconds=10 (explicit)
+SYNC config loaded: fast_block_sync_max_blocks=256 (explicit)
+SYNC config loaded: restart_snapshot_grace_blocks=256 (explicit)
+SYNC config loaded: delta_replay_max_blocks=50000 (explicit)
+SYNC config loaded: delta_replay_batch_blocks=1024 (explicit)
+SYNC config loaded: delta_replay_verify_workers=8 (explicit)
+SYNC config loaded: direct_gossip_max_blocks=128 (explicit)
+SYNC config loaded: range_fetch_max_blocks=50000 (explicit)
+SYNC config loaded: snapshot_delta_max_blocks=10000000 (explicit)
+SYNC config loaded: snapshot_chunk_size_bytes=1048576 (explicit)
+SYNC config loaded: snapshot_parallel_chunks=8 (explicit)
+SYNC config loaded: sync_stall_seconds=180 (explicit)
+SYNC config loaded: sync_peer_timeout_seconds=15 (explicit)
+SYNC config loaded: snapshot_anchor_timeout_seconds=10 (explicit)
+SYNC config loaded: snapshot_anchor_max_retries=6 (explicit)
+SYNC config loaded: checkpoint_interval_blocks=32 (explicit)
+SYNC config loaded: snapshot_checkpoint_domain=MSC_SNAPSHOT_V1 (explicit)
+SYNC config loaded: snapshot_checkpoint_v2_height=0 (explicit)
+SYNC config loaded: snapshot_session_ttl_seconds=0 (explicit)
+SYNC config loaded: snapshot_quorum_apply_watchdog_seconds=15 (explicit)
+SYNC config loaded: snapshot_session_reset_watchdog_seconds=60 (explicit)
+SYNC config loaded: snapshot_invalid_proof_quarantine_after=3 (explicit)
+SYNC config loaded: history_mode=background (explicit)
+SYNC config loaded: trusted_snapshot_require_checkpoint_proof=true (explicit)
+EVM config ignored: stack hard-disabled in this build
+DTL config loaded: contract_runtime_removed=true contracts_v2=false compat_rpc_subset=false v2_activation_height=0 logs_index_enabled=true oracle_min_signers=3 oracle_staleness=120 lending_accrual_interval=1 beacon_delay=8 router_enabled=true router_max_hops=4 router_deadline_max_blocks=30 router_max_price_impact_bps=3000 router_quote_max_paths=16 defi_farm_enabled=true gamefi_season_enabled=true gamefi_reward_token=MSC
+WARN dtl.solidity_like_runtime_enabled ignored: contract runtime removed
+DTL config loaded: contracts_v2_enabled=false (explicit)
+DTL config loaded: compat_rpc_subset_enabled=false (explicit)
+DTL config loaded: v2_activation_height=0 (explicit)
+DTL config loaded: logs_index_enabled=true (explicit)
+DTL config loaded: oracle_min_signers=3 (explicit)
+DTL config loaded: oracle_max_staleness_blocks=120 (explicit)
+DTL config loaded: lending_accrual_interval_blocks=1 (explicit)
+DTL config loaded: game_beacon_delay_blocks=8 (explicit)
+WARN dtl.max_contract_call_depth ignored: contract runtime removed
+WARN dtl.bytecode_runtime_enabled ignored: contract runtime removed
+WARN dtl.bytecode_activation_height ignored: contract runtime removed
+WARN dtl.bytecode_max_size ignored: contract runtime removed
+WARN dtl.bytecode_require_canonical ignored: contract runtime removed
+DTL config loaded: router_enabled=true (explicit)
+DTL config loaded: router_max_hops=4 (explicit)
+DTL config loaded: router_deadline_max_blocks=30 (explicit)
+DTL config loaded: router_max_price_impact_bps=3000 (explicit)
+DTL config loaded: router_quote_max_paths=16 (explicit)
+DTL config loaded: defi_farm_enabled=true (explicit)
+DTL config loaded: gamefi_season_enabled=true (explicit)
+DTL config loaded: gamefi_reward_token=MSC (explicit)
+DTL config loaded: gamefi_season_length_blocks=43200 (explicit)
+DTL config loaded: gamefi_claim_grace_blocks=21600 (explicit)
+DTL config loaded: gamefi_fee_share_from_pool_bps=2500 (explicit)
+DTL config loaded: gamefi_fee_share_from_lending_bps=2000 (explicit)
+DTL config loaded: gamefi_duel_win_points=100 (explicit)
+DTL config loaded: gamefi_tournament_win_points=600 (explicit)
+DTL config loaded: gamefi_tournament_participation_points=80 (explicit)
+DTL config loaded: farm_min_stake_blocks=50 (explicit)
+DTL config loaded: farm_lp_points_per_block=1 (explicit)
+DTL config loaded: farm_max_multiplier_bps=30000 (explicit)
+DTL config loaded: gamefi_max_reward_per_account_per_season=1000000 (explicit)
+[DTL-CONTRACT-RUNTIME] removed=true
+TOKENOMICS config loaded: allow_treasury_ops=false
+TOKENOMICS config loaded: random_user_reward_enabled=true
+TOKENOMICS config loaded: random_user_reward_chance_bps=2500
+TOKENOMICS config loaded: emission_enabled=true
+TOKENOMICS config loaded: emission_min_reward=2
+TOKENOMICS config loaded: emission_max_reward=4
+TOKENOMICS config loaded: work_block_reward_enabled=true
+TOKENOMICS config loaded: work_block_base_reward=2
+TOKENOMICS config loaded: emission_jackpot_chance_bps=100
+TOKENOMICS config loaded: emission_base_chance_bps=10000
+TOKENOMICS config loaded: emission_high_chance_after_blocks=1105840
+TOKENOMICS config loaded: emission_high_chance_bps=10000
+TOKENOMICS config loaded: emission_halving_interval_blocks=1105840
+TOKENOMICS config loaded: emission_treasury_bps=2000
+TOKENOMICS config loaded: emission_validator_bps=7200
+TOKENOMICS config loaded: emission_burn_bps=800
+TOKENOMICS config loaded: emission_interval_mode=false
+TOKENOMICS config loaded: emission_gap_min_blocks=4
+TOKENOMICS config loaded: emission_gap_max_blocks=6
+TOKENOMICS config loaded: emission_validator_to_proposer=false
+TOKENOMICS config loaded: supply_burn_floor=62000000
+TOKENOMICS config loaded: unified_team_reward_enabled=true
+TOKENOMICS config loaded: unified_team_reward_treasury_bps=2000
+TOKENOMICS config loaded: unified_team_reward_proposer_bps=3500
+TOKENOMICS config loaded: unified_team_reward_validator_bps=4500
+AUTH config loaded: require_wallet=true open_browser=true timeout=600s challenge_ttl=180s token_ttl=86400s core=[A B C D]
+CORE config loaded: registry_path=core_validators.json (explicit)
+CORE config loaded: registry_enforcement=warn (explicit)
+CORE config loaded: registry_min_signatures=0 (explicit)
+CORE config loaded: registry_reload_seconds=10 (explicit)
+STORAGE config loaded: key_env=MSC_DB_ENCRYPTION_KEY key_file= key_hex=false key_b64=false
+STORAGE runtime: db_encryption=false
+2026/05/22 14:17:39 RPC address resolved: 127.0.0.1:26661 (source=cli)
+===============================================
+===============================================
+Node ID     : F
+Mode        : full
+Role        : full
+Data Dir    : data\sync-gap-live-20260522-141608\F
+Listen Port : 7005
+===============================================
+2026/05/22 14:17:39 [PEER-BOOTSTRAP-RECONCILE] base=/ip4/127.0.0.1/tcp/7001 old=12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg new=12D3KooWHqFmL9P8RkkBctwJykXkgA8vyFNKVNw5MxvmaoycHUKp source=peers.json
+2026/05/22 14:17:39 [PEER-BOOTSTRAP-RECONCILE] base=/ip4/127.0.0.1/tcp/7002 old=12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk new=12D3KooWCk1mRxygvy5j8AxSz7NJeEzb8tve8miiGeDGd2b1eoGw source=peers.json
+2026/05/22 14:17:39 [PEER-BOOTSTRAP-RECONCILE] base=/ip4/127.0.0.1/tcp/7003 old=12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8 new=12D3KooWDKCEsbPrX8ktNoYgoECKkQ2Ah3fGuUdAhpwTsztz93R6 source=peers.json
+2026/05/22 14:17:39 [PEER-BOOTSTRAP-RECONCILE] base=/ip4/127.0.0.1/tcp/7004 old=12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W new=12D3KooWKrjP18NY64sDBLtuexzLipt9PyDULeQgVyv3bki6cf3m source=peers.json
+2026/05/22 14:17:39 validator key unlocked
+2026/05/22 14:17:39 [KEY-AUDIT] validator=F backup_present=true backup_age_s=0 integrity=true
+2026/05/22 14:17:39 [IDENTITY] key_loaded=true validator=F fingerprint=523a7dd3ee0e500a expected= match=true source=existing mode=strict
+2026/05/22 14:17:39 SECURITY: storage DB encryption is disabled. Configure [storage] encryption key and OS disk encryption (BitLocker/LUKS/FileVault).
+2026/05/22 14:17:39 [JOB 1] WAL file C:\Users\Mohammad Talha\OneDrive\Desktop\msc-chain\data\sync-gap-live-20260522-141608\F\node_F\state.db\000002.log with log number 000002 stopped reading at offset: 257542; replayed 95 keys in 48 batches
+2026/05/22 14:17:39 [JOB 1] WAL file C:\Users\Mohammad Talha\OneDrive\Desktop\msc-chain\data\sync-gap-live-20260522-141608\F\node_F\state.db\000004.log with log number 000004 stopped reading at offset: 424267; replayed 162 keys in 81 batches
+2026/05/22 14:17:39 [JOB 1] WAL file C:\Users\Mohammad Talha\OneDrive\Desktop\msc-chain\data\sync-gap-live-20260522-141608\F\node_F\blocks.db\000002.log with log number 000002 stopped reading at offset: 259244; replayed 63 keys in 63 batches
+2026/05/22 14:17:39 [JOB 1] WAL file C:\Users\Mohammad Talha\OneDrive\Desktop\msc-chain\data\sync-gap-live-20260522-141608\F\node_F\blocks.db\000004.log with log number 000004 stopped reading at offset: 150470; replayed 36 keys in 36 batches
+2026/05/22 14:17:39 [JOB 1] WAL file C:\Users\Mohammad Talha\OneDrive\Desktop\msc-chain\data\sync-gap-live-20260522-141608\F\node_F\tx.db\000002.log with log number 000002 stopped reading at offset: 0; replayed 0 keys in 0 batches
+2026/05/22 14:17:39 [JOB 1] WAL file C:\Users\Mohammad Talha\OneDrive\Desktop\msc-chain\data\sync-gap-live-20260522-141608\F\node_F\meta.db\000002.log with log number 000002 stopped reading at offset: 248339; replayed 319 keys in 178 batches
+2026/05/22 14:17:39 [JOB 1] WAL file C:\Users\Mohammad Talha\OneDrive\Desktop\msc-chain\data\sync-gap-live-20260522-141608\F\node_F\meta.db\000004.log with log number 000004 stopped reading at offset: 515151; replayed 221 keys in 92 batches
+2026/05/22 14:17:39 [JOB 1] WAL file C:\Users\Mohammad Talha\OneDrive\Desktop\msc-chain\data\sync-gap-live-20260522-141608\F\node_F\meta.db\000005.log with log number 000005 stopped reading at offset: 1029310; replayed 345 keys in 147 batches
+2026/05/22 14:17:39 [JOB 1] WAL file C:\Users\Mohammad Talha\OneDrive\Desktop\msc-chain\data\sync-gap-live-20260522-141608\F\node_F\meta.db\000006.log with log number 000006 stopped reading at offset: 1528183; replayed 287 keys in 99 batches
+[REGISTRY-BOOTSTRAP] height=0 chain_height=98 reason=early_height
+[WARN] consensus validator set unresolved height=1 chain_height=98 expected_hash= local_hash= local_source=none snapshot_missing=false
+[COMMITTEE] height=2 size=4 target=4 hash=cda45a02
+[SET-FREEZE] height=2 vhash=cda45a02 size=4
+2026/05/22 14:17:40 [REGISTRY-PERSIST] height=98 source=committed_carry_forward from=97 validators=4 hash=902cfb0d
+2026/05/22 14:17:40 [REGISTRY] bootstrap snapshot created height=98 validators=4 reason=startup
+[SET-FREEZE-REPLAY] entries=1 applied=1 last_h=2 hash=cda45a02
+[SET-FREEZE-CHAIN] applied=1 materialized=0 tip_h=98 hash=cda45a02
+[EMISSION] h=96 reward=3 treasury=1 validators=2 burn=0 applied_burn=0 chance_bps=10000
+2026/05/22 14:17:40 [AUTOHEAL] startup_recovery_applied height=98 frozen_sets=99
+2026/05/22 14:17:40 [STARTUP-EXECUTION-SNAPSHOT] action=rebuild resume base=96 target=98
+2026/05/22 14:17:40 Wallet auth required for validator activation; network starts immediately for node F
+2026/05/22 14:17:40 EVM/VM routes removed permanently. DTL JSON-RPC available at /rpc
+Consensus disabled for node F (role=full). Running in sync-only mode.
+===============================================
+===============================================
+Peer ID  : n/a
+Height   : 98
+Peers    : 0
+===============================================
+msc[F]> 2026/05/22 14:17:40 [WARN] interactive CLI input closed; node keeps running: EOF
+2026/05/22 14:17:40 [P2P-ID] identity key=data\sync-gap-live-20260522-141608\F\node_F\p2p_identity.key peer_id=12D3KooWDyMfzb1W7eVraegtuNmRMqg74q2geZeRDq1YZR5owLkZ
+Ã°Å¸Å’Â LibP2P host initialized
+Ã°Å¸â€ â€ PeerID: 12D3KooWDyMfzb1W7eVraegtuNmRMqg74q2geZeRDq1YZR5owLkZ
+Ã°Å¸â€œÂ Listening addresses:
+  /ip4/127.0.0.1/tcp/7005/p2p/12D3KooWDyMfzb1W7eVraegtuNmRMqg74q2geZeRDq1YZR5owLkZ
+P2P stack: discovery=DNS seeds + DHT + mDNS, transport=QUIC, security=Noise, messaging=GossipSub, NAT=UPnP + Relay
+Ã°Å¸â€œÅ  Host info: Addrs=1 DHT=true
+[EMISSION] h=97 reward=2 treasury=1 validators=1 burn=0 applied_burn=0 chance_bps=10000
+mDNS auto-disabled on Windows (set MSC_FORCE_MDNS=1 to force-enable)
+ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â¡ PubSub topics initialized (MSC)
+   msc-block        block propagation
+   msc-tx           mempool ingress
+   msc-consensus    exec/commit/snapshot
+   msc-validator    validator gossip
+   msc-snapshot-meta snapshot manifest metadata
+   msc-snapshot-chunk snapshot chunk availability
+   msc-snapshot-proof snapshot anchor proofs
+Ã°Å¸â€â€” Peer connected: 12D3KooWHqFmL9P8RkkBctwJykXkgA8vyFNKVNw5MxvmaoycHUKp
+Ã°Å¸â€Â§ Network protocols configured
+Ã¢Å“â€¦ Listening for transactions...
+Ã¢Å“â€¦ Listening for blocks...
+Pubkey override (peer-hello testnet) for validator A
+Pubkey override (peer-hello testnet) for validator A
+Peer info from 12D3KooWHqFmL9P8RkkBctwJykXkgA8vyFNKVNw5MxvmaoycHUKp | validator=A role=validator
+Peer info from 12D3KooWHqFmL9P8RkkBctwJykXkgA8vyFNKVNw5MxvmaoycHUKp | validator=A role=validator
+Ã°Å¸â€â€” Peer connected: 12D3KooWKrjP18NY64sDBLtuexzLipt9PyDULeQgVyv3bki6cf3m
+Validator registered | id=A addr=/ip4/127.0.0.1/tcp/7001/p2p/12D3KooWHqFmL9P8RkkBctwJykXkgA8vyFNKVNw5MxvmaoycHUKp
+Pubkey override (peer-hello testnet) for validator D
+Peer info from 12D3KooWKrjP18NY64sDBLtuexzLipt9PyDULeQgVyv3bki6cf3m | validator=D role=validator
+Pubkey override (peer-hello testnet) for validator D
+Peer info from 12D3KooWKrjP18NY64sDBLtuexzLipt9PyDULeQgVyv3bki6cf3m | validator=D role=validator
+[EMISSION] h=98 reward=4 treasury=1 validators=2 burn=1 applied_burn=0 chance_bps=10000
+Validator registered | id=D addr=/ip4/127.0.0.1/tcp/7004/p2p/12D3KooWKrjP18NY64sDBLtuexzLipt9PyDULeQgVyv3bki6cf3m
+2026/05/22 14:17:40 [SNAPSHOT-REPAIR] height=98 source=tip_create_snapshot_repair reason=startup
+Ã°Å¸â€œÂ¨ Consensus message from 12D3KooWHqFmL9P8RkkBctwJykXkgA8vyFNKVNw5MxvmaoycHUKp: peers (size: 333 bytes)
+Ã°Å¸â€â€” Received 4 peers from 12D3KooWHqFmL9P8RkkBctwJykXkgA8vyFNKVNw5MxvmaoycHUKp
+Attempting to connect to 4 peers
+Ã°Å¸â€œÂ¨ Consensus message from 12D3KooWKrjP18NY64sDBLtuexzLipt9PyDULeQgVyv3bki6cf3m: peers (size: 333 bytes)
+Ã°Å¸â€â€” Received 4 peers from 12D3KooWKrjP18NY64sDBLtuexzLipt9PyDULeQgVyv3bki6cf3m
+Pubkey override (testnet) for validator C
+Pubkey override (testnet) for validator C
+Validator registered | id=C addr=/ip4/127.0.0.1/tcp/7003/p2p/12D3KooWDKCEsbPrX8ktNoYgoECKkQ2Ah3fGuUdAhpwTsztz93R6
+[REGISTRY-PENDING] height=104 chain_height=98 reason=future_parent
+[SET-PENDING] height=105 chain_height=98 reason=future_height
+[REGISTRY-PENDING] height=103 chain_height=98 reason=future_parent
+[SET-PENDING] height=104 chain_height=98 reason=future_height
+[REGISTRY-PENDING] height=105 chain_height=98 reason=future_parent
+[SET-PENDING] height=106 chain_height=98 reason=future_height
+Validator heartbeat: C | reported_height=105 | finalized_height=105 | local_exec_epoch=106
+Validator heartbeat: C | reported_height=105 | finalized_height=105 | local_exec_epoch=106
+Validator heartbeat received: C | reported_height=105 | finalized_height=105 | local_exec_epoch=106
+Validator heartbeat received: C | reported_height=105 | finalized_height=105 | local_exec_epoch=106
+2026/05/22 14:17:40 [VOTE-DROP] reason=queued_future_epoch signer=C height=106 round=0 vote_block=59bf6262 current_block= proposal= exec=bc256e76 tx_merkle=
+[REGISTRY-PENDING] height=106 chain_height=98 reason=future_parent
+[SET-PENDING] height=107 chain_height=98 reason=future_height
+Validator heartbeat: C | reported_height=106 | finalized_height=106 | local_exec_epoch=107
+Validator heartbeat: C | reported_height=106 | finalized_height=106 | local_exec_epoch=107
+2026/05/22 14:17:41 [VOTE-DROP] reason=queued_future_epoch signer=C height=106 round=0 vote_block=59bf6262 current_block= proposal= exec=bc256e76 tx_merkle=
+Validator heartbeat received: C | reported_height=106 | finalized_height=106 | local_exec_epoch=107
+Validator heartbeat received: C | reported_height=106 | finalized_height=106 | local_exec_epoch=107
+Ã°Å¸â€â€” Peer connected: 12D3KooWDKCEsbPrX8ktNoYgoECKkQ2Ah3fGuUdAhpwTsztz93R6
+Ã¢Å“â€¦ Connected to peer: 12D3KooWDKCEsbPrX8ktNoYgoECKkQ2Ah3fGuUdAhpwTsztz93R6
+Peer info from 12D3KooWDKCEsbPrX8ktNoYgoECKkQ2Ah3fGuUdAhpwTsztz93R6 | validator=C role=validator
+Peer info from 12D3KooWDKCEsbPrX8ktNoYgoECKkQ2Ah3fGuUdAhpwTsztz93R6 | validator=C role=validator
+Validator heartbeat: C | reported_height=106 | finalized_height=106 | local_exec_epoch=107
+Validator heartbeat: C | reported_height=106 | finalized_height=106 | local_exec_epoch=107
+2026/05/22 14:17:41 [VOTE-DROP] reason=queued_future_epoch signer=C height=106 round=0 vote_block=59bf6262 current_block= proposal= exec=bc256e76 tx_merkle=
+2026/05/22 14:17:41 [VOTE-DROP] reason=queued_future_epoch signer=C height=106 round=0 vote_block=59bf6262 current_block= proposal= exec=bc256e76 tx_merkle=
+Validator heartbeat received: C | reported_height=106 | finalized_height=106 | local_exec_epoch=107
+Validator heartbeat received: C | reported_height=106 | finalized_height=106 | local_exec_epoch=107
+[SYNC] reason=heartbeat local=98 target=106 votes=1 required=3 stage=direct_gossip action=block_range_fetch
+[SYNC-BATCH-REPLICATED] stage=direct_gossip ranges=1 replicas=2 local=98 requested=99-106 window=128 peers=2 per_peer_max=512
+[SYNC-REQUEST-START] peer=12D3KooW range=99-106 snapshot=false snapshot_height=0 timeout_ms=15000
+[SYNC-REQUEST-OPEN] peer=12D3KooW range=99-106
+[SYNC-REQUEST-START] peer=12D3KooW range=99-106 snapshot=false snapshot_height=0 timeout_ms=15000
+[SYNC-REQUEST-OPEN] peer=12D3KooW range=99-106
+[SYNC-REQUEST-OPEN-OK] peer=12D3KooW range=99-106 duration_ms=0
+[SYNC-REQUEST-ENCODE] peer=12D3KooW range=99-106
+[SYNC-REQUEST-OPEN-OK] peer=12D3KooW range=99-106 duration_ms=0
+[SYNC-REQUEST-ENCODE] peer=12D3KooW range=99-106
+[SYNC-REQUEST-ENCODE-OK] peer=12D3KooW range=99-106 duration_ms=0
+[SYNC-REQUEST-DECODE] peer=12D3KooW range=99-106
+[SYNC-REQUEST-ENCODE-OK] peer=12D3KooW range=99-106 duration_ms=0
+[SYNC-REQUEST-DECODE] peer=12D3KooW range=99-106
+[SYNC-REQUEST-RESULT] peer=12D3KooW range=99-106 count=8 snapshot=false duration_ms=1
+[SYNC-REQUEST-RESULT] peer=12D3KooW range=99-106 count=8 snapshot=false duration_ms=1
+[SYNC-BLOCK-REJECT] stage=direct_gossip provider=12D3KooW local=98 next=99 got=99 reason=invalid_execution_result_signature queue_tip=0 proposer=C hash=2de1be1a prev=f2f3b8cb
+[APPLY-FAIL] h=99 hash=2de1be1a reason=invalid_execution_result_signature fail_count=1
+[SYNC-APPLY-STOP] requested_height=99 local=98 reason=invalid_execution_result_signature retries=1
+[SYNC-RANGE] provider=12D3KooW requested=99-106 received=99-106 count=8 applied_before=98 applied_after=98
+[SYNC-RANGE-NO-PROGRESS] stage=direct_gossip provider=12D3KooW requested=99-106 received=99-106 local=98 queue_tip=0 queued_next=none
+[SYNC-REQUEST-START] peer=12D3KooW range=99-106 snapshot=false snapshot_height=0 timeout_ms=15000
+[SYNC-REQUEST-OPEN] peer=12D3KooW range=99-106
+[SYNC-REQUEST-OPEN-OK] peer=12D3KooW range=99-106 duration_ms=0
+[SYNC-REQUEST-ENCODE] peer=12D3KooW range=99-106
+[SYNC-REQUEST-ENCODE-OK] peer=12D3KooW range=99-106 duration_ms=0
+[SYNC-REQUEST-DECODE] peer=12D3KooW range=99-106
+[SYNC-REQUEST-RESULT] peer=12D3KooW range=99-106 count=8 snapshot=false duration_ms=1
+[REGISTRY-COMMITMENT-CHECK] height=99 required=true parent_unanchored=false source=chain_parent_commitment expected=902cfb0d got=902cfb0d
+[EMISSION] h=98 reward=4 treasury=1 validators=2 burn=1 applied_burn=0 chance_bps=10000
+[REGISTRY-PRECOMMIT] height=99 source=committed_carry_forward header=902cfb0d resolved=902cfb0d validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=98 phase=process_block_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=process_block_committed
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=post_block_effects_begin
+[EMISSION] h=99 reward=2 treasury=1 validators=1 burn=0 applied_burn=0 chance_bps=10000
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=post_block_effects_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=persist_registry_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=persist_registry_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=apply_validator_updates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=apply_validator_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=observe_candidates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=observe_candidates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=apply_validator_update_txs_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=apply_validator_update_txs_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=apply_scheduled_updates_begin
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=queue_inactive_removals_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=queue_inactive_removals_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=sync_gate_snapshot_state_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=sync_gate_snapshot_state_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=apply_queued_set_update_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=apply_queued_set_update_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=validator_set_lock_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=validator_set_lock_acquired update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=compute_next_transition_height_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=compute_next_transition_height_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=due_transition_eval_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=due_transition_eval_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=defer_for_sync_eval_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=defer_for_sync_eval_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=scheduled_transition_validators_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=scheduled_transition_validators_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=build_next_validators_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=build_next_validators_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=transition_quorum_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=transition_quorum_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=transition_plan_write_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=transition_plan_write_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=finalize_pending_maps_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=finalize_pending_maps_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=active_transition_heights_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=active_transition_heights_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=validator_set_unlock update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=retry_clear_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=retry_clear_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=prune_retry_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=prune_retry_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=onboarding_tracker_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=onboarding_tracker_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=broadcast_validator_info_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=broadcast_validator_info_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=final_update_log_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=final_update_log_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=snapshot_epoch_validators_begin update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=99 step=snapshot_epoch_validators_done update_height=99 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=apply_scheduled_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=snapshot_epoch_validators_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=snapshot_epoch_validators_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=start_next_round_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=start_next_round_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=clear_exec_results_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=clear_exec_results_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=update_validator_metrics_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=update_validator_metrics_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=enter_safe_mode_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=enter_safe_mode_deferred
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=enter_safe_mode_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=ensure_tip_snapshot_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=ensure_tip_snapshot_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=prune_snapshots_deferred
+[COMMIT] node=F h=99 hash=2de1be1a by=C type=TIME txs=0
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=commit_log_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=touch_signers_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=touch_signers_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=maybe_exit_sync_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=99 local=99 phase=done
+[HEIGHT] node=F updated -> 99
+[SYNC-BLOCK-REJECT] stage=direct_gossip provider=12D3KooW local=99 next=100 got=100 reason=invalid_execution_result_signature queue_tip=0 proposer=C hash=0aca4090 prev=2de1be1a
+[APPLY-FAIL] h=100 hash=0aca4090 reason=invalid_execution_result_signature fail_count=1
+[SYNC-APPLY-STOP] requested_height=100 local=99 reason=invalid_execution_result_signature retries=1
+[SYNC-RANGE] provider=12D3KooW requested=99-106 received=99-106 count=8 applied_before=98 applied_after=99
+[SYNC-APPLY-PARTIAL] stage=direct_gossip provider=12D3KooW requested=99-106 received=99-106 applied_before=98 applied_after=99 next=100 queue_tip=0 queued_next=none
+[SYNC-REQUEST-START] peer=12D3KooW range=100-100 snapshot=false snapshot_height=0 timeout_ms=15000
+[SYNC-REQUEST-OPEN] peer=12D3KooW range=100-100
+[SYNC-REQUEST-OPEN-OK] peer=12D3KooW range=100-100 duration_ms=0
+[SYNC-REQUEST-ENCODE] peer=12D3KooW range=100-100
+[SYNC-REQUEST-ENCODE-OK] peer=12D3KooW range=100-100 duration_ms=0
+[SYNC-REQUEST-DECODE] peer=12D3KooW range=100-100
+[SYNC-REQUEST-START] peer=12D3KooW range=100-106 snapshot=false snapshot_height=0 timeout_ms=15000
+[SYNC-REQUEST-OPEN] peer=12D3KooW range=100-106
+[SYNC-REQUEST-RESULT] peer=12D3KooW range=100-100 count=1 snapshot=false duration_ms=0
+[SYNC-REQUEST-OPEN-OK] peer=12D3KooW range=100-106 duration_ms=0
+[SYNC-REQUEST-ENCODE] peer=12D3KooW range=100-106
+[MISSING-BLOCK-RECOVERY] request height=100 provider=12D3KooW trigger=sync_apply_partial_direct_gossip
+[SYNC-REQUEST-ENCODE-OK] peer=12D3KooW range=100-106 duration_ms=0
+[SYNC-REQUEST-DECODE] peer=12D3KooW range=100-106
+[SYNC-BLOCK-REJECT] stage=direct_gossip provider=12D3KooW local=99 next=100 got=100 reason=invalid_execution_result_signature queue_tip=0 proposer=C hash=0aca4090 prev=2de1be1a
+[APPLY-FAIL] h=100 hash=0aca4090 reason=invalid_execution_result_signature fail_count=2
+[MISSING-BLOCK-RECOVERY] no_progress height=100 provider=12D3KooW trigger=sync_apply_partial_direct_gossip apply_reason=invalid_execution_result_signature retries=1 after=99 block=0aca4090 prev=2de1be1a
+[SYNC-REQUEST-START] peer=12D3KooW range=100-100 snapshot=false snapshot_height=0 timeout_ms=15000
+[SYNC-REQUEST-OPEN] peer=12D3KooW range=100-100
+[SYNC-REQUEST-RESULT] peer=12D3KooW range=100-106 count=7 snapshot=false duration_ms=2
+[SYNC-REQUEST-OPEN-OK] peer=12D3KooW range=100-100 duration_ms=0
+[SYNC-REQUEST-ENCODE] peer=12D3KooW range=100-100
+[SYNC-REQUEST-ENCODE-OK] peer=12D3KooW range=100-100 duration_ms=0
+[SYNC-REQUEST-DECODE] peer=12D3KooW range=100-100
+[SYNC-REQUEST-RESULT] peer=12D3KooW range=100-100 count=1 snapshot=false duration_ms=0
+[MISSING-BLOCK-RECOVERY] request height=100 provider=12D3KooW trigger=sync_apply_partial_direct_gossip
+[SYNC-BLOCK-REJECT] stage=direct_gossip provider=12D3KooW local=99 next=100 got=100 reason=invalid_execution_result_signature queue_tip=0 proposer=C hash=0aca4090 prev=2de1be1a
+[APPLY-FAIL] h=100 hash=0aca4090 reason=invalid_execution_result_signature fail_count=3
+[SYNC-APPLY-STOP] requested_height=100 local=99 reason=invalid_execution_result_signature retries=1
+[SYNC-RANGE] provider=12D3KooW requested=100-106 received=100-106 count=7 applied_before=99 applied_after=99
+[SYNC-RANGE-NO-PROGRESS] stage=direct_gossip provider=12D3KooW requested=100-106 received=100-106 local=99 queue_tip=0 queued_next=none
+[SYNC-BATCH-STOP] stage=direct_gossip local=99 target=106 reason=no_sync_peer exclude=3
+[SYNC-BLOCK-REJECT] stage=direct_gossip provider=12D3KooW local=99 next=100 got=100 reason=invalid_execution_result_signature queue_tip=0 proposer=C hash=0aca4090 prev=2de1be1a
+[APPLY-FAIL] h=100 hash=0aca4090 reason=invalid_execution_result_signature fail_count=4
+[MISSING-BLOCK-RECOVERY] no_progress height=100 provider=12D3KooW trigger=sync_apply_partial_direct_gossip apply_reason=invalid_execution_result_signature retries=1 after=99 block=0aca4090 prev=2de1be1a
+[SYNC-REQUEST-START] peer=12D3KooW range=100-100 snapshot=false snapshot_height=0 timeout_ms=15000
+[SYNC-REQUEST-OPEN] peer=12D3KooW range=100-100
+[SYNC-REQUEST-OPEN-OK] peer=12D3KooW range=100-100 duration_ms=0
+[SYNC-REQUEST-ENCODE] peer=12D3KooW range=100-100
+[SYNC-REQUEST-ENCODE-OK] peer=12D3KooW range=100-100 duration_ms=0
+[SYNC-REQUEST-DECODE] peer=12D3KooW range=100-100
+[SYNC-REQUEST-RESULT] peer=12D3KooW range=100-100 count=1 snapshot=false duration_ms=0
+[MISSING-BLOCK-RECOVERY] request height=100 provider=12D3KooW trigger=sync_apply_partial_direct_gossip
+[SYNC-BLOCK-REJECT] stage=direct_gossip provider=12D3KooW local=99 next=100 got=100 reason=invalid_execution_result_signature queue_tip=0 proposer=C hash=0aca4090 prev=2de1be1a
+[APPLY-FAIL] h=100 hash=0aca4090 reason=invalid_execution_result_signature fail_count=5
+[SYNC] repeated block failure h=100 hash=0aca4090 reason=invalid_execution_result_signature fail_count=5 action=provider_rotate
+[SYNC-FAILURE-CONTROLLER] stage=direct_gossip provider=12D3KooW local=99 next=100 target=100 fail_count=5 reason=invalid_execution_result_signature action=provider_rotate_snapshot
+[MISSING-BLOCK-RECOVERY] no_progress height=100 provider=12D3KooW trigger=sync_apply_partial_direct_gossip apply_reason=invalid_execution_result_signature retries=1 after=99 block=0aca4090 prev=2de1be1a
+Ã°Å¸â€œÂ¨ Consensus message from 12D3KooWDKCEsbPrX8ktNoYgoECKkQ2Ah3fGuUdAhpwTsztz93R6: peers (size: 333 bytes)
+Ã°Å¸â€â€” Received 4 peers from 12D3KooWDKCEsbPrX8ktNoYgoECKkQ2Ah3fGuUdAhpwTsztz93R6
+Ã°Å¸â€â€” Peer connected: 12D3KooWCk1mRxygvy5j8AxSz7NJeEzb8tve8miiGeDGd2b1eoGw
+Ã¢Å“â€¦ Connected to peer: 12D3KooWCk1mRxygvy5j8AxSz7NJeEzb8tve8miiGeDGd2b1eoGw
+Pubkey override (peer-hello testnet) for validator B
+Peer info from 12D3KooWCk1mRxygvy5j8AxSz7NJeEzb8tve8miiGeDGd2b1eoGw | validator=B role=validator
+Validator registered | id=B addr=/ip4/127.0.0.1/tcp/7002/p2p/12D3KooWCk1mRxygvy5j8AxSz7NJeEzb8tve8miiGeDGd2b1eoGw
+Peer info from 12D3KooWCk1mRxygvy5j8AxSz7NJeEzb8tve8miiGeDGd2b1eoGw | validator=B role=validator
+Validator heartbeat: B | reported_height=106 | finalized_height=106 | local_exec_epoch=107
+Validator heartbeat: B | reported_height=106 | finalized_height=106 | local_exec_epoch=107
+Validator heartbeat received: B | reported_height=106 | finalized_height=106 | local_exec_epoch=107
+2026/05/22 14:17:42 [VOTE-DROP] reason=queued_future_epoch signer=C height=106 round=0 vote_block=59bf6262 current_block= proposal= exec=bc256e76 tx_merkle=
+Validator heartbeat received: B | reported_height=106 | finalized_height=106 | local_exec_epoch=107
+[SNAPSHOT-PROOF] height=106 checkpoint=96 validator=C votes=1 hash=b23f9cf4
+Ã°Å¸â€œÂ¨ Consensus message from 12D3KooWCk1mRxygvy5j8AxSz7NJeEzb8tve8miiGeDGd2b1eoGw: peers (size: 333 bytes)
+Ã°Å¸â€â€” Received 4 peers from 12D3KooWCk1mRxygvy5j8AxSz7NJeEzb8tve8miiGeDGd2b1eoGw
+[SYNC-RESUME] reason=partial_sync_resume local=99 target=106
+Ã°Å¸â€â€ž Bootstrapping DHT...
+Ã¢Å“â€¦ DHT bootstrap complete
+Ã°Å¸â€Â Starting DHT peer discovery...
+Ã°Å¸â€â€” PubSub mesh check against 4 peers
+[SYNC] reason=late_join local=99 target=106 votes=2 required=3 stage=direct_gossip action=block_range_fetch
+[SYNC-BATCH-REPLICATED] stage=direct_gossip ranges=1 replicas=2 local=99 requested=100-106 window=128 peers=2 per_peer_max=512
+[SYNC-REQUEST-START] peer=12D3KooW range=100-106 snapshot=false snapshot_height=0 timeout_ms=15000
+[SYNC-REQUEST-OPEN] peer=12D3KooW range=100-106
+[SYNC-REQUEST-START] peer=12D3KooW range=100-106 snapshot=false snapshot_height=0 timeout_ms=15000
+[SYNC-REQUEST-OPEN] peer=12D3KooW range=100-106
+[SYNC-REQUEST-OPEN-OK] peer=12D3KooW range=100-106 duration_ms=0
+[SYNC-REQUEST-OPEN-OK] peer=12D3KooW range=100-106 duration_ms=0
+[SYNC-REQUEST-ENCODE] peer=12D3KooW range=100-106
+[SYNC-REQUEST-ENCODE] peer=12D3KooW range=100-106
+[SYNC-REQUEST-ENCODE-OK] peer=12D3KooW range=100-106 duration_ms=0
+[SYNC-REQUEST-DECODE] peer=12D3KooW range=100-106
+[SYNC-REQUEST-ENCODE-OK] peer=12D3KooW range=100-106 duration_ms=0
+[SYNC-REQUEST-DECODE] peer=12D3KooW range=100-106
+[SYNC-REQUEST-RESULT] peer=12D3KooW range=100-106 count=7 snapshot=false duration_ms=1
+[SYNC-REQUEST-RESULT] peer=12D3KooW range=100-106 count=7 snapshot=false duration_ms=0
+[REGISTRY-COMMITMENT-CHECK] height=100 required=true parent_unanchored=false source=chain_parent_commitment expected=902cfb0d got=902cfb0d
+[REGISTRY-PRECOMMIT] height=100 source=committed_carry_forward header=902cfb0d resolved=902cfb0d validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=99 phase=process_block_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=process_block_committed
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=post_block_effects_begin
+âœ… Height finalized â†’ 101
+[EMISSION] h=100 reward=3 treasury=1 validators=2 burn=0 applied_burn=0 chance_bps=10000
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=post_block_effects_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=persist_registry_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=persist_registry_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=apply_validator_updates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=apply_validator_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=observe_candidates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=observe_candidates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=apply_validator_update_txs_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=apply_validator_update_txs_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=apply_scheduled_updates_begin
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=queue_inactive_removals_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=queue_inactive_removals_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=sync_gate_snapshot_state_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=sync_gate_snapshot_state_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=apply_queued_set_update_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=apply_queued_set_update_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=validator_set_lock_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=validator_set_lock_acquired update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=compute_next_transition_height_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=compute_next_transition_height_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=due_transition_eval_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=due_transition_eval_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=defer_for_sync_eval_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=defer_for_sync_eval_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=scheduled_transition_validators_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=scheduled_transition_validators_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=build_next_validators_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=build_next_validators_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=transition_quorum_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=transition_quorum_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=transition_plan_write_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=transition_plan_write_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=finalize_pending_maps_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=finalize_pending_maps_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=active_transition_heights_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=active_transition_heights_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=validator_set_unlock update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=retry_clear_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=retry_clear_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=prune_retry_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=prune_retry_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=onboarding_tracker_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=onboarding_tracker_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=broadcast_validator_info_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=broadcast_validator_info_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=final_update_log_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=final_update_log_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=snapshot_epoch_validators_begin update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=100 step=snapshot_epoch_validators_done update_height=100 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=apply_scheduled_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=snapshot_epoch_validators_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=snapshot_epoch_validators_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=start_next_round_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=start_next_round_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=clear_exec_results_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=clear_exec_results_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=update_validator_metrics_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=update_validator_metrics_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=enter_safe_mode_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=enter_safe_mode_deferred
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=enter_safe_mode_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=ensure_tip_snapshot_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=ensure_tip_snapshot_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=prune_snapshots_deferred
+[COMMIT] node=F h=100 hash=0aca4090 by=C type=TIME txs=0
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=commit_log_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=touch_signers_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=touch_signers_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=maybe_exit_sync_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=100 local=100 phase=done
+[HEIGHT] node=F updated -> 100
+[REGISTRY-COMMITMENT-CHECK] height=101 required=true parent_unanchored=false source=chain_parent_commitment expected=902cfb0d got=902cfb0d
+[REGISTRY-PRECOMMIT] height=101 source=committed_carry_forward header=902cfb0d resolved=902cfb0d validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=100 phase=process_block_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=process_block_committed
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=post_block_effects_begin
+âœ… Height finalized â†’ 102
+[EMISSION] h=101 reward=4 treasury=1 validators=2 burn=1 applied_burn=0 chance_bps=10000
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=post_block_effects_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=persist_registry_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=persist_registry_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=apply_validator_updates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=apply_validator_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=observe_candidates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=observe_candidates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=apply_validator_update_txs_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=apply_validator_update_txs_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=apply_scheduled_updates_begin
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=queue_inactive_removals_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=queue_inactive_removals_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=sync_gate_snapshot_state_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=sync_gate_snapshot_state_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=apply_queued_set_update_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=apply_queued_set_update_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=validator_set_lock_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=validator_set_lock_acquired update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=compute_next_transition_height_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=compute_next_transition_height_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=due_transition_eval_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=due_transition_eval_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=defer_for_sync_eval_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=defer_for_sync_eval_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=scheduled_transition_validators_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=scheduled_transition_validators_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=build_next_validators_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=build_next_validators_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=transition_quorum_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=transition_quorum_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=transition_plan_write_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=transition_plan_write_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=finalize_pending_maps_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=finalize_pending_maps_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=active_transition_heights_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=active_transition_heights_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=validator_set_unlock update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=retry_clear_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=retry_clear_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=prune_retry_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=prune_retry_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=onboarding_tracker_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=onboarding_tracker_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=broadcast_validator_info_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=broadcast_validator_info_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=final_update_log_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=final_update_log_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=snapshot_epoch_validators_begin update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=101 step=snapshot_epoch_validators_done update_height=101 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=apply_scheduled_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=snapshot_epoch_validators_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=snapshot_epoch_validators_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=start_next_round_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=start_next_round_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=clear_exec_results_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=clear_exec_results_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=update_validator_metrics_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=update_validator_metrics_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=enter_safe_mode_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=enter_safe_mode_deferred
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=enter_safe_mode_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=ensure_tip_snapshot_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=ensure_tip_snapshot_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=prune_snapshots_deferred
+[COMMIT] node=F h=101 hash=755d165f by=A type=TIME txs=0
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=commit_log_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=touch_signers_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=touch_signers_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=maybe_exit_sync_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=101 local=101 phase=done
+[HEIGHT] node=F updated -> 101
+[REGISTRY-COMMITMENT-CHECK] height=102 required=true parent_unanchored=false source=chain_parent_commitment expected=902cfb0d got=902cfb0d
+[REGISTRY-PRECOMMIT] height=102 source=committed_carry_forward header=902cfb0d resolved=902cfb0d validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=101 phase=process_block_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=process_block_committed
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=post_block_effects_begin
+âœ… Height finalized â†’ 103
+[EMISSION] h=102 reward=3 treasury=1 validators=2 burn=0 applied_burn=0 chance_bps=10000
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=post_block_effects_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=persist_registry_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=persist_registry_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=apply_validator_updates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=apply_validator_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=observe_candidates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=observe_candidates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=apply_validator_update_txs_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=apply_validator_update_txs_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=apply_scheduled_updates_begin
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=queue_inactive_removals_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=queue_inactive_removals_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=sync_gate_snapshot_state_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=sync_gate_snapshot_state_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=apply_queued_set_update_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=apply_queued_set_update_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=validator_set_lock_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=validator_set_lock_acquired update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=compute_next_transition_height_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=compute_next_transition_height_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=due_transition_eval_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=due_transition_eval_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=defer_for_sync_eval_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=defer_for_sync_eval_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=scheduled_transition_validators_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=scheduled_transition_validators_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=build_next_validators_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=build_next_validators_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=transition_quorum_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=transition_quorum_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=transition_plan_write_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=transition_plan_write_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=finalize_pending_maps_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=finalize_pending_maps_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=active_transition_heights_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=active_transition_heights_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=validator_set_unlock update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=retry_clear_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=retry_clear_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=prune_retry_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=prune_retry_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=onboarding_tracker_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=onboarding_tracker_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=broadcast_validator_info_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=broadcast_validator_info_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=final_update_log_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=final_update_log_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=snapshot_epoch_validators_begin update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=102 step=snapshot_epoch_validators_done update_height=102 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=apply_scheduled_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=snapshot_epoch_validators_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=snapshot_epoch_validators_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=start_next_round_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=start_next_round_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=clear_exec_results_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=clear_exec_results_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=update_validator_metrics_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=update_validator_metrics_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=enter_safe_mode_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=enter_safe_mode_deferred
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=enter_safe_mode_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=ensure_tip_snapshot_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=ensure_tip_snapshot_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=prune_snapshots_deferred
+[COMMIT] node=F h=102 hash=d9d9a0c7 by=C type=TIME txs=0
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=commit_log_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=touch_signers_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=touch_signers_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=maybe_exit_sync_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=102 local=102 phase=done
+[HEIGHT] node=F updated -> 102
+[REGISTRY-COMMITMENT-CHECK] height=103 required=true parent_unanchored=false source=chain_parent_commitment expected=902cfb0d got=902cfb0d
+[REGISTRY-PRECOMMIT] height=103 source=committed_carry_forward header=902cfb0d resolved=902cfb0d validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=102 phase=process_block_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=process_block_committed
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=post_block_effects_begin
+âœ… Height finalized â†’ 104
+[EMISSION] h=103 reward=3 treasury=1 validators=2 burn=0 applied_burn=0 chance_bps=10000
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=post_block_effects_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=persist_registry_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=persist_registry_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=apply_validator_updates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=apply_validator_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=observe_candidates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=observe_candidates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=apply_validator_update_txs_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=apply_validator_update_txs_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=apply_scheduled_updates_begin
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=queue_inactive_removals_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=queue_inactive_removals_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=sync_gate_snapshot_state_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=sync_gate_snapshot_state_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=apply_queued_set_update_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=apply_queued_set_update_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=validator_set_lock_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=validator_set_lock_acquired update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=compute_next_transition_height_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=compute_next_transition_height_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=due_transition_eval_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=due_transition_eval_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=defer_for_sync_eval_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=defer_for_sync_eval_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=scheduled_transition_validators_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=scheduled_transition_validators_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=build_next_validators_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=build_next_validators_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=transition_quorum_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=transition_quorum_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=transition_plan_write_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=transition_plan_write_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=finalize_pending_maps_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=finalize_pending_maps_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=active_transition_heights_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=active_transition_heights_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=validator_set_unlock update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=retry_clear_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=retry_clear_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=prune_retry_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=prune_retry_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=onboarding_tracker_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=onboarding_tracker_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=broadcast_validator_info_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=broadcast_validator_info_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=final_update_log_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=final_update_log_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=snapshot_epoch_validators_begin update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=103 step=snapshot_epoch_validators_done update_height=103 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=apply_scheduled_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=snapshot_epoch_validators_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=snapshot_epoch_validators_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=start_next_round_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=start_next_round_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=clear_exec_results_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=clear_exec_results_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=update_validator_metrics_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=update_validator_metrics_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=enter_safe_mode_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=enter_safe_mode_deferred
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=enter_safe_mode_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=ensure_tip_snapshot_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=ensure_tip_snapshot_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=prune_snapshots_deferred
+[COMMIT] node=F h=103 hash=3274d4b6 by=D type=TIME txs=0
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=commit_log_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=touch_signers_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=touch_signers_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=maybe_exit_sync_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=103 local=103 phase=done
+[HEIGHT] node=F updated -> 103
+[REGISTRY-COMMITMENT-CHECK] height=104 required=true parent_unanchored=false source=chain_parent_commitment expected=902cfb0d got=902cfb0d
+[REGISTRY-PRECOMMIT] height=104 source=committed_carry_forward header=902cfb0d resolved=902cfb0d validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=103 phase=process_block_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=process_block_committed
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=post_block_effects_begin
+âœ… Height finalized â†’ 105
+[EMISSION] h=104 reward=4 treasury=1 validators=2 burn=1 applied_burn=0 chance_bps=10000
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=post_block_effects_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=persist_registry_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=persist_registry_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=apply_validator_updates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=apply_validator_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=observe_candidates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=observe_candidates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=apply_validator_update_txs_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=apply_validator_update_txs_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=apply_scheduled_updates_begin
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=queue_inactive_removals_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=queue_inactive_removals_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=sync_gate_snapshot_state_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=sync_gate_snapshot_state_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=apply_queued_set_update_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=apply_queued_set_update_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=validator_set_lock_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=validator_set_lock_acquired update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=compute_next_transition_height_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=compute_next_transition_height_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=due_transition_eval_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=due_transition_eval_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=defer_for_sync_eval_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=defer_for_sync_eval_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=scheduled_transition_validators_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=scheduled_transition_validators_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=build_next_validators_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=build_next_validators_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=transition_quorum_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=transition_quorum_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=transition_plan_write_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=transition_plan_write_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=finalize_pending_maps_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=finalize_pending_maps_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=active_transition_heights_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=active_transition_heights_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=validator_set_unlock update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=retry_clear_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=retry_clear_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=prune_retry_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=prune_retry_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=onboarding_tracker_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=onboarding_tracker_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=broadcast_validator_info_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=broadcast_validator_info_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=final_update_log_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=final_update_log_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=snapshot_epoch_validators_begin update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=104 step=snapshot_epoch_validators_done update_height=104 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=apply_scheduled_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=snapshot_epoch_validators_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=snapshot_epoch_validators_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=start_next_round_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=start_next_round_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=clear_exec_results_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=clear_exec_results_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=update_validator_metrics_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=update_validator_metrics_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=enter_safe_mode_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=enter_safe_mode_deferred
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=enter_safe_mode_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=ensure_tip_snapshot_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=ensure_tip_snapshot_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=prune_snapshots_deferred
+[COMMIT] node=F h=104 hash=95d73baa by=A type=TIME txs=0
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=commit_log_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=touch_signers_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=touch_signers_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=maybe_exit_sync_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=104 local=104 phase=done
+[HEIGHT] node=F updated -> 104
+[REGISTRY-COMMITMENT-CHECK] height=105 required=true parent_unanchored=false source=chain_parent_commitment expected=902cfb0d got=902cfb0d
+[REGISTRY-PRECOMMIT] height=105 source=committed_carry_forward header=902cfb0d resolved=902cfb0d validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=104 phase=process_block_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=process_block_committed
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=post_block_effects_begin
+âœ… Height finalized â†’ 106
+[EMISSION] h=105 reward=3 treasury=1 validators=2 burn=0 applied_burn=0 chance_bps=10000
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=post_block_effects_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=persist_registry_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=persist_registry_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=apply_validator_updates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=apply_validator_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=observe_candidates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=observe_candidates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=apply_validator_update_txs_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=apply_validator_update_txs_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=apply_scheduled_updates_begin
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=queue_inactive_removals_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=queue_inactive_removals_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=sync_gate_snapshot_state_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=sync_gate_snapshot_state_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=apply_queued_set_update_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=apply_queued_set_update_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=validator_set_lock_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=validator_set_lock_acquired update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=compute_next_transition_height_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=compute_next_transition_height_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=due_transition_eval_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=due_transition_eval_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=defer_for_sync_eval_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=defer_for_sync_eval_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=scheduled_transition_validators_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=scheduled_transition_validators_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=build_next_validators_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=build_next_validators_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=transition_quorum_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=transition_quorum_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=transition_plan_write_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=transition_plan_write_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=finalize_pending_maps_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=finalize_pending_maps_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=active_transition_heights_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=active_transition_heights_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=validator_set_unlock update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=retry_clear_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=retry_clear_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=prune_retry_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=prune_retry_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=onboarding_tracker_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=onboarding_tracker_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=broadcast_validator_info_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=broadcast_validator_info_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=final_update_log_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=final_update_log_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=snapshot_epoch_validators_begin update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=105 step=snapshot_epoch_validators_done update_height=105 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=apply_scheduled_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=snapshot_epoch_validators_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=snapshot_epoch_validators_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=start_next_round_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=start_next_round_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=clear_exec_results_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=clear_exec_results_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=update_validator_metrics_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=update_validator_metrics_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=enter_safe_mode_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=enter_safe_mode_deferred
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=enter_safe_mode_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=ensure_tip_snapshot_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=ensure_tip_snapshot_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=prune_snapshots_deferred
+[COMMIT] node=F h=105 hash=ec2f2ba6 by=B type=TIME txs=0
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=commit_log_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=touch_signers_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=touch_signers_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=maybe_exit_sync_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=105 local=105 phase=done
+[HEIGHT] node=F updated -> 105
+[REGISTRY-COMMITMENT-CHECK] height=106 required=true parent_unanchored=false source=chain_parent_commitment expected=902cfb0d got=902cfb0d
+[REGISTRY-PRECOMMIT] height=106 source=committed_carry_forward header=902cfb0d resolved=902cfb0d validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=105 phase=process_block_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=process_block_committed
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=post_block_effects_begin
+âœ… Height finalized â†’ 107
+[EMISSION] h=106 reward=3 treasury=1 validators=2 burn=0 applied_burn=0 chance_bps=10000
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=post_block_effects_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=persist_registry_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=persist_registry_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=apply_validator_updates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=apply_validator_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=observe_candidates_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=observe_candidates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=apply_validator_update_txs_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=apply_validator_update_txs_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=apply_scheduled_updates_begin
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=queue_inactive_removals_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=queue_inactive_removals_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=sync_gate_snapshot_state_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=sync_gate_snapshot_state_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=apply_queued_set_update_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=apply_queued_set_update_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=validator_set_lock_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=validator_set_lock_acquired update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=compute_next_transition_height_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=compute_next_transition_height_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=due_transition_eval_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=due_transition_eval_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=defer_for_sync_eval_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=defer_for_sync_eval_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=scheduled_transition_validators_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=0 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=scheduled_transition_validators_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=build_next_validators_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=0
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=build_next_validators_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=transition_quorum_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=transition_quorum_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=transition_plan_write_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=transition_plan_write_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=finalize_pending_maps_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=finalize_pending_maps_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=active_transition_heights_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=active_transition_heights_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=validator_set_unlock update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=retry_clear_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=retry_clear_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=prune_retry_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=prune_retry_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=onboarding_tracker_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=onboarding_tracker_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=broadcast_validator_info_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=broadcast_validator_info_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=final_update_log_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=final_update_log_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=snapshot_epoch_validators_begin update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-SCHEDULED-UPDATES] stage=direct_gossip provider=12D3KooW current_height=106 step=snapshot_epoch_validators_done update_height=106 due_transition=false defer_for_sync=false update_blocked=false planned_only=false updated=false processed_adds=0 processed_removes=0 next_transition_height=0 transition_validators=4 next_validators=4
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=apply_scheduled_updates_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=snapshot_epoch_validators_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=snapshot_epoch_validators_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=start_next_round_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=start_next_round_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=clear_exec_results_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=clear_exec_results_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=update_validator_metrics_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=update_validator_metrics_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=enter_safe_mode_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=enter_safe_mode_deferred
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=enter_safe_mode_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=ensure_tip_snapshot_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=ensure_tip_snapshot_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=prune_snapshots_deferred
+[COMMIT] node=F h=106 hash=5ebc88ea by=B type=TIME txs=0
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=commit_log_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=touch_signers_begin
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=touch_signers_done
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=maybe_exit_sync_begin
+[SYNC-CLEAR] reason=commit local=106 target=106
+[REJOIN-WARMUP] reason=commit local=106 target=106 warmup_seconds=10
+2026/05/22 14:17:45 [VOTE-DROP] reason=stale_committed_height signer=C height=106 round=0 vote_block=59bf6262 current_block= proposal= exec=bc256e76 tx_merkle=
+[SYNC-COMMIT-PHASE] node=F stage=direct_gossip provider=12D3KooW height=106 local=106 phase=done
+[HEIGHT] node=F updated -> 106
+[SYNC-RANGE] provider=12D3KooW requested=100-106 received=100-106 count=7 applied_before=99 applied_after=106

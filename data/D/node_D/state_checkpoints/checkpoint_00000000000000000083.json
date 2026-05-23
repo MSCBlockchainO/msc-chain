@@ -1,0 +1,15 @@
+{
+  "version": "state_checkpoint_v1",
+  "domain": "MSC_STATE_CHECKPOINT_V1",
+  "height": 83,
+  "state_root": "df341d86b605d33da2d3c4766b625161b8f4606a4e8ca73c13a2c28394ef7dbf",
+  "finality_root": "154b8bcc120ec3e1de388005e62051f9f3134fc0b7e81f9416b35a049946772b",
+  "epoch_anchor_hash": "c5a3b3c4254d96ed7319cf5018c92123c4efa0aa99c8691899f4ac1ad11c14e8",
+  "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+  "validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+  "finalized_validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+  "finalized_validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+  "block_hash": "d4eff12b66e5b6c9b99e11595875fc4c01a3a40474d2490a11fb343284195b93",
+  "finality_certificate_hash": "f5b229927069603d0948b6ae440e525ed42f2271bb9130c0e6b04cc9442ea43c",
+  "created_at_unix": 1779524482
+}

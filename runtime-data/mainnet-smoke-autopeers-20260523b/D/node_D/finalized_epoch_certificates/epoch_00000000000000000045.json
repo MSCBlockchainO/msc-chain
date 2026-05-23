@@ -1,0 +1,44 @@
+{
+  "version": "finality_epoch_v1",
+  "domain": "MSC_FINALIZED_EPOCH_V1",
+  "epoch": 45,
+  "height": 45,
+  "block_hash": "90292f324ce45383fa2055162017f27e6918c981df10990a8c901203d2578daa",
+  "state_root": "9638c4fd8b864ec43d868c36fb5347e1e96d02cce33f1c65b6bb90022f605179",
+  "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+  "validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+  "epoch_anchor_hash": "cf94d8d2525739b1e3633474d872bfc16a9e8767ef88bc8ab212ab44847f654a",
+  "previous_epoch_anchor_hash": "3832090f65f704db4c81f42e4837ee01408e697c86558418ed0cc511f46bbf65",
+  "finality_root": "da560ee6b27d9335fe9b955cfa7d5e73a99028fb4a87087450a55a74ed1c4d0f",
+  "consensus_mode": "NORMAL",
+  "quorum_policy_version": "v1_consensus_ready_degraded",
+  "active_ready_count": 4,
+  "required_quorum": 3,
+  "strict_quorum": 3,
+  "finalized_validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+  "finalized_validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+  "signers": [
+    "B",
+    "C",
+    "D"
+  ],
+  "signatures": [
+    {
+      "validator": "B",
+      "signature": "6be9611032f7c3bde0898ca36357536cffd3141beb6386b5426177ee85bcddc3dae603f3456665f80b9f7d34a322fd9380bc51b2241a1a345aa18a5b366f1e0f"
+    },
+    {
+      "validator": "C",
+      "signature": "01430f6c69f60dabfe793ee9938001afe2c8715a1030f474caf6a7a2234ba427077e2bc52a3a5a61209525581114e0f9723e098cc9e376f3bf171c9f07c0be01"
+    },
+    {
+      "validator": "D",
+      "signature": "c3231a53f4db445ffaf23d43ff92b2e9be50ce0d239b7257f9f58bc1f49f4a8c143f503048c00f5806b9856d043f3ffae607cd6ce2d083cce7bc65299ca2d70f"
+    }
+  ],
+  "execution_result_signatures": {
+    "B": "6be9611032f7c3bde0898ca36357536cffd3141beb6386b5426177ee85bcddc3dae603f3456665f80b9f7d34a322fd9380bc51b2241a1a345aa18a5b366f1e0f",
+    "C": "01430f6c69f60dabfe793ee9938001afe2c8715a1030f474caf6a7a2234ba427077e2bc52a3a5a61209525581114e0f9723e098cc9e376f3bf171c9f07c0be01",
+    "D": "c3231a53f4db445ffaf23d43ff92b2e9be50ce0d239b7257f9f58bc1f49f4a8c143f503048c00f5806b9856d043f3ffae607cd6ce2d083cce7bc65299ca2d70f"
+  }
+}

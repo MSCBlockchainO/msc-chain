@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script>
+    (function () {
+      "use strict";
+      try {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get("keep_origin") === "1") return;
+        var host = String(window.location.hostname || "").toLowerCase();
+        var isLocal =
+          host === "localhost" ||
+          host === "::1" ||
+          /^127(?:\.\d{1,3}){1,3}$/.test(host);
+        var canonicalPort = "26657";
+        var currentPort = String(window.location.port || "");
+        if (!isLocal || !currentPort) return;
+        if (host === "127.0.0.1" && currentPort === canonicalPort) return;
+        var target = new URL(window.location.href);
+        target.hostname = "127.0.0.1";
+        target.port = canonicalPort;
+        if (target.href !== window.location.href) {
+          window.location.replace(target.toString());
+        }
+      } catch (_) {
+        // Keep page usable even if URL parsing fails.
+      }
+    })();
+  </script>
+  <title>MSC DTL IDE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="dtl_ide.css?v=20260228a" />
+</head>
+<body>
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+
+  <header class="top">
+    <div class="brand">
+      <div class="logo">DTL</div>
+      <div>
+        <h1>MSC DTL IDE</h1>
+        <p>Native token ledger tool (no Remix, no EVM required)</p>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="index.html">Wallet</a>
+      <a href="explorer.html">Explorer</a>
+    </nav>
+  </header>
+
+  <main class="grid">
+    <section class="card wide workspace-strip">
+      <div class="workspace-row">
+        <div class="workspace-item">
+          <span class="workspace-label">Network</span>
+          <span id="wsConn" class="mono">Disconnected</span>
+        </div>
+        <div class="workspace-item">
+          <span class="workspace-label">Tx Type</span>
+          <span id="wsType" class="mono">TOKEN_CREATE</span>
+        </div>
+        <div class="workspace-item grow">
+          <span class="workspace-label">Last Tx ID</span>
+          <span id="wsTxId" class="mono">-</span>
+          <button id="copyLastTxBtn" class="btn-ghost btn-mini" type="button">Copy</button>
+        </div>
+      </div>
+      <div class="workspace-note mono muted">
+        Shortcuts: Ctrl/Cmd+Enter submit, Ctrl/Cmd+Shift+S sign, Alt+B build.
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Connection</h2>
+        <span id="connState" class="pill">Disconnected</span>
+      </div>
+      <div class="form-grid">
+        <label>
+          RPC Base URL
+          <input id="rpcBase" type="text" placeholder="https://127.0.0.1:26657" />
+        </label>
+        <label>
+          API Token (optional)
+          <input id="apiToken" type="password" placeholder="Bearer token" />
+        </label>
+      </div>
+      <div class="row">
+        <button id="connectBtn" class="btn-primary" type="button">Connect</button>
+        <button id="walletConnectBtn" class="btn-primary" type="button">Connect Wallet</button>
+        <button id="chainIdBtn" class="btn-ghost" type="button">dtl_chainId</button>
+      </div>
+      <div id="chainMeta" class="mono muted">Chain ID: -</div>
+      <div id="walletMeta" class="mono muted">Wallet: -</div>
+      <div id="compatMeta" class="mono muted">DTL Runtime (MSC Compat Subset: -)</div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Read Methods</h2>
+      </div>
+      <div class="form-grid">
+        <label>
+          Token Ref (symbol or token_id)
+          <input id="tokenRef" type="text" placeholder="MSC or token_id" list="tokenRefList" />
+        </label>
+        <label>
+          Account
+          <input id="accountRef" type="text" placeholder="alice or MSC..." />
+        </label>
+        <label>
+          Pool Ref (pool_id)
+          <input id="poolRef" type="text" placeholder="pool id" list="poolRefList" />
+        </label>
+        <label>
+          Farm Ref (farm_id)
+          <input id="farmRef" type="text" placeholder="farm id" list="farmRefList" />
+        </label>
+        <label>
+          Season Ref (optional)
+          <input id="seasonRef" type="text" placeholder="season id (empty = active)" />
+        </label>
+        <label>
+          Route Token Out
+          <input id="routeTokenOut" type="text" placeholder="token_out id" list="tokenRefList" />
+        </label>
+        <label>
+          Route Amount In
+          <input id="routeAmountIn" type="number" min="1" step="1" value="1" />
+        </label>
+        <label>
+          Route Max Hops (optional)
+          <input id="routeMaxHops" type="number" min="1" step="1" placeholder="4" />
+        </label>
+        <label>
+          Leaderboard Limit
+          <input id="leaderboardLimit" type="number" min="1" step="1" value="20" />
+        </label>
+      </div>
+      <div class="row wrap">
+        <button id="tokenInfoBtn" class="btn-primary" type="button">dtl_tokenInfo</button>
+        <button id="balanceBtn" class="btn-ghost" type="button">dtl_balanceOf</button>
+        <button id="supplyBtn" class="btn-ghost" type="button">dtl_totalSupply</button>
+        <button id="listTokensBtn" class="btn-ghost" type="button">dtl_listTokens</button>
+        <button id="poolInfoBtn" class="btn-ghost" type="button">dtl_poolInfo</button>
+        <button id="listPoolsBtn" class="btn-ghost" type="button">dtl_listPools</button>
+        <button id="routeQuoteBtn" class="btn-ghost" type="button">dtl_routeQuote</button>
+        <button id="farmInfoBtn" class="btn-ghost" type="button">dtl_farmInfo</button>
+        <button id="farmPositionBtn" class="btn-ghost" type="button">dtl_positionFarm</button>
+        <button id="seasonInfoBtn" class="btn-ghost" type="button">dtl_seasonInfo</button>
+        <button id="leaderboardBtn" class="btn-ghost" type="button">dtl_leaderboard</button>
+        <button id="syncRefsBtn" class="btn-ghost" type="button">Sync Token/Pool Refs</button>
+      </div>
+      <datalist id="tokenRefList"></datalist>
+      <datalist id="poolRefList"></datalist>
+      <datalist id="farmRefList"></datalist>
+      <pre id="readOut" class="console">Ready.</pre>
+    </section>
+
+    <section class="card wide">
+      <div class="card-head">
+        <h2>DTL Transaction Builder</h2>
+      </div>
+      <div class="helper">
+        Build payload template, then add signature/publicKey from your wallet signer.
+      </div>
+      <div class="guided-box">
+        <div class="row wrap">
+          <label>
+            <input id="beginnerMode" type="checkbox" checked />
+            Beginner Mode (No JSON)
+          </label>
+        </div>
+        <div class="helper">
+          Beginner mode me payload JSON edit karne ki zarurat nahi. Fields fill karo, IDE payload khud bana dega.
+        </div>
+      </div>
+
+      <div class="signer-box">
+        <div class="card-head">
+          <h2>Wallet Signer</h2>
+          <span id="signerState" class="pill">Locked</span>
+        </div>
+        <div class="form-grid">
+          <label>
+            Stored Wallet Address
+            <input id="signerAddress" type="text" readonly />
+          </label>
+          <label>
+            Wallet Password
+            <input id="signerPassword" type="password" placeholder="Unlock local MSC wallet" />
+          </label>
+        </div>
+        <div class="row wrap">
+          <button id="signerLoadBtn" class="btn-ghost" type="button">Load Local Wallet</button>
+          <button id="signerUnlockBtn" class="btn-primary" type="button">Unlock Signer</button>
+          <button id="signerLockBtn" class="btn-ghost" type="button">Lock</button>
+          <button id="signTxBtn" class="btn-primary" type="button">Build + Sign Tx</button>
+        </div>
+      </div>
+
+      <div class="form-grid split">
+        <label>
+          DTL Tx Type
+          <select id="dtlType">
+            <option value="TOKEN_CREATE">TOKEN_CREATE</option>
+            <option value="TOKEN_TRANSFER">TOKEN_TRANSFER</option>
+            <option value="TOKEN_APPROVE">TOKEN_APPROVE</option>
+            <option value="TOKEN_TRANSFER_FROM">TOKEN_TRANSFER_FROM</option>
+            <option value="TOKEN_MINT">TOKEN_MINT</option>
+            <option value="TOKEN_BURN">TOKEN_BURN</option>
+            <option value="NFT721_CREATE">NFT721_CREATE</option>
+            <option value="NFT721_MINT">NFT721_MINT</option>
+            <option value="NFT721_TRANSFER">NFT721_TRANSFER</option>
+            <option value="NFT1155_CREATE">NFT1155_CREATE</option>
+            <option value="NFT1155_MINT">NFT1155_MINT</option>
+            <option value="NFT1155_TRANSFER">NFT1155_TRANSFER</option>
+            <option value="POOL_CREATE">POOL_CREATE</option>
+            <option value="POOL_ADD_LIQUIDITY">POOL_ADD_LIQUIDITY</option>
+            <option value="POOL_REMOVE_LIQUIDITY">POOL_REMOVE_LIQUIDITY</option>
+            <option value="POOL_SWAP">POOL_SWAP</option>
+            <option value="POOL_SWAP_ROUTE">POOL_SWAP_ROUTE</option>
+            <option value="FARM_CREATE">FARM_CREATE</option>
+            <option value="FARM_STAKE_LP">FARM_STAKE_LP</option>
+            <option value="FARM_UNSTAKE_LP">FARM_UNSTAKE_LP</option>
+            <option value="FARM_CLAIM">FARM_CLAIM</option>
+            <option value="DUEL_CREATE">DUEL_CREATE</option>
+            <option value="DUEL_JOIN">DUEL_JOIN</option>
+            <option value="DUEL_REVEAL">DUEL_REVEAL</option>
+            <option value="DUEL_FINALIZE">DUEL_FINALIZE</option>
+            <option value="LEND_MARKET_CREATE">LEND_MARKET_CREATE</option>
+            <option value="LEND_DEPOSIT_COLLATERAL">LEND_DEPOSIT_COLLATERAL</option>
+            <option value="LEND_BORROW">LEND_BORROW</option>
+            <option value="LEND_REPAY">LEND_REPAY</option>
+            <option value="LEND_WITHDRAW_COLLATERAL">LEND_WITHDRAW_COLLATERAL</option>
+            <option value="LEND_LIQUIDATE">LEND_LIQUIDATE</option>
+            <option value="TOURNAMENT_CREATE">TOURNAMENT_CREATE</option>
+            <option value="TOURNAMENT_JOIN">TOURNAMENT_JOIN</option>
+            <option value="TOURNAMENT_REVEAL">TOURNAMENT_REVEAL</option>
+            <option value="TOURNAMENT_FINALIZE">TOURNAMENT_FINALIZE</option>
+            <option value="SEASON_CREATE">SEASON_CREATE</option>
+            <option value="SEASON_FINALIZE">SEASON_FINALIZE</option>
+            <option value="SEASON_CLAIM">SEASON_CLAIM</option>
+            <option value="ORACLE_FEED_CREATE">ORACLE_FEED_CREATE</option>
+            <option value="ORACLE_PRICE_SUBMIT">ORACLE_PRICE_SUBMIT</option>
+          </select>
+        </label>
+        <label>
+          From
+          <input id="txFrom" type="text" placeholder="MSC... / alice" />
+        </label>
+        <label>
+          Nonce
+          <input id="txNonce" type="number" min="1" step="1" value="1" />
+        </label>
+        <label>
+          Fee (MSC)
+          <input id="txFee" type="number" min="0" step="1" value="1" />
+        </label>
+        <label>
+          Expiry (seconds from now)
+          <input id="txTtlSec" type="number" min="10" step="10" value="120" />
+        </label>
+        <label>
+          ChainID
+          <input id="txChainId" type="text" value="91938" />
+        </label>
+        <label>
+          Coin
+          <input id="txCoin" type="text" value="MSC" />
+        </label>
+        <label>
+          To (optional envelope field)
+          <input id="txTo" type="text" placeholder="" />
+        </label>
+      </div>
+
+      <div class="form-grid split">
+        <label>
+          publicKey (hex)
+          <input id="txPublicKey" type="text" placeholder="ed25519 public key hex" />
+        </label>
+        <label>
+          signature (hex)
+          <input id="txSignature" type="text" placeholder="tx signature hex" />
+        </label>
+        <label>
+          tx id (optional)
+          <input id="txId" type="text" placeholder="leave empty to auto-set on node" />
+        </label>
+        <label>
+          dtl_token_id (optional)
+          <input id="txTokenId" type="text" list="tokenRefList" placeholder="required for transfer/mint/burn if not in payload" />
+        </label>
+      </div>
+
+      <div id="tokenCreateGuidedBox" class="guided-box">
+        <div class="card-head">
+          <h2>TOKEN_CREATE Details</h2>
+          <span class="pill">Guided</span>
+        </div>
+        <div class="helper">
+          New token details yahan fill karo. "Apply Details to Payload" par click karke JSON auto-generate ho jayega.
+        </div>
+        <div class="form-grid split">
+          <label>
+            Token Name
+            <input id="tcName" type="text" placeholder="Mythical System Coin" />
+          </label>
+          <label>
+            Symbol
+            <input id="tcSymbol" type="text" placeholder="MSCX" />
+          </label>
+          <label>
+            Decimals
+            <input id="tcDecimals" type="number" min="0" max="18" step="1" value="18" />
+          </label>
+          <label>
+            Initial Supply
+            <input id="tcInitialSupply" type="number" min="0" step="1" value="1000" />
+          </label>
+          <label>
+            Max Supply
+            <input id="tcMaxSupply" type="number" min="1" step="1" value="1000000" />
+          </label>
+          <label>
+            Authority Threshold
+            <input id="tcAuthorityThreshold" type="number" min="1" step="1" value="1" />
+          </label>
+          <label>
+            Freeze Enabled
+            <select id="tcFreezeEnabled">
+              <option value="false" selected>false</option>
+              <option value="true">true</option>
+            </select>
+          </label>
+          <label>
+            Tax (BPS)
+            <input id="tcTaxBps" type="number" min="0" max="10000" step="1" value="0" />
+          </label>
+        </div>
+        <label>
+          Metadata URI
+          <input id="tcMetadataUri" type="text" placeholder="https://example.com/token-metadata.json" />
+        </label>
+        <label>
+          Authority Signers (comma-separated MSC addresses)
+          <input id="tcAuthoritySigners" type="text" placeholder="MSC..., MSC..." />
+        </label>
+        <div class="row wrap">
+          <button id="applyTokenDetailsBtn" class="btn-primary" type="button">Apply Details to Payload</button>
+          <button id="readTokenDetailsBtn" class="btn-ghost advanced-only" type="button">Read Details from Payload</button>
+        </div>
+      </div>
+
+      <div id="tokenTransferGuidedBox" class="guided-box">
+        <div class="card-head">
+          <h2>TOKEN_TRANSFER Details</h2>
+          <span class="pill">Guided</span>
+        </div>
+        <div class="helper">
+          Token transfer payload yahan fill karo.
+        </div>
+        <div class="form-grid split">
+          <label>
+            Token ID
+            <input id="ttTokenId" type="text" placeholder="token id" list="tokenRefList" />
+          </label>
+          <label>
+            Recipient (To)
+            <input id="ttTo" type="text" placeholder="MSC..." />
+          </label>
+          <label>
+            Amount
+            <input id="ttAmount" type="number" min="1" step="1" value="1" />
+          </label>
+        </div>
+        <div class="row wrap">
+          <button id="applyTransferDetailsBtn" class="btn-primary" type="button">Apply Details to Payload</button>
+          <button id="readTransferDetailsBtn" class="btn-ghost advanced-only" type="button">Read Details from Payload</button>
+        </div>
+      </div>
+
+      <div id="tokenApproveGuidedBox" class="guided-box">
+        <div class="card-head">
+          <h2>TOKEN_APPROVE Details</h2>
+          <span class="pill">Guided</span>
+        </div>
+        <div class="helper">
+          Allowance set/revoke payload yahan fill karo.
+        </div>
+        <div class="form-grid split">
+          <label>
+            Token ID
+            <input id="taTokenId" type="text" placeholder="token id" list="tokenRefList" />
+          </label>
+          <label>
+            Spender
+            <input id="taSpender" type="text" placeholder="MSC..." />
+          </label>
+          <label>
+            Amount (0 = revoke)
+            <input id="taAmount" type="number" min="0" step="1" value="0" />
+          </label>
+        </div>
+        <div class="row wrap">
+          <button id="applyApproveDetailsBtn" class="btn-primary" type="button">Apply Details to Payload</button>
+          <button id="readApproveDetailsBtn" class="btn-ghost advanced-only" type="button">Read Details from Payload</button>
+        </div>
+      </div>
+
+      <div id="tokenTransferFromGuidedBox" class="guided-box">
+        <div class="card-head">
+          <h2>TOKEN_TRANSFER_FROM Details</h2>
+          <span class="pill">Guided</span>
+        </div>
+        <div class="helper">
+          Delegated transfer payload yahan fill karo. Spender ko tx sender (From field) ke same rakhna mandatory hai.
+        </div>
+        <div id="transferFromSpenderHint" class="mono muted">Effective spender: (set From first)</div>
+        <div class="form-grid split">
+          <label>
+            Token ID
+            <input id="tfTokenId" type="text" placeholder="token id" list="tokenRefList" />
+          </label>
+          <label>
+            Spender
+            <input id="tfSpender" type="text" placeholder="MSC... (optional)" />
+          </label>
+          <label>
+            From (owner)
+            <input id="tfFrom" type="text" placeholder="MSC..." />
+          </label>
+          <label>
+            To (recipient)
+            <input id="tfTo" type="text" placeholder="MSC..." />
+          </label>
+          <label>
+            Amount
+            <input id="tfAmount" type="number" min="1" step="1" value="1" />
+          </label>
+        </div>
+        <div class="row wrap">
+          <button id="applyTransferFromDetailsBtn" class="btn-primary" type="button">Apply Details to Payload</button>
+          <button id="useSenderAsSpenderBtn" class="btn-ghost" type="button">Use Tx Sender as Spender</button>
+          <button id="prepareApproveFromTransferBtn" class="btn-ghost" type="button">Prepare TOKEN_APPROVE</button>
+          <button id="readTransferFromDetailsBtn" class="btn-ghost advanced-only" type="button">Read Details from Payload</button>
+        </div>
+      </div>
+
+      <div id="tokenMintGuidedBox" class="guided-box">
+        <div class="card-head">
+          <h2>TOKEN_MINT Details</h2>
+          <span class="pill">Guided</span>
+        </div>
+        <div class="helper">
+          Mint payload + governance cert yahan fill karo. `action_payload_hash` auto-generate hota hai.
+        </div>
+        <div class="form-grid split">
+          <label>
+            Token ID
+            <input id="tmTokenId" type="text" placeholder="token id" list="tokenRefList" />
+          </label>
+          <label>
+            Recipient (To)
+            <input id="tmTo" type="text" placeholder="MSC..." />
+          </label>
+          <label>
+            Amount
+            <input id="tmAmount" type="number" min="1" step="1" value="1" />
+          </label>
+          <label>
+            Governance Epoch
+            <input id="tmEpoch" type="number" min="1" step="1" value="1" />
+          </label>
+          <label>
+            Governance Action
+            <select id="tmAction">
+              <option value="MINT" selected>MINT</option>
+            </select>
+          </label>
+          <label>
+            Cert Signers (comma-separated)
+            <input id="tmSigners" type="text" placeholder="MSC..., MSC..." />
+          </label>
+          <label>
+            Cert Signatures (comma-separated; use `pubkey:sig` format)
+            <input id="tmSignatures" type="text" placeholder="pubkeyhex1:sighex1, pubkeyhex2:sighex2" />
+          </label>
+        </div>
+        <div class="row wrap">
+          <button id="applyMintDetailsBtn" class="btn-primary" type="button">Apply Details to Payload + Cert</button>
+          <button id="readMintDetailsBtn" class="btn-ghost advanced-only" type="button">Read Details from Payload + Cert</button>
+        </div>
+      </div>
+
+      <div id="tokenBurnGuidedBox" class="guided-box">
+        <div class="card-head">
+          <h2>TOKEN_BURN Details</h2>
+          <span class="pill">Guided</span>
+        </div>
+        <div class="helper">
+          Token burn payload yahan fill karo.
+        </div>
+        <div class="form-grid split">
+          <label>
+            Token ID
+            <input id="tbTokenId" type="text" placeholder="token id" list="tokenRefList" />
+          </label>
+          <label>
+            Amount
+            <input id="tbAmount" type="number" min="1" step="1" value="1" />
+          </label>
+        </div>
+        <div class="row wrap">
+          <button id="applyBurnDetailsBtn" class="btn-primary" type="button">Apply Details to Payload</button>
+          <button id="readBurnDetailsBtn" class="btn-ghost advanced-only" type="button">Read Details from Payload</button>
+        </div>
+      </div>
+
+      <div id="quickPayloadBox" class="guided-box hidden">
+        <div class="card-head">
+          <h2>Quick Payload Fields</h2>
+          <span class="pill">No JSON</span>
+        </div>
+        <div class="helper">
+          Neeche fields fill karo. `Build Tx JSON` par click karte hi payload automatically ban jayega.
+        </div>
+        <div id="quickPayloadFields" class="form-grid split"></div>
+      </div>
+
+      <div id="contractRuntimeRemovedBox" class="guided-box">
+        <div class="card-head">
+          <h2>Contract Runtime Removed</h2>
+          <span class="pill">Disabled</span>
+        </div>
+        <div class="helper">
+          DTL contract subsystem (Solidity-like, Vyper-like, logic-pack, bytecode runtime) is disabled in this build.
+          Non-contract DTL transactions remain available in this IDE.
+        </div>
+      </div>
+
+      <label id="txPayloadWrap" class="advanced-only">
+        dtl_payload (JSON string)
+        <textarea id="txPayload" rows="8"></textarea>
+      </label>
+
+      <label id="txGovCertWrap" class="advanced-only">
+        dtl_governance_cert (JSON string, optional for mint/governance)
+        <textarea id="txGovCert" rows="4" placeholder='{"token_id":"...","epoch":1,"action":"MINT","action_payload_hash":"...","signers":[],"signer_public_keys":[],"signatures":[]}'></textarea>
+      </label>
+
+      <div class="row wrap">
+        <button id="payloadTemplateBtn" class="btn-ghost advanced-only" type="button">Load Payload Template</button>
+        <button id="nextNonceBtn" class="btn-ghost" type="button">Load Next Nonce</button>
+        <button id="buildBtn" class="btn-primary" type="button">Build Tx JSON</button>
+        <button id="copyBtn" class="btn-ghost" type="button">Copy JSON</button>
+        <button id="clearDraftBtn" class="btn-ghost" type="button">Clear Draft</button>
+      </div>
+
+      <label>
+        Built Transaction Object
+        <textarea id="txObject" rows="10"></textarea>
+      </label>
+      <label>
+        Resolved Payload (readable)
+        <textarea id="txPayloadPreview" rows="8" readonly></textarea>
+      </label>
+
+      <div class="row wrap">
+        <button id="submitDtlBtn" class="btn-primary" type="button">Submit via dtl_submit</button>
+        <button id="submitRawBtn" class="btn-ghost" type="button">Submit via /submitTx</button>
+      </div>
+      <pre id="txOut" class="console">No transaction submitted yet.</pre>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Tx Status</h2>
+      </div>
+      <div class="form-grid">
+        <label>
+          tx_id
+          <input id="statusTxId" type="text" placeholder="transaction id" />
+        </label>
+      </div>
+      <div class="row">
+        <button id="statusBtn" class="btn-primary" type="button">Check /tx/status</button>
+      </div>
+      <pre id="statusOut" class="console">-</pre>
+    </section>
+  </main>
+
+  <div id="walletBridgeModal" class="bridge-launcher-overlay hidden" aria-hidden="true">
+    <div class="bridge-launcher-modal">
+      <div class="bridge-launcher-head">
+        <h3>MSC Wallet Connect</h3>
+        <button id="walletBridgeClose" class="btn-ghost" type="button">Close</button>
+      </div>
+      <p id="walletBridgeHint" class="bridge-launcher-hint">
+        Approve wallet connection in this embedded MSC wallet panel.
+      </p>
+      <iframe
+        id="walletBridgeFrame"
+        title="MSC Wallet Bridge"
+        src="about:blank"
+        loading="lazy"
+      ></iframe>
+    </div>
+  </div>
+
+  <script src="vendor/nacl.min.js"></script>
+  <script src="dtl_ide.js?v=20260228a"></script>
+</body>
+</html>

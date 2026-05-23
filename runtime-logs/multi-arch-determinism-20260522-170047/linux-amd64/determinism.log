@@ -1,0 +1,1 @@
+compiled_only target=linux/amd64 local=windows/amd64; run this script on that target to execute the golden replay test

@@ -1,0 +1,10 @@
+{"at":"2026-05-23T09:21:13.2424680Z","type":"chaos_start","packet_loss":false,"slow_validators":false,"random_restarts":false,"restart_storms":false,"warmup_seconds":12,"allow_snapshot_mutation":false,"max_finalized_lag_blocks":20,"tx_flood":false,"stale_snapshots_requested":false,"validator_node_count":4,"max_height_lag_blocks":30,"remote_netem":false,"status_timeout_seconds":8,"network_chaos":false,"stale_snapshots":false,"node_count":4,"auto_local_peers":true,"max_block_gap_seconds":45,"min_reachable_nodes":3,"duration_seconds":45}
+{"at":"2026-05-23T09:21:17.4772209Z","type":"auto_peer_topology_begin","nodes":["A","B","C","D"]}
+{"at":"2026-05-23T09:21:17.5280529Z","type":"node_start","port":18101,"node":"A","rpc":"http://127.0.0.1:28757","pid":15780,"role":"validator"}
+{"at":"2026-05-23T09:21:18.5930463Z","type":"node_rpc_ready","role":"validator","node":"A","rpc":"http://127.0.0.1:28757","height":0,"finalized_height":0}
+{"at":"2026-05-23T09:21:18.6070538Z","type":"node_start","port":18102,"node":"B","rpc":"http://127.0.0.1:28758","pid":18996,"role":"validator"}
+{"at":"2026-05-23T09:21:19.1228810Z","type":"node_rpc_ready","role":"validator","node":"B","rpc":"http://127.0.0.1:28758","height":0,"finalized_height":0}
+{"at":"2026-05-23T09:21:19.1364653Z","type":"node_start","port":18103,"node":"C","rpc":"http://127.0.0.1:28759","pid":9060,"role":"validator"}
+{"at":"2026-05-23T09:21:19.6556627Z","type":"node_rpc_ready","role":"validator","node":"C","rpc":"http://127.0.0.1:28759","height":0,"finalized_height":0}
+{"at":"2026-05-23T09:21:19.6700303Z","type":"node_start","port":18104,"node":"D","rpc":"http://127.0.0.1:28760","pid":8292,"role":"validator"}
+{"at":"2026-05-23T09:21:20.1807819Z","type":"node_rpc_ready","role":"validator","node":"D","rpc":"http://127.0.0.1:28760","height":0,"finalized_height":0}

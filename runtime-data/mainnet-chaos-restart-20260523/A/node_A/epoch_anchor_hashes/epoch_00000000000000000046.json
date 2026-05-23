@@ -1,0 +1,15 @@
+{
+  "version": "finality_epoch_v1",
+  "domain": "MSC_FINALIZED_EPOCH_V1",
+  "epoch": 46,
+  "height": 46,
+  "anchor_hash": "cb9081e8a8127fc0ecdee9ab22d4e59b0de7bbb307c0aea86e543483d025dcad",
+  "previous_anchor_hash": "8ba34e927feb6122043e0ba02834717d3aba2c7d15e7fab27fc0180b999f25a2",
+  "finalized_hash": "e349a3998abfd651899065f532be4ac3fad26c4dd4a2933a2365459181cc277b",
+  "state_root": "79c287582dbb4a291812d44f2391a4a58a9c8eb7152ebaed67204f5e8db699e4",
+  "validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+  "validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+  "finalized_validator_set_hash": "cda45a0212ce4dfdac0c0acb2ac41e69525deafdc42108563a96953bd03ca212",
+  "finalized_validator_set_root": "3969875da0d9fa3814f48b187864d3743b154dda7e409b04ca77bf7502059ef4",
+  "finality_root": "e40590680f41725a4f4633ae9a52502ee6adbd86a9f8a1613ef476c16dfc665a"
+}

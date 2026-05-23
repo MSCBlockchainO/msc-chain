@@ -1,0 +1,5675 @@
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"math/rand"
+	"net"
+	"net/http"
+	"os"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ipfs/go-cid"
+	"github.com/libp2p/go-libp2p"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	lpcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	mdns "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
+	connmgr "github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
+	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
+	libp2pwebrtc "github.com/libp2p/go-libp2p/p2p/transport/webrtc"
+	libp2pwebsocket "github.com/libp2p/go-libp2p/p2p/transport/websocket"
+	"github.com/multiformats/go-multihash"
+	"golang.org/x/time/rate"
+
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
+)
+
+const (
+	peerSuspectTimeout        = 2 * time.Minute
+	peerFlapWindow            = 5 * time.Minute
+	peerFlapThreshold         = 5
+	peerQuarantineFor         = 5 * time.Minute
+	peerQuarantineForProtocol = 30 * time.Minute
+	peerQuarantineForMismatch = 1 * time.Hour
+	peerHelloCooldown         = 30 * time.Second
+	peerSuspectInterval       = 20 * time.Second
+	syncCooldown              = 30 * time.Second
+	peerMinHold               = 30 * time.Second
+	peerGraftCooldown         = 30 * time.Second
+	dialBackoffStep1          = 5 * time.Second
+	dialBackoffStep2          = 30 * time.Second
+	dialBackoffStep3          = 2 * time.Minute
+	dialBackoffMax            = 5 * time.Minute
+)
+
+func (n *Node) configPeerListsSnapshot() ([]string, []string) {
+	if n == nil || n.Config == nil {
+		return nil, nil
+	}
+	n.configMu.RLock()
+	persistent := append([]string{}, n.Config.PersistentPeers...)
+	seeds := append([]string{}, n.Config.Seeds...)
+	n.configMu.RUnlock()
+	return persistent, seeds
+}
+
+func (n *Node) persistentPeersSnapshot() []string {
+	persistent, _ := n.configPeerListsSnapshot()
+	return persistent
+}
+
+func (n *Node) seedsSnapshot() []string {
+	_, seeds := n.configPeerListsSnapshot()
+	return seeds
+}
+
+func (n *Node) setPersistentPeers(peers []string) {
+	if n == nil || n.Config == nil {
+		return
+	}
+	n.configMu.Lock()
+	n.Config.PersistentPeers = append([]string{}, peers...)
+	n.configMu.Unlock()
+}
+
+func (n *Node) setSeedPeers(peers []string) {
+	if n == nil || n.Config == nil {
+		return
+	}
+	n.configMu.Lock()
+	n.Config.Seeds = append([]string{}, peers...)
+	n.configMu.Unlock()
+}
+
+func (n *Node) setConfigPeerLists(persistent []string, seeds []string) {
+	if n == nil || n.Config == nil {
+		return
+	}
+	n.configMu.Lock()
+	n.Config.PersistentPeers = append([]string{}, persistent...)
+	n.Config.Seeds = append([]string{}, seeds...)
+	n.configMu.Unlock()
+}
+
+func (n *Node) logPubSubStatus() {
+	if n.PubSub == nil {
+		fmt.Println("PubSub: Not initialized")
+		return
+	}
+
+	topics := []string{
+		"msc-blocks",
+		"msc-transactions",
+		"msc-validators",
+	}
+
+	fmt.Println("PubSub Mesh Status:")
+	hasConnections := false
+
+	for _, topicName := range topics {
+		peers := n.PubSub.ListPeers(topicName)
+		fmt.Printf("  %s: %d peers\n", topicName, len(peers))
+
+		if len(peers) > 0 {
+			hasConnections = true
+			if DebugConsensus {
+				for i, pid := range peers {
+					if i >= 3 {
+						break
+					}
+					fmt.Printf("    - %s\n", pid.String()[:8])
+				}
+				if len(peers) > 3 {
+					fmt.Printf("    ... and %d more\n", len(peers)-3)
+				}
+			}
+		}
+	}
+
+	if n.Host != nil {
+		allPeers := n.Host.Network().Peers()
+		fmt.Printf("Network: %d total peers connected\n", len(allPeers))
+		if !hasConnections && len(allPeers) > 0 {
+			fmt.Println("WARNING: Peers connected but not in PubSub mesh")
+			fmt.Println("Action: trigger publish, ensure common topics, or restart nodes together")
+		}
+	}
+}
+
+/*
+legacy consensus removed
+
+	func (n *Node) BroadcastProposal(block Block) {
+		if ResultGossipOnly {
+			return
+		}
+		if DebugConsensus {
+			fmt.Printf("ðŸ“¢ Publishing proposal | height=%d proposer=%s hash=%s\n",
+				block.ID, ShortID(block.Proposer), block.BlockHash[:8])
+		}
+
+		// Build message
+		msg := Message{
+			Type: MsgProposeBlock,
+			Data: MustJSON(block),
+		}
+
+		data, err := json.Marshal(msg)
+		if err != nil {
+			if DebugConsensus {
+				fmt.Println("âŒ Proposal marshal failed:", err)
+			}
+			return
+		}
+
+		// Track publishing attempts
+		published := false
+		var publishErr error
+
+		// =====================================================
+		// TRY PRIMARY TOPICS
+		// =====================================================
+
+		// 1. Try ProposalTopic first (most specific)
+		if n.ProposalTopic != nil {
+			publishErr = n.ProposalTopic.Publish(context.Background(), data)
+			if publishErr == nil {
+				if DebugConsensus {
+					fmt.Printf("âœ… Proposal published to proposal topic | height=%d\n", block.ID)
+				}
+				published = true
+			} else {
+				if DebugConsensus {
+					fmt.Printf("âš ï¸ ProposalTopic publish failed: %v\n", publishErr)
+				}
+			}
+		} else if DebugConsensus {
+			fmt.Println("âš ï¸ ProposalTopic is nil")
+		}
+
+		// 2. Fallback to BlockTopic (if ProposalTopic failed or is nil)
+		if !published && n.TopicBlocks != nil {
+			publishErr = n.TopicBlocks.Publish(context.Background(), data)
+			if publishErr == nil {
+				if DebugConsensus {
+					fmt.Printf("âœ… Proposal published via blocks topic (fallback) | height=%d\n", block.ID)
+				}
+				published = true
+			} else {
+				if DebugConsensus {
+					fmt.Printf("âš ï¸ BlockTopic publish failed: %v\n", publishErr)
+				}
+			}
+		} else if !published && DebugConsensus {
+			fmt.Println("âš ï¸ TopicBlocks is nil")
+		}
+
+		// =====================================================
+		// EMERGENCY FALLBACKS
+		// =====================================================
+		if !published {
+			// 3. Try direct stream to known validators
+			if n.Host != nil && len(n.Host.Network().Peers()) > 0 {
+				if DebugConsensus {
+					fmt.Printf("ðŸ”„ Trying direct stream to %d peers\n", len(n.Host.Network().Peers()))
+				}
+
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+
+				// Send to first 3 peers
+				peers := n.Host.Network().Peers()
+				sentCount := 0
+				for i, pid := range peers {
+					if i >= 3 { // Limit to 3 peers
+						break
+					}
+
+					if err := n.sendToPeerLibp2p(ctx, pid, msg); err == nil {
+						sentCount++
+						if DebugConsensus {
+							fmt.Printf("  âœ“ Sent to peer %s\n", pid.String()[:8])
+						}
+					}
+				}
+
+				if sentCount > 0 {
+					published = true
+					if DebugConsensus {
+						fmt.Printf("âœ… Proposal sent via direct streams to %d peers\n", sentCount)
+					}
+				}
+			}
+
+			// 4. Last resort: create temporary topic
+			if !published && n.PubSub != nil {
+				if topic, err := n.PubSub.Join("msc-proposals-fallback"); err == nil {
+					if err := topic.Publish(context.Background(), data); err == nil {
+						published = true
+						if DebugConsensus {
+							fmt.Printf("âœ… Proposal published via temporary fallback topic\n")
+						}
+					}
+					topic.Close()
+				}
+			}
+		}
+
+		// =====================================================
+		// FINAL STATUS
+		// =====================================================
+		if !published {
+			if DebugConsensus {
+				fmt.Printf("âŒ Could not publish proposal for height %d (no available method)\n", block.ID)
+
+				// Debug info
+				fmt.Printf("   Debug: ProposalTopic=%v, TopicBlocks=%v, PubSub=%v, Host=%v\n",
+					n.ProposalTopic != nil, n.TopicBlocks != nil, n.PubSub != nil, n.Host != nil)
+
+				if n.Host != nil {
+					fmt.Printf("   Connected peers: %d\n", len(n.Host.Network().Peers()))
+				}
+			}
+		} else if DebugConsensus {
+			fmt.Printf("ðŸ“¤ Proposal successfully broadcast | height=%d\n", block.ID)
+		}
+	}
+
+	func (n *Node) listenProposals(ctx context.Context) {
+		// Result-gossip consensus: proposals are ignored.
+		if ResultGossipOnly {
+			return
+		}
+
+		// =====================================================
+		// ðŸ“¡ SUBSCRIPTION INITIALIZATION
+		// =====================================================
+		var sub *pubsub.Subscription
+		var err error
+
+		// Priority 1: Use ProposalTopic if available
+		if n.ProposalTopic != nil {
+			sub, err = n.ProposalTopic.Subscribe(
+				pubsub.WithBufferSize(1024),
+			)
+			if err != nil {
+				if DebugNet {
+					fmt.Printf("âŒ ProposalTopic subscribe failed: %v\n", err)
+				}
+				// Fall through to PubSub
+			}
+		}
+
+		// Priority 2: Fallback to direct PubSub subscription
+		if sub == nil {
+			sub, err = n.PubSub.Subscribe("msc-proposals")
+			if err != nil {
+				if DebugNet {
+					fmt.Printf("âŒ Failed to subscribe to proposals: %v\n", err)
+				}
+				return
+			}
+		}
+
+		defer func() {
+			if sub != nil {
+				sub.Cancel()
+			}
+		}()
+
+		if DebugNet {
+			fmt.Println("âœ… Listening for proposals...")
+		}
+
+		// =====================================================
+		// ðŸ”„ MESSAGE PROCESSING LOOP
+		// =====================================================
+		for {
+			select {
+			case <-ctx.Done():
+				if DebugNet {
+					fmt.Println("ðŸ›‘ Proposal listener stopped")
+				}
+				return
+
+			case <-n.shutdownCh:
+				if DebugNet {
+					fmt.Println("ðŸ›‘ Proposal listener (shutdown)")
+				}
+				return
+
+			default:
+				// =================================================
+				// ðŸ“¨ RECEIVE MESSAGE
+				// =================================================
+				msg, err := sub.Next(ctx)
+				if err != nil {
+					if err == context.Canceled {
+						return
+					}
+					if DebugNet {
+						fmt.Printf("âš ï¸ Proposal subscription error: %v\n", err)
+					}
+					// Continue to next message
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
+
+				// =================================================
+				// ðŸ™… SELF-MESSAGE FILTERING
+				// =================================================
+				if msg.ReceivedFrom == n.Host.ID() {
+					if DebugConsensus {
+						fmt.Println("â­ï¸ Ignoring self-proposal")
+					}
+					continue
+				}
+
+				// =================================================
+				// ðŸ§© MESSAGE PARSING (MULTI-FORMAT SUPPORT)
+				// =================================================
+				var block Block
+				var parseErr error
+
+				// Try parsing as Message wrapper first
+				var m Message
+				if err := json.Unmarshal(msg.Data, &m); err == nil && m.Type == MsgProposeBlock {
+					// Message wrapper format
+					parseErr = json.Unmarshal(m.Data, &block)
+				} else {
+					// Try direct Block format
+					parseErr = json.Unmarshal(msg.Data, &block)
+				}
+
+				if parseErr != nil {
+					if DebugNet {
+						fmt.Printf("âš ï¸ Failed to parse proposal: %v\n", parseErr)
+						fmt.Printf("   Raw data: %s\n", string(msg.Data)[:min(100, len(msg.Data))])
+					}
+					continue
+				}
+
+				// =================================================
+				// ðŸŽ¯ BASIC VALIDATION
+				// =================================================
+				if block.ID == 0 || block.Proposer == "" {
+					if DebugNet {
+						fmt.Println("âš ï¸ Invalid proposal: missing required fields")
+					}
+					continue
+				}
+
+				// =================================================
+				// ðŸ“Š DEBUG LOGGING
+				// =================================================
+				if DebugConsensus {
+					fmt.Printf("ðŸ“¦ Proposal received | height=%d proposer=%s from=%s\n",
+						block.ID, ShortID(block.Proposer), msg.ReceivedFrom)
+
+					// Additional debug info
+					if len(block.Transactions) > 0 {
+						fmt.Printf("   TX count: %d, Hash: %s\n",
+							len(block.Transactions), block.BlockHash[:8])
+					}
+				}
+
+				// =================================================
+				// ðŸš€ PROCESS PROPOSAL
+				// =================================================
+				n.HandleProposal(block)
+
+				// =================================================
+				// â¸ï¸ RATE LIMITING (OPTIONAL)
+				// =================================================
+				// Small delay to prevent CPU spike
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
+	}
+
+	func (n *Node) BroadcastVote(vote BlockVote) {
+		if ResultGossipOnly {
+			return
+		}
+
+		msg := Message{
+			Type: MsgBlockVote,
+			Data: MustJSON(vote),
+		}
+
+		data, _ := json.Marshal(msg)
+		_ = n.VoteTopic.Publish(context.Background(), data)
+	}
+*/
+func (n *Node) BroadcastLeaderBlock(block Block) {
+	if n.TopicBlocks == nil && n.PubSub == nil {
+		return
+	}
+
+	msg := Message{
+		Type: MsgLeaderBlock,
+		Data: MustJSON(block),
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	if n.TopicBlocks != nil {
+		_ = n.TopicBlocks.Publish(context.Background(), data)
+		return
+	}
+
+	_ = n.PubSub.Publish("msc-blocks", data)
+}
+
+func (n *Node) handleTransactionGossip(sub *pubsub.Subscription) {
+	for {
+		_, err := sub.Next(context.Background())
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (n *Node) handleValidatorGossip(sub *pubsub.Subscription) {
+	for {
+		_, err := sub.Next(context.Background())
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (n *Node) handleBlockGossip(sub *pubsub.Subscription) {
+	ctx := context.Background()
+
+	for {
+		msg, err := sub.Next(ctx)
+		if err != nil {
+			if DebugNet {
+				fmt.Println("âŒ Block gossip read error:", err)
+			}
+			return
+		}
+
+		// Ignore self-published messages
+		if msg.ReceivedFrom == n.Host.ID() {
+			continue
+		}
+
+		// Ignore non-JSON payloads (e.g., pubsub mesh keepalive)
+		if len(msg.Data) == 0 || msg.Data[0] != '{' {
+			continue
+		}
+
+		// Leader blocks are wrapped in Message
+		var wrapped Message
+		if err := json.Unmarshal(msg.Data, &wrapped); err == nil && wrapped.Type != "" {
+			if wrapped.Type == MsgLeaderBlock {
+				var block Block
+				if err := json.Unmarshal(wrapped.Data, &block); err == nil {
+					n.handleLeaderBlock(block)
+				}
+			}
+			if ResultGossipOnly {
+				continue
+			}
+		}
+
+		if ResultGossipOnly {
+			continue
+		}
+
+		var block Block
+		if err := json.Unmarshal(msg.Data, &block); err != nil {
+			if DebugNet {
+				fmt.Println("âŒ Invalid block gossip payload")
+			}
+			continue
+		}
+
+		if DebugConsensus {
+			fmt.Printf(
+				"ðŸ“¦ Block received via gossip | height=%d from=%s\n",
+				block.ID,
+				msg.ReceivedFrom.String(),
+			)
+		}
+
+		// Pass into blockchain
+		n.ReceiveBlock(block, n.Blockchain)
+		n.ProcessQueuedBlocks()
+	}
+}
+
+func (n *Node) requestBlocksFromPeer(
+	pid peer.ID,
+	from, to uint64,
+	wantSnapshot bool,
+	snapshotHeight uint64,
+) ([]Block, *StateSnapshot, *ExecPoolSnapshot, error) {
+	if n.Host == nil {
+		return nil, nil, nil, fmt.Errorf("host not initialized")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	s, err := n.Host.NewStream(ctx, pid, BlockSyncProtocol)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer s.Close()
+
+	_ = s.SetDeadline(time.Now().Add(30 * time.Second))
+	enc := json.NewEncoder(s)
+	dec := json.NewDecoder(s)
+
+	req := BlockRequest{
+		From:           from,
+		To:             to,
+		WantSnapshot:   wantSnapshot,
+		SnapshotHeight: snapshotHeight,
+	}
+	if err := enc.Encode(req); err != nil {
+		return nil, nil, nil, err
+	}
+
+	var resp BlockResponse
+	if err := dec.Decode(&resp); err != nil {
+		return nil, nil, nil, err
+	}
+	return resp.Blocks, resp.Snapshot, resp.ExecPool, nil
+}
+
+func (n *Node) sendBlockAck(pid peer.ID, height uint64) {
+	if n.Host == nil || height == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s, err := n.Host.NewStream(ctx, pid, "/msc/consensus/1.0.0")
+	if err != nil {
+		n.recordDialFailure(pid.String())
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "protocols not supported") || strings.Contains(errMsg, "protocol not supported") {
+			n.disconnectPeerID(pid.String(), "consensus_protocol_mismatch")
+		}
+		return
+	}
+	defer s.Close()
+
+	msg := Message{
+		Type: MsgBlockAck,
+		Data: MustJSON(BlockAck{Height: height}),
+	}
+	data, _ := json.Marshal(msg)
+	_, _ = s.Write(append(data, '\n'))
+}
+
+func (n *Node) broadcastExecutionResult(heightHint uint64, execHash string, txMerkle string) {
+	n.broadcastExecutionResultInternal(heightHint, execHash, txMerkle, false)
+}
+
+func (n *Node) broadcastExecutionResultInternal(heightHint uint64, execHash string, txMerkle string, force bool) {
+	if n.ValidatorTopic == nil {
+		return
+	}
+	if heightHint == 0 {
+		heightHint = n.currentEpoch()
+	}
+	if !n.canParticipateAsValidator() {
+		// Rule 2: candidates cannot publish execution hashes.
+		return
+	}
+	if !force {
+		if !n.markExecBroadcastedByValidator(heightHint) {
+			return
+		}
+		if !n.markExecBroadcasted(heightHint, execHash, txMerkle) {
+			return
+		}
+	}
+
+	sigBytes := execResultSignBytes(heightHint, execHash, txMerkle)
+	signature := ""
+	if len(n.ValidatorKey.PrivateKey) == ed25519.PrivateKeySize {
+		sig := ed25519.Sign(n.ValidatorKey.PrivateKey, sigBytes)
+		signature = hex.EncodeToString(sig)
+	}
+
+	msg := Message{
+		Type: MsgExecutionResult,
+		Data: MustJSON(ExecutionResultMsg{
+			HeightHint: heightHint,
+			ExecHash:   execHash,
+			TxMerkle:   txMerkle,
+			Signer:     n.ID,
+			Signature:  signature,
+		}),
+	}
+
+	data, _ := json.Marshal(msg)
+	_ = n.ValidatorTopic.Publish(context.Background(), data)
+
+}
+
+func (n *Node) shouldRebroadcastExec(epoch uint64, cooldown time.Duration) bool {
+	if epoch == 0 {
+		return false
+	}
+	if cooldown <= 0 {
+		cooldown = 15 * time.Second
+	}
+	n.execRebroadcastMu.Lock()
+	defer n.execRebroadcastMu.Unlock()
+	if n.execRebroadcastAt == nil {
+		n.execRebroadcastAt = make(map[uint64]time.Time)
+	}
+	if last, ok := n.execRebroadcastAt[epoch]; ok {
+		if time.Since(last) < cooldown {
+			return false
+		}
+	}
+	n.execRebroadcastAt[epoch] = time.Now()
+	return true
+}
+
+func (n *Node) markExecBroadcasted(epoch uint64, execHash string, txMerkle string) bool {
+	key := execBroadcastKey(execHash, txMerkle)
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+	if n.execBroadcasted == nil {
+		n.execBroadcasted = make(map[uint64]map[string]bool)
+	}
+	if _, ok := n.execBroadcasted[epoch]; !ok {
+		n.execBroadcasted[epoch] = make(map[string]bool)
+	}
+	if n.execBroadcasted[epoch][key] {
+		return false
+	}
+	n.execBroadcasted[epoch][key] = true
+	n.trimConsensusCachesLocked(committedHeight)
+	return true
+}
+
+func (n *Node) markExecBroadcastedByValidator(epoch uint64) bool {
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+	if n.execBroadcastedByValidator == nil {
+		n.execBroadcastedByValidator = make(map[uint64]map[string]bool)
+	}
+	if _, ok := n.execBroadcastedByValidator[epoch]; !ok {
+		n.execBroadcastedByValidator[epoch] = make(map[string]bool)
+	}
+	if n.execBroadcastedByValidator[epoch][n.ID] {
+		return false
+	}
+	n.execBroadcastedByValidator[epoch][n.ID] = true
+	n.trimConsensusCachesLocked(committedHeight)
+	return true
+}
+
+func (n *Node) markExecSignerSeen(epoch uint64, signer string) bool {
+	if epoch == 0 || signer == "" {
+		return false
+	}
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+	if n.execSignerSeen == nil {
+		n.execSignerSeen = make(map[uint64]map[string]bool)
+	}
+	if _, ok := n.execSignerSeen[epoch]; !ok {
+		n.execSignerSeen[epoch] = make(map[string]bool)
+	}
+	if n.execSignerSeen[epoch][signer] {
+		return false
+	}
+	n.execSignerSeen[epoch][signer] = true
+	n.trimConsensusCachesLocked(committedHeight)
+	return true
+}
+
+func execResultKey(epoch uint64, execHash string, txMerkle string) string {
+	return fmt.Sprintf("%d:%s:%s", epoch, execHash, txMerkle)
+}
+
+func execBroadcastKey(execHash string, txMerkle string) string {
+	return fmt.Sprintf("%s:%s", execHash, txMerkle)
+}
+
+func execResultSignBytes(heightHint uint64, execHash string, txMerkle string) []byte {
+	return []byte(fmt.Sprintf("%d|%s|%s", heightHint, execHash, txMerkle))
+}
+
+func recordExecResultGlobal(epoch uint64, execHash string, txMerkle string, res ExecutionResult) (int, bool, bool) {
+	if epoch == 0 || execHash == "" || res.Signer == "" {
+		return 0, false, false
+	}
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+
+	if frozenHash, ok := ExecPool.frozen[epoch]; ok && frozenHash != "" && frozenHash != execHash {
+		if byHash, ok := ExecPool.pool[epoch][frozenHash]; ok {
+			return len(byHash), false, false
+		}
+		return 0, false, false
+	}
+
+	if _, ok := ExecPool.pool[epoch]; !ok {
+		ExecPool.pool[epoch] = make(map[string]map[string]ExecutionResult)
+	}
+	if _, ok := ExecPool.txMerkle[epoch]; !ok {
+		ExecPool.txMerkle[epoch] = make(map[string]string)
+	}
+	if _, ok := ExecPool.signers[epoch]; !ok {
+		ExecPool.signers[epoch] = make(map[string]bool)
+	}
+	if _, ok := ExecPool.choice[epoch]; !ok {
+		ExecPool.choice[epoch] = make(map[string]string)
+	}
+
+	if existing, ok := ExecPool.txMerkle[epoch][execHash]; ok && existing != "" && existing != txMerkle {
+		return len(ExecPool.pool[epoch][execHash]), false, false
+	}
+	if _, ok := ExecPool.txMerkle[epoch][execHash]; !ok {
+		ExecPool.txMerkle[epoch][execHash] = txMerkle
+	}
+
+	choice := execBroadcastKey(execHash, txMerkle)
+	if prev, exists := ExecPool.choice[epoch][res.Signer]; exists {
+		if prev != choice {
+			// Signed equivocation proof: same signer, same epoch, different exec vote.
+			return 0, false, true
+		}
+		if byHash, ok := ExecPool.pool[epoch][execHash]; ok {
+			return len(byHash), false, false
+		}
+		return 0, false, false
+	}
+
+	if ExecPool.signers[epoch][res.Signer] {
+		if byHash, ok := ExecPool.pool[epoch][execHash]; ok {
+			return len(byHash), false, false
+		}
+		return 0, false, false
+	}
+
+	ExecPool.choice[epoch][res.Signer] = choice
+	ExecPool.signers[epoch][res.Signer] = true
+
+	if _, ok := ExecPool.pool[epoch][execHash]; !ok {
+		ExecPool.pool[epoch][execHash] = make(map[string]ExecutionResult)
+	}
+	if _, ok := ExecPool.pool[epoch][execHash][res.Signer]; !ok {
+		ExecPool.pool[epoch][execHash][res.Signer] = res
+	}
+
+	return len(ExecPool.pool[epoch][execHash]), true, false
+}
+
+func freezeExecPool(epoch uint64, execHash string) {
+	if epoch == 0 || execHash == "" {
+		return
+	}
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+	if ExecPool.frozen == nil {
+		ExecPool.frozen = make(map[uint64]string)
+	}
+	if _, ok := ExecPool.frozen[epoch]; !ok {
+		ExecPool.frozen[epoch] = execHash
+	}
+}
+
+func getExecResultsGlobal(epoch uint64, execHash string, txMerkle string) ([]ExecutionResult, []string, int, bool) {
+	if epoch == 0 || execHash == "" {
+		return nil, nil, 0, false
+	}
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+
+	byHash, ok := ExecPool.pool[epoch]
+	if !ok {
+		return nil, nil, 0, false
+	}
+	resultsMap, ok := byHash[execHash]
+	if !ok {
+		return nil, nil, 0, false
+	}
+	if txMerkle != "" {
+		if expected, ok := ExecPool.txMerkle[epoch][execHash]; ok && expected != "" && expected != txMerkle {
+			return nil, nil, 0, false
+		}
+	}
+
+	results := make([]ExecutionResult, 0, len(resultsMap))
+	signers := make([]string, 0, len(resultsMap))
+	for _, r := range resultsMap {
+		results = append(results, r)
+		if r.Signer != "" {
+			signers = append(signers, r.Signer)
+		}
+	}
+
+	return results, signers, len(resultsMap), true
+}
+
+func getExecCountGlobal(epoch uint64, execHash string, txMerkle string) int {
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+
+	if epoch == 0 || execHash == "" {
+		return 0
+	}
+	byHash, ok := ExecPool.pool[epoch]
+	if !ok {
+		return 0
+	}
+	resultsMap, ok := byHash[execHash]
+	if !ok {
+		return 0
+	}
+	if txMerkle != "" {
+		if expected, ok := ExecPool.txMerkle[epoch][execHash]; ok && expected != "" && expected != txMerkle {
+			return 0
+		}
+	}
+	return len(resultsMap)
+}
+
+func clearExecPoolUpTo(height uint64) {
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+
+	for h := range ExecPool.pool {
+		if h <= height {
+			delete(ExecPool.pool, h)
+		}
+	}
+	for h := range ExecPool.txMerkle {
+		if h <= height {
+			delete(ExecPool.txMerkle, h)
+		}
+	}
+	for h := range ExecPool.frozen {
+		if h <= height {
+			delete(ExecPool.frozen, h)
+		}
+	}
+	for h := range ExecPool.signers {
+		if h <= height {
+			delete(ExecPool.signers, h)
+		}
+	}
+	for h := range ExecPool.choice {
+		if h <= height {
+			delete(ExecPool.choice, h)
+		}
+	}
+}
+
+func buildExecPoolSnapshot(epoch uint64) *ExecPoolSnapshot {
+	if epoch == 0 {
+		return nil
+	}
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+
+	byHash, ok := ExecPool.pool[epoch]
+	if !ok || len(byHash) == 0 {
+		return nil
+	}
+
+	hashes := make(map[string][]string, len(byHash))
+	for hash, resMap := range byHash {
+		signers := make([]string, 0, len(resMap))
+		for signer := range resMap {
+			signers = append(signers, signer)
+		}
+		sort.Strings(signers)
+		hashes[hash] = signers
+	}
+
+	txMerkle := make(map[string]string)
+	if tm, ok := ExecPool.txMerkle[epoch]; ok {
+		for hash, merkle := range tm {
+			txMerkle[hash] = merkle
+		}
+	}
+
+	return &ExecPoolSnapshot{
+		Epoch:    epoch,
+		Hashes:   hashes,
+		TxMerkle: txMerkle,
+	}
+}
+
+func (n *Node) mergeExecPoolSnapshot(snapshot ExecPoolSnapshot) {
+	if snapshot.Epoch == 0 {
+		return
+	}
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	if snapshot.Epoch <= committedHeight {
+		return
+	}
+	// Accept only current epoch to avoid stale pollution.
+	if snapshot.Epoch != n.currentEpoch() {
+		return
+	}
+	for hash, signers := range snapshot.Hashes {
+		txMerkle := ""
+		if snapshot.TxMerkle != nil {
+			txMerkle = snapshot.TxMerkle[hash]
+		}
+		for _, signer := range signers {
+			if !n.isValidatorInSetForHeight(signer, snapshot.Epoch) {
+				continue
+			}
+			_, _, _ = recordExecResultGlobal(snapshot.Epoch, hash, txMerkle, ExecutionResult{
+				Height:     snapshot.Epoch,
+				Signer:     signer,
+				ResultHash: hash,
+				TxMerkle:   txMerkle,
+			})
+		}
+	}
+}
+
+func (n *Node) currentEpoch() uint64 {
+	h := n.Blockchain.Height()
+	n.commitMu.Lock()
+	if n.committedHeight > h {
+		h = n.committedHeight
+	}
+	n.commitMu.Unlock()
+	return h + 1
+}
+
+func recordProposedBlock(height uint64, proposer string, blockHash string) (bool, bool, string) {
+	proposer = normalizeValidatorID(proposer)
+	if height == 0 || proposer == "" || blockHash == "" {
+		return false, false, ""
+	}
+
+	proposedBlocksMu.Lock()
+	defer proposedBlocksMu.Unlock()
+
+	if ProposedBlocks == nil {
+		ProposedBlocks = make(map[uint64]map[string]string)
+	}
+	if _, ok := ProposedBlocks[height]; !ok {
+		ProposedBlocks[height] = make(map[string]string)
+	}
+
+	if prev, ok := ProposedBlocks[height][proposer]; ok {
+		if prev == blockHash {
+			return false, false, prev
+		}
+		return false, true, prev
+	}
+	ProposedBlocks[height][proposer] = blockHash
+
+	const keepWindow = uint64(512)
+	if height > keepWindow {
+		cutoff := height - keepWindow
+		for h := range ProposedBlocks {
+			if h < cutoff {
+				delete(ProposedBlocks, h)
+			}
+		}
+	}
+
+	return true, false, ""
+}
+
+func penalizeSignedProposal(n *Node, block Block, reason string) {
+	if n == nil || block.ID == 0 || block.Proposer == "" {
+		return
+	}
+	n.RecordMisbehavior(block.Proposer, reason, int(block.ID), block.BlockHash)
+	SlashValidator(block.Proposer, reason, int(block.ID))
+}
+
+func (n *Node) verifyLeaderBlock(block Block) bool {
+	if block.ID == 0 {
+		return false
+	}
+	epoch := n.currentEpoch()
+	if block.ID != epoch {
+		return false
+	}
+
+	if len(block.Signature) == 0 || !VerifyBlockSignature(block) {
+		if DebugConsensus {
+			fmt.Printf("Invalid proposer signature at height %d | proposer=%s\n",
+				block.ID, ShortID(block.Proposer))
+		}
+		return false
+	}
+
+	_, equivocated, prevHash := recordProposedBlock(block.ID, block.Proposer, block.BlockHash)
+	if equivocated {
+		if DebugConsensus {
+			fmt.Printf("Double proposal detected at height %d | proposer=%s prev=%s got=%s\n",
+				block.ID, ShortID(block.Proposer), ShortHash(prevHash), ShortHash(block.BlockHash))
+		}
+		penalizeSignedProposal(n, block, "double_proposal")
+		n.requestConsensusRecomputePause(block.ID, "double_proposal")
+		return false
+	}
+
+	if block.ValidatorSetHash != "" {
+		expectedHash := n.expectedValidatorSetHash(block.ID)
+		if expectedHash != "" && block.ValidatorSetHash != expectedHash {
+			if n.tryRepairValidatorSetHash(block.ID, block.ValidatorSetHash) {
+				expectedHash = n.expectedValidatorSetHash(block.ID)
+			}
+		}
+		if expectedHash != "" && block.ValidatorSetHash != expectedHash {
+			if DebugConsensus {
+				fmt.Printf("âŒ Validator set hash mismatch at height %d | expected=%s got=%s\n",
+					block.ID, expectedHash[:8], block.ValidatorSetHash[:8])
+			}
+			n.requestConsensusRecomputePause(block.ID, "validator_set_hash_mismatch")
+			localHeight := n.Blockchain.Height()
+			if n.recordValidatorSetMismatch(block.ID, expectedHash, block.ValidatorSetHash) {
+				if shouldForceSnapshotResyncForValidatorSetMismatch(localHeight, block.ID) {
+					n.forceSnapshotResyncNow(block.ID, "validator-set-hash-mismatch-autoheal")
+				} else {
+					n.maybeForceNearTipValidatorSetResync(localHeight, block.ID, "validator-set-hash-mismatch-autoheal")
+				}
+			}
+			// Near-tip mismatch should still drive regular catch-up.
+			n.maybeSyncToBestObservedHeight("validator_set_mismatch")
+			return false
+		}
+	}
+
+	validators := n.GetConsensusValidators(int(block.ID))
+	expectedLeader := LeaderForHeight(block.ID, validators)
+	if expectedLeader == "" || block.Proposer != expectedLeader {
+		if DebugConsensus {
+			fmt.Printf("Invalid proposer at height %d | expected=%s got=%s\n",
+				block.ID, ShortID(expectedLeader), ShortID(block.Proposer))
+		}
+		penalizeSignedProposal(n, block, "invalid_proposer")
+		n.requestConsensusRecomputePause(block.ID, "invalid_proposer")
+		// Production safety: proposer mismatch near tip should not force snapshot
+		// rollback loops. Use regular heartbeat-driven sync instead.
+		n.maybeSyncToBestObservedHeight("invalid_proposer")
+		return false
+	}
+
+	last := n.Blockchain.LastBlock()
+	if block.PrevHash != last.BlockHash {
+		return false
+	}
+	if HashBlock(block) != block.BlockHash {
+		penalizeSignedProposal(n, block, "invalid_block")
+		return false
+	}
+	if err := VerifyMempoolRoot(block); err != nil {
+		penalizeSignedProposal(n, block, "invalid_block")
+		return false
+	}
+	expectedRoot := n.ExecuteBlockAndGetStateRoot(block)
+	if expectedRoot == "" || expectedRoot != block.StateRoot {
+		penalizeSignedProposal(n, block, "invalid_block")
+		return false
+	}
+	return true
+}
+
+func (n *Node) handleLeaderBlock(block Block) {
+	if !n.verifyLeaderBlock(block) {
+		return
+	}
+
+	if !n.storeLeaderBlock(block) {
+		return
+	}
+	n.replayQueuedExecutionVotes()
+	if n.consensusRecomputePauseActive() {
+		// Validator-set recompute barrier: do not emit votes while paused.
+		return
+	}
+
+	if !n.canParticipateAsValidator() {
+		// Rule 2: candidate/observer nodes do not vote/propose execution hashes.
+		return
+	}
+
+	execHash := block.StateRoot
+	if execHash == "" {
+		execHash = n.ExecuteBlockAndGetStateRoot(block)
+	}
+	if execHash == "" || execHash != block.StateRoot {
+		return
+	}
+
+	n.setLogicalTick(block.ID, TickExec)
+	n.broadcastExecutionResult(block.ID, execHash, block.MempoolRoot)
+}
+
+func (n *Node) setLogicalTick(epoch uint64, tick uint64) {
+	n.logicalMu.Lock()
+	n.logicalClock = LogicalClock{Epoch: epoch, Tick: tick}
+	n.logicalMu.Unlock()
+}
+
+func leaderFromExecHash(execHash string, epoch uint64, validators []string) string {
+	if len(validators) == 0 {
+		return ""
+	}
+
+	sort.Strings(validators)
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s:%d", execHash, epoch)))
+	idx := binary.BigEndian.Uint64(sum[:8]) % uint64(len(validators))
+	return validators[idx]
+}
+
+func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle string, results []ExecutionResult, signers []string) bool {
+	if n.consensusRecomputePauseActive() {
+		return false
+	}
+	leaderBlock, ok := n.getLeaderBlock(epoch)
+	if !ok || leaderBlock.ID != epoch {
+		return false
+	}
+	if n.Blockchain.Height() >= epoch {
+		return false
+	}
+	if txMerkle != "" && leaderBlock.MempoolRoot != txMerkle {
+		return false
+	}
+	if txMerkle == "" && leaderBlock.MempoolRoot != "" {
+		return false
+	}
+
+	expected := leaderBlock.StateRoot
+	if expected == "" {
+		expected = n.ExecuteBlockAndGetStateRoot(leaderBlock)
+	}
+	if expected == "" || expected != execHash {
+		return false
+	}
+
+	final := leaderBlock
+	final.BlockTime = LogicalTimeForEpochTick(epoch, TickFinalize)
+	final.Timestamp = int64(SystemTimeUnits(final.BlockTime))
+	final.StateRoot = execHash
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Signer < results[j].Signer
+	})
+	sort.Strings(signers)
+	final.ExecutionResults = results
+	final.Signatures = signers
+	final.BlockHash = HashBlock(final)
+
+	for i := range final.ExecutionResults {
+		final.ExecutionResults[i].BlockHash = final.BlockHash
+		final.ExecutionResults[i].Height = final.ID
+		final.ExecutionResults[i].TxMerkle = txMerkle
+	}
+
+	before := n.Blockchain.Height()
+	n.ReceiveBlock(final, n.Blockchain)
+	n.setLogicalTick(epoch, TickFinalize)
+	after := n.Blockchain.Height()
+	if after > before && ResultGossipOnly && n.Consensus != nil {
+		n.hardResetConsensus(epoch + 1)
+		n.Consensus.mu.Lock()
+		n.Consensus.Paused = false
+		n.Consensus.Syncing = false
+		n.Consensus.SyncTarget = 0
+		n.Consensus.syncInFlight = false
+		n.Consensus.mu.Unlock()
+	}
+	if after > before {
+		n.clearLeaderBlock(epoch)
+	}
+	return true
+}
+
+func (n *Node) handleExecutionResultMsg(res ExecutionResultMsg) {
+	n.processExecutionResultMsg(res, true)
+}
+
+func (n *Node) queueExecResult(res ExecutionResultMsg) {
+	res.Signer = normalizeValidatorID(res.Signer)
+	if res.HeightHint == 0 || res.Signer == "" || res.ExecHash == "" {
+		return
+	}
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	key := fmt.Sprintf("%d", res.HeightHint)
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+
+	if n.queuedExecVotes == nil {
+		n.queuedExecVotes = make(map[string][]ExecutionResultMsg)
+	}
+	// Avoid duplicate queued entries from the same signer for the same hash.
+	for _, existing := range n.queuedExecVotes[key] {
+		if existing.Signer == res.Signer &&
+			existing.ExecHash == res.ExecHash &&
+			existing.TxMerkle == res.TxMerkle {
+			return
+		}
+	}
+	n.queuedExecVotes[key] = append(n.queuedExecVotes[key], res)
+	n.trimConsensusCachesLocked(committedHeight)
+}
+
+func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool) {
+	res.Signer = normalizeValidatorID(res.Signer)
+	_ = allowQueue
+	if res.Signer == "" || res.ExecHash == "" {
+		return
+	}
+
+	if res.HeightHint == 0 {
+		// Height hint is mandatory to scope execution votes per epoch.
+		return
+	}
+	if n.consensusRecomputePauseActive() {
+		if allowQueue {
+			n.queueExecResult(res)
+		}
+		return
+	}
+	if n.Consensus != nil {
+		n.Consensus.mu.Lock()
+		syncing := n.Consensus.Syncing
+		n.Consensus.mu.Unlock()
+		if syncing {
+			if allowQueue {
+				n.queueExecResult(res)
+			}
+			return
+		}
+	}
+	epoch := n.currentEpoch()
+	// Future-epoch execution votes are expected during late join/catch-up.
+	// Queue them instead of misclassifying as "non-active validator".
+	if res.HeightHint != epoch {
+		if allowQueue && res.HeightHint > epoch {
+			n.queueExecResult(res)
+		}
+		return
+	}
+	// Only validators can send execution votes.
+	validators := n.GetConsensusValidators(int(res.HeightHint))
+	if len(validators) == 0 {
+		if allowQueue {
+			n.queueExecResult(res)
+		}
+		return
+	}
+	allowed := false
+	for _, v := range validators {
+		if v == res.Signer {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		if DebugConsensus {
+			fmt.Printf("Ignoring exec hash from non-active validator %s @ epoch %d\n",
+				ShortID(res.Signer), res.HeightHint)
+		}
+		return
+	}
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	if res.HeightHint <= committedHeight {
+		return
+	}
+
+	// Enforce validator identity with signature.
+	if res.Signature == "" {
+		return
+	}
+	pub, ok := ValidatorPubKeys[res.Signer]
+	if !ok || len(pub) != ed25519.PublicKeySize {
+		if allowQueue {
+			n.queueExecResult(res)
+		}
+		return
+	}
+	sig, err := hex.DecodeString(res.Signature)
+	if err != nil {
+		return
+	}
+	if !ed25519.Verify(pub, execResultSignBytes(res.HeightHint, res.ExecHash, res.TxMerkle), sig) {
+		return
+	}
+
+	leaderBlock, ok := n.getLeaderBlock(epoch)
+	if !ok {
+		if allowQueue {
+			n.queueExecResult(res)
+		}
+		return
+	}
+	if res.TxMerkle != leaderBlock.MempoolRoot {
+		return
+	}
+	targetEpoch := res.HeightHint
+	expected := leaderBlock.StateRoot
+	if expected == "" {
+		expected = n.ExecuteBlockAndGetStateRoot(leaderBlock)
+	}
+	if expected == "" {
+		return
+	}
+	if res.ExecHash != expected {
+		if DebugConsensus {
+			fmt.Printf("Invalid execution vote from %s @ epoch %d | expected=%s got=%s\n",
+				ShortID(res.Signer), targetEpoch, ShortHash(expected), ShortHash(res.ExecHash))
+		}
+		n.RecordMisbehavior(res.Signer, "exec_mismatch", int(targetEpoch), res.ExecHash)
+		SlashValidator(res.Signer, "exec_mismatch", int(targetEpoch))
+		return
+	}
+	if !n.markExecSignerSeen(targetEpoch, res.Signer) {
+		return
+	}
+
+	// If we haven't broadcast yet for this epoch+hash and our local execution matches,
+	// broadcast our execution result to help convergence.
+	if n.canParticipateAsValidator() {
+		localHash := expected
+		if localHash == "" {
+			localHash = n.ExecuteBlockAndGetStateRoot(leaderBlock)
+		}
+		if localHash != "" && localHash == res.ExecHash {
+			n.setLogicalTick(epoch, TickExec)
+			n.broadcastExecutionResult(epoch, res.ExecHash, leaderBlock.MempoolRoot)
+		}
+	}
+
+	// Refresh validator liveness on any execution result
+	n.validatorMu.Lock()
+	if st, ok := n.validatorStatus[res.Signer]; ok {
+		st.LastSeen = time.Now()
+		st.Active = true
+	} else {
+		n.validatorStatus[res.Signer] = &ValidatorStatus{
+			LastSeen: time.Now(),
+			Active:   true,
+		}
+	}
+	n.validatorMu.Unlock()
+
+	if DebugConsensus {
+		fmt.Printf("[EXEC-HASH] hint=%d from=%s exec=%s\n",
+			res.HeightHint, res.Signer, ShortHash(res.ExecHash))
+	}
+
+	storedCount, ok, equivocation := recordExecResultGlobal(targetEpoch, res.ExecHash, res.TxMerkle, ExecutionResult{
+		Height:     targetEpoch,
+		Signer:     res.Signer,
+		ResultHash: res.ExecHash,
+		TxMerkle:   res.TxMerkle,
+	})
+	if equivocation {
+		if DebugConsensus {
+			fmt.Printf("Execution equivocation detected from %s @ epoch %d\n", ShortID(res.Signer), targetEpoch)
+		}
+		n.RecordMisbehavior(res.Signer, "exec_equivocation", int(targetEpoch), res.ExecHash)
+		SlashValidator(res.Signer, "exec_equivocation", int(targetEpoch))
+		return
+	}
+	if !ok {
+		return
+	}
+
+	if DebugConsensus {
+		fmt.Printf("Execution hash received: %s @ epoch %d\n",
+			ShortID(res.Signer), targetEpoch)
+	}
+
+	// Only finalize for the current epoch; future epochs are stored.
+	if targetEpoch != epoch {
+		return
+	}
+	n.setLogicalTick(epoch, TickVote)
+
+	epochValidators := n.GetConsensusValidators(int(epoch))
+	total := len(epochValidators)
+	required := execQuorumRequired(total)
+	if total == 0 || required == 0 {
+		return
+	}
+	if DebugConsensus {
+		fmt.Printf("[EXEC-POOL] epoch=%d hash=%s voters=%d/%d\n",
+			epoch, ShortHash(res.ExecHash), storedCount, total)
+		fmt.Printf("[EXEC-QUORUM] epoch=%d required=%d total=%d votes=%d\n",
+			epoch, required, total, storedCount)
+	}
+
+	if storedCount < required {
+		return
+	}
+
+	results, signers, _, ok := getExecResultsGlobal(targetEpoch, res.ExecHash, res.TxMerkle)
+	if !ok {
+		return
+	}
+
+	if DebugConsensus {
+		fmt.Printf("âœ… Execution quorum reached (hash=%s votes=%d/%d)\n",
+			ShortHash(res.ExecHash), storedCount, total)
+	}
+
+	freezeExecPool(epoch, res.ExecHash)
+	_ = n.finalizeExecutionResult(epoch, res.ExecHash, res.TxMerkle, results, signers)
+}
+
+func (n *Node) recordCandidateExecutionResult(res ExecutionResultMsg) bool {
+	if res.Signer == "" || res.ExecHash == "" || res.HeightHint == 0 {
+		return false
+	}
+	n.candidateMu.RLock()
+	cand, ok := n.candidates[res.Signer]
+	if !ok || cand == nil || cand.PermanentBan {
+		n.candidateMu.RUnlock()
+		return false
+	}
+	if cand.BanUntil > 0 && res.HeightHint < cand.BanUntil {
+		n.candidateMu.RUnlock()
+		return false
+	}
+	pub := cand.PubKey
+	n.candidateMu.RUnlock()
+
+	if len(pub) != ed25519.PublicKeySize || res.Signature == "" {
+		return false
+	}
+	sig, err := hex.DecodeString(res.Signature)
+	if err != nil {
+		return false
+	}
+	if !ed25519.Verify(pub, execResultSignBytes(res.HeightHint, res.ExecHash, res.TxMerkle), sig) {
+		return false
+	}
+
+	expected := ""
+	if res.HeightHint == n.currentEpoch() {
+		leaderBlock, ok := n.getLeaderBlock(res.HeightHint)
+		if ok {
+			if res.TxMerkle != leaderBlock.MempoolRoot {
+				return false
+			}
+			expected = leaderBlock.StateRoot
+			if expected == "" {
+				expected = n.ExecuteBlockAndGetStateRoot(leaderBlock)
+			}
+		}
+	} else {
+		if block, ok := n.Blockchain.GetBlock(res.HeightHint); ok {
+			if res.TxMerkle != block.MempoolRoot {
+				return false
+			}
+			expected = block.StateRoot
+		}
+	}
+
+	n.candidateMu.Lock()
+	cand, ok = n.candidates[res.Signer]
+	if !ok || cand == nil {
+		n.candidateMu.Unlock()
+		return false
+	}
+	if cand.ExecHashes == nil {
+		cand.ExecHashes = make(map[uint64]string)
+	}
+	if existing, ok := cand.ExecHashes[res.HeightHint]; ok && existing != res.ExecHash {
+		if res.Signer == "F" || res.Signer == "G" {
+			fmt.Printf("DBG candidate %s exec_equivocation height=%d existing=%s new=%s\n",
+				res.Signer,
+				res.HeightHint,
+				ShortHash(existing),
+				ShortHash(res.ExecHash),
+			)
+		}
+		n.recordCandidateMisbehaviorLocked(res.Signer, cand, res.HeightHint, "exec_equivocation")
+		n.candidateMu.Unlock()
+		return false
+	}
+	if expected != "" && res.ExecHash != expected {
+		if res.Signer == "F" || res.Signer == "G" {
+			fmt.Printf("DBG candidate %s exec_mismatch height=%d expected=%s got=%s\n",
+				res.Signer,
+				res.HeightHint,
+				ShortHash(expected),
+				ShortHash(res.ExecHash),
+			)
+		}
+		n.recordCandidateMisbehaviorLocked(res.Signer, cand, res.HeightHint, "exec_mismatch")
+		n.candidateMu.Unlock()
+		return false
+	}
+	cand.ExecHashes[res.HeightHint] = res.ExecHash
+	if res.Signer == "F" || res.Signer == "G" {
+		fmt.Printf("DBG candidate %s exec_hash_stored height=%d hash=%s expected_known=%t\n",
+			res.Signer,
+			res.HeightHint,
+			ShortHash(res.ExecHash),
+			expected != "",
+		)
+	}
+	pending := false
+	if cand.PendingMatch != nil {
+		pending = cand.PendingMatch[res.HeightHint]
+	}
+	n.candidateMu.Unlock()
+
+	if pending {
+		var expected string
+		n.Blockchain.mu.RLock()
+		if res.HeightHint < uint64(len(n.Blockchain.Blocks)) {
+			block := n.Blockchain.Blocks[res.HeightHint]
+			if block.ID == res.HeightHint {
+				expected = block.StateRoot
+			}
+		}
+		n.Blockchain.mu.RUnlock()
+		if expected != "" {
+			n.candidateMu.Lock()
+			cand, ok = n.candidates[res.Signer]
+			if ok && cand != nil && cand.PendingMatch != nil && cand.PendingMatch[res.HeightHint] {
+				if res.ExecHash == expected {
+					cand.MatchedEpochs++
+				} else {
+					n.recordCandidateMisbehaviorLocked(res.Signer, cand, res.HeightHint, "exec_mismatch_late")
+				}
+				delete(cand.PendingMatch, res.HeightHint)
+			}
+			n.candidateMu.Unlock()
+		}
+	}
+
+	return true
+}
+
+func (n *Node) replayQueuedExecutionVotes() {
+	n.execResultsMu.Lock()
+	if len(n.queuedExecVotes) == 0 {
+		n.execResultsMu.Unlock()
+		n.tryFinalizeFromStoredResults()
+		return
+	}
+	queued := n.queuedExecVotes
+	n.queuedExecVotes = make(map[string][]ExecutionResultMsg)
+	n.execResultsMu.Unlock()
+
+	for _, msgs := range queued {
+		for _, msg := range msgs {
+			n.processExecutionResultMsg(msg, true)
+		}
+	}
+	n.tryFinalizeFromStoredResults()
+}
+
+func (n *Node) tryFinalizeFromStoredResults() {
+	if n.consensusRecomputePauseActive() {
+		return
+	}
+	epoch := n.currentEpoch()
+	leaderBlock, ok := n.getLeaderBlock(epoch)
+	if !ok || leaderBlock.ID != epoch {
+		return
+	}
+	execHash := leaderBlock.StateRoot
+	if execHash == "" {
+		execHash = n.ExecuteBlockAndGetStateRoot(leaderBlock)
+	}
+	if execHash == "" {
+		return
+	}
+	txMerkle := leaderBlock.MempoolRoot
+	validators := n.GetConsensusValidators(int(epoch))
+	total := len(validators)
+	required := execQuorumRequired(total)
+	if total == 0 || required == 0 {
+		return
+	}
+	count := getExecCountGlobal(epoch, execHash, txMerkle)
+	if count < required {
+		return
+	}
+
+	results, signers, _, ok := getExecResultsGlobal(epoch, execHash, txMerkle)
+	if !ok {
+		return
+	}
+
+	freezeExecPool(epoch, execHash)
+	_ = n.finalizeExecutionResult(epoch, execHash, txMerkle, results, signers)
+}
+
+func (n *Node) hasFinalExecutionResult(epoch uint64, execHash string, txMerkle string) bool {
+	if execHash == "" {
+		return false
+	}
+	count := getExecCountGlobal(epoch, execHash, txMerkle)
+	validators := n.GetConsensusValidators(int(epoch))
+	total := len(validators)
+	required := execQuorumRequired(total)
+	if total == 0 || required == 0 {
+		return false
+	}
+	return count >= required
+}
+
+func (n *Node) handleCommitMsg(cm CommitMsg) {
+	// Commit messages are ignored in result-gossip consensus.
+	_ = cm
+}
+
+func (n *Node) BroadcastBlock(block Block) {
+	if ResultGossipOnly {
+		return
+	}
+	if n.TopicBlocks == nil {
+		fmt.Println("âŒ TopicBlocks not initialized")
+		return
+	}
+
+	data, _ := json.Marshal(block)
+
+	if err := n.TopicBlocks.Publish(context.Background(), data); err != nil {
+		fmt.Println("âŒ Block publish failed:", err)
+		return
+	}
+
+	if DebugConsensus {
+		fmt.Printf("ðŸ“¦ Block published | height=%d\n", block.ID)
+	}
+}
+
+func (n *Node) DiscoverPeers() {
+	ctx := context.Background()
+	seeds := n.seedsSnapshot()
+
+	for _, seed := range seeds {
+		seedAddr, err := ma.NewMultiaddr(seed)
+		if err != nil {
+			continue
+		}
+
+		seedInfo, err := peer.AddrInfoFromP2pAddr(seedAddr)
+		if err != nil {
+			continue
+		}
+		if n.Host != nil && seedInfo.ID == n.Host.ID() {
+			continue
+		}
+
+		if !n.canDialPeerID(seedInfo.ID.String()) {
+			continue
+		}
+		if err := n.Host.Connect(ctx, *seedInfo); err == nil {
+			n.Host.ConnManager().TagPeer(seedInfo.ID, "bootstrap", 100)
+
+			if DebugNet {
+				fmt.Println("ðŸ”— Connected to seed:", seedInfo.ID.String())
+			}
+			n.recordDialSuccess(seedInfo.ID.String())
+		} else {
+			errLower := strings.ToLower(err.Error())
+			if strings.Contains(errLower, "peer id mismatch") ||
+				strings.Contains(errLower, "dial to self attempted") {
+				if n.refreshPeerIDMismatch(seed, seedInfo.ID.String(), err) {
+					continue
+				}
+				n.forgetPeer(seedInfo.ID.String(), "peer_id_mismatch")
+			}
+			n.recordDialFailure(seedInfo.ID.String())
+		}
+	}
+}
+
+
+
+
+
+
+func (n *Node) connectPubSubPeers() {
+	// =====================================================
+	// 0ï¸âƒ£ HARD GUARD â€” REQUIRE HOST + PUBSUB
+	// =====================================================
+	if n.Host == nil || n.PubSub == nil {
+		if DebugNet {
+			fmt.Println("âš ï¸ PubSub handshake skipped: host or pubsub nil")
+		}
+		return
+	}
+	// =====================================================
+	// 1ï¸âƒ£ CANONICAL TOPICS (AUTHORITATIVE SET)
+	// =====================================================
+	canonicalTopics := []string{
+		"msc-blocks",
+		"msc-transactions",
+		"msc-validators",
+	}
+	// =====================================================
+	// 2ï¸âƒ£ ENSURE ALL TOPICS ARE JOINED (ONCE)
+	// =====================================================
+	for _, topic := range canonicalTopics {
+		if n.isTopicJoined(topic) {
+			continue
+		}
+		if _, err := n.PubSub.Join(topic); err != nil {
+			if DebugNet {
+				fmt.Printf("âš ï¸ Failed to join topic %s: %v\n", topic, err)
+			}
+		}
+	}
+	// =====================================================
+	// 3ï¸âƒ£ FETCH CONNECTED LIBP2P PEERS
+	// =====================================================
+	peers := n.Host.Network().Peers()
+	if len(peers) == 0 {
+		if DebugNet {
+			fmt.Println("âš ï¸ No connected peers â€” PubSub mesh idle")
+		}
+		return
+	}
+	if DebugNet {
+		fmt.Printf("ðŸ”— PubSub mesh check against %d peers\n", len(peers))
+	}
+	// =====================================================
+	// 4ï¸âƒ£ BUILD FAST LOOKUP OF MESH PEERS (O(1))
+	// =====================================================
+	meshPeers := make(map[string]bool)
+	for _, topic := range canonicalTopics {
+		for _, pid := range n.PubSub.ListPeers(topic) {
+			meshPeers[pid.String()] = true
+		}
+	}
+	// =====================================================
+	// 5ï¸âƒ£ FORCE GOSSIPSUB GRAFT FOR MISSING PEERS
+	// =====================================================
+	for _, pid := range peers {
+		if meshPeers[pid.String()] {
+			continue
+		}
+		if n.peerConnectedFor(pid.String()) < peerMinHold {
+			continue
+		}
+		if !n.shouldForceGraft(pid.String()) {
+			continue
+		}
+		if DebugNet {
+			fmt.Printf(
+				"ðŸ”„ Forcing GossipSub graft with peer %s\n",
+				pid.String()[:8],
+			)
+		}
+		// ðŸ” Controlled publish to trigger IWANT/IHAVE exchange
+		// Prefer validator gossip when ResultGossipOnly is enabled.
+		publishTopic := n.TopicBlocks
+		if ResultGossipOnly && n.ValidatorTopic != nil {
+			publishTopic = n.ValidatorTopic
+		}
+		if publishTopic != nil {
+			_ = publishTopic.Publish(
+				context.Background(),
+				[]byte{0x01}, // minimal payload, safe
+			)
+		}
+		// ðŸ§˜ Throttle to protect mesh stability
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+func (n *Node) validatorSetHash() string {
+	nextHeight := n.Blockchain.Height() + 1
+	if expected := n.expectedValidatorSetHash(nextHeight); expected != "" {
+		return expected
+	}
+	validators := n.GetConsensusValidators(int(nextHeight))
+	return ValidatorSetHash(validators)
+}
+func (n *Node) setGossipQuiet(quiet bool) {
+	n.peerStateMu.Lock()
+	n.gossipQuiet = quiet
+	n.peerStateMu.Unlock()
+}
+func (n *Node) isGossipQuiet() bool {
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	return n.gossipQuiet
+}
+func (n *Node) setPeerConnected(peerID string, connected bool) {
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	if connected {
+		n.connectedPeers[peerID] = true
+		delete(n.connectingPeers, peerID)
+	} else {
+		delete(n.connectedPeers, peerID)
+		delete(n.connectingPeers, peerID)
+	}
+}
+func (n *Node) isPeerConnected(peerID string) bool {
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	return n.connectedPeers[peerID]
+}
+func (n *Node) setPeerConnectedAt(peerID string, t time.Time) {
+	n.peerStateMu.Lock()
+	n.peerConnectedAt[peerID] = t
+	n.peerStateMu.Unlock()
+}
+func (n *Node) clearPeerConnectedAt(peerID string) {
+	n.peerStateMu.Lock()
+	delete(n.peerConnectedAt, peerID)
+	n.peerStateMu.Unlock()
+}
+func (n *Node) peerConnectedFor(peerID string) time.Duration {
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	if t, ok := n.peerConnectedAt[peerID]; ok {
+		return time.Since(t)
+	}
+	return 0
+}
+func (n *Node) shouldForceGraft(peerID string) bool {
+	now := time.Now()
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	if t, ok := n.peerGraftAt[peerID]; ok {
+		if now.Sub(t) < peerGraftCooldown {
+			return false
+		}
+	}
+	n.peerGraftAt[peerID] = now
+	return true
+}
+func (n *Node) markPeerConnecting(peerID string) bool {
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	if n.connectingPeers[peerID] {
+		return false
+	}
+	n.connectingPeers[peerID] = true
+	return true
+}
+func dialBackoffDelay(failures int) time.Duration {
+	switch failures {
+	case 1:
+		return dialBackoffStep1
+	case 2:
+		return dialBackoffStep2
+	case 3:
+		return dialBackoffStep3
+	default:
+		return dialBackoffMax
+	}
+}
+func (n *Node) canDialPeerID(peerID string) bool {
+	if peerID == "" {
+		return true
+	}
+	if n.isPeerQuarantined(peerID) {
+		return false
+	}
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	next, ok := n.peerDialNext[peerID]
+	if !ok || next.IsZero() {
+		return true
+	}
+	return time.Now().After(next)
+}
+func (n *Node) recordDialFailure(peerID string) {
+	if peerID == "" {
+		return
+	}
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	failures := n.peerDialFailures[peerID] + 1
+	n.peerDialFailures[peerID] = failures
+	n.peerDialNext[peerID] = time.Now().Add(dialBackoffDelay(failures))
+}
+func (n *Node) recordDialSuccess(peerID string) {
+	if peerID == "" {
+		return
+	}
+	n.peerStateMu.Lock()
+	delete(n.peerDialFailures, peerID)
+	delete(n.peerDialNext, peerID)
+	n.peerStateMu.Unlock()
+}
+func (n *Node) decayDialFailures(now time.Time) {
+	if n == nil {
+		return
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	n.peerStateMu.Lock()
+	for peerID, next := range n.peerDialNext {
+		if next.IsZero() || now.After(next.Add(dialBackoffMax)) {
+			delete(n.peerDialNext, peerID)
+			delete(n.peerDialFailures, peerID)
+		}
+	}
+	n.peerStateMu.Unlock()
+}
+func quarantineDurationFor(reason string) time.Duration {
+	switch {
+	case strings.Contains(reason, "chain_id_mismatch"),
+		strings.Contains(reason, "genesis_hash_mismatch"),
+		strings.Contains(reason, "version_mismatch"),
+		strings.Contains(reason, "consensus_params_mismatch"),
+		strings.Contains(reason, "consensus_protocol_mismatch"):
+		return peerQuarantineForMismatch
+	case strings.Contains(reason, "protocol"):
+		return peerQuarantineForProtocol
+	default:
+		return peerQuarantineFor
+	}
+}
+func shouldForgetPeer(reason string) bool {
+	switch {
+	case strings.Contains(reason, "chain_id_mismatch"),
+		strings.Contains(reason, "genesis_hash_mismatch"),
+		strings.Contains(reason, "version_mismatch"),
+		strings.Contains(reason, "consensus_params_mismatch"),
+		strings.Contains(reason, "consensus_protocol_mismatch"):
+		return true
+	default:
+		return false
+	}
+}
+func (n *Node) clearPeerState(peerID string) {
+	if peerID == "" {
+		return
+	}
+	n.peerStateMu.Lock()
+	delete(n.peerDialFailures, peerID)
+	delete(n.peerDialNext, peerID)
+	delete(n.peerHelloOK, peerID)
+	delete(n.peerSuspectAt, peerID)
+	delete(n.peerHashMatch, peerID)
+	delete(n.peerToValidator, peerID)
+	delete(n.peerSetHash, peerID)
+	delete(n.peerAckHeight, peerID)
+	delete(n.peerFlapTimes, peerID)
+	delete(n.quarantineUntil, peerID)
+	delete(n.connectedPeers, peerID)
+	delete(n.connectingPeers, peerID)
+	delete(n.peerConnectedAt, peerID)
+	delete(n.allowedPeerIDs, peerID)
+	n.peerStateMu.Unlock()
+}
+func remotePeerIDFromMismatchError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	lower := strings.ToLower(msg)
+	markers := []string{
+		"remote key matches ",
+		"but got ",
+	}
+	for _, marker := range markers {
+		idx := strings.Index(lower, marker)
+		if idx < 0 {
+			continue
+		}
+		tail := strings.TrimSpace(msg[idx+len(marker):])
+		if tail == "" {
+			continue
+		}
+		fields := strings.Fields(tail)
+		if len(fields) == 0 {
+			continue
+		}
+		candidate := strings.Trim(fields[0], " ,.;:)]}\"'")
+		if strings.HasPrefix(candidate, "12D3") {
+			return candidate
+		}
+	}
+	return ""
+}
+func peerAddrWithPeerID(rawAddr, peerID string) (string, bool) {
+	rawAddr = strings.TrimSpace(rawAddr)
+	peerID = strings.TrimSpace(peerID)
+	if rawAddr == "" || peerID == "" {
+		return "", false
+	}
+	base, _, hasPID := splitPeerAddress(rawAddr)
+	if hasPID {
+		return fmt.Sprintf("%s/p2p/%s", base, peerID), true
+	}
+	if strings.HasPrefix(rawAddr, "/") {
+		if _, err := ma.NewMultiaddr(rawAddr); err == nil {
+			return fmt.Sprintf("%s/p2p/%s", rawAddr, peerID), true
+		}
+	}
+	return "", false
+}
+func replacePeerAddrForBase(list []string, fixedAddr string) []string {
+	fixedAddr = strings.TrimSpace(fixedAddr)
+	if fixedAddr == "" {
+		return list
+	}
+	base := stripP2PComponent(fixedAddr)
+	if base == "" {
+		return list
+	}
+	out := make([]string, 0, len(list)+1)
+	for _, addr := range list {
+		addr = strings.TrimSpace(addr)
+		if addr == "" {
+			continue
+		}
+		if stripP2PComponent(addr) == base {
+			continue
+		}
+		out = append(out, addr)
+	}
+	out = append(out, fixedAddr)
+	return sanitizePeerListWithPreferred(out, []string{fixedAddr})
+}
+func (n *Node) refreshPeerIDMismatch(rawAddr, expectedPeerID string, dialErr error) bool {
+	if n == nil || expectedPeerID == "" || rawAddr == "" || dialErr == nil {
+		return false
+	}
+	// Auto-heal only for private/LAN targets to avoid trusting public mismatches.
+	if !isPeerAddrPrivate(rawAddr) {
+		return false
+	}
+	remotePeerID := remotePeerIDFromMismatchError(dialErr)
+	if remotePeerID == "" || remotePeerID == expectedPeerID {
+		return false
+	}
+	fixedAddr, ok := peerAddrWithPeerID(rawAddr, remotePeerID)
+	if !ok {
+		return false
+	}
+	// Never keep stale self entries.
+	if n.Host != nil && remotePeerID == n.Host.ID().String() {
+		n.forgetPeer(expectedPeerID, "self_dial")
+		return true
+	}
+	persistent, seeds := n.configPeerListsSnapshot()
+	persistent = replacePeerAddrForBase(persistent, fixedAddr)
+	seeds = replacePeerAddrForBase(seeds, fixedAddr)
+	n.setConfigPeerLists(persistent, seeds)
+	if err := savePersistentPeers(n.DataDir, n.ID, persistent); err != nil && DebugNet {
+		fmt.Printf("âš ï¸ Failed to persist peer-id refresh for %s: %v\n", expectedPeerID, err)
+	}
+	base, _, hasBase := splitPeerAddress(rawAddr)
+	if hasBase {
+		ValidatorAddrBook.mu.Lock()
+		for vid, addr := range ValidatorAddrBook.m {
+			addrBase, _, has := splitPeerAddress(addr)
+			if has && addrBase == base {
+				ValidatorAddrBook.m[vid] = fixedAddr
+			}
+		}
+		ValidatorAddrBook.mu.Unlock()
+	}
+	n.peerStateMu.Lock()
+	delete(n.allowedPeerIDs, expectedPeerID)
+	n.allowedPeerIDs[remotePeerID] = true
+	n.peerStateMu.Unlock()
+	if DebugNet {
+		fmt.Printf("â™»ï¸ PeerID refreshed for %s â†’ %s (%s)\n", expectedPeerID, remotePeerID, stripP2PComponent(fixedAddr))
+	}
+	n.forgetPeer(expectedPeerID, "peer_id_mismatch")
+	return true
+}
+func (n *Node) forgetPeer(peerID, reason string) {
+	if peerID == "" {
+		return
+	}
+	n.clearPeerState(peerID)
+	if n.Host != nil {
+		if pid, err := peer.Decode(peerID); err == nil {
+			n.Host.Peerstore().ClearAddrs(pid)
+		}
+	}
+	ValidatorAddrBook.mu.Lock()
+	for vid, addr := range ValidatorAddrBook.m {
+		if strings.Contains(addr, peerID) {
+			delete(ValidatorAddrBook.m, vid)
+		}
+	}
+	ValidatorAddrBook.mu.Unlock()
+	persistent, seeds := n.configPeerListsSnapshot()
+	filteredPersistent := make([]string, 0, len(persistent))
+	filteredSeeds := make([]string, 0, len(seeds))
+	persistentChanged := false
+	seedsChanged := false
+	for _, addr := range persistent {
+		if strings.Contains(addr, peerID) {
+			persistentChanged = true
+			continue
+		}
+		filteredPersistent = append(filteredPersistent, addr)
+	}
+	for _, addr := range seeds {
+		if strings.Contains(addr, peerID) {
+			seedsChanged = true
+			continue
+		}
+		filteredSeeds = append(filteredSeeds, addr)
+	}
+	if persistentChanged || seedsChanged {
+		n.setConfigPeerLists(filteredPersistent, filteredSeeds)
+		if persistentChanged {
+			if err := savePersistentPeers(n.DataDir, n.ID, filteredPersistent); err != nil && DebugNet {
+				fmt.Printf("?? Failed to persist peers list: %v\n", err)
+			}
+		}
+	}
+	if DebugNet {
+		fmt.Printf("?? Peer forgotten: %s reason=%s\n", peerID, reason)
+	}
+}
+func (n *Node) quarantinePeer(peerID, reason string) {
+	if peerID == "" {
+		return
+	}
+	duration := quarantineDurationFor(reason)
+	forget := shouldForgetPeer(reason)
+	if forget {
+		n.forgetPeer(peerID, reason)
+	}
+	n.peerStateMu.Lock()
+	n.quarantineUntil[peerID] = time.Now().Add(duration)
+	n.peerStateMu.Unlock()
+	if DebugNet {
+		fmt.Printf("?? Peer quarantined: %s reason=%s\n", peerID, reason)
+	}
+}
+func (n *Node) disconnectPeerID(peerID, reason string) {
+	if peerID == "" {
+		return
+	}
+	n.quarantinePeer(peerID, reason)
+	n.recordDialFailure(peerID)
+	n.clearPeerHello(peerID)
+	if n.Host == nil {
+		return
+	}
+	pid, err := peer.Decode(peerID)
+	if err != nil {
+		return
+	}
+	_ = n.Host.Network().ClosePeer(pid)
+}
+func (n *Node) validatePeerHello(peerID string, hello PeerHello) bool {
+	if hello.ChainID == "" || hello.ChainID != ChainID {
+		n.disconnectPeerID(peerID, "chain_id_mismatch")
+		return false
+	}
+	if GenesisHash != "" && (hello.GenesisHash == "" || hello.GenesisHash != GenesisHash) {
+		n.disconnectPeerID(peerID, "genesis_hash_mismatch")
+		return false
+	}
+	if hello.Version == "" || hello.Version != Version {
+		n.disconnectPeerID(peerID, "version_mismatch")
+		return false
+	}
+	if hello.ConsensusHash == "" || hello.ConsensusHash != consensusParamsHash() {
+		n.disconnectPeerID(peerID, "consensus_params_mismatch")
+		return false
+	}
+	n.peerStateMu.Lock()
+	n.peerHelloOK[peerID] = true
+	n.peerStateMu.Unlock()
+	return true
+}
+func (n *Node) isPeerHelloOK(peerID string) bool {
+	if peerID == "" {
+		return false
+	}
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	return n.peerHelloOK[peerID]
+}
+func (n *Node) clearPeerHello(peerID string) {
+	if peerID == "" {
+		return
+	}
+	n.peerStateMu.Lock()
+	delete(n.peerHelloOK, peerID)
+	n.peerStateMu.Unlock()
+}
+func (n *Node) shouldHandshakePeer(peerID string) bool {
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	if BlockPublicPeers {
+		return n.allowedPeerIDs[peerID]
+	}
+	if strings.HasPrefix(peerID, "12D3") {
+		return true
+	}
+	return n.allowedPeerIDs[peerID]
+}
+func (n *Node) recomputeGossipQuiet() {
+	if n.Host == nil {
+		return
+	}
+	peers := n.Host.Network().Peers()
+	if len(peers) == 0 {
+		n.setGossipQuiet(true)
+		return
+	}
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	for _, pid := range peers {
+		if match, ok := n.peerHashMatch[pid.String()]; !ok || !match {
+			n.gossipQuiet = false
+			return
+		}
+	}
+	n.gossipQuiet = true
+}
+func (n *Node) isPeerQuarantined(peerID string) bool {
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	until, ok := n.quarantineUntil[peerID]
+	if !ok {
+		return false
+	}
+	if time.Now().After(until) {
+		delete(n.quarantineUntil, peerID)
+		return false
+	}
+	return true
+}
+func (n *Node) markHelloSent(peerID string) bool {
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	if last, ok := n.peerHelloSentAt[peerID]; ok {
+		if time.Since(last) < peerHelloCooldown {
+			return false
+		}
+	}
+	n.peerHelloSentAt[peerID] = time.Now()
+	return true
+}
+func (n *Node) sendPeerHello(pid peer.ID) {
+	if n.Host == nil {
+		return
+	}
+	if n.isPeerQuarantined(pid.String()) {
+		return
+	}
+	if !n.shouldHandshakePeer(pid.String()) {
+		return
+	}
+	if !n.markHelloSent(pid.String()) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s, err := n.Host.NewStream(ctx, pid, "/msc/peerinfo/1.0.0")
+	if err != nil {
+		if DebugNet {
+			fmt.Printf("âš ï¸ Peer hello stream failed to %s: %v\n", pid, err)
+		}
+		n.recordDialFailure(pid.String())
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "protocols not supported") || strings.Contains(errMsg, "protocol not supported") {
+			n.disconnectPeerID(pid.String(), "peerinfo_protocol_mismatch")
+		}
+		return
+	}
+	defer s.Close()
+	hello := PeerHello{
+		ChainID:          ChainID,
+		GenesisHash:      GenesisHash,
+		Version:          Version,
+		ConsensusHash:    consensusParamsHash(),
+		ValidatorID:      "",
+		P2PAddr:          n.SelfAddr,
+		ValidatorSetHash: n.validatorSetHash(),
+		Height:           n.Blockchain.Height(),
+	}
+	if n.canParticipateAsValidator() {
+		hello.ValidatorID = n.ID
+	}
+	_ = json.NewEncoder(s).Encode(hello)
+	n.recordDialSuccess(pid.String())
+}
+func decodePeerHelloPayload(raw json.RawMessage) (PeerHello, error) {
+	var hello PeerHello
+	if err := json.Unmarshal(raw, &hello); err == nil {
+		if hello.ChainID != "" {
+			return hello, nil
+		}
+	}
+	var wrapped Message
+	if err := json.Unmarshal(raw, &wrapped); err == nil {
+		if wrapped.Type == MsgPeerHello && len(wrapped.Data) > 0 {
+			if err := json.Unmarshal(wrapped.Data, &hello); err == nil {
+				if hello.ChainID != "" {
+					return hello, nil
+				}
+			}
+		}
+	}
+	return PeerHello{}, fmt.Errorf("invalid peer hello payload")
+}
+func (n *Node) exchangePeerInfo(pid peer.ID) {
+	if n.Host == nil {
+		return
+	}
+	if n.isPeerQuarantined(pid.String()) {
+		return
+	}
+	if !n.shouldHandshakePeer(pid.String()) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s, err := n.Host.NewStream(ctx, pid, "/msc/peerinfo/1.0.0")
+	if err != nil {
+		if DebugNet {
+			fmt.Printf("âš ï¸ Peer info stream failed to %s: %v\n", pid, err)
+		}
+		n.recordDialFailure(pid.String())
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "protocols not supported") || strings.Contains(errMsg, "protocol not supported") {
+			n.disconnectPeerID(pid.String(), "peerinfo_protocol_mismatch")
+		}
+		return
+	}
+	defer s.Close()
+	enc := json.NewEncoder(s)
+	dec := json.NewDecoder(s)
+	info := PeerHello{
+		ChainID:          ChainID,
+		GenesisHash:      GenesisHash,
+		Version:          Version,
+		ConsensusHash:    consensusParamsHash(),
+		ValidatorID:      "",
+		P2PAddr:          n.SelfAddr,
+		ValidatorSetHash: n.validatorSetHash(),
+		Height:           n.Blockchain.Height(),
+	}
+	if n.canParticipateAsValidator() {
+		info.ValidatorID = n.ID
+	}
+	_ = enc.Encode(info)
+	var peerInfo PeerHello
+	var raw json.RawMessage
+	if err := dec.Decode(&raw); err == nil {
+		decoded, derr := decodePeerHelloPayload(raw)
+		if derr != nil {
+			n.recordDialFailure(pid.String())
+			return
+		}
+		peerInfo = decoded
+		if n.validatePeerHello(pid.String(), peerInfo) {
+			n.applyPeerInfo(pid.String(), peerInfo)
+			n.recordDialSuccess(pid.String())
+		}
+	} else {
+		n.recordDialFailure(pid.String())
+	}
+}
+func (n *Node) sendPeersList(pid peer.ID) {
+	if n.Host == nil {
+		return
+	}
+	if n.isPeerQuarantined(pid.String()) {
+		return
+	}
+	peers := n.collectPeerMultiaddrs()
+	if len(peers) == 0 {
+		return
+	}
+	self := stripP2PComponent(n.SelfAddr)
+	out := make([]string, 0, len(peers))
+	seen := make(map[string]struct{}, len(peers))
+	for _, addr := range peers {
+		addr = strings.TrimSpace(addr)
+		if addr == "" {
+			continue
+		}
+		if n.SelfAddr != "" {
+			if addr == n.SelfAddr || stripP2PComponent(addr) == self {
+				continue
+			}
+		}
+		if n.Host != nil && strings.Contains(addr, n.Host.ID().String()) {
+			continue
+		}
+		if _, ok := seen[addr]; ok {
+			continue
+		}
+		seen[addr] = struct{}{}
+		out = append(out, addr)
+	}
+	if len(out) == 0 {
+		return
+	}
+	if len(out) > 50 {
+		out = out[:50]
+	}
+	msg := Message{
+		Type: MsgPeers,
+		Data: MustJSON(out),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s, err := n.Host.NewStream(ctx, pid, "/msc/consensus/1.0.0")
+	if err != nil {
+		if DebugNet {
+			fmt.Printf("âš ï¸ Peers list stream failed to %s: %v\n", pid, err)
+		}
+		n.recordDialFailure(pid.String())
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "protocols not supported") || strings.Contains(errMsg, "protocol not supported") {
+			n.disconnectPeerID(pid.String(), "consensus_protocol_mismatch")
+		}
+		return
+	}
+	defer s.Close()
+	data, _ := json.Marshal(msg)
+	_, _ = s.Write(append(data, '\n'))
+}
+func (n *Node) handlePeersList(peerAddr string, peers []string) {
+	if len(peers) == 0 {
+		return
+	}
+	self := stripP2PComponent(n.SelfAddr)
+	uniq := make(map[string]struct{}, len(peers))
+	for _, addr := range peers {
+		addr = strings.TrimSpace(addr)
+		if addr == "" {
+			continue
+		}
+		if addr == peerAddr {
+			continue
+		}
+		if n.SelfAddr != "" && (addr == n.SelfAddr || stripP2PComponent(addr) == self) {
+			continue
+		}
+		if n.Host != nil && strings.Contains(addr, n.Host.ID().String()) {
+			continue
+		}
+		uniq[addr] = struct{}{}
+	}
+	if len(uniq) == 0 {
+		return
+	}
+	list := make([]string, 0, len(uniq))
+	for addr := range uniq {
+		list = append(list, addr)
+	}
+	sort.Strings(list)
+	list = sanitizePeerListWithPreferred(list, n.trustedPeerMultiaddrs())
+	currentPersistent := n.persistentPeersSnapshot()
+	merged := mergePeerLists(currentPersistent, list)
+	sanitizedPersistent := sanitizePeerListWithPreferred(merged, n.trustedPeerMultiaddrs())
+	n.setPersistentPeers(sanitizedPersistent)
+	if err := savePersistentPeers(n.DataDir, n.ID, sanitizedPersistent); err != nil && DebugNet {
+		fmt.Printf("âš ï¸ Failed to persist peers list: %v\n", err)
+	}
+	go n.connectToPeers(context.Background(), sanitizePeerListWithPreferred(list, n.trustedPeerMultiaddrs()))
+}
+func shouldSyncForValidatorSetMismatch(localHeight, peerHeight uint64) bool {
+	if peerHeight == 0 {
+		return false
+	}
+	// Never roll back due to a stale peer advertisement.
+	return peerHeight >= localHeight
+}
+func shouldForceSnapshotResyncForValidatorSetMismatch(localHeight, targetHeight uint64) bool {
+	if targetHeight == 0 || targetHeight <= localHeight {
+		return false
+	}
+	// Snapshot resync is last-resort only. Prefer block/heartbeat convergence
+	// for near and medium-range gaps to avoid rollback loops.
+	gap := targetHeight - localHeight
+	if nearSyncTip(localHeight, targetHeight) {
+		return false
+	}
+	// Force only for clearly large divergence.
+	return gap > 64
+}
+func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
+	if DebugNet && hello.ValidatorID != "" {
+		fmt.Printf("ðŸ¤ Peer info from %s | validator=%s\n",
+			peerAddr, ShortID(hello.ValidatorID))
+	}
+	// Peer hello is informational only. Do not update sync state.
+	expectedHash := ""
+	if hello.Height > 0 {
+		expectedHash = n.expectedValidatorSetHash(hello.Height + 1)
+	}
+	hashMatch := true
+	if hello.ValidatorSetHash != "" && expectedHash != "" {
+		hashMatch = hello.ValidatorSetHash == expectedHash
+	}
+	mismatch := !hashMatch && hello.ValidatorSetHash != "" && expectedHash != ""
+	n.peerStateMu.Lock()
+	n.peerToValidator[peerAddr] = hello.ValidatorID
+	n.peerSetHash[peerAddr] = hello.ValidatorSetHash
+	n.peerHashMatch[peerAddr] = hashMatch
+	if hello.ValidatorID != "" {
+		delete(n.validatorSuspect, hello.ValidatorID)
+	}
+	if hello.Height > 0 {
+		// Reset peer ACK cursor from fresh hello advertisement.
+		// A restarted peer may rejoin from a lower height, and stale higher ACK
+		// would otherwise make us skip required historical blocks.
+		n.peerAckHeight[peerAddr] = hello.Height
+	}
+	n.peerStateMu.Unlock()
+	if mismatch {
+		if DebugConsensus || DebugNet {
+			fmt.Printf("Ã¢ÂÅ’ Peer validator set mismatch %s | expected=%s got=%s height=%d\n",
+				peerAddr, expectedHash[:8], hello.ValidatorSetHash[:8], hello.Height)
+		}
+		localHeight := n.Blockchain.Height()
+		finalizedHeight := n.getFinalizedHeight()
+		effectiveLocal := localHeight
+		if finalizedHeight > effectiveLocal {
+			effectiveLocal = finalizedHeight
+		}
+		if !shouldSyncForValidatorSetMismatch(effectiveLocal, hello.Height) {
+			if DebugConsensus || DebugNet {
+				fmt.Printf("Ignoring validator-set mismatch from stale peer %s (peer=%d local=%d)\n",
+					peerAddr, hello.Height, effectiveLocal)
+			}
+			n.recomputeGossipQuiet()
+			return
+		}
+		targetHeight := hello.Height + 1
+		if n.tryRepairValidatorSetHash(targetHeight, hello.ValidatorSetHash) {
+			n.recomputeGossipQuiet()
+			return
+		}
+		target := hello.Height
+		if target == 0 || target < effectiveLocal {
+			target = effectiveLocal
+		}
+		n.requestConsensusRecomputePause(targetHeight, "peer_validator_set_mismatch")
+		if n.recordValidatorSetMismatch(targetHeight, expectedHash, hello.ValidatorSetHash) {
+			if shouldForceSnapshotResyncForValidatorSetMismatch(effectiveLocal, target) {
+				n.forceSnapshotResyncNow(target, "peer-validator-set-mismatch-autoheal")
+			} else {
+				n.maybeForceNearTipValidatorSetResync(effectiveLocal, targetHeight, "peer-validator-set-mismatch-autoheal")
+			}
+		}
+		// Ensure mismatch still nudges normal sync forward when force-resync is skipped.
+		n.maybeSyncToBestObservedHeight("peer_validator_set_mismatch")
+	}
+	n.recomputeGossipQuiet()
+}
+func (n *Node) recordPeerAck(peerAddr string, height uint64) {
+	if peerAddr == "" || height == 0 {
+		return
+	}
+	n.peerStateMu.Lock()
+	if prev, ok := n.peerAckHeight[peerAddr]; !ok || height > prev {
+		n.peerAckHeight[peerAddr] = height
+	}
+	n.peerStateMu.Unlock()
+}
+func (n *Node) peerAckHeightFor(peerAddr string) uint64 {
+	if peerAddr == "" {
+		return 0
+	}
+	n.peerStateMu.Lock()
+	defer n.peerStateMu.Unlock()
+	return n.peerAckHeight[peerAddr]
+}
+func (n *Node) shouldLogNoBlocks(peerID string, from, to uint64) bool {
+	if n == nil {
+		return false
+	}
+	now := time.Now()
+	key := fmt.Sprintf("%s:%d:%d", peerID, from, to)
+	n.noBlockLogMu.Lock()
+	defer n.noBlockLogMu.Unlock()
+	if n.noBlockLogAt == nil {
+		n.noBlockLogAt = make(map[string]time.Time)
+	}
+	if prev, ok := n.noBlockLogAt[key]; ok && now.Sub(prev) < 60*time.Second {
+		return false
+	}
+	n.noBlockLogAt[key] = now
+	// Keep map bounded to avoid unbounded growth on noisy peers.
+	if len(n.noBlockLogAt) > 2048 {
+		cutoff := now.Add(-2 * time.Minute)
+		for k, ts := range n.noBlockLogAt {
+			if ts.Before(cutoff) {
+				delete(n.noBlockLogAt, k)
+			}
+		}
+		if len(n.noBlockLogAt) > 3072 {
+			n.noBlockLogAt = make(map[string]time.Time)
+		}
+	}
+	return true
+}
+func (n *Node) shouldLogSentBlocks(peerID string, from, to uint64) bool {
+	if n == nil {
+		return false
+	}
+	now := time.Now()
+	key := fmt.Sprintf("sent:%s:%d:%d", peerID, from, to)
+	n.noBlockLogMu.Lock()
+	defer n.noBlockLogMu.Unlock()
+	if n.noBlockLogAt == nil {
+		n.noBlockLogAt = make(map[string]time.Time)
+	}
+	if prev, ok := n.noBlockLogAt[key]; ok && now.Sub(prev) < 10*time.Second {
+		return false
+	}
+	n.noBlockLogAt[key] = now
+	if len(n.noBlockLogAt) > 2048 {
+		cutoff := now.Add(-2 * time.Minute)
+		for k, ts := range n.noBlockLogAt {
+			if ts.Before(cutoff) {
+				delete(n.noBlockLogAt, k)
+			}
+		}
+		if len(n.noBlockLogAt) > 3072 {
+			n.noBlockLogAt = make(map[string]time.Time)
+		}
+	}
+	return true
+}
+func (n *Node) shouldSendSnapshotToPeer(peerID string, height uint64) bool {
+	if n == nil || peerID == "" || height == 0 {
+		return false
+	}
+	now := time.Now()
+	key := fmt.Sprintf("snap-send:%s:%d", peerID, height)
+	n.noBlockLogMu.Lock()
+	defer n.noBlockLogMu.Unlock()
+	if n.noBlockLogAt == nil {
+		n.noBlockLogAt = make(map[string]time.Time)
+	}
+	if prev, ok := n.noBlockLogAt[key]; ok && now.Sub(prev) < 5*time.Second {
+		return false
+	}
+	n.noBlockLogAt[key] = now
+	if len(n.noBlockLogAt) > 2048 {
+		cutoff := now.Add(-2 * time.Minute)
+		for k, ts := range n.noBlockLogAt {
+			if ts.Before(cutoff) {
+				delete(n.noBlockLogAt, k)
+			}
+		}
+		if len(n.noBlockLogAt) > 3072 {
+			n.noBlockLogAt = make(map[string]time.Time)
+		}
+	}
+	return true
+}
+func (n *Node) shouldProcessSnapshotOffer(from string, height uint64) bool {
+	if n == nil || from == "" || height == 0 {
+		return false
+	}
+	now := time.Now()
+	key := fmt.Sprintf("snap-offer:%s:%d", from, height)
+	n.noBlockLogMu.Lock()
+	defer n.noBlockLogMu.Unlock()
+	if n.noBlockLogAt == nil {
+		n.noBlockLogAt = make(map[string]time.Time)
+	}
+	if prev, ok := n.noBlockLogAt[key]; ok && now.Sub(prev) < 5*time.Second {
+		return false
+	}
+	n.noBlockLogAt[key] = now
+	if len(n.noBlockLogAt) > 2048 {
+		cutoff := now.Add(-2 * time.Minute)
+		for k, ts := range n.noBlockLogAt {
+			if ts.Before(cutoff) {
+				delete(n.noBlockLogAt, k)
+			}
+		}
+		if len(n.noBlockLogAt) > 3072 {
+			n.noBlockLogAt = make(map[string]time.Time)
+		}
+	}
+	return true
+}
+func (n *Node) recordPeerFlap(peerID string) {
+	now := time.Now()
+	cutoff := now.Add(-peerFlapWindow)
+	quarantine := false
+	n.peerStateMu.Lock()
+	list := n.peerFlapTimes[peerID]
+	filtered := list[:0]
+	for _, t := range list {
+		if t.After(cutoff) {
+			filtered = append(filtered, t)
+		}
+	}
+	filtered = append(filtered, now)
+	n.peerFlapTimes[peerID] = filtered
+	if len(filtered) >= peerFlapThreshold {
+		quarantine = true
+	}
+	n.peerStateMu.Unlock()
+	if quarantine {
+		n.quarantinePeer(peerID, "peer_flap")
+	}
+}
+func (n *Node) onPeerConnected(pid peer.ID) {
+	if n.isPeerConnected(pid.String()) {
+		return
+	}
+	n.peerStateMu.Lock()
+	delete(n.peerSuspectAt, pid.String())
+	n.peerHashMatch[pid.String()] = false
+	delete(n.peerHelloOK, pid.String())
+	n.peerStateMu.Unlock()
+	n.setGossipQuiet(false)
+	n.setPeerConnected(pid.String(), true)
+	n.setPeerConnectedAt(pid.String(), time.Now())
+	n.peerStateMu.Lock()
+	vid := n.peerToValidator[pid.String()]
+	n.peerStateMu.Unlock()
+	if vid != "" {
+		n.touchValidator(vid, n.Blockchain.Height())
+	}
+	go n.exchangePeerInfo(pid)
+	go n.sendPeersList(pid)
+}
+func (n *Node) onPeerDisconnected(pid peer.ID) {
+	connectedFor := n.peerConnectedFor(pid.String())
+	n.clearPeerConnectedAt(pid.String())
+	n.setPeerConnected(pid.String(), false)
+	if connectedFor > 0 && connectedFor < peerMinHold {
+		return
+	}
+	n.peerStateMu.Lock()
+	n.peerSuspectAt[pid.String()] = time.Now()
+	delete(n.peerHelloOK, pid.String())
+	delete(n.peerAckHeight, pid.String())
+	n.peerStateMu.Unlock()
+	n.recordPeerFlap(pid.String())
+	n.setGossipQuiet(false)
+	// Mark validator as suspect if we know the mapping
+	n.peerStateMu.Lock()
+	vid := n.peerToValidator[pid.String()]
+	if vid != "" {
+		n.validatorSuspect[vid] = time.Now()
+	}
+	n.peerStateMu.Unlock()
+}
+func (n *Node) removeValidatorByPeer(peerID string) {
+	n.peerStateMu.Lock()
+	vid, ok := n.peerToValidator[peerID]
+	n.peerStateMu.Unlock()
+	if !ok || vid == "" {
+		return
+	}
+	n.validatorMu.Lock()
+	if st, ok := n.validatorStatus[vid]; ok && st != nil {
+		// Keep status entry so inactive-removal logic can evict deterministically
+		// after ValidatorInactiveBlocks instead of keeping the validator forever.
+		if st.LastSeen.IsZero() || time.Since(st.LastSeen) > 20*time.Second {
+			st.Active = false
+		}
+	}
+	n.validatorMu.Unlock()
+}
+func (n *Node) monitorPeerSuspects() {
+	ticker := time.NewTicker(peerSuspectInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-n.shutdownCh:
+			return
+		case <-ticker.C:
+			var toRemove []string
+			n.peerStateMu.Lock()
+			for peerID, ts := range n.peerSuspectAt {
+				if time.Since(ts) >= peerSuspectTimeout {
+					toRemove = append(toRemove, peerID)
+				}
+			}
+			n.peerStateMu.Unlock()
+			for _, peerID := range toRemove {
+				if n.Host != nil {
+					if pid, err := peer.Decode(peerID); err == nil {
+						if n.Host.Network().Connectedness(pid) == network.Connected {
+							continue
+						}
+					}
+				}
+				if DebugNet {
+					fmt.Printf("ðŸ§¹ Suspect peer expired: %s\n", peerID)
+				}
+				n.removeValidatorByPeer(peerID)
+				n.peerStateMu.Lock()
+				delete(n.peerSuspectAt, peerID)
+				delete(n.peerHashMatch, peerID)
+				delete(n.peerSetHash, peerID)
+				delete(n.peerHelloOK, peerID)
+				n.peerStateMu.Unlock()
+			}
+			n.recomputeGossipQuiet()
+		}
+	}
+}
+func (n *Node) startSelfHeal(ctx context.Context) {
+	if n == nil || !SelfHealEnabled {
+		return
+	}
+	interval := SelfHealInterval
+	if interval <= 0 {
+		interval = 15 * time.Second
+	}
+	minPeers := SelfHealMinPeers
+	if minPeers < 1 {
+		minPeers = 1
+	}
+	lastHeight := uint64(0)
+	lastProgress := time.Now()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-n.shutdownCh:
+			return
+		case <-ticker.C:
+			if n.Host == nil {
+				continue
+			}
+			height := uint64(0)
+			if n.Blockchain != nil {
+				height = n.Blockchain.FinalizedHeight()
+				if height == 0 {
+					height = n.Blockchain.Height()
+				}
+			}
+			if height != 0 && height != lastHeight {
+				lastHeight = height
+				lastProgress = time.Now()
+			}
+			peers := len(n.Host.Network().Peers())
+			stalled := false
+			if SelfHealStallSeconds > 0 {
+				observedHeight, _ := n.bestObservedSyncHeight()
+				lagging := observedHeight > height && observedHeight > 0
+				if lagging && time.Since(lastProgress) >= time.Duration(SelfHealStallSeconds)*time.Second {
+					stalled = true
+				}
+			}
+			if peers < minPeers || stalled {
+				if n.Role == "validator" {
+					targets := n.validatorMeshTargets()
+					if len(targets) > 0 {
+						n.connectToPeers(ctx, targets)
+					}
+				}
+				persistent, seeds := n.configPeerListsSnapshot()
+				extras := mergePeerLists(nil, persistent)
+				extras = mergePeerLists(extras, seeds)
+				extras = sanitizePeerListWithPreferred(extras, n.trustedPeerMultiaddrs())
+				if len(extras) > 0 {
+					n.connectToPeers(ctx, extras)
+				}
+				n.connectPubSubPeers()
+				n.recomputeGossipQuiet()
+			}
+			n.decayDialFailures(time.Now())
+		}
+	}
+}
+func (n *Node) isTopicJoined(topic string) bool {
+	if n.PubSub == nil {
+		return false
+	}
+	for _, t := range n.PubSub.GetTopics() {
+		if t == topic {
+			return true
+		}
+	}
+	return false
+}
+// ShortID returns a shortened version of the ID
+func ShortID(id string) string {
+	if len(id) <= 8 {
+		return id
+	}
+	return id[:8]
+}
+func signData(data map[string]interface{}, privKey ed25519.PrivateKey) ([]byte, error) {
+	// Create a deterministic representation of the data for signing
+	// Remove signature field if present
+	delete(data, "signature")
+	// Sort keys for consistent serialization
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var buffer bytes.Buffer
+	for _, k := range keys {
+		value := data[k]
+		buffer.WriteString(fmt.Sprintf("%s:%v|", k, value))
+	}
+	// Sign the data
+	hash := sha256.Sum256(buffer.Bytes())
+	return ed25519.Sign(privKey, hash[:]), nil
+}
+func validatorAnnounceSignBytes(nodeID string, pubKey string, reported uint64, finalized uint64, execEpoch uint64, isValidator bool) []byte {
+	return []byte(fmt.Sprintf("%s|%s|%d|%d|%d|%t", nodeID, pubKey, reported, finalized, execEpoch, isValidator))
+}
+func validatorAnnounceSignBytesV2(nodeID string, pubKey string, p2pAddr string, reported uint64, finalized uint64, execEpoch uint64, isValidator bool) []byte {
+	return []byte(fmt.Sprintf("%s|%s|%s|%d|%d|%d|%t", nodeID, pubKey, p2pAddr, reported, finalized, execEpoch, isValidator))
+}
+func validatorAnnounceSignBytesV3(nodeID string, pubKey string, p2pAddr string, reported uint64, finalized uint64, execEpoch uint64, validatorSetHeight uint64, validatorSetHash string, isValidator bool) []byte {
+	return []byte(fmt.Sprintf("%s|%s|%s|%d|%d|%d|%d|%s|%t", nodeID, pubKey, p2pAddr, reported, finalized, execEpoch, validatorSetHeight, validatorSetHash, isValidator))
+}
+func validatorAnnounceSignBytesLegacy(nodeID string, pubKey string, height uint64, isValidator bool) []byte {
+	return []byte(fmt.Sprintf("%s|%s|%d|%t", nodeID, pubKey, height, isValidator))
+}
+func (n *Node) broadcastValidatorInfoViaBlocks() {
+	// =====================================================
+	// ðŸ”’ HARD GUARD â€” BLOCKS TOPIC MUST EXIST
+	// =====================================================
+	if n.TopicBlocks == nil {
+		if DebugConsensus {
+			fmt.Println("âš ï¸ Cannot broadcast validator info: TopicBlocks is nil")
+		}
+		return
+	}
+	// =====================================================
+	// ðŸ“¢ BUILD VALIDATOR ANNOUNCEMENT
+	// =====================================================
+	announcement := map[string]interface{}{
+		"type":         "validator_announce",
+		"node_id":      n.ID, // A / B / C (AUTHORITATIVE)
+		"pubkey":       hex.EncodeToString(n.ValidatorKey.PublicKey),
+		"height":       n.Blockchain.Height(),
+		"timestamp":    time.Now().Unix(),
+		"address":      n.SelfAddr,
+		"is_validator": true,
+	}
+	// =====================================================
+	// ðŸ” OPTIONAL SIGNATURE (AUTHENTICITY)
+	// =====================================================
+	if n.ValidatorKey.PrivateKey != nil {
+		if sig, err := signData(announcement, n.ValidatorKey.PrivateKey); err == nil {
+			announcement["signature"] = hex.EncodeToString(sig)
+		}
+	}
+	// =====================================================
+	// ðŸ“¦ SERIALIZE PAYLOAD
+	// =====================================================
+	payload, err := json.Marshal(announcement)
+	if err != nil {
+		if DebugConsensus {
+			fmt.Printf("âŒ Failed to marshal validator announcement: %v\n", err)
+		}
+		return
+	}
+	msg := Message{
+		Type: MsgValidatorAnnounce,
+		Data: payload,
+	}
+	msgBytes, err := json.Marshal(msg)
+	if err != nil {
+		if DebugConsensus {
+			fmt.Printf("âŒ Failed to marshal message wrapper: %v\n", err)
+		}
+		return
+	}
+	// =====================================================
+	// ðŸš€ PUBLISH VIA BLOCKS TOPIC
+	// =====================================================
+	if err := n.TopicBlocks.Publish(context.Background(), msgBytes); err != nil {
+		if DebugConsensus {
+			fmt.Printf("âŒ Validator broadcast failed: %v\n", err)
+		}
+		return
+	}
+	if DebugConsensus {
+		fmt.Printf(
+			"ðŸ“¢ Validator info broadcast via blocks | %s | height=%d\n",
+			ShortID(n.ID),
+			n.Blockchain.Height(),
+		)
+	}
+}
+// Add this function for DHT peer discovery
+func (n *Node) discoverPeersViaDHT(ctx context.Context, dhtInst *dht.IpfsDHT) {
+	if DisableDHT {
+		if DebugNet {
+			fmt.Println("DHT discovery disabled by config")
+		}
+		return
+	}
+	if DebugNet {
+		fmt.Println("ðŸ” Starting DHT peer discovery...")
+	}
+	// Initial discovery after a short delay
+	time.Sleep(5 * time.Second)
+	ticker := time.NewTicker(45 * time.Second)
+	defer ticker.Stop()
+	// Function to attempt connection to a peer
+	tryConnect := func(pid peer.ID) {
+		if pid == n.Host.ID() {
+			return // Don't connect to self
+		}
+		if !n.canDialPeerID(pid.String()) {
+			return
+		}
+		// Check if already connected
+		if len(n.Host.Network().ConnsToPeer(pid)) > 0 {
+			return
+		}
+		// Get addresses from peerstore
+		addrs := n.Host.Peerstore().Addrs(pid)
+		if len(addrs) == 0 {
+			return
+		}
+		if BlockPublicPeers {
+			addrs = filterPrivateAddrs(addrs)
+			if len(addrs) == 0 {
+				return
+			}
+		}
+		addrInfo := peer.AddrInfo{
+			ID:    pid,
+			Addrs: addrs,
+		}
+		if !connectionLimiter.Allow() {
+			return
+		}
+		if !n.canDialPeer() {
+			return
+		}
+		// Try to connect
+		connectCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if err := n.Host.Connect(connectCtx, addrInfo); err == nil {
+			if DebugNet {
+				fmt.Printf("âœ… DHT discovered and connected to peer: %s\n", pid)
+			}
+			// Tag and track the peer
+			if cm := n.Host.ConnManager(); cm != nil {
+				cm.TagPeer(pid, "dht-discovered", 50)
+			}
+			n.PeersLibp2p = append(n.PeersLibp2p, pid)
+			n.recordDialSuccess(pid.String())
+		} else {
+			errLower := strings.ToLower(err.Error())
+			if strings.Contains(errLower, "peer id mismatch") ||
+				strings.Contains(errLower, "dial to self attempted") {
+				rawAddr := ""
+				if len(addrs) > 0 {
+					rawAddr = fmt.Sprintf("%s/p2p/%s", addrs[0].String(), pid.String())
+				}
+				if n.refreshPeerIDMismatch(rawAddr, pid.String(), err) {
+					return
+				}
+				n.forgetPeer(pid.String(), "peer_id_mismatch")
+			}
+			n.recordDialFailure(pid.String())
+		}
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-n.shutdownCh:
+			return
+		case <-ticker.C:
+			// Look for specific providers (network-key only)
+			// This helps nodes in the same network find each other
+			networkKey := fmt.Sprintf("msc-chain-network-%s", ChainID)
+			mh, err := multihash.Sum([]byte(networkKey), multihash.SHA2_256, -1)
+			if err != nil {
+				continue
+			}
+			c := cid.NewCidV1(cid.Raw, mh)
+			providersCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			// Announce ourselves as a provider
+			dhtInst.Provide(providersCtx, c, true)
+			// Look for other providers
+			providers := dhtInst.FindProvidersAsync(providersCtx, c, 10)
+			for provider := range providers {
+				if provider.ID != n.Host.ID() {
+					tryConnect(provider.ID)
+				}
+			}
+			cancel()
+		}
+	}
+}
+type mdnsNotifee struct {
+	node *Node
+}
+func (m *mdnsNotifee) HandlePeerFound(pi peer.AddrInfo) {
+	if m == nil || m.node == nil || m.node.Host == nil {
+		return
+	}
+	if pi.ID == m.node.Host.ID() {
+		return
+	}
+	if len(m.node.Host.Network().ConnsToPeer(pi.ID)) > 0 {
+		return
+	}
+	if BlockPublicPeers {
+		filtered := filterPrivateAddrs(pi.Addrs)
+		if len(filtered) == 0 {
+			return
+		}
+		pi.Addrs = filtered
+	}
+	if !connectionLimiter.Allow() || !m.node.canDialPeer() {
+		return
+	}
+	if !m.node.canDialPeerID(pi.ID.String()) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := m.node.Host.Connect(ctx, pi); err == nil {
+		if cm := m.node.Host.ConnManager(); cm != nil {
+			cm.TagPeer(pi.ID, "mdns-discovered", 50)
+		}
+		if DebugNet {
+			fmt.Printf("âœ… mDNS discovered and connected to peer: %s\n", pi.ID.String())
+		}
+		m.node.recordDialSuccess(pi.ID.String())
+	} else {
+		errLower := strings.ToLower(err.Error())
+		if strings.Contains(errLower, "peer id mismatch") ||
+			strings.Contains(errLower, "dial to self attempted") {
+			rawAddr := ""
+			if len(pi.Addrs) > 0 {
+				rawAddr = fmt.Sprintf("%s/p2p/%s", pi.Addrs[0].String(), pi.ID.String())
+			}
+			if m.node.refreshPeerIDMismatch(rawAddr, pi.ID.String(), err) {
+				return
+			}
+			m.node.forgetPeer(pi.ID.String(), "peer_id_mismatch")
+		}
+		m.node.recordDialFailure(pi.ID.String())
+	}
+}
+func (n *Node) startMDNS() {
+	if !EnableMDNS || n == nil || n.Host == nil {
+		return
+	}
+	serviceTag := fmt.Sprintf("msc-mdns-%s", ChainID)
+	service := mdns.NewMdnsService(n.Host, serviceTag, &mdnsNotifee{node: n})
+	if err := service.Start(); err != nil {
+		if DebugNet {
+			fmt.Printf("âš ï¸ mDNS start failed: %v\n", err)
+		}
+		return
+	}
+	if DebugNet {
+		fmt.Printf("ðŸ“¡ mDNS discovery enabled (%s)\n", serviceTag)
+	}
+}
+func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
+	// =====================================================
+	// ðŸ”‘ CONVERT VALIDATOR KEY TO LIBP2P KEY
+	// =====================================================
+	lpPriv, err := libp2pcrypto.UnmarshalEd25519PrivateKey(
+		n.ValidatorKey.PrivateKey,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to convert validator key: %w", err)
+	}
+	// =====================================================
+	// ðŸš€ CREATE LIBP2P HOST
+	// =====================================================
+	if n.SelfAddr != "" {
+		if maddr, err := ma.NewMultiaddr(stripP2PComponent(n.SelfAddr)); err == nil {
+			if portStr, err := maddr.ValueForProtocol(ma.P_TCP); err == nil {
+				if port, err := strconv.Atoi(portStr); err == nil && port > 0 {
+					listenPort = port
+				}
+			}
+		}
+	}
+	listenAddr := fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", listenPort)
+	listenIP := ""
+	if n.SelfAddr != "" {
+		selfAddr := stripP2PComponent(n.SelfAddr)
+		if maddr, err := ma.NewMultiaddr(selfAddr); err == nil {
+			if ip, err := maddr.ValueForProtocol(ma.P_IP4); err == nil && ip != "" {
+				listenIP = ip
+				listenAddr = fmt.Sprintf("/ip4/%s/tcp/%d", ip, listenPort)
+			} else {
+				listenAddr = selfAddr
+			}
+		}
+	}
+	sourceMultiAddr, _ := ma.NewMultiaddr(listenAddr)
+	opts := []libp2p.Option{
+		libp2p.ListenAddrs(sourceMultiAddr),
+		libp2p.Identity(lpPriv),
+		libp2p.NATPortMap(),
+		libp2p.Transport(libp2ptcp.NewTCPTransport),
+		libp2p.Transport(libp2pquic.NewTransport),
+		libp2p.Transport(libp2pwebsocket.New),
+		libp2p.Transport(libp2pwebrtc.New),
+		libp2p.DefaultSecurity,
+		libp2p.DefaultMuxers,
+		libp2p.Ping(true),
+	}
+	// Connection manager enforces peer limits.
+	high := MaxPeers
+	if MaxConnections > 0 && (high == 0 || MaxConnections < high) {
+		high = MaxConnections
+	}
+	if high <= 0 {
+		high = 50
+	}
+	low := high / 2
+	if low < 1 {
+		low = 1
+	}
+	if cm, err := connmgr.NewConnManager(low, high, connmgr.WithGracePeriod(time.Minute)); err == nil {
+		opts = append(opts, libp2p.ConnectionManager(cm))
+	}
+	externalAddr := ""
+	if ConfigP2PExternalAddr != "" {
+		externalAddr = stripP2PComponent(ConfigP2PExternalAddr)
+	}
+	if listenIP != "" || externalAddr != "" {
+		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
+			filtered := make([]ma.Multiaddr, 0, len(addrs))
+			if listenIP != "" {
+				for _, addr := range addrs {
+					if ip, err := addr.ValueForProtocol(ma.P_IP4); err == nil && ip == listenIP {
+						filtered = append(filtered, addr)
+					}
+				}
+			} else {
+				filtered = append(filtered, addrs...)
+			}
+			if externalAddr != "" {
+				if maddr, err := ma.NewMultiaddr(externalAddr); err == nil {
+					filtered = append(filtered, maddr)
+				}
+			}
+			if len(filtered) == 0 {
+				return addrs
+			}
+			return filtered
+		}))
+	}
+	h, err := libp2p.New(opts...)
+	if err != nil {
+		return fmt.Errorf("failed to create libp2p host: %w", err)
+	}
+	// =====================================================
+	// ðŸ“¡ CREATE GOSSIPSUB
+	// =====================================================
+	params := pubsub.DefaultGossipSubParams()
+	params.HeartbeatInterval = 5 * time.Second
+	validateWorkers := runtime.NumCPU() * 2
+	if validateWorkers < 2 {
+		validateWorkers = 2
+	}
+	validateQueue := MaxValidateQueue
+	if validateQueue <= 0 {
+		validateQueue = 1024
+	}
+	validateThrottle := validateWorkers * 4
+	if validateThrottle < validateQueue {
+		validateThrottle = validateQueue
+	}
+	peerOutboundQueue := MaxPeerOutboundQueue
+	if peerOutboundQueue <= 0 {
+		peerOutboundQueue = 1024
+	}
+	ps, err := pubsub.NewGossipSub(
+		ctx,
+		h,
+		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
+		pubsub.WithPeerExchange(true),
+		pubsub.WithMaxMessageSize(10<<20),
+		pubsub.WithGossipSubParams(params),
+		pubsub.WithValidateWorkers(validateWorkers),
+		pubsub.WithValidateQueueSize(validateQueue),
+		pubsub.WithValidateThrottle(validateThrottle),
+		pubsub.WithPeerOutboundQueueSize(peerOutboundQueue),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create pubsub: %w", err)
+	}
+	// =====================================================
+	// ðŸ’¾ STORE CORE REFERENCES
+	// =====================================================
+	n.Host = h
+	n.PubSub = ps
+	n.Libp2pHost = h
+	// =====================================================
+	// ðŸ”” LIVE CONNECT/DISCONNECT EVENTS
+	// =====================================================
+	h.Network().Notify(&network.NotifyBundle{
+		ConnectedF: func(_ network.Network, c network.Conn) {
+			if !n.allowConnection(c) {
+				if DebugNet {
+					fmt.Printf("âš ï¸ Peer limit reached; closing %s\n", c.RemotePeer().String())
+				}
+				_ = c.Close()
+				return
+			}
+			peerLastSeenMu.Lock()
+			PeerLastSeen[c.RemotePeer().String()] = time.Now()
+			peerLastSeenMu.Unlock()
+			fmt.Printf("ðŸ”— Peer connected: %s\n", c.RemotePeer().String())
+			go n.onPeerConnected(c.RemotePeer())
+		},
+		DisconnectedF: func(_ network.Network, c network.Conn) {
+			fmt.Printf("ðŸ”Œ Peer disconnected: %s\n", c.RemotePeer().String())
+			go n.onPeerDisconnected(c.RemotePeer())
+		},
+	})
+	// =====================================================
+	// ðŸ—ºï¸ INITIALIZE DHT
+	// =====================================================
+	var d *dht.IpfsDHT
+	if DisableDHT {
+		if DebugNet {
+			fmt.Println("DHT disabled by config")
+		}
+	} else {
+		bootstrapPeers := make([]peer.AddrInfo, 0)
+		addBootstrap := func(raw string) {
+			raw = strings.TrimSpace(raw)
+			if raw == "" {
+				return
+			}
+			maddr, err := ma.NewMultiaddr(raw)
+			if err != nil {
+				return
+			}
+			info, err := peer.AddrInfoFromP2pAddr(maddr)
+			if err != nil {
+				return
+			}
+			bootstrapPeers = append(bootstrapPeers, *info)
+		}
+		_, seeds := n.configPeerListsSnapshot()
+		persistent := n.persistentPeersSnapshot()
+		for _, seed := range seeds {
+			addBootstrap(seed)
+		}
+		for _, p := range persistent {
+			addBootstrap(p)
+		}
+		if len(bootstrapPeers) == 0 {
+			if DebugNet {
+				fmt.Println("No DHT bootstrap peers available (set p2p.seeds)")
+			}
+		} else {
+			d, err = dht.New(
+				ctx,
+				h,
+				dht.Mode(dht.ModeAuto),
+				dht.ProtocolPrefix("/msc/kad/1.0.0"),
+				dht.BootstrapPeers(bootstrapPeers...),
+				dht.RoutingTableRefreshPeriod(30*time.Second),
+			)
+			if err != nil {
+				if DebugNet {
+					fmt.Printf("Failed to create DHT: %v (continuing without DHT)\n", err)
+				}
+				d = nil
+			}
+		}
+	}
+	n.DHT = d
+	// =====================================================
+	// ðŸ“¢ DEBUG INFO
+	// =====================================================
+	if DebugNet {
+		fmt.Println("ðŸŒ LibP2P host initialized")
+		fmt.Println("ðŸ†” PeerID:", h.ID().String())
+		fmt.Println("ðŸ“ Listening addresses:")
+		for _, addr := range h.Addrs() {
+			fmt.Printf("  %s/p2p/%s\n", addr, h.ID())
+		}
+		fmt.Printf(
+			"ðŸ“Š Host info: Addrs=%d DHT=%v\n",
+			len(h.Addrs()),
+			d != nil,
+		)
+	}
+	// =====================================================
+	// ðŸ”„ BOOTSTRAP DHT (ASYNC)
+	// =====================================================
+	if d != nil {
+		go func() {
+			time.Sleep(3 * time.Second)
+			if DebugNet {
+				fmt.Println("ðŸ”„ Bootstrapping DHT...")
+			}
+			bootstrapCtx, cancel := context.WithTimeout(
+				ctx,
+				15*time.Second,
+			)
+			defer cancel()
+			if err := d.Bootstrap(bootstrapCtx); err != nil {
+				if DebugNet {
+					fmt.Printf(
+						"âš ï¸ DHT bootstrap failed: %v\n",
+						err,
+					)
+				}
+			}
+			if DebugNet {
+				fmt.Println("âœ… DHT bootstrap complete")
+			}
+			go n.discoverPeersViaDHT(ctx, d)
+		}()
+	}
+	// =====================================================
+	// ðŸ“¡ mDNS DISCOVERY (LAN)
+	// =====================================================
+	if EnableMDNS {
+		go n.startMDNS()
+	}
+	return nil
+}
+func (n *Node) validatorMeshTargets() []string {
+	if n == nil {
+		return nil
+	}
+	targetIDs := make(map[string]struct{})
+	consensus := n.GetConsensusValidators(int(n.Blockchain.Height() + 1))
+	for _, vid := range consensus {
+		vid = strings.TrimSpace(vid)
+		if vid == "" {
+			continue
+		}
+		targetIDs[strings.ToUpper(vid)] = struct{}{}
+	}
+	for _, vid := range ConfigAuthCoreValidators {
+		vid = strings.TrimSpace(vid)
+		if vid == "" {
+			continue
+		}
+		targetIDs[strings.ToUpper(vid)] = struct{}{}
+	}
+	addrs := make([]string, 0, len(targetIDs))
+	for vid := range targetIDs {
+		if strings.EqualFold(vid, n.ID) {
+			continue
+		}
+		if addr := n.GetValidatorAddr(vid); addr != "" {
+			addrs = append(addrs, addr)
+		}
+	}
+	persistent, seeds := n.configPeerListsSnapshot()
+	addrs = mergePeerLists(addrs, persistent)
+	addrs = mergePeerLists(addrs, seeds)
+	return sanitizePeerListWithPreferred(addrs, n.trustedPeerMultiaddrs())
+}
+func (n *Node) trustedPeerMultiaddrs() []string {
+	if n == nil {
+		return nil
+	}
+	if n.Config == nil {
+		return nil
+	}
+	persistent, seeds := n.configPeerListsSnapshot()
+	// Order matters: later sources override earlier ones for same endpoint.
+	// Keep runtime order so fresh discoveries can win over stale static entries.
+	trusted := make([]string, 0, len(persistent)+len(seeds)+8)
+	trusted = append(trusted, seeds...)
+	trusted = append(trusted, persistent...)
+	ValidatorAddrBook.mu.RLock()
+	for _, addr := range ValidatorAddrBook.m {
+		if strings.TrimSpace(addr) != "" {
+			trusted = append(trusted, strings.TrimSpace(addr))
+		}
+	}
+	ValidatorAddrBook.mu.RUnlock()
+	if n.Host != nil {
+		for _, pid := range n.Host.Network().Peers() {
+			for _, addr := range n.Host.Peerstore().Addrs(pid) {
+				trusted = append(trusted, fmt.Sprintf("%s/p2p/%s", addr.String(), pid.String()))
+			}
+		}
+	}
+	return sanitizePeerListWithPreferred(trusted, trusted)
+}
+func (n *Node) maintainValidatorMesh(ctx context.Context) {
+	if n == nil || n.Host == nil {
+		return
+	}
+	ticker := time.NewTicker(12 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-n.shutdownCh:
+			return
+		case <-ticker.C:
+			if n.Role != "validator" {
+				continue
+			}
+			targets := n.validatorMeshTargets()
+			if len(targets) == 0 {
+				continue
+			}
+			n.connectToPeers(ctx, targets)
+		}
+	}
+}
+func (n *Node) HandlePeerHello(peerAddr, validatorID, advertisedAddr string) {
+	// Hard validation
+	if validatorID == "" || advertisedAddr == "" {
+		return
+	}
+	advertisedAddr = strings.TrimSpace(advertisedAddr)
+	peerAddr = strings.TrimSpace(peerAddr)
+	// If /p2p/ is missing in advertised address, attach remote stream peer ID.
+	if _, _, hasPID := splitPeerAddress(advertisedAddr); !hasPID {
+		if _, remotePeerID, ok := splitPeerAddress(peerAddr); ok {
+			if fixedAddr, ok := peerAddrWithPeerID(advertisedAddr, remotePeerID); ok {
+				advertisedAddr = fixedAddr
+			}
+		}
+	}
+	updated := false
+	ValidatorAddrBook.mu.Lock()
+	if old, exists := ValidatorAddrBook.m[validatorID]; exists {
+		updated = old != advertisedAddr
+	} else {
+		updated = true
+	}
+	ValidatorAddrBook.m[validatorID] = advertisedAddr
+	ValidatorAddrBook.mu.Unlock()
+	n.upsertDiscoveredPeerAddress(advertisedAddr)
+	if updated && DebugConsensus {
+		fmt.Printf("Validator registered | id=%s addr=%s\n", validatorID, advertisedAddr)
+	}
+	// Ensure late-joining peers see our heartbeat quickly.
+	if updated && n.canParticipateAsValidator() {
+		n.broadcastValidatorInfoInternal(true)
+	}
+}
+func peerListsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+// upsertDiscoveredPeerAddress persists private peer addresses learned during
+// peer hello so stale /p2p/ identities are corrected across restarts.
+func (n *Node) upsertDiscoveredPeerAddress(addr string) {
+	if n == nil {
+		return
+	}
+	addr = strings.TrimSpace(addr)
+	if addr == "" || !isPeerAddrPrivate(addr) {
+		return
+	}
+	selfBase := stripP2PComponent(n.SelfAddr)
+	addrBase := stripP2PComponent(addr)
+	if n.SelfAddr != "" && (addr == n.SelfAddr || addrBase == selfBase) {
+		return
+	}
+	if n.Host != nil && strings.Contains(addr, n.Host.ID().String()) {
+		return
+	}
+	currentPersistent := n.persistentPeersSnapshot()
+	merged := mergePeerLists(currentPersistent, []string{addr})
+	preferred := append(n.trustedPeerMultiaddrs(), addr)
+	sanitized := sanitizePeerListWithPreferred(merged, preferred)
+	if peerListsEqual(sanitized, currentPersistent) {
+		return
+	}
+	n.setPersistentPeers(sanitized)
+	if err := savePersistentPeers(n.DataDir, n.ID, sanitized); err != nil && DebugNet {
+		fmt.Printf("Failed to persist discovered peer %s: %v\n", stripP2PComponent(addr), err)
+	}
+}
+func parsePeerAddress(addr string) (string, error) {
+	// If it's already a multiaddr, use it as-is
+	if strings.HasPrefix(addr, "/") {
+		// Validate it's a proper multiaddr
+		_, err := ma.NewMultiaddr(addr)
+		if err != nil {
+			return "", fmt.Errorf("invalid multiaddr %s: %w", addr, err)
+		}
+		return addr, nil
+	}
+	// Try to parse as host:port
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		// Try adding default port
+		if strings.Contains(addr, ":") {
+			return "", fmt.Errorf("invalid address %s: %w", addr, err)
+		}
+		host = addr
+		port = "7001" // default port
+	}
+	if host == "" || host == "localhost" {
+		host = "127.0.0.1"
+	}
+	// Create multiaddr WITHOUT peer ID
+	return fmt.Sprintf("/ip4/%s/tcp/%s", host, port), nil
+}
+func isPrivateIP(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+	return false
+}
+func isPrivateMultiaddr(maddr ma.Multiaddr) bool {
+	if v, err := maddr.ValueForProtocol(ma.P_IP4); err == nil && v != "" {
+		return isPrivateIP(net.ParseIP(v))
+	}
+	if v, err := maddr.ValueForProtocol(ma.P_IP6); err == nil && v != "" {
+		return isPrivateIP(net.ParseIP(v))
+	}
+	return false
+}
+func filterPrivateAddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
+	if len(addrs) == 0 {
+		return addrs
+	}
+	out := make([]ma.Multiaddr, 0, len(addrs))
+	for _, addr := range addrs {
+		if isPrivateMultiaddr(addr) {
+			out = append(out, addr)
+		}
+	}
+	return out
+}
+func isPeerAddrPrivate(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	if strings.HasPrefix(raw, "/") {
+		maddr, err := ma.NewMultiaddr(raw)
+		if err != nil {
+			return false
+		}
+		return isPrivateMultiaddr(maddr)
+	}
+	host := raw
+	if h, _, err := net.SplitHostPort(raw); err == nil {
+		host = h
+	}
+	if host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return isPrivateIP(ip)
+}
+func (n *Node) countConnectionDirections() (int, int, int) {
+	if n == nil || n.Host == nil {
+		return 0, 0, 0
+	}
+	conns := n.Host.Network().Conns()
+	inbound := 0
+	outbound := 0
+	for _, c := range conns {
+		switch c.Stat().Direction {
+		case network.DirInbound:
+			inbound++
+		case network.DirOutbound:
+			outbound++
+		}
+	}
+	return inbound, outbound, len(conns)
+}
+func (n *Node) canDialPeer() bool {
+	if n == nil || n.Host == nil {
+		return false
+	}
+	inbound, outbound, total := n.countConnectionDirections()
+	if MaxConnections > 0 && total >= MaxConnections {
+		return false
+	}
+	if MaxPeers > 0 && len(n.Host.Network().Peers()) >= MaxPeers {
+		return false
+	}
+	if MaxOutboundPeers > 0 && outbound >= MaxOutboundPeers {
+		return false
+	}
+	_ = inbound // inbound is enforced for inbound conns only
+	return true
+}
+func (n *Node) allowConnection(conn network.Conn) bool {
+	if n == nil || n.Host == nil || conn == nil {
+		return true
+	}
+	inbound, outbound, total := n.countConnectionDirections()
+	if MaxConnections > 0 && total > MaxConnections {
+		return false
+	}
+	if MaxPeers > 0 && len(n.Host.Network().Peers()) > MaxPeers {
+		return false
+	}
+	switch conn.Stat().Direction {
+	case network.DirInbound:
+		if MaxInboundPeers > 0 && inbound > MaxInboundPeers {
+			return false
+		}
+	case network.DirOutbound:
+		if MaxOutboundPeers > 0 && outbound > MaxOutboundPeers {
+			return false
+		}
+	}
+	if !n.allowPeerDiversityConn(conn) {
+		return false
+	}
+	return true
+}
+func peerSubnetKeyFromMultiaddr(maddr ma.Multiaddr) string {
+	if maddr == nil {
+		return ""
+	}
+	if ip4, err := maddr.ValueForProtocol(ma.P_IP4); err == nil && ip4 != "" {
+		ip := net.ParseIP(ip4)
+		if ip == nil {
+			return ""
+		}
+		if ip.IsLoopback() {
+			return ""
+		}
+		v4 := ip.To4()
+		if v4 == nil {
+			return ""
+		}
+		prefix := PeerDiversityIPv4Prefix
+		if prefix <= 0 || prefix > 32 {
+			prefix = 24
+		}
+		masked := v4.Mask(net.CIDRMask(prefix, 32))
+		if masked == nil {
+			return ""
+		}
+		return fmt.Sprintf("%s/%d", masked.String(), prefix)
+	}
+	if ip6, err := maddr.ValueForProtocol(ma.P_IP6); err == nil && ip6 != "" {
+		ip := net.ParseIP(ip6)
+		if ip == nil {
+			return ""
+		}
+		if ip.IsLoopback() {
+			return ""
+		}
+		v6 := ip.To16()
+		if v6 == nil {
+			return ""
+		}
+		prefix := PeerDiversityIPv6Prefix
+		if prefix <= 0 || prefix > 128 {
+			prefix = 64
+		}
+		masked := v6.Mask(net.CIDRMask(prefix, 128))
+		if masked == nil {
+			return ""
+		}
+		return fmt.Sprintf("%s/%d", masked.String(), prefix)
+	}
+	return ""
+}
+func (n *Node) connectedPeersInSubnet(subnet string, excludePeer string) int {
+	if n == nil || n.Host == nil || subnet == "" {
+		return 0
+	}
+	seen := make(map[string]struct{})
+	for _, c := range n.Host.Network().Conns() {
+		if c == nil {
+			continue
+		}
+		pid := c.RemotePeer().String()
+		if pid == "" || pid == excludePeer {
+			continue
+		}
+		key := peerSubnetKeyFromMultiaddr(c.RemoteMultiaddr())
+		if key != subnet {
+			continue
+		}
+		seen[pid] = struct{}{}
+	}
+	return len(seen)
+}
+func (n *Node) allowPeerDiversityConn(conn network.Conn) bool {
+	if n == nil || conn == nil {
+		return true
+	}
+	if !PeerDiversityEnabled || PeerDiversityMaxPerSubnet <= 0 {
+		return true
+	}
+	subnet := peerSubnetKeyFromMultiaddr(conn.RemoteMultiaddr())
+	if subnet == "" {
+		return true
+	}
+	connected := n.connectedPeersInSubnet(subnet, "")
+	if connected > PeerDiversityMaxPerSubnet {
+		if DebugNet {
+			fmt.Printf("WARN peer diversity limit exceeded: subnet=%s connected=%d max=%d peer=%s\n",
+				subnet, connected, PeerDiversityMaxPerSubnet, conn.RemotePeer().String())
+		}
+		return false
+	}
+	return true
+}
+func (n *Node) allowPeerDiversityDial(maddr ma.Multiaddr) bool {
+	if n == nil {
+		return true
+	}
+	if !PeerDiversityEnabled || PeerDiversityMaxPerSubnet <= 0 {
+		return true
+	}
+	subnet := peerSubnetKeyFromMultiaddr(maddr)
+	if subnet == "" {
+		return true
+	}
+	connected := n.connectedPeersInSubnet(subnet, "")
+	if connected >= PeerDiversityMaxPerSubnet {
+		if DebugNet {
+			fmt.Printf("WARN peer diversity dial blocked: subnet=%s connected=%d max=%d\n",
+				subnet, connected, PeerDiversityMaxPerSubnet)
+		}
+		return false
+	}
+	return true
+}
+// Fallback method using blocks topic
+func (n *Node) connectToPeers(ctx context.Context, peerMultiaddrs []string) {
+	if n.Host == nil {
+		if DebugNet {
+			fmt.Println("âš ï¸ Cannot connect to peers: libp2p host not initialized")
+		}
+		return
+	}
+	// If no peers specified, rely on DHT
+	if len(peerMultiaddrs) == 0 {
+		if DebugNet {
+			fmt.Println("ðŸŒ No static peers specified, relying on DHT discovery")
+		}
+		return
+	}
+	peerMultiaddrs = sanitizePeerListWithPreferred(peerMultiaddrs, n.trustedPeerMultiaddrs())
+	if len(peerMultiaddrs) == 0 {
+		return
+	}
+	uniquePeers := make(map[string]struct{})
+	for _, p := range peerMultiaddrs {
+		if p == "" {
+			continue
+		}
+		uniquePeers[p] = struct{}{}
+	}
+	if DebugNet && len(uniquePeers) > 0 {
+		fmt.Printf("Ã°Å¸Å’Â Attempting to connect to %d peers\n", len(uniquePeers))
+	}
+	for rawAddr := range uniquePeers {
+		if rawAddr == "" {
+			continue
+		}
+		go func(addr string) {
+			// Stagger connections to avoid thundering herd
+			if BlockPublicPeers && !isPeerAddrPrivate(addr) {
+				if DebugNet {
+					fmt.Printf("Skipping public peer (block_public_peers): %s\n", addr)
+				}
+				return
+			}
+			if !connectionLimiter.Allow() {
+				if DebugNet {
+					fmt.Println("âš ï¸ Connection rate limited; skipping dial")
+				}
+				return
+			}
+			if !n.canDialPeer() {
+				if DebugNet {
+					fmt.Println("âš ï¸ Outbound peer limit reached; skipping dial")
+				}
+				return
+			}
+			time.Sleep(time.Duration(rand.Intn(2000)) * time.Millisecond)
+			// Drop stale self entries even when the embedded peer ID is old.
+			selfBase := stripP2PComponent(n.SelfAddr)
+			if selfBase != "" && stripP2PComponent(addr) == selfBase {
+				if _, stalePID, has := splitPeerAddress(addr); has && (n.Host == nil || stalePID != n.Host.ID().String()) {
+					n.forgetPeer(stalePID, "self_dial")
+				}
+				if DebugNet {
+					fmt.Printf("â­ï¸ Skipping self dial target: %s\n", addr)
+				}
+				return
+			}
+			// Check if it's a simple host:port format
+			if !strings.HasPrefix(addr, "/") {
+				// Try to convert host:port to multiaddr
+				parsedAddr, err := parsePeerAddress(addr)
+				if err != nil {
+					if DebugNet {
+						fmt.Printf("âŒ Invalid peer address %s: %v\n", addr, err)
+					}
+					return
+				}
+				if DebugNet {
+					fmt.Printf("ðŸ”„ Converted %s -> %s (but missing peer ID for direct connection)\n", addr, parsedAddr)
+				}
+				// Can't connect directly without peer ID, but can use for DHT
+				// For now, just skip - DHT should handle discovery
+				return
+			}
+			// It's already a multiaddr, try to parse
+			maddr, err := ma.NewMultiaddr(addr)
+			if err != nil {
+				if DebugNet {
+					fmt.Printf("âŒ Invalid multiaddr %s: %v\n", addr, err)
+				}
+				return
+			}
+			// Check if it has a peer ID
+			hasPeerID := false
+			ma.ForEach(maddr, func(c ma.Component) bool {
+				if c.Protocol().Name == "p2p" {
+					hasPeerID = true
+					return false // Stop iterating
+				}
+				return true
+			})
+			if !hasPeerID {
+				if DebugNet {
+					fmt.Printf("âš ï¸ Multiaddr %s missing /p2p/ component\n", addr)
+				}
+				// Can't connect without peer ID
+				return
+			}
+			// It has a peer ID, try to connect
+			addrInfo, err := peer.AddrInfoFromP2pAddr(maddr)
+			if err != nil {
+				if DebugNet {
+					fmt.Printf("? Failed to parse peer info: %v\n", err)
+				}
+				return
+			}
+			if addrInfo.ID == n.Host.ID() {
+				return
+			}
+			if !n.canDialPeerID(addrInfo.ID.String()) {
+				if DebugNet {
+					fmt.Printf("? Dial backoff active; skipping peer %s\n", addrInfo.ID)
+				}
+				return
+			}
+			if n.isPeerConnected(addrInfo.ID.String()) {
+				return
+			}
+			if err := n.connectToPeer(ctx, addr); err != nil {
+				if DebugNet {
+					fmt.Printf("âŒ Failed to connect to peer %s: %v\n", addr, err)
+				}
+			}
+		}(rawAddr)
+	}
+}
+// Add this method to the Node struct
+func (n *Node) startNetworkCLI() {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("ðŸŒ Network CLI ready (type 'network help' for commands)")
+	fmt.Println("Type 'back' to return to main CLI")
+	for {
+		fmt.Printf("[network:%s] > ", n.ID)
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		line = strings.TrimSpace(line)
+		switch line {
+		case "network help", "help":
+			fmt.Println("ðŸŒ Network Commands:")
+			fmt.Println("  network list       - List connected peers")
+			fmt.Println("  network connect    - Connect to a peer")
+			fmt.Println("  network info       - Network information")
+			fmt.Println("  network topics     - List active PubSub topics")
+			fmt.Println("  network stats      - Network statistics")
+			fmt.Println("  network maps       - Map size metrics")
+			fmt.Println("  status             - Node status")
+			fmt.Println("  validators         - List active validators")
+			fmt.Println("  validatorset       - Show current validator set + hash + pending updates")
+			fmt.Println("  validator-pending  - Show pending validator updates")
+			fmt.Println("  candidates         - Show candidate admission status")
+			fmt.Println("  back               - Return to main CLI")
+		case "network list", "list":
+			if n.Host == nil {
+				fmt.Println("âš ï¸ libp2p host not initialized")
+				continue
+			}
+			peers := n.Host.Network().Peers()
+			fmt.Printf("=== Connected Peers (%d) ===\n", len(peers))
+			if len(peers) == 0 {
+				fmt.Println("No connected peers")
+				continue
+			}
+			for _, pid := range peers {
+				conns := n.Host.Network().ConnsToPeer(pid)
+				addrInfo := n.Host.Peerstore().PeerInfo(pid)
+				fmt.Printf("Peer: %s\n", pid.String())
+				fmt.Printf("  Connections: %d\n", len(conns))
+				fmt.Printf("  Addresses: %v\n", addrInfo.Addrs)
+				// Get connection state
+				connState := n.Host.Network().Connectedness(pid)
+				fmt.Printf("  State: %s\n", connState.String())
+				// Get protocol info
+				protos, _ := n.Host.Peerstore().GetProtocols(pid)
+				if len(protos) > 0 {
+					fmt.Printf("  Protocols: %v\n", protos)
+				}
+				fmt.Println()
+			}
+		case "network info", "info":
+			if n.Host == nil {
+				fmt.Println("âš ï¸ libp2p host not initialized")
+				continue
+			}
+			fmt.Println("=== Network Information ===")
+			fmt.Printf("Peer ID: %s\n", n.Host.ID())
+			fmt.Printf("Listening addresses:\n")
+			for _, addr := range n.Host.Addrs() {
+				fmt.Printf("  %s\n", addr)
+			}
+			// Network stats
+			peers := n.Host.Network().Peers()
+			fmt.Printf("Connected peers: %d\n", len(peers))
+			// Connection count
+			totalConns := 0
+			for _, pid := range peers {
+				totalConns += len(n.Host.Network().ConnsToPeer(pid))
+			}
+			fmt.Printf("Total connections: %d\n", totalConns)
+		case "network topics", "topics":
+			fmt.Println("=== PubSub Topics ===")
+			topics := []string{"msc-blocks", "msc-transactions", "msc-validators"}
+			for _, topic := range topics {
+				fmt.Printf("- %s\n", topic)
+			}
+			// Check if topics are active
+			if n.TopicBlocks != nil {
+				fmt.Println("\nâœ… Block topic active")
+			}
+			if n.TxTopic != nil {
+				fmt.Println("âœ… Transaction topic active")
+			}
+			/* legacy consensus removed
+			if n.ProposalTopic != nil {
+				fmt.Println("âœ… Proposal topic active")
+			}
+			if n.VoteTopic != nil {
+				fmt.Println("âœ… Vote topic active")
+			}
+			*/
+		case "network stats", "stats":
+			if n.Host == nil {
+				fmt.Println("âš ï¸ libp2p host not initialized")
+				continue
+			}
+			fmt.Println("=== Network Statistics ===")
+			// Peer count by connection state
+			peers := n.Host.Network().Peers()
+			states := make(map[string]int)
+			for _, pid := range peers {
+				state := n.Host.Network().Connectedness(pid)
+				states[state.String()]++
+			}
+			for state, count := range states {
+				fmt.Printf("%s: %d\n", state, count)
+			}
+			// Protocol usage
+			fmt.Println("\nProtocol usage:")
+			for _, pid := range peers {
+				protos, _ := n.Host.Peerstore().GetProtocols(pid)
+				for _, proto := range protos {
+					fmt.Printf("  %s: %s\n", pid.ShortString(), proto)
+				}
+			}
+		case "network maps", "maps":
+			stats := n.MapStats()
+			fmt.Println("=== Map Sizes ===")
+			fmt.Printf("SeenBlockHashes: %d\n", stats.SeenBlockHashes)
+			fmt.Printf("SeenTxIDs: %d\n", stats.SeenTxIDs)
+			fmt.Printf("ForkBlocks: heights=%d total=%d\n", stats.ForkBlocksHeights, stats.ForkBlocksTotal)
+			fmt.Printf("ExecResults: keys=%d total=%d\n", stats.ExecResultsKeys, stats.ExecResultsTotal)
+			fmt.Printf("PendingBlocks: %d\n", stats.PendingBlocks)
+			fmt.Printf("QueuedExecVotes: keys=%d total=%d\n", stats.QueuedExecVotesKeys, stats.QueuedExecVotesTotal)
+			fmt.Printf("AcceptedProposal: %d\n", stats.AcceptedProposal)
+			fmt.Printf("ExecBroadcasted: epochs=%d keys=%d\n", stats.ExecBroadcastedEpochs, stats.ExecBroadcastedKeys)
+			fmt.Printf("ExecSignerSeen: epochs=%d total=%d\n", stats.ExecSignerSeenEpochs, stats.ExecSignerSeenTotal)
+			fmt.Printf("ExecBroadcastedByVal: epochs=%d total=%d\n", stats.ExecBroadcastedByValEpochs, stats.ExecBroadcastedByValTotal)
+			fmt.Printf("ExecRebroadcastAt: epochs=%d\n", stats.ExecRebroadcastAtEpochs)
+			fmt.Printf("ValidatorStatus: %d\n", stats.ValidatorStatusCount)
+			fmt.Printf("Candidates: %d\n", stats.CandidateCount)
+			fmt.Printf("PeerState: %d\n", stats.PeerStateCount)
+			fmt.Printf("Peers: connected=%d connecting=%d suspect=%d allowed=%d\n",
+				stats.PeerConnectedCount, stats.PeerConnectingCount, stats.PeerSuspectCount, stats.AllowedPeerCount)
+			fmt.Printf("ValidatorSet: pending=%d removals=%d queued_updates=%d\n",
+				stats.ValidatorSetPendingCount, stats.ValidatorSetRemovalCount, stats.QueuedValidatorSetUpdates)
+			fmt.Printf("HeightReports: epochs=%d total=%d\n",
+				stats.HeightReportsEpochs, stats.HeightReportValidatorsTotal)
+		case "status", "network status":
+			runtime := n.runtimeStatusSnapshot()
+			validators := len(n.GetConsensusValidators(int(runtime.Height)))
+			fmt.Printf(
+				"[STATUS] height=%d finalized=%d peers=%d validators=%d syncing=%t sync_complete=%t consensus_running=%t role=%s ready=%t reason=%s\n",
+				runtime.Height,
+				runtime.FinalizedHeight,
+				runtime.Peers,
+				validators,
+				runtime.Syncing,
+				runtime.SyncComplete,
+				runtime.ConsensusRunning,
+				runtime.Role,
+				runtime.Ready,
+				runtime.WaitReason,
+			)
+		case "validators", "validator list", "network validators":
+			vals := n.GetActiveValidators()
+			if len(vals) == 0 {
+				fmt.Println("no validators")
+				continue
+			}
+			for _, v := range vals {
+				fmt.Println(v)
+			}
+		case "validatorset", "validator set", "validator-set", "network validatorset", "network validator set", "network validator-set":
+			n.validatorSetMu.RLock()
+			current := append([]string{}, n.currentValidators...)
+			pendingAdds := make([]string, 0, len(n.pendingValidators))
+			for id, act := range n.pendingValidators {
+				pendingAdds = append(pendingAdds, fmt.Sprintf("%s@%d", id, act))
+			}
+			pendingRemoves := make([]string, 0, len(n.pendingValidatorRemovals))
+			for id, act := range n.pendingValidatorRemovals {
+				pendingRemoves = append(pendingRemoves, fmt.Sprintf("%s@%d", id, act))
+			}
+			n.validatorSetMu.RUnlock()
+			if len(current) == 0 {
+				current = n.GetConsensusValidators(int(n.Blockchain.Height() + 1))
+			}
+			sort.Strings(current)
+			sort.Strings(pendingAdds)
+			sort.Strings(pendingRemoves)
+			fmt.Printf("validator_set_hash=%s\n", ValidatorSetHash(current)[:8])
+			fmt.Printf("validators (%d):\n", len(current))
+			for _, v := range current {
+				fmt.Println(v)
+			}
+			if len(pendingAdds) > 0 || len(pendingRemoves) > 0 {
+				fmt.Println("pending_updates:")
+				if len(pendingAdds) > 0 {
+					fmt.Printf("  add: %s\n", strings.Join(pendingAdds, ", "))
+				}
+				if len(pendingRemoves) > 0 {
+					fmt.Printf("  remove: %s\n", strings.Join(pendingRemoves, ", "))
+				}
+			}
+		case "validator-pending", "validator pending", "network validator-pending", "network validator pending":
+			n.validatorSetMu.RLock()
+			pendingAdds := make([]string, 0, len(n.pendingValidators))
+			for id, act := range n.pendingValidators {
+				pendingAdds = append(pendingAdds, fmt.Sprintf("%s@%d", id, act))
+			}
+			pendingRemoves := make([]string, 0, len(n.pendingValidatorRemovals))
+			for id, act := range n.pendingValidatorRemovals {
+				pendingRemoves = append(pendingRemoves, fmt.Sprintf("%s@%d", id, act))
+			}
+			n.validatorSetMu.RUnlock()
+			sort.Strings(pendingAdds)
+			sort.Strings(pendingRemoves)
+			if len(pendingAdds) == 0 && len(pendingRemoves) == 0 {
+				fmt.Println("no pending validator updates")
+				continue
+			}
+			if len(pendingAdds) > 0 {
+				fmt.Printf("pending add: %s\n", strings.Join(pendingAdds, ", "))
+			}
+			if len(pendingRemoves) > 0 {
+				fmt.Printf("pending remove: %s\n", strings.Join(pendingRemoves, ", "))
+			}
+		case "candidates", "network candidates":
+			n.candidateMu.RLock()
+			if len(n.candidates) == 0 {
+				n.candidateMu.RUnlock()
+				fmt.Println("no candidates")
+				continue
+			}
+			ids := make([]string, 0, len(n.candidates))
+			for id := range n.candidates {
+				ids = append(ids, id)
+			}
+			sort.Strings(ids)
+			fmt.Printf("candidates (%d):\n", len(ids))
+			for _, id := range ids {
+				cand := n.candidates[id]
+				if cand == nil {
+					continue
+				}
+				observed := cand.ObservedEpochs
+				matched := cand.MatchedEpochs
+				dcs := 0.0
+				uptime := 0.0
+				diversityAvg := 0.0
+				gossipTimeliness := 0.0
+				if observed > 0 {
+					dcs = float64(matched) / float64(observed)
+					diversityAvg = cand.DiversitySum / float64(observed)
+				}
+				if cand.HeartbeatTotal > 0 {
+					uptime = float64(cand.HeartbeatGood) / float64(cand.HeartbeatTotal)
+				}
+				if cand.GossipTotal > 0 {
+					gossipTimeliness = float64(cand.GossipTimely) / float64(cand.GossipTotal)
+				}
+				ban := "none"
+				if cand.PermanentBan {
+					ban = "permanent"
+				} else if cand.BanUntil > 0 {
+					ban = fmt.Sprintf("until %d", cand.BanUntil)
+				}
+				fmt.Printf("  %s observed=%d matched=%d dcs=%.4f uptime=%.2f%% diversity=%.2f%% gossip=%.2f%% strikes=%d ban=%s promoted=%v\n",
+					id,
+					observed,
+					matched,
+					dcs,
+					uptime*100,
+					diversityAvg*100,
+					gossipTimeliness*100,
+					cand.Strikes,
+					ban,
+					cand.Promoted,
+				)
+			}
+			n.candidateMu.RUnlock()
+		case "network connect":
+			fmt.Print("Enter peer multiaddr (e.g., /ip4/127.0.0.1/tcp/7001/p2p/...): ")
+			addrInput, _ := reader.ReadString('\n')
+			addrInput = strings.TrimSpace(addrInput)
+			if addrInput == "" {
+				fmt.Println("âŒ No address provided")
+				continue
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			maddr, err := ma.NewMultiaddr(addrInput)
+			if err != nil {
+				fmt.Printf("âŒ Invalid multiaddr: %v\n", err)
+				continue
+			}
+			addrInfo, err := peer.AddrInfoFromP2pAddr(maddr)
+			if err != nil {
+				fmt.Printf("âŒ Failed to parse peer info: %v\n", err)
+				continue
+			}
+			fmt.Printf("Attempting to connect to %s...\n", addrInfo.ID)
+			if err := n.connectToPeer(ctx, addrInput); err != nil {
+				fmt.Printf("âŒ Connection failed: %v\n", err)
+			} else {
+				fmt.Println("âœ… Connected successfully")
+			}
+		case "back", "exit", "quit":
+			fmt.Println("Returning to main CLI...")
+			return
+		default:
+			if line != "" {
+				fmt.Println("âŒ Unknown command. Type 'network help' for available commands.")
+			}
+		}
+	}
+}
+func (n *Node) connectToPeer(ctx context.Context, peerAddr string) error {
+	// Convert string to multiaddr
+	maddr, err := ma.NewMultiaddr(peerAddr)
+	if err != nil {
+		return fmt.Errorf("invalid multiaddr %s: %w", peerAddr, err)
+	}
+	if !n.allowPeerDiversityDial(maddr) {
+		return fmt.Errorf("peer diversity policy blocked dial")
+	}
+	// Get peer info from multiaddr
+	addrInfo, err := peer.AddrInfoFromP2pAddr(maddr)
+	if err != nil {
+		// If it's just an address without peer ID, we can't connect directly
+		return fmt.Errorf("multiaddr must include peer ID: %w", err)
+	}
+	if n.Host != nil && addrInfo.ID == n.Host.ID() {
+		return nil
+	}
+	if !n.canDialPeerID(addrInfo.ID.String()) {
+		return fmt.Errorf("dial backoff active for peer %s", addrInfo.ID)
+	}
+	if !connectionLimiter.Allow() {
+		return fmt.Errorf("connection rate limited")
+	}
+	if !n.canDialPeer() {
+		return fmt.Errorf("outbound peer limit reached")
+	}
+	// Check if already connected
+	if n.Host.Network().Connectedness(addrInfo.ID) == network.Connected {
+		if DebugNet {
+			fmt.Printf("âš ï¸ Already connected to peer %s\n", addrInfo.ID)
+		}
+		return nil
+	}
+	if n.isPeerConnected(addrInfo.ID.String()) {
+		return nil
+	}
+	if !n.markPeerConnecting(addrInfo.ID.String()) {
+		return nil
+	}
+	// Connect with timeout
+	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := n.Host.Connect(connectCtx, *addrInfo); err != nil {
+		n.setPeerConnected(addrInfo.ID.String(), false)
+		errLower := strings.ToLower(err.Error())
+		if strings.Contains(errLower, "peer id mismatch") ||
+			strings.Contains(errLower, "dial to self attempted") {
+			if n.refreshPeerIDMismatch(peerAddr, addrInfo.ID.String(), err) {
+				return fmt.Errorf("peer id refreshed for %s; retrying later", addrInfo.ID)
+			}
+			n.forgetPeer(addrInfo.ID.String(), "peer_id_mismatch")
+		}
+		n.recordDialFailure(addrInfo.ID.String())
+		return fmt.Errorf("connection failed: %w", err)
+	}
+	// Tag peer for priority
+	if cm := n.Host.ConnManager(); cm != nil {
+		cm.TagPeer(addrInfo.ID, "persistent", 100)
+	}
+	// Add to peers list
+	n.PeersLibp2p = append(n.PeersLibp2p, addrInfo.ID)
+	n.setPeerConnected(addrInfo.ID.String(), true)
+	if DebugNet {
+		fmt.Printf("âœ… Connected to peer: %s\n", addrInfo.ID)
+	}
+	n.recordDialSuccess(addrInfo.ID.String())
+	return nil
+}
+func (n *Node) handlePeerInfoStream(s network.Stream) {
+	defer s.Close()
+	enc := json.NewEncoder(s)
+	dec := json.NewDecoder(s)
+	// Send our info
+	info := PeerHello{
+		ChainID:          ChainID,
+		GenesisHash:      GenesisHash,
+		Version:          Version,
+		ConsensusHash:    consensusParamsHash(),
+		ValidatorID:      "",
+		P2PAddr:          n.SelfAddr,
+		ValidatorSetHash: n.validatorSetHash(),
+		Height:           n.Blockchain.Height(),
+	}
+	if n.canParticipateAsValidator() {
+		info.ValidatorID = n.ID
+	}
+	_ = enc.Encode(info)
+	// Receive peer info
+	var raw json.RawMessage
+	if err := dec.Decode(&raw); err == nil {
+		peerID := s.Conn().RemotePeer().String()
+		peerInfo, derr := decodePeerHelloPayload(raw)
+		if derr != nil {
+			n.recordDialFailure(peerID)
+			return
+		}
+		if n.validatePeerHello(peerID, peerInfo) {
+			n.applyPeerInfo(peerID, peerInfo)
+			n.recordDialSuccess(peerID)
+		}
+	} else {
+		n.recordDialFailure(s.Conn().RemotePeer().String())
+	}
+}
+func (n *Node) handleMessage(msg Message, peerAddr string) {
+	if n.isPeerQuarantined(peerAddr) {
+		if DebugNet {
+			fmt.Printf("ðŸš§ Ignoring message from quarantined peer %s\n", peerAddr)
+		}
+		return
+	}
+	if msg.Type != MsgPeerHello && !n.isPeerHelloOK(peerAddr) {
+		if DebugNet {
+			fmt.Printf("WARNING: ignoring message from unverified peer %s type=%s\n", peerAddr, msg.Type)
+		}
+		if n.Host != nil {
+			if pid, err := peer.Decode(peerAddr); err == nil {
+				go n.sendPeerHello(pid)
+			}
+		}
+		return
+	}
+	// =====================================================
+	// ðŸŽ¯ MESSAGE TYPE ROUTING
+	// =====================================================
+	switch msg.Type {
+	// =================================================
+	// ðŸ“¦ BLOCK PROPOSAL
+	// =================================================
+	/* legacy consensus removed: proposals/votes
+	case MsgProposeBlock:
+		var block Block
+		if err := json.Unmarshal(msg.Data, &block); err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to unmarshal block proposal from %s: %v\n", peerAddr, err)
+			}
+			return
+		}
+		if DebugConsensus {
+			fmt.Printf("ðŸ“¦ Processing block proposal from %s | height=%d\n",
+				peerAddr, block.ID)
+		}
+		n.HandleProposal(block)
+	// =================================================
+	// ðŸ—³ï¸ BLOCK VOTE
+	// =================================================
+	case MsgBlockVote:
+		var vote BlockVote
+		if err := json.Unmarshal(msg.Data, &vote); err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to unmarshal vote from %s: %v\n", peerAddr, err)
+			}
+			return
+		}
+		if DebugConsensus {
+			fmt.Printf("ðŸ—³ï¸ Processing vote from %s | height=%d validator=%s\n",
+				peerAddr, vote.Height, ShortID(vote.Validator))
+		}
+	// =================================================
+	// ðŸ¤ PEER HELLO (VALIDATOR DISCOVERY)
+	// =================================================
+	*/
+	case MsgPeerHello:
+		var hello PeerHello
+		if err := json.Unmarshal(msg.Data, &hello); err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to unmarshal peer hello from %s: %v\n", peerAddr, err)
+			}
+			return
+		}
+		if !n.validatePeerHello(peerAddr, hello) {
+			return
+		}
+		n.HandlePeerHello(peerAddr, hello.ValidatorID, hello.P2PAddr)
+		n.applyPeerInfo(peerAddr, hello)
+	// =================================================
+	// ðŸ“¦ LEADER BLOCK (REAL-TIME PROPOSAL)
+	// =================================================
+	case MsgLeaderBlock:
+		var block Block
+		if err := json.Unmarshal(msg.Data, &block); err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to unmarshal leader block from %s: %v\n", peerAddr, err)
+			}
+			return
+		}
+		if DebugConsensus {
+			fmt.Printf("ðŸ“¦ Leader block received from %s | height=%d proposer=%s\n",
+				peerAddr, block.ID, ShortID(block.Proposer))
+		}
+		n.handleLeaderBlock(block)
+	// =================================================
+	// ðŸ›¡ï¸ CENSORSHIP EVIDENCE
+	// =================================================
+	case MsgCensorshipEvidence:
+		var evidence CensorshipEvidence
+		if err := json.Unmarshal(msg.Data, &evidence); err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to unmarshal censorship evidence from %s: %v\n", peerAddr, err)
+			}
+			return
+		}
+		if DebugConsensus {
+			fmt.Printf("ðŸ›¡ï¸ Processing censorship evidence from %s | height=%d\n",
+				peerAddr, evidence.Height)
+		}
+		// Load the block and apply evidence if available
+		if block, ok := n.LoadBlock(int(evidence.Height)); ok {
+			if ApplyCensorshipEvidence(n, evidence, block) {
+				CheckCensorshipSlashing(evidence.Leader, int(evidence.Height))
+			}
+		}
+	// =================================================
+	// ðŸ’¸ TRANSACTION
+	// =================================================
+	case MsgTx:
+		var tx Transaction
+		if err := json.Unmarshal(msg.Data, &tx); err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to unmarshal transaction from %s: %v\n", peerAddr, err)
+			}
+			return
+		}
+		if DebugConsensus {
+			fmt.Printf("ðŸ’¸ Processing transaction from %s | id=%s\n",
+				peerAddr, tx.ID[:8])
+		}
+		n.ReceiveTransaction(tx)
+	// =================================================
+	// ðŸ“¦ BLOCK (FINALIZED)
+	// =================================================
+	case MsgFinalBlock:
+		var block Block
+		if err := json.Unmarshal(msg.Data, &block); err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to unmarshal final block from %s: %v\n", peerAddr, err)
+			}
+			return
+		}
+		if DebugConsensus {
+			fmt.Printf("ðŸ“¦ Processing final block from %s | height=%d\n",
+				peerAddr, block.ID)
+		}
+		n.ReceiveBlock(block, n.Blockchain)
+		n.ProcessQueuedBlocks()
+	// =================================================
+	// âœ… EXECUTION RESULT (CONSENSUS QUORUM)
+	// =================================================
+	case MsgExecutionResult:
+		var res ExecutionResultMsg
+		if err := json.Unmarshal(msg.Data, &res); err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to unmarshal execution result from %s: %v\n", peerAddr, err)
+			}
+			return
+		}
+		n.handleExecutionResultMsg(res)
+	// =================================================
+	// âœ… COMMIT (FINALITY)
+	// =================================================
+	case MsgCommit:
+		var cm CommitMsg
+		if err := json.Unmarshal(msg.Data, &cm); err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to unmarshal commit from %s: %v\n", peerAddr, err)
+			}
+			return
+		}
+		n.handleCommitMsg(cm)
+	// =================================================
+	// âœ… BLOCK ACK (SYNC CONFIRMATION)
+	// =================================================
+	case MsgBlockAck:
+		var ack BlockAck
+		if err := json.Unmarshal(msg.Data, &ack); err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to unmarshal block ack from %s: %v\n", peerAddr, err)
+			}
+			return
+		}
+		n.recordPeerAck(peerAddr, ack.Height)
+	// =================================================
+	// ðŸ”„ BLOCK SYNC REQUEST
+	// =================================================
+	case MsgGetBlocks:
+		var req BlockRequest
+		if err := json.Unmarshal(msg.Data, &req); err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to unmarshal block request from %s: %v\n", peerAddr, err)
+			}
+			return
+		}
+		if DebugSync {
+			fmt.Printf("ðŸ”„ Block sync request from %s | %d-%d\n",
+				peerAddr, req.From, req.To)
+		}
+		// TODO: Implement block sync response
+		// n.sendBlocksToPeer(peerAddr, int(req.From), int(req.To))
+	// =================================================
+	// ðŸ”„ PEERS LIST EXCHANGE
+	// =================================================
+	case MsgPeers:
+		var peers []string
+		if err := json.Unmarshal(msg.Data, &peers); err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to unmarshal peers list from %s: %v\n", peerAddr, err)
+			}
+			return
+		}
+		if DebugNet {
+			fmt.Printf("ðŸ”— Received %d peers from %s\n", len(peers), peerAddr)
+		}
+		n.handlePeersList(peerAddr, peers)
+	// =================================================
+	// ðŸ“ PING (KEEPALIVE)
+	// =================================================
+	case MsgPing:
+		if DebugNet {
+			fmt.Printf("ðŸ“ Ping from %s\n", peerAddr)
+		}
+		// TODO: Send pong response
+	// =================================================
+	// ðŸš¨ UNKNOWN MESSAGE TYPE
+	// =================================================
+	default:
+		if DebugNet {
+			fmt.Printf("âš ï¸ Unknown message type from %s: %s\n", peerAddr, msg.Type)
+		}
+	}
+}
+func (n *Node) addBootstrapAddr(maddr ma.Multiaddr) {
+	// This function would add addresses to DHT for bootstrap
+	// In practice, DHT bootstrap addresses should be set during DHT creation
+	if DebugNet {
+		fmt.Printf("âž• Would add bootstrap address: %s (but DHT bootstrap addresses should be set during initialization)\n", maddr)
+	}
+}
+// Helper function to create a proper multiaddr from host:port
+func createMultiaddrFromHostPort(host string, port int) string {
+	if host == "" || host == "localhost" {
+		host = "127.0.0.1"
+	}
+	return fmt.Sprintf("/ip4/%s/tcp/%d", host, port)
+}
+func verifyCensorshipEvidenceObserver(ev CensorshipEvidence) bool {
+	observer := normalizeValidatorID(ev.Observer)
+	if observer == "" {
+		return false
+	}
+	if len(ev.ObserverSig) != ed25519.SignatureSize {
+		return false
+	}
+	pubKey, ok := ValidatorPubKeys[observer]
+	if !ok || len(pubKey) != ed25519.PublicKeySize {
+		return false
+	}
+	return ed25519.Verify(pubKey, censorshipEvidenceSignBytes(ev), ev.ObserverSig)
+}
+func ApplyCensorshipEvidence(
+	n *Node,
+	ev CensorshipEvidence,
+	block Block,
+) bool {
+	CensorshipMu.Lock()
+	defer CensorshipMu.Unlock()
+	if ev.Leader == "" || ev.TxID == "" {
+		return false
+	}
+	if ev.Height != block.ID {
+		return false
+	}
+	ev.Leader = normalizeValidatorID(ev.Leader)
+	ev.Observer = normalizeValidatorID(ev.Observer)
+	if ev.Observer == "" || ev.Observer == ev.Leader {
+		return false
+	}
+	if ev.ObservedAt == 0 {
+		ev.ObservedAt = block.ID
+	}
+	if ev.MempoolRoot == "" {
+		ev.MempoolRoot = block.MempoolRoot
+	}
+	if n != nil && !n.isValidatorInSetForHeight(ev.Observer, ev.Height) {
+		return false
+	}
+	if !verifyCensorshipEvidenceObserver(ev) {
+		return false
+	}
+	key := EvidenceKey{
+		Leader: ev.Leader,
+		Height: ev.Height,
+	}
+	list := CensorshipEvidencePool[key]
+	if len(list) >= MaxEvidencePerHeight {
+		return false
+	}
+	for _, existing := range list {
+		if existing.TxID == ev.TxID && normalizeValidatorID(existing.Observer) == ev.Observer {
+			return false
+		}
+	}
+	CensorshipEvidencePool[key] = append(list, ev)
+	if DebugConsensus {
+		fmt.Printf(
+			"Censorship evidence applied | leader=%s tx=%s height=%d\n",
+			ShortID(ev.Leader),
+			ev.TxID,
+			ev.Height,
+		)
+	}
+	return true
+}
+// You might also want this function to help users create proper multiaddrs
+func (n *Node) GetPublicMultiaddr() string {
+	if n.Host == nil || len(n.Host.Addrs()) == 0 {
+		return ""
+	}
+	// Return the first address with peer ID
+	for _, addr := range n.Host.Addrs() {
+		fullAddr := fmt.Sprintf("%s/p2p/%s", addr, n.Host.ID())
+		// Return a loopback address if available
+		if strings.Contains(addr.String(), "127.0.0.1") {
+			return fullAddr
+		}
+	}
+	// Otherwise return any address
+	return fmt.Sprintf("%s/p2p/%s", n.Host.Addrs()[0], n.Host.ID())
+}
+// Helper function for public IP detection
+func GetPublicIP() (string, error) {
+	resp, err := http.Get("https://api.ipify.org?format=text")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	ip, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(ip), nil
+}
+func (n *Node) handleBlockStream(s network.Stream) {
+	defer s.Close()
+	// =====================================================
+	// â±ï¸ SET TIMEOUTS FOR NETWORK OPERATIONS
+	// =====================================================
+	deadline := time.Now().Add(30 * time.Second)
+	s.SetDeadline(deadline)
+	s.SetReadDeadline(deadline)
+	s.SetWriteDeadline(deadline)
+	// =====================================================
+	// ðŸ“¥ RECEIVE BLOCK REQUEST
+	// =====================================================
+	dec := json.NewDecoder(s)
+	enc := json.NewEncoder(s)
+	var req BlockRequest
+	if err := dec.Decode(&req); err != nil {
+		if DebugNet {
+			fmt.Printf("âŒ Failed to decode block request from %s: %v\n",
+				s.Conn().RemotePeer(), err)
+		}
+		return
+	}
+	// =====================================================
+	// ðŸŽ¯ VALIDATE REQUEST PARAMETERS
+	// =====================================================
+	if req.To < req.From {
+		if DebugNet {
+			fmt.Printf("âš ï¸ Invalid block range from %s: %d-%d\n",
+				s.Conn().RemotePeer(), req.From, req.To)
+		}
+		return
+	}
+	// =====================================================
+	// âœ… ACK-AWARE RANGE ADJUSTMENT
+	// =====================================================
+	peerID := s.Conn().RemotePeer().String()
+	if ackHeight := n.peerAckHeightFor(peerID); ackHeight > 0 {
+		if ackHeight >= req.From {
+			req.From = ackHeight + 1
+		}
+		if req.From > req.To && !req.WantSnapshot {
+			_ = enc.Encode(BlockResponse{})
+			return
+		}
+	}
+	// Limit block range to prevent abuse
+	maxBlockRange := uint64(1000)
+	if req.To-req.From > maxBlockRange {
+		req.To = req.From + maxBlockRange
+		if DebugNet {
+			fmt.Printf("âš ï¸ Limiting block range to %d blocks for %s\n",
+				maxBlockRange, s.Conn().RemotePeer())
+		}
+	}
+	// =====================================================
+	// ðŸ“¦ SNAPSHOT (OPTIONAL)
+	// =====================================================
+	var snapshot *StateSnapshot
+	start := req.From
+	if req.WantSnapshot {
+		tip := n.Blockchain.Height()
+		var snapHeight uint64
+		if req.SnapshotHeight > 0 {
+			snapHeight = req.SnapshotHeight
+			if s, err := n.GetSnapshot(snapHeight); err == nil {
+				snapshot = s
+			}
+			if snapshot == nil {
+				if s, err := n.GetSnapshotAtOrBelow(snapHeight); err == nil {
+					snapshot = s
+				}
+			}
+		} else {
+			if tip > 50 {
+				snapHeight = tip - 50
+			}
+			if s, err := n.GetSnapshot(snapHeight); err == nil {
+				snapshot = s
+			} else if s, err := n.GetLatestSnapshot(); err == nil {
+				snapshot = s
+			}
+		}
+		if snapshot != nil {
+			// Prevent snapshot resend storms to the same peer at the same height.
+			if !n.shouldSendSnapshotToPeer(peerID, snapshot.Height) {
+				snapshot = nil
+			} else if snapshot.Height >= start {
+				start = snapshot.Height + 1
+			}
+		}
+	}
+	// =====================================================
+	// ðŸ“¦ FETCH REQUESTED BLOCKS
+	// =====================================================
+	var blocks []Block
+	fetchedCount := 0
+	currentTip := n.Blockchain.Height()
+	tipGapOnly := false
+	historicalGapOnly := false
+	if start > currentTip {
+		// Peer is asking for blocks beyond our current tip; return snapshot/empty response quietly.
+		tipGapOnly = true
+	} else {
+		for h := start; h <= req.To; h++ {
+			// Avoid noisy "not found" logs for blocks we simply don't have yet.
+			if h > currentTip {
+				tipGapOnly = true
+				break
+			}
+			if b, ok := n.LoadBlock(int(h)); ok {
+				// Safety: never serve a block range that is internally inconsistent
+				// with our own validator-set expectations at that height.
+				if b.ValidatorSetHash != "" {
+					if expected := n.expectedValidatorSetHash(b.ID); expected != "" && expected != b.ValidatorSetHash {
+						historicalGapOnly = true
+						if DebugSync || DebugConsensus {
+							fmt.Printf("⏳ Refusing inconsistent block %d for %s (expected_set=%s got=%s)\n",
+								b.ID, s.Conn().RemotePeer(), ShortHash(expected), ShortHash(b.ValidatorSetHash))
+						}
+						break
+					}
+				}
+				blocks = append(blocks, b)
+				fetchedCount++
+			} else {
+				// Node may be anchored from a snapshot at/above tip without full historical blocks.
+				// Treat this as a quiet historical gap instead of noisy warning spam.
+				historicalGapOnly = true
+				if DebugSync {
+					fmt.Printf("â³ Historical block gap at %d for %s (tip=%d)\n",
+						h, s.Conn().RemotePeer(), currentTip)
+				}
+				break
+			}
+			// Limit batch size for memory/network efficiency
+			if fetchedCount >= 100 {
+				if DebugNet {
+					fmt.Printf("âš ï¸ Sending partial batch of %d blocks to %s\n",
+						fetchedCount, s.Conn().RemotePeer())
+				}
+				break
+			}
+		}
+	}
+	// =====================================================
+	// ðŸ“¤ SEND BLOCK RESPONSE
+	// =====================================================
+	var execPoolSnap *ExecPoolSnapshot
+	if ResultGossipOnly && req.WantSnapshot {
+		execPoolSnap = buildExecPoolSnapshot(n.currentEpoch())
+	}
+	resp := BlockResponse{Blocks: blocks, Snapshot: snapshot, ExecPool: execPoolSnap}
+	if err := enc.Encode(resp); err != nil {
+		if DebugNet {
+			fmt.Printf("âŒ Failed to send blocks to %s: %v\n",
+				s.Conn().RemotePeer(), err)
+		}
+		return
+	}
+	// Flush the stream to ensure data is sent
+	if err := s.CloseWrite(); err != nil {
+		if DebugNet {
+			fmt.Printf("âš ï¸ Stream flush error for %s: %v\n",
+				s.Conn().RemotePeer(), err)
+		}
+	}
+	// =====================================================
+	// ðŸ“Š LOGGING AND METRICS
+	// =====================================================
+	if DebugNet {
+		if snapshot != nil {
+			fmt.Printf("ðŸ“¦ Sent snapshot height=%d to %s\n",
+				snapshot.Height, s.Conn().RemotePeer())
+		}
+		if len(blocks) > 0 {
+			fromHeight := blocks[0].ID
+			toHeight := blocks[len(blocks)-1].ID
+			if n.shouldLogSentBlocks(peerID, fromHeight, toHeight) {
+				fmt.Printf("ðŸ“¦ Sent blocks %d-%d (%d blocks) to %s\n",
+					fromHeight, toHeight, len(blocks), s.Conn().RemotePeer())
+			}
+		} else {
+			if tipGapOnly || historicalGapOnly {
+				if DebugSync {
+					if tipGapOnly {
+						fmt.Printf("â³ Peer %s requested future range %d-%d (local tip=%d)\n",
+							s.Conn().RemotePeer(), req.From, req.To, currentTip)
+					} else {
+						fmt.Printf("â³ Peer %s requested unavailable historical range %d-%d (local tip=%d)\n",
+							s.Conn().RemotePeer(), req.From, req.To, currentTip)
+					}
+				}
+			} else {
+				if n.shouldLogNoBlocks(peerID, req.From, req.To) {
+					fmt.Printf("ðŸ“­ No blocks sent to %s (requested %d-%d)\n",
+						s.Conn().RemotePeer(), req.From, req.To)
+				}
+			}
+		}
+	}
+	// Update sync metrics
+	if len(blocks) > 0 {
+		// Record successful sync
+		lastBlock := blocks[len(blocks)-1]
+		if DebugSync {
+			fmt.Printf("ðŸ”„ Sync stats: Sent %d blocks (height %d-%d) to %s\n",
+				len(blocks), blocks[0].ID, lastBlock.ID, s.Conn().RemotePeer())
+		}
+	}
+}
+func ed25519ToLibp2pKey(priv ed25519.PrivateKey) (libp2pcrypto.PrivKey, error) {
+	return libp2pcrypto.UnmarshalEd25519PrivateKey(priv)
+}
+func (n *Node) sendToPeerLibp2p(ctx context.Context, peerID peer.ID, msg Message) error {
+	s, err := n.Host.NewStream(ctx, peerID, "/msc/1.0.0")
+	if err != nil {
+		n.recordDialFailure(peerID.String())
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "protocols not supported") || strings.Contains(errMsg, "protocol not supported") {
+			n.disconnectPeerID(peerID.String(), "consensus_protocol_mismatch")
+		}
+		return err
+	}
+	defer s.Close()
+	data, _ := json.Marshal(msg)
+	_, err = s.Write(append(data, '\n'))
+	return err
+}
+func libp2pKeyFromEd25519(priv ed25519.PrivateKey) (lpcrypto.PrivKey, error) {
+	return lpcrypto.UnmarshalEd25519PrivateKey(priv)
+}
+/*
+	legacy consensus removed
+func (n *Node) subscribeProposals(ctx context.Context) {
+		sub, err := n.TopicProposal.Subscribe()
+		if err != nil {
+			panic(err)
+		}
+		go func() {
+			for {
+				msg, err := sub.Next(ctx)
+				if err != nil {
+					return
+				}
+				var m Message
+				if err := json.Unmarshal(msg.Data, &m); err != nil {
+					continue
+				}
+				var block Block
+				if err := json.Unmarshal(m.Data, &block); err != nil {
+					continue
+				}
+				if DebugConsensus {
+					fmt.Printf(
+						"ðŸ“¦ Proposal received | height=%d proposer=%s\n",
+						block.ID,
+						ShortID(block.Proposer),
+					)
+				}
+				n.HandleProposal(block)
+			}
+		}()
+	}
+*/
+func (n *Node) setupProtocols() {
+	// Block sync protocol
+	n.Host.SetStreamHandler("/msc/blocksync/1.0.0", n.handleBlockStream)
+	// Consensus stream
+	n.Host.SetStreamHandler("/msc/consensus/1.0.0", n.handleConsensusStream)
+	// Peer info exchange
+	n.Host.SetStreamHandler("/msc/peerinfo/1.0.0", n.handlePeerInfoStream)
+	// Ping protocol (already enabled in libp2p.New)
+	if DebugNet {
+		fmt.Println("ðŸ”§ Network protocols configured")
+	}
+}
+func (n *Node) handleConsensusStream(s network.Stream) {
+	defer s.Close()
+	// =====================================================
+	// â±ï¸ SET TIMEOUTS FOR NETWORK OPERATIONS
+	// =====================================================
+	deadline := time.Now().Add(120 * time.Second) // Longer timeout for consensus
+	s.SetDeadline(deadline)
+	s.SetReadDeadline(deadline)
+	s.SetWriteDeadline(deadline)
+	// =====================================================
+	// ðŸ“– SETUP READER/WRITER WITH BUFFERING
+	// =====================================================
+	reader := bufio.NewReaderSize(s, 65536) // 64KB buffer
+	writer := bufio.NewWriterSize(s, 65536)
+	defer writer.Flush()
+	// =====================================================
+	// ðŸ”„ PROCESSING LOOP
+	// =====================================================
+	for {
+		// =================================================
+		// ðŸ“¨ READ MESSAGE WITH NEWLINE DELIMITER
+		// =================================================
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				if DebugNet {
+					fmt.Printf("ðŸ”Œ Consensus stream EOF from %s\n", s.Conn().RemotePeer())
+				}
+			} else if !strings.Contains(err.Error(), "closed") {
+				if DebugNet {
+					fmt.Printf("âš ï¸ Consensus stream read error from %s: %v\n",
+						s.Conn().RemotePeer(), err)
+				}
+			}
+			break
+		}
+		// =================================================
+		// ðŸ§© PARSE JSON MESSAGE
+		// =================================================
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var msg Message
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			if DebugNet {
+				fmt.Printf("âš ï¸ Invalid JSON from %s: %v\n",
+					s.Conn().RemotePeer(), err)
+				fmt.Printf("   Raw: %s\n", line[:min(100, len(line))])
+			}
+			// Send error response
+			errorResp := Message{
+				Type: "error",
+				Data: []byte(fmt.Sprintf(`{"error":"invalid_json","message":"%v"}`, err)),
+			}
+			respData, _ := json.Marshal(errorResp)
+			writer.Write(append(respData, '\n'))
+			writer.Flush()
+			continue
+		}
+		// =================================================
+		// ðŸŽ¯ VALIDATE MESSAGE TYPE
+		// =================================================
+		if msg.Type == "" {
+			if DebugNet {
+				fmt.Printf("âš ï¸ Empty message type from %s\n", s.Conn().RemotePeer())
+			}
+			continue
+		}
+		// =================================================
+		// ðŸ“Š DEBUG LOGGING
+		// =================================================
+		if DebugConsensus {
+			fmt.Printf("ðŸ“¨ Consensus message from %s: %s (size: %d bytes)\n",
+				s.Conn().RemotePeer(), msg.Type, len(msg.Data))
+			// Log specific message types in detail
+			switch msg.Type {
+			/* legacy consensus removed: proposals/votes
+			case MsgProposeBlock:
+				var block Block
+				if err := json.Unmarshal(msg.Data, &block); err == nil {
+					fmt.Printf("   Block proposal: height=%d proposer=%s\n",
+						block.ID, ShortID(block.Proposer))
+				}
+			case MsgBlockVote:
+				var vote BlockVote
+				if err := json.Unmarshal(msg.Data, &vote); err == nil {
+					fmt.Printf("   Block vote: height=%d validator=%s\n",
+						vote.Height, ShortID(vote.Validator))
+				}
+			*/
+			case MsgPeerHello:
+				var hello PeerHello
+				if err := json.Unmarshal(msg.Data, &hello); err == nil {
+					fmt.Printf("   Peer hello: validator=%s\n", ShortID(hello.ValidatorID))
+				}
+			}
+		}
+		// =================================================
+		// ðŸš€ PROCESS MESSAGE
+		// =================================================
+		n.handleMessage(msg, s.Conn().RemotePeer().String())
+		// =================================================
+		// ðŸ“¤ SEND ACKNOWLEDGEMENT
+		// =================================================
+		ack := Message{
+			Type: "ack",
+			Data: []byte(fmt.Sprintf(`{"type":"%s","status":"processed"}`, msg.Type)),
+		}
+		ackData, _ := json.Marshal(ack)
+		if _, err := writer.Write(append(ackData, '\n')); err != nil {
+			if DebugNet {
+				fmt.Printf("âš ï¸ Failed to send ack to %s: %v\n",
+					s.Conn().RemotePeer(), err)
+			}
+			break
+		}
+		// Flush periodically to ensure delivery
+		if err := writer.Flush(); err != nil {
+			if DebugNet {
+				fmt.Printf("âš ï¸ Stream flush error to %s: %v\n",
+					s.Conn().RemotePeer(), err)
+			}
+			break
+		}
+		// =================================================
+		// ðŸ”„ RESET DEADLINE FOR NEXT MESSAGE
+		// =================================================
+		newDeadline := time.Now().Add(30 * time.Second)
+		s.SetDeadline(newDeadline)
+		s.SetReadDeadline(newDeadline)
+		s.SetWriteDeadline(newDeadline)
+	}
+	// =====================================================
+	// ðŸ“Š FINAL LOGGING
+	// =====================================================
+	if DebugNet {
+		fmt.Printf("ðŸ”Œ Consensus stream closed with %s\n", s.Conn().RemotePeer())
+	}
+}
+func (n *Node) joinGossipTopics() {
+	ctx := context.Background()
+	// Block topic
+	blockTopic := "msc-blocks"
+	blockSub, err := n.PubSub.Subscribe(blockTopic)
+	if err == nil {
+		go n.handleBlockGossip(blockSub)
+	}
+	// Transaction topic
+	txTopic := "msc-transactions"
+	txSub, err := n.PubSub.Subscribe(txTopic)
+	if err == nil {
+		go n.handleTransactionGossip(txSub)
+	}
+	// Validator gossip topic
+	valTopic := "msc-validators"
+	valSub, err := n.PubSub.Subscribe(valTopic)
+	if err == nil {
+		go n.handleValidatorGossip(valSub)
+	}
+	// Join topics (these don't return errors in Join)
+	n.BlockTopic, _ = n.PubSub.Join("msc-blocks")
+	n.TxTopic, _ = n.PubSub.Join("msc-tx")
+	// Subscribe to topics
+	// go n.listenVotes(ctx)
+	go n.listenBlocks(ctx)
+	go n.listenTx(ctx)
+}
+func (n *Node) listenBlocks(ctx context.Context) {
+	// =====================================================
+	// ðŸ“¡ SUBSCRIPTION INITIALIZATION
+	// =====================================================
+	var sub *pubsub.Subscription
+	var err error
+	// Try BlockTopic first
+	if n.BlockTopic != nil {
+		sub, err = n.BlockTopic.Subscribe(
+			pubsub.WithBufferSize(1024),
+		)
+		if err != nil && DebugNet {
+			fmt.Printf("âŒ BlockTopic subscribe failed: %v\n", err)
+		}
+	}
+	// Fallback to direct PubSub subscription
+	if sub == nil {
+		sub, err = n.PubSub.Subscribe("msc-blocks")
+		if err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to subscribe to blocks: %v\n", err)
+			}
+			return
+		}
+	}
+	defer func() {
+		if sub != nil {
+			sub.Cancel()
+			if DebugNet {
+				fmt.Println("ðŸ›‘ Block listener stopped")
+			}
+		}
+	}()
+	if DebugNet {
+		fmt.Println("âœ… Listening for blocks...")
+	}
+	// =====================================================
+	// ðŸ“Š METRICS AND STATE
+	// =====================================================
+	var (
+		blockCount  int
+		lastLogTime = time.Now()
+		seenBlockMu sync.RWMutex
+		seenBlocks  = make(map[string]time.Time)
+		lastHeight  uint64
+		heightJumps int
+	)
+	// Cleanup goroutine for seen blocks cache
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-n.shutdownCh:
+				return
+			case <-ticker.C:
+				seenBlockMu.Lock()
+				now := time.Now()
+				for hash, seenTime := range seenBlocks {
+					if now.Sub(seenTime) > 30*time.Minute {
+						delete(seenBlocks, hash)
+					}
+				}
+				seenBlockMu.Unlock()
+			}
+		}
+	}()
+	// =====================================================
+	// ðŸ”„ PROCESSING LOOP
+	// =====================================================
+	for {
+		select {
+		case <-ctx.Done():
+			if DebugNet {
+				fmt.Printf("ðŸ›‘ Block listener stopped (context): %v\n", ctx.Err())
+			}
+			return
+		case <-n.shutdownCh:
+			if DebugNet {
+				fmt.Println("ðŸ›‘ Block listener (shutdown)")
+			}
+			return
+		default:
+			// =================================================
+			// ðŸ“¨ RECEIVE MESSAGE
+			// =================================================
+			msg, err := sub.Next(ctx)
+			if err != nil {
+				if err == context.Canceled {
+					return
+				}
+				if DebugNet {
+					fmt.Printf("âš ï¸ Block subscription error: %v\n", err)
+				}
+				time.Sleep(500 * time.Millisecond) // Longer delay for blocks
+				continue
+			}
+			// =================================================
+			// ðŸ™… SELF-MESSAGE FILTERING
+			// =================================================
+			if msg.ReceivedFrom == n.Host.ID() {
+				continue
+			}
+			// Ignore non-JSON payloads (e.g., pubsub mesh keepalive)
+			if len(msg.Data) == 0 || msg.Data[0] != '{' {
+				continue
+			}
+			// =================================================
+			// ðŸ§© MESSAGE PARSING
+			// =================================================
+			var block Block
+			var parseErr error
+			// Try Message wrapper format first
+			var m Message
+			if err := json.Unmarshal(msg.Data, &m); err == nil && m.Type != "" {
+				if m.Type == MsgLeaderBlock {
+					var leader Block
+					if err := json.Unmarshal(m.Data, &leader); err == nil {
+						n.handleLeaderBlock(leader)
+					}
+					continue
+				}
+				if m.Type == MsgBlock {
+					parseErr = json.Unmarshal(m.Data, &block)
+				} else {
+					continue
+				}
+			} else {
+				// Try direct Block format
+				parseErr = json.Unmarshal(msg.Data, &block)
+			}
+			if parseErr != nil {
+				if DebugNet {
+					fmt.Printf("âš ï¸ Failed to parse block: %v\n", parseErr)
+					if len(msg.Data) < 500 {
+						fmt.Printf("   Raw data (first 500 chars): %.500s\n", string(msg.Data))
+					}
+				}
+				continue
+			}
+			// =================================================
+			// ðŸŽ¯ BASIC VALIDATION
+			// =================================================
+			if block.ID == 0 || block.BlockHash == "" || block.PrevHash == "" {
+				if DebugNet {
+					fmt.Println("âš ï¸ Invalid block: missing required fields")
+				}
+				continue
+			}
+			// Check for height jumps (possible fork or sync)
+			if lastHeight > 0 && block.ID > lastHeight+1 {
+				heightJumps++
+				if DebugSync {
+					fmt.Printf("âš ï¸ Height jump detected: %d -> %d (gap: %d)\n",
+						lastHeight, block.ID, block.ID-lastHeight-1)
+				}
+			}
+			lastHeight = block.ID
+			// =================================================
+			// ðŸ”„ DEDUPLICATION
+			// =================================================
+			seenBlockMu.RLock()
+			seenTime, exists := seenBlocks[block.BlockHash]
+			seenBlockMu.RUnlock()
+			if exists && time.Since(seenTime) < 5*time.Minute {
+				if DebugConsensus {
+					fmt.Printf("â­ï¸ Duplicate block ignored: height=%d hash=%s\n",
+						block.ID, block.BlockHash[:8])
+				}
+				continue
+			}
+			seenBlockMu.Lock()
+			seenBlocks[block.BlockHash] = time.Now()
+			seenBlockMu.Unlock()
+			// =================================================
+			// ðŸ“Š DEBUG LOGGING
+			// =================================================
+			blockCount++
+			if DebugConsensus {
+				// Log every block in detail
+				fmt.Printf("ðŸ“¦ Block received | height=%d type=%s proposer=%s from=%s\n",
+					block.ID,
+					block.Type,
+					ShortID(block.Proposer),
+					msg.ReceivedFrom)
+				// Additional info for work blocks
+				if block.Type == BlockTypeWork && len(block.Transactions) > 0 {
+					fmt.Printf("   TX count: %d, Mempool root: %s\n",
+						len(block.Transactions), block.MempoolRoot[:8])
+				}
+				// Periodic summary
+				if blockCount%100 == 0 || time.Since(lastLogTime) > 30*time.Second {
+					fmt.Printf("ðŸ“Š Block stats: Received %d blocks, height jumps: %d\n",
+						blockCount, heightJumps)
+					lastLogTime = time.Now()
+				}
+			}
+			// =================================================
+			// ðŸš€ PROCESS BLOCK
+			// =================================================
+			n.ReceiveBlock(block, n.Blockchain)
+			n.ProcessQueuedBlocks()
+			// =================================================
+			// â¸ï¸ THROTTLING (blocks are less frequent than TXs)
+			// =================================================
+			// Small delay to allow other goroutines to run
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+}
+func (n *Node) listenTx(ctx context.Context) {
+	// =====================================================
+	// ðŸ“¡ SUBSCRIPTION INITIALIZATION
+	// =====================================================
+	var sub *pubsub.Subscription
+	var err error
+	// Try TxTopic first, fallback to PubSub
+	if n.TxTopic != nil {
+		sub, err = n.TxTopic.Subscribe(
+			pubsub.WithBufferSize(2048), // Larger buffer for TX flood
+		)
+		if err != nil && DebugNet {
+			fmt.Printf("âŒ TxTopic subscribe failed: %v\n", err)
+		}
+	}
+	if sub == nil {
+		// Fallback to direct PubSub subscription
+		sub, err = n.PubSub.Subscribe("msc-transactions")
+		if err != nil {
+			if DebugNet {
+				fmt.Printf("âŒ Failed to subscribe to transactions: %v\n", err)
+			}
+			return
+		}
+	}
+	defer func() {
+		if sub != nil {
+			sub.Cancel()
+			if DebugNet {
+				fmt.Println("ðŸ›‘ TX listener stopped")
+			}
+		}
+	}()
+	if DebugNet {
+		fmt.Println("âœ… Listening for transactions...")
+	}
+	// =====================================================
+	// ðŸ“Š METRICS AND RATE LIMITING
+	// =====================================================
+	var (
+		txCount      int
+		lastLogTime  = time.Now()
+		rateLimiter  = rate.NewLimiter(rate.Every(time.Second), 1000) // 1000 TX/sec
+		seenTxCache  = make(map[string]time.Time)
+		cacheCleanup = time.NewTicker(5 * time.Minute)
+	)
+	defer cacheCleanup.Stop()
+	// =====================================================
+	// ðŸ”„ PROCESSING LOOP
+	// =====================================================
+	for {
+		select {
+		case <-ctx.Done():
+			if DebugNet {
+				fmt.Printf("ðŸ›‘ TX listener stopped (context): %v\n", ctx.Err())
+			}
+			return
+		case <-n.shutdownCh:
+			if DebugNet {
+				fmt.Println("ðŸ›‘ TX listener (shutdown)")
+			}
+			return
+		case <-cacheCleanup.C:
+			// Clean old entries from cache
+			now := time.Now()
+			for txID, seenTime := range seenTxCache {
+				if now.Sub(seenTime) > 10*time.Minute {
+					delete(seenTxCache, txID)
+				}
+			}
+		default:
+			// =================================================
+			// ðŸ“¨ RECEIVE MESSAGE
+			// =================================================
+			msg, err := sub.Next(ctx)
+			if err != nil {
+				if err == context.Canceled {
+					return
+				}
+				if DebugNet {
+					fmt.Printf("âš ï¸ TX subscription error: %v\n", err)
+				}
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			// =================================================
+			// ðŸ™… SELF-MESSAGE FILTERING
+			// =================================================
+			if msg.ReceivedFrom == n.Host.ID() {
+				if DebugConsensus {
+					fmt.Println("â­ï¸ Ignoring self-published TX")
+				}
+				continue
+			}
+			// =================================================
+			// â¸ï¸ RATE LIMITING
+			// =================================================
+			if !rateLimiter.Allow() {
+				if DebugNet {
+					fmt.Println("âš ï¸ TX rate limit exceeded, skipping")
+				}
+				continue
+			}
+			// =================================================
+			// ðŸ§© MESSAGE PARSING (MULTI-FORMAT SUPPORT)
+			// =================================================
+			var tx Transaction
+			var parseErr error
+			// Try Message wrapper format first
+			var m Message
+			if err := json.Unmarshal(msg.Data, &m); err == nil && m.Type == MsgTx {
+				parseErr = json.Unmarshal(m.Data, &tx)
+			} else {
+				// Try direct Transaction format
+				parseErr = json.Unmarshal(msg.Data, &tx)
+			}
+			if parseErr != nil {
+				if DebugNet {
+					fmt.Printf("âš ï¸ Failed to parse transaction: %v\n", parseErr)
+					if len(msg.Data) < 200 {
+						fmt.Printf("   Raw data: %s\n", string(msg.Data))
+					}
+				}
+				continue
+			}
+			// =================================================
+			// ðŸŽ¯ BASIC VALIDATION
+			// =================================================
+			if tx.ID == "" || tx.From == "" || tx.To == "" {
+				if DebugNet {
+					fmt.Println("âš ï¸ Invalid transaction: missing required fields")
+				}
+				continue
+			}
+			if tx.Amount <= 0 || tx.Fee < 0 {
+				if DebugNet {
+					fmt.Printf("âš ï¸ Invalid transaction amounts: amount=%d fee=%d\n",
+						tx.Amount, tx.Fee)
+				}
+				continue
+			}
+			// =================================================
+			// ðŸ”„ DEDUPLICATION CACHE
+			// =================================================
+			now := time.Now()
+			if seenTime, exists := seenTxCache[tx.ID]; exists {
+				if now.Sub(seenTime) < 1*time.Minute {
+					// Recently seen, skip
+					if DebugConsensus {
+						fmt.Printf("â­ï¸ Duplicate TX ignored (recent): %s\n", tx.ID[:8])
+					}
+					continue
+				}
+			}
+			seenTxCache[tx.ID] = now
+			// =================================================
+			// ðŸ“Š DEBUG LOGGING (THROTTLED)
+			// =================================================
+			txCount++
+			if DebugConsensus {
+				// Log first few and then periodically
+				if txCount <= 10 || txCount%100 == 0 || time.Since(lastLogTime) > 10*time.Second {
+					fmt.Printf("ðŸ’¸ TX received | id=%s from=%s to=%s amount=%d fee=%d\n",
+						tx.ID[:8],
+						ShortID(tx.From),
+						ShortID(tx.To),
+						tx.Amount,
+						tx.Fee)
+					lastLogTime = time.Now()
+				}
+			}
+			// =================================================
+			// ðŸš€ PROCESS TRANSACTION
+			// =================================================
+			n.ReceiveTransaction(tx)
+			// =================================================
+			// ðŸ“ˆ PERIODIC STATS
+			// =================================================
+			if txCount%1000 == 0 && DebugNet {
+				fmt.Printf("ðŸ“Š TX stats: Processed %d transactions\n", txCount)
+			}
+			// =================================================
+			// â¸ï¸ SMALL DELAY FOR CPU BREATHER
+			// =================================================
+			time.Sleep(1 * time.Millisecond)
+		}
+	}
+}
+
+legacy consensus removed
+		}
+	}
+}

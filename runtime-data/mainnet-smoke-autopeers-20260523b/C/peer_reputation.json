@@ -1,0 +1,50 @@
+{
+  "12D3KooWCRnjNo5CpxxXAKtR8o7a5km69fUzqffHpCQe71j3aMqr": {
+    "SnapshotSuccess": 0,
+    "SnapshotFail": 0,
+    "BlockBatchSuccess": 0,
+    "BlockBatchFail": 0,
+    "DialSuccess": 67,
+    "DialFailure": 0,
+    "TimeoutCount": 0,
+    "InvalidProofCount": 0,
+    "SecurityFaultCount": 0,
+    "RateLimitDropCount": 0,
+    "DecayedAt": "2026-05-23T14:51:53.8346811+05:30",
+    "AvgLatencyMs": 0,
+    "LastBytesPerSec": 0,
+    "UpdatedAt": "2026-05-23T14:52:40.1581043+05:30"
+  },
+  "12D3KooWNMsVH95F95XJyKta9odxoitzb9Mc2FFAL8UUPBz7Su8T": {
+    "SnapshotSuccess": 0,
+    "SnapshotFail": 0,
+    "BlockBatchSuccess": 0,
+    "BlockBatchFail": 0,
+    "DialSuccess": 65,
+    "DialFailure": 0,
+    "TimeoutCount": 0,
+    "InvalidProofCount": 0,
+    "SecurityFaultCount": 0,
+    "RateLimitDropCount": 0,
+    "DecayedAt": "2026-05-23T14:51:53.3134553+05:30",
+    "AvgLatencyMs": 0,
+    "LastBytesPerSec": 0,
+    "UpdatedAt": "2026-05-23T14:52:39.73549+05:30"
+  },
+  "12D3KooWSsc7JjDa8u9vharzZA26LaD3gAQ3pQ2PNhvuhGEAJkVn": {
+    "SnapshotSuccess": 0,
+    "SnapshotFail": 0,
+    "BlockBatchSuccess": 0,
+    "BlockBatchFail": 0,
+    "DialSuccess": 67,
+    "DialFailure": 0,
+    "TimeoutCount": 0,
+    "InvalidProofCount": 0,
+    "SecurityFaultCount": 0,
+    "RateLimitDropCount": 0,
+    "DecayedAt": "2026-05-23T14:51:53.3078861+05:30",
+    "AvgLatencyMs": 0,
+    "LastBytesPerSec": 0,
+    "UpdatedAt": "2026-05-23T14:52:40.1581043+05:30"
+  }
+}

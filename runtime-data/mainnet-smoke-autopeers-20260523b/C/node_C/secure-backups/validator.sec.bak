@@ -1,0 +1,14 @@
+{
+  "address": "C",
+  "publicKey": "45c2f48644e63f71b4e722ea04591a4b04f4d8fccfb851a9d4b30efac4bef47b",
+  "crypto": {
+    "ciphertext": "8c27aaa9783a2938558d8feded44d04706290f91d32a7be718fee94a42c17a960bf047dc5f2502b1d7ba001eeff145be1ec6dcf9bf4a2536b14ef23e4a2b760261074e39d668b76b97385937b6ca2933",
+    "nonce": "ca4255d95d6ac75565dcda0d",
+    "salt": "1a2fd4b05a2a25f293a40a61a8e07816",
+    "version": 2,
+    "kdf": "argon2id",
+    "argon2_time": 3,
+    "argon2_memory_kib": 65536,
+    "argon2_threads": 2
+  }
+}

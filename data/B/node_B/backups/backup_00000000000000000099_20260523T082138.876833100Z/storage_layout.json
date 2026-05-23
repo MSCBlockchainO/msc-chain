@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "root": "data\\B\\node_B",
+  "state_db": "data\\B\\node_B\\state.db",
+  "block_db": "data\\B\\node_B\\blocks.db",
+  "snapshot_db": "data\\B\\node_B\\snapshot.db",
+  "tx_db": "data\\B\\node_B\\tx.db",
+  "meta_db": "data\\B\\node_B\\meta.db",
+  "block_files": "data\\B\\node_B\\blocks",
+  "snapshot_files": "data\\B\\node_B\\snapshots",
+  "checkpoints": "data\\B\\node_B\\state_checkpoints",
+  "archive": "data\\B\\node_B\\cold-storage",
+  "updated_at_unix": 1779524498
+}

@@ -1,0 +1,43 @@
+{
+  "chain_id": "91938",
+  "symbol": "MSC",
+  "total_supply": 9193823602,
+  "decimals": 18,
+  "buckets": [
+    {
+      "name": "Team Treasury",
+      "address": "MSC_OWNER_ACCOUNT",
+      "allocation": 2298455900,
+      "percent": 25,
+      "balance": 2298455900
+    },
+    {
+      "name": "Foundation",
+      "address": "MSC_FOUNDATION",
+      "allocation": 1379073540,
+      "percent": 15,
+      "balance": 1379073540
+    },
+    {
+      "name": "Validator Bootstrap",
+      "address": "MSC_VALIDATOR_BOOTSTRAP",
+      "allocation": 919382360,
+      "percent": 10,
+      "balance": 919382360
+    },
+    {
+      "name": "Community",
+      "address": "MSC_COMMUNITY_POOL",
+      "allocation": 1838764720,
+      "percent": 20,
+      "balance": 1838764720
+    },
+    {
+      "name": "Future Rewards",
+      "address": "USER_REWARD_POOL",
+      "allocation": 2758147082,
+      "percent": 30,
+      "balance": 2758147082
+    }
+  ]
+}
