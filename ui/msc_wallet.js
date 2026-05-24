@@ -104,9 +104,45 @@ const inferDefaultRPCBase = () => {
   return window.location.origin;
 };
 
+const savedRPCListForCurrentPage = () => {
+  const values = String(localStorage.getItem("msc_rpc") || "")
+    .split(",")
+    .map((item) => normalizeRPCBaseURL(item.trim()))
+    .filter(Boolean);
+  if (!values.length) return [];
+  if (isLoopbackHost(window.location.hostname)) return values;
+  return values.filter((rpc) => {
+    try {
+      const url = new URL(rpc, window.location.href);
+      return !isLoopbackHost(url.hostname);
+    } catch (_) {
+      return false;
+    }
+  });
+};
+
+const initialRPCBase = () => {
+  const saved = savedRPCListForCurrentPage();
+  return saved.length ? saved[0] : inferDefaultRPCBase();
+};
+
+const publicJSONRPCExplicitlyEnabled = () =>
+  String(localStorage.getItem("msc_wallet_allow_public_jsonrpc") || "").trim() === "1";
+
+const isProtectedPublicGatewayRPC = (rpc) => {
+  if (publicJSONRPCExplicitlyEnabled()) return false;
+  try {
+    const url = new URL(normalizeRPCBaseURL(rpc || window.location.origin), window.location.href);
+    if (isLoopbackHost(url.hostname)) return false;
+    return url.origin === window.location.origin;
+  } catch (_) {
+    return false;
+  }
+};
+
 const state = {
   rpcUrl: normalizeRPCBaseURL(
-    preferHttpsForLocalRpc(localStorage.getItem("msc_rpc") || inferDefaultRPCBase())
+    preferHttpsForLocalRpc(initialRPCBase())
   ),
   rpcUrls: [],
   chainId: MSC_ONLY_CHAIN_ID,
@@ -1387,6 +1423,10 @@ const apiWithFallback = async (path, options = {}) => {
 };
 
 const rpcRequest = async (method, params = [], { useFallback = true } = {}) => {
+  const rpcTargets = state.rpcUrls.length ? state.rpcUrls : [state.rpcUrl];
+  if (rpcTargets.some(isProtectedPublicGatewayRPC)) {
+    throw new Error("JSON-RPC is protected on the public gateway. Use DTL IDE for advanced DTL RPC.");
+  }
   const payload = {
     jsonrpc: "2.0",
     id: Date.now(),
@@ -5746,7 +5786,8 @@ const handleBridgeReject = () => {
 };
 
 const init = () => {
-  el("rpcUrl").value = preferHttpsForLocalRpc(localStorage.getItem("msc_rpc") || state.rpcUrl);
+  const savedRPCs = savedRPCListForCurrentPage();
+  el("rpcUrl").value = preferHttpsForLocalRpc(savedRPCs.length ? savedRPCs.join(", ") : state.rpcUrl);
   enforceMSCChainID();
   state.apiToken = normalizeAuthToken(state.apiToken);
   el("apiToken").value = state.apiToken;

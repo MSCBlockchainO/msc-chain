@@ -145,7 +145,7 @@ Write-Host "Uploading static UI from $UiSource..."
 $uiArchive = Join-Path ([System.IO.Path]::GetTempPath()) ("msc-ui-upload-{0}.tar" -f ([System.Guid]::NewGuid().ToString("N")))
 try {
     tar -cf $uiArchive -C $UiSource .
-    ssh -i $KeyPath -o StrictHostKeyChecking=no $target "rm -rf ~/msc-ui-upload ~/msc-ui-upload.tar && mkdir -p ~/msc-ui-upload"
+    ssh -i $KeyPath -o StrictHostKeyChecking=no $target 'sudo rm -rf "$HOME/msc-ui-upload" "$HOME/msc-ui-upload.tar" && mkdir -p "$HOME/msc-ui-upload"'
     scp -i $KeyPath -o StrictHostKeyChecking=no $uiArchive "${target}:msc-ui-upload.tar"
     ssh -i $KeyPath -o StrictHostKeyChecking=no $target "tar -xf ~/msc-ui-upload.tar -C ~/msc-ui-upload"
     $remote | ssh -i $KeyPath -o StrictHostKeyChecking=no $target "$envPrefix bash -s"
