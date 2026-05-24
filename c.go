@@ -2639,7 +2639,7 @@ func (n *Node) handleConsensusEnvelope(data []byte) bool {
 
 func (n *Node) handleConsensusEnvelopeFromPeer(data []byte, peerID string) bool {
 	var wrapped Message
-	if err := json.Unmarshal(data, &wrapped); err != nil || wrapped.Type == "" {
+	if err := UnmarshalP2PMessage(data, &wrapped); err != nil || wrapped.Type == "" {
 		return false
 	}
 	switch wrapped.Type {
@@ -2734,7 +2734,7 @@ func (n *Node) listenValidators(ctx context.Context) {
 
 		// Support both raw ValidatorInfo and Message wrappers
 		var wrapped Message
-		if err := json.Unmarshal(msg.Data, &wrapped); err == nil && wrapped.Type != "" {
+		if err := UnmarshalP2PMessage(msg.Data, &wrapped); err == nil && wrapped.Type != "" {
 			switch wrapped.Type {
 			case MsgValidatorAnnounce:
 				n.handleValidatorAnnouncement(wrapped.Data)

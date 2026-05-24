@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -37,6 +38,10 @@ func blockStoreDir(dataDir, nodeID string) string {
 
 func blockStoreFilePath(dataDir, nodeID string, height uint64) string {
 	return filepath.Join(blockStoreDir(dataDir, nodeID), fmt.Sprintf("block_%06d.json", height))
+}
+
+func blockStoreProtoFilePath(dataDir, nodeID string, height uint64) string {
+	return filepath.Join(blockStoreDir(dataDir, nodeID), fmt.Sprintf("block_%06d.mpb", height))
 }
 
 func coldBlockStoreDir(dataDir, nodeID string) string {
@@ -96,12 +101,22 @@ func (n *Node) persistBlockFile(block Block) error {
 	if err := writeFileAtomic(blockStoreFilePath(n.DataDir, n.ID, height), raw, 0o600); err != nil {
 		return fmt.Errorf("persist block file: %w", err)
 	}
+	if protoRaw, err := MarshalBlockFileRecordProtobuf(record); err == nil {
+		if err := writeFileAtomic(blockStoreProtoFilePath(n.DataDir, n.ID, height), protoRaw, 0o600); err != nil {
+			return fmt.Errorf("persist protobuf block file: %w", err)
+		}
+	} else {
+		return fmt.Errorf("marshal protobuf block file: %w", err)
+	}
 	return nil
 }
 
 func (n *Node) loadBlockFile(height uint64) (Block, bool) {
 	if n == nil || height == 0 {
 		return Block{}, false
+	}
+	if raw, err := os.ReadFile(blockStoreProtoFilePath(n.DataDir, n.ID, height)); err == nil {
+		return decodeBlockFileRecord(raw, height)
 	}
 	raw, err := os.ReadFile(blockStoreFilePath(n.DataDir, n.ID, height))
 	if err == nil {
@@ -112,7 +127,11 @@ func (n *Node) loadBlockFile(height uint64) (Block, bool) {
 
 func decodeBlockFileRecord(raw []byte, height uint64) (Block, bool) {
 	var record BlockFileRecord
-	if err := json.Unmarshal(raw, &record); err != nil {
+	if bytes.HasPrefix(raw, []byte(blockFileProtoMagic)) {
+		if err := UnmarshalBlockFileRecordProtobuf(raw, &record); err != nil {
+			return Block{}, false
+		}
+	} else if err := json.Unmarshal(raw, &record); err != nil {
 		return Block{}, false
 	}
 	block := record.Block
@@ -173,18 +192,24 @@ func (n *Node) loadBlockFilesFromDisk() []Block {
 	if err != nil {
 		return nil
 	}
+	seen := make(map[uint64]struct{}, len(entries))
 	heights := make([]uint64, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 		name := entry.Name()
-		if !strings.HasPrefix(name, "block_") || !strings.HasSuffix(name, ".json") {
+		if !strings.HasPrefix(name, "block_") || (!strings.HasSuffix(name, ".json") && !strings.HasSuffix(name, ".mpb")) {
 			continue
 		}
-		rawHeight := strings.TrimSuffix(strings.TrimPrefix(name, "block_"), ".json")
+		rawHeight := strings.TrimPrefix(name, "block_")
+		rawHeight = strings.TrimSuffix(strings.TrimSuffix(rawHeight, ".json"), ".mpb")
 		height, err := strconv.ParseUint(rawHeight, 10, 64)
 		if err == nil && height > 0 {
+			if _, ok := seen[height]; ok {
+				continue
+			}
+			seen[height] = struct{}{}
 			heights = append(heights, height)
 		}
 	}
@@ -262,10 +287,11 @@ func deleteBlockFilesAboveHeight(dataDir, nodeID string, height uint64) error {
 			continue
 		}
 		name := entry.Name()
-		if !strings.HasPrefix(name, "block_") || !strings.HasSuffix(name, ".json") {
+		if !strings.HasPrefix(name, "block_") || (!strings.HasSuffix(name, ".json") && !strings.HasSuffix(name, ".mpb")) {
 			continue
 		}
-		rawHeight := strings.TrimSuffix(strings.TrimPrefix(name, "block_"), ".json")
+		rawHeight := strings.TrimPrefix(name, "block_")
+		rawHeight = strings.TrimSuffix(strings.TrimSuffix(rawHeight, ".json"), ".mpb")
 		blockHeight, err := strconv.ParseUint(rawHeight, 10, 64)
 		if err != nil {
 			continue

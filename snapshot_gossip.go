@@ -529,7 +529,7 @@ func (n *Node) publishSnapshotMetaGossipInternal(snapshot *StateSnapshot, allowR
 	if err != nil {
 		return false
 	}
-	wrapped, err := json.Marshal(Message{Type: MsgSnapshotMeta, Data: raw})
+	wrapped, err := MarshalP2PMessage(Message{Type: MsgSnapshotMeta, Data: raw})
 	if err != nil {
 		return false
 	}
@@ -590,7 +590,7 @@ func (n *Node) publishSnapshotChunkGossipInternal(snapshot *StateSnapshot, allow
 	if err != nil {
 		return false
 	}
-	wrapped, err := json.Marshal(Message{Type: MsgSnapshotChunk, Data: raw})
+	wrapped, err := MarshalP2PMessage(Message{Type: MsgSnapshotChunk, Data: raw})
 	if err != nil {
 		return false
 	}

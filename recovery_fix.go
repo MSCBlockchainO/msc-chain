@@ -740,7 +740,7 @@ func (n *Node) maybeOfferSnapshotToValidator(validatorID string, _ uint64) {
 		StateRoot: snap.StateRoot,
 	}
 	raw, _ := json.Marshal(offer)
-	msg, _ := json.Marshal(Message{Type: MsgSnapshotOffer, Data: raw})
+	msg, _ := MarshalP2PMessage(Message{Type: MsgSnapshotOffer, Data: raw})
 	publishTopic := n.ConsensusTopic
 	if publishTopic == nil {
 		publishTopic = n.ValidatorTopic

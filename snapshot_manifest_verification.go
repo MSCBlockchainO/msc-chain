@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -34,7 +33,7 @@ func verifySnapshotPayloadAgainstManifest(payload []byte, manifest *SnapshotMani
 	}
 
 	var snap StateSnapshot
-	if err := json.Unmarshal(payload, &snap); err != nil {
+	if err := UnmarshalSnapshotBinary(payload, &snap); err != nil {
 		return nil, err
 	}
 	if len(snap.CheckpointProof) == 0 && len(manifest.CheckpointProof) > 0 {

@@ -307,7 +307,7 @@ func (n *Node) broadcastLeaderBlockUnchecked(block Block) {
 		Type: MsgLeaderBlock,
 		Data: MustJSON(block),
 	}
-	data, err := json.Marshal(msg)
+	data, err := MarshalP2PMessage(msg)
 	if err != nil {
 		return
 	}
@@ -2199,7 +2199,7 @@ func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 	n.fanoutConsensusMessageToPeers(msg)
 	n.noteExecBroadcastActivity(heightHint)
 
-	data, _ := json.Marshal(msg)
+	data, _ := MarshalP2PMessage(msg)
 	publishTopic := n.ConsensusTopic
 	if publishTopic == nil {
 		publishTopic = n.ValidatorTopic
@@ -5381,7 +5381,11 @@ func (n *Node) BroadcastBlock(block Block) {
 		return
 	}
 
-	data, _ := json.Marshal(block)
+	msg := Message{Type: MsgBlock, Data: MustJSON(block)}
+	data, err := MarshalP2PMessage(msg)
+	if err != nil {
+		data, _ = json.Marshal(block)
+	}
 
 	if n.BlockTopic != nil {
 		if err := n.BlockTopic.Publish(context.Background(), data); err != nil {
@@ -7795,7 +7799,7 @@ func (n *Node) broadcastValidatorInfoViaBlocks() {
 		Type: MsgValidatorAnnounce,
 		Data: payload,
 	}
-	msgBytes, err := json.Marshal(msg)
+	msgBytes, err := MarshalP2PMessage(msg)
 	if err != nil {
 		if DebugConsensus {
 			fmt.Printf("Failed to marshal message wrapper: %v\n", err)
@@ -9984,7 +9988,7 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 	// =================================================
 	case MsgTx:
 		var tx Transaction
-		if err := json.Unmarshal(msg.Data, &tx); err != nil {
+		if err := UnmarshalTransactionWire(msg.Data, &tx); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢ÂÅ’ Failed to unmarshal transaction from %s: %v\n", peerAddr, err)
 			}
@@ -11101,8 +11105,8 @@ func (n *Node) listenBlocks(ctx context.Context) {
 			if msg.ReceivedFrom == n.Host.ID() {
 				continue
 			}
-			// Ignore non-JSON payloads (e.g., pubsub mesh keepalive)
-			if len(msg.Data) == 0 || msg.Data[0] != '{' {
+			// Ignore empty payloads; block gossip supports JSON and protobuf-wire envelopes.
+			if len(msg.Data) == 0 {
 				continue
 			}
 			// =================================================
@@ -11112,7 +11116,7 @@ func (n *Node) listenBlocks(ctx context.Context) {
 			var parseErr error
 			// Try Message wrapper format first
 			var m Message
-			if err := json.Unmarshal(msg.Data, &m); err == nil && m.Type != "" {
+			if err := UnmarshalP2PMessage(msg.Data, &m); err == nil && m.Type != "" {
 				if m.Type == MsgLeaderBlock {
 					var leader Block
 					if err := json.Unmarshal(m.Data, &leader); err == nil {
@@ -11385,8 +11389,8 @@ func (n *Node) listenTx(ctx context.Context) {
 			var parseErr error
 			// Try Message wrapper format first
 			var m Message
-			if err := json.Unmarshal(msg.Data, &m); err == nil && m.Type == MsgTx {
-				parseErr = json.Unmarshal(m.Data, &tx)
+			if err := UnmarshalP2PMessage(msg.Data, &m); err == nil && m.Type == MsgTx {
+				parseErr = UnmarshalTransactionWire(m.Data, &tx)
 			} else {
 				// Try direct Transaction format
 				parseErr = json.Unmarshal(msg.Data, &tx)

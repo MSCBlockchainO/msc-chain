@@ -483,7 +483,7 @@ func (n *Node) publishSnapshotProof(proof SnapshotProof) bool {
 	if err != nil {
 		return false
 	}
-	wrapped, err := json.Marshal(Message{Type: MsgSnapshotProof, Data: raw})
+	wrapped, err := MarshalP2PMessage(Message{Type: MsgSnapshotProof, Data: raw})
 	if err != nil {
 		return false
 	}

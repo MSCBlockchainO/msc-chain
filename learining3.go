@@ -100,14 +100,19 @@ func (n *Node) BroadcastTx(tx Transaction) {
 
 	}
 
+	txPayload, err := MarshalTransactionProtobuf(tx)
+	if err != nil {
+		return
+	}
+
 	msg := Message{
 
 		Type: MsgTx,
 
-		Data: MustJSON(tx),
+		Data: txPayload,
 	}
 
-	data, err := json.Marshal(msg)
+	data, err := MarshalP2PMessage(msg)
 
 	if err != nil {
 
@@ -9424,7 +9429,7 @@ func snapshotManifestFromSnapshot(snapshot *StateSnapshot) (*SnapshotManifest, [
 		return nil, nil, fmt.Errorf("snapshot unavailable")
 	}
 	populateSnapshotDerivedFields(snapshot)
-	payload, err := json.Marshal(snapshot)
+	payload, err := MarshalSnapshotBinary(snapshot)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -19938,7 +19943,7 @@ func (n *Node) broadcastValidatorSetUpdate(height uint64, validators []string) {
 		Data: MustJSON(update),
 	}
 
-	data, err := json.Marshal(msg)
+	data, err := MarshalP2PMessage(msg)
 
 	if err != nil {
 
@@ -24764,7 +24769,7 @@ func (n *Node) broadcastValidatorInfoInternal(force bool) {
 		Data: MustJSON(ann),
 	}
 
-	data, err := json.Marshal(msg)
+	data, err := MarshalP2PMessage(msg)
 
 	if err != nil {
 
