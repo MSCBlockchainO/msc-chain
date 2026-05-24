@@ -81,6 +81,48 @@ func TestSyncCatchupModeCompatibilityMapping(t *testing.T) {
 	}
 }
 
+func TestSelectSyncTargetAllowsLaggingSelfCatchupOneBlock(t *testing.T) {
+	got := selectSyncTargetHeight(
+		100, // local
+		100, // strict quorum height is held down by this lagging node
+		true,
+		101, // two connected peers are already one block ahead
+		2,
+		3,
+	)
+	if got != 101 {
+		t.Fatalf("expected lagging node to catch up one block with required-1 observed votes, got=%d", got)
+	}
+}
+
+func TestSelectSyncTargetAllowsLaggingSelfCatchupHugeGap(t *testing.T) {
+	got := selectSyncTargetHeight(
+		100,
+		100,
+		true,
+		100000100,
+		2,
+		3,
+	)
+	if got != 100000100 {
+		t.Fatalf("expected lagging node to catch up huge gap with required-1 observed votes, got=%d", got)
+	}
+}
+
+func TestSelectSyncTargetRejectsSingleMinorityObservedVote(t *testing.T) {
+	got := selectSyncTargetHeight(
+		100,
+		100,
+		true,
+		101,
+		1,
+		3,
+	)
+	if got != 0 {
+		t.Fatalf("expected one minority observed vote to be ignored, got=%d", got)
+	}
+}
+
 func TestSyncRealtimeGossipCompatibilityMapping(t *testing.T) {
 	if got := normalizeSyncStage("gossip"); got != "realtime_gossip" {
 		t.Fatalf("expected gossip alias to normalize to realtime_gossip, got=%q", got)

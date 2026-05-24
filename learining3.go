@@ -9967,6 +9967,18 @@ func shouldUseObservedSyncHeight(observedVotes, required int) bool {
 	return observedVotes >= required
 }
 
+func shouldUseObservedLagCatchup(localHeight uint64, observedHeight uint64, observedVotes int, required int) bool {
+	if observedHeight <= localHeight || observedVotes <= 0 {
+		return false
+	}
+	if required <= 1 {
+		return true
+	}
+	// Catch-up may use one fewer vote than finality because fetched blocks are
+	// still verified against strict committed quorum evidence before they apply.
+	return observedVotes >= required-1
+}
+
 func selectSyncTargetHeight(
 	localHeight uint64,
 	quorumHeight uint64,
@@ -9980,6 +9992,9 @@ func selectSyncTargetHeight(
 		target = quorumHeight
 	}
 	if (!quorumOK || shouldUseObservedSyncHeight(observedVotes, required)) && observedHeight > target {
+		target = observedHeight
+	}
+	if shouldUseObservedLagCatchup(localHeight, observedHeight, observedVotes, required) && observedHeight > target {
 		target = observedHeight
 	}
 	if target <= localHeight {
