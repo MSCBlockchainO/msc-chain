@@ -1,0 +1,3 @@
+/.gitattributes text eol=lf
+genesis.json text eol=lf
+config.toml text eol=lf
