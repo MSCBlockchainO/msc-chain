@@ -2129,7 +2129,7 @@ func (n *Node) handleValidatorAnnouncement(data []byte) {
 			nextValidatorSetHash = validatorSetHash
 		}
 		v5OK := false
-		if validatorSetHash != "" && ann.ConsensusReadySet {
+		if ann.ConsensusReadySet {
 			v5OK = ed25519.Verify(
 				ed25519.PublicKey(pkBytes),
 				validatorAnnounceSignBytesV5(
@@ -2151,43 +2151,39 @@ func (n *Node) handleValidatorAnnouncement(data []byte) {
 			)
 		}
 		v4OK := false
-		if validatorSetHash != "" {
-			v4OK = ed25519.Verify(
-				ed25519.PublicKey(pkBytes),
-				validatorAnnounceSignBytesV4(
-					ann.NodeID,
-					ann.PubKey,
-					ann.P2PAddr,
-					reported,
-					finalized,
-					execEpoch,
-					validatorSetHeight,
-					validatorSetHash,
-					nextValidatorSetHash,
-					nextActivationHeight,
-					ann.IsValidator,
-				),
-				sigBytes,
-			)
-		}
+		v4OK = ed25519.Verify(
+			ed25519.PublicKey(pkBytes),
+			validatorAnnounceSignBytesV4(
+				ann.NodeID,
+				ann.PubKey,
+				ann.P2PAddr,
+				reported,
+				finalized,
+				execEpoch,
+				validatorSetHeight,
+				validatorSetHash,
+				nextValidatorSetHash,
+				nextActivationHeight,
+				ann.IsValidator,
+			),
+			sigBytes,
+		)
 		v3OK := false
-		if validatorSetHash != "" {
-			v3OK = ed25519.Verify(
-				ed25519.PublicKey(pkBytes),
-				validatorAnnounceSignBytesV3(
-					ann.NodeID,
-					ann.PubKey,
-					ann.P2PAddr,
-					reported,
-					finalized,
-					execEpoch,
-					validatorSetHeight,
-					validatorSetHash,
-					ann.IsValidator,
-				),
-				sigBytes,
-			)
-		}
+		v3OK = ed25519.Verify(
+			ed25519.PublicKey(pkBytes),
+			validatorAnnounceSignBytesV3(
+				ann.NodeID,
+				ann.PubKey,
+				ann.P2PAddr,
+				reported,
+				finalized,
+				execEpoch,
+				validatorSetHeight,
+				validatorSetHash,
+				ann.IsValidator,
+			),
+			sigBytes,
+		)
 		if !v5OK && !v4OK && !v3OK && !ed25519.Verify(
 			ed25519.PublicKey(pkBytes),
 			validatorAnnounceSignBytesV2(ann.NodeID, ann.PubKey, ann.P2PAddr, reported, finalized, execEpoch, ann.IsValidator),

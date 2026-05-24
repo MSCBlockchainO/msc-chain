@@ -51,6 +51,72 @@ func TestHeartbeatFallbackRegistersValidator(t *testing.T) {
 	}
 }
 
+func TestValidatorAnnouncementAcceptsV5EmptyValidatorSetHash(t *testing.T) {
+	oldDebug := DebugConsensus
+	DebugConsensus = false
+	validatorPubKeysMu.Lock()
+	oldPubKeys := ValidatorPubKeys
+	ValidatorPubKeys = make(map[string]ed25519.PublicKey)
+	validatorPubKeysMu.Unlock()
+	t.Cleanup(func() {
+		DebugConsensus = oldDebug
+		validatorPubKeysMu.Lock()
+		ValidatorPubKeys = oldPubKeys
+		validatorPubKeysMu.Unlock()
+	})
+
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B"})
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("keygen failed: %v", err)
+	}
+
+	ann := ValidatorAnnouncement{
+		NodeID:               "A",
+		PubKey:               hex.EncodeToString(pub),
+		P2PAddr:              "/ip4/127.0.0.1/tcp/19001/p2p/12D3KooWJqFp6YvYxD7SXfJf3y9Li9nZQ5TPPjS7k2qxJbPryK5U",
+		ReportedHeight:       0,
+		FinalizedHeight:      0,
+		ExecEpoch:            1,
+		ValidatorSetHeight:   1,
+		ActivationHeight:     1,
+		ValidatorSetHash:     "",
+		NextValidatorSetHash: "",
+		NextActivationHeight: 2,
+		ConsensusReadySet:    true,
+		ConsensusReady:       false,
+		IsValidator:          true,
+	}
+	ann.Signature = hex.EncodeToString(ed25519.Sign(priv, validatorAnnounceSignBytesV5(
+		ann.NodeID,
+		ann.PubKey,
+		ann.P2PAddr,
+		ann.ReportedHeight,
+		ann.FinalizedHeight,
+		ann.ExecEpoch,
+		ann.ValidatorSetHeight,
+		ann.ValidatorSetHash,
+		ann.NextValidatorSetHash,
+		ann.NextActivationHeight,
+		ann.ConsensusReadySet,
+		ann.ConsensusReady,
+		ann.IsValidator,
+	)))
+
+	data, err := json.Marshal(ann)
+	if err != nil {
+		t.Fatalf("marshal announcement: %v", err)
+	}
+	node.handleValidatorAnnouncement(data)
+
+	validatorPubKeysMu.RLock()
+	got, ok := ValidatorPubKeys["A"]
+	validatorPubKeysMu.RUnlock()
+	if !ok || !bytes.Equal(got, pub) {
+		t.Fatalf("expected empty-hash V5 heartbeat to verify and store pubkey")
+	}
+}
+
 func TestRegistryBootstrapFallbackEarlyHeight(t *testing.T) {
 	oldRegistry := GlobalValidatorRegistry.Snapshot()
 	t.Cleanup(func() {
