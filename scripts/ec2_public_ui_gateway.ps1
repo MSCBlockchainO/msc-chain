@@ -4,7 +4,8 @@ param(
     [string]$KeyPath = "C:\Users\Mohammad Talha\Downloads\msc-key.pem",
     [string]$IdeUser = "mscadmin",
     [string]$IdePassword = $env:MSC_IDE_PASSWORD,
-    [string]$RpcTarget = "127.0.0.1:26657"
+    [string]$RpcTarget = "127.0.0.1:26657",
+    [string]$UiSource = (Join-Path (Split-Path -Parent $PSScriptRoot) "ui")
 )
 
 Set-StrictMode -Version Latest
@@ -12,6 +13,9 @@ $ErrorActionPreference = "Stop"
 
 if (-not $IdePassword) {
     throw "Set `$env:MSC_IDE_PASSWORD before running this script."
+}
+if (-not (Test-Path -LiteralPath $UiSource -PathType Container)) {
+    throw "UI source directory not found: $UiSource"
 }
 
 function Quote-Sh {
@@ -37,11 +41,17 @@ fi
 sudo htpasswd -bc /etc/nginx/msc_ide.htpasswd "$IDE_USER" "$IDE_PASSWORD" >/dev/null
 
 sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+sudo mkdir -p /var/www/msc-ui
+sudo find /var/www/msc-ui -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+sudo cp -a /tmp/msc-ui-upload/. /var/www/msc-ui/
+sudo find /var/www/msc-ui -type f -exec chmod 0644 {} \;
+sudo find /var/www/msc-ui -type d -exec chmod 0755 {} \;
 sudo tee /etc/nginx/sites-available/msc-ui >/dev/null <<'NGINX'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
+    root /var/www/msc-ui;
     absolute_redirect off;
 
     client_max_body_size 4m;
@@ -55,10 +65,48 @@ server {
         return 302 /explorer.html;
     }
 
+    # Keep the wallet public and stable even though the Go file server redirects
+    # index.html to ./ for direct localhost use.
+    location = /msc_wallet.html {
+        try_files /index.html =404;
+    }
+
+    location = /wallet.html {
+        try_files /index.html =404;
+    }
+
+    location = /index.html {
+        try_files /index.html =404;
+    }
+
+    location ~ ^/(explorer\.html|explorer\.js|explorer\.css|msc_wallet\.js|msc_wallet\.css|app\.js|styles\.css)$ {
+        try_files $uri =404;
+    }
+
+    location ^~ /vendor/ {
+        try_files $uri =404;
+    }
+
     location ~ ^/(dtl_ide\.html|dtl_ide\.js|dtl_ide\.css)$ {
         auth_basic "MSC DTL IDE";
         auth_basic_user_file /etc/nginx/msc_ide.htpasswd;
+        try_files $uri =404;
+    }
+
+    location ~ ^/(rpc|jsonrpc|v1/rpc)$ {
+        auth_basic "MSC DTL RPC";
+        auth_basic_user_file /etc/nginx/msc_ide.htpasswd;
         proxy_pass http://__RPC_TARGET__;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location ~ ^/(status|healthz|metrics|misbehavior|validators|validatorset/hash|validatorset/audit|validators/pending|tx/status|txs|explorer/blocks|explorer/block|explorer/tx|explorer/peers|balance|sendTx|createWallet|faucet|submitTx|nonce|nonce/pending|wallet|wallet/status|wallet/create|wallet/recover|auth/challenge|auth/verify|stake|unstake|coins|tokenomics|pool/transfer|governance/status|governance/proposals|upgrade/status|dtl/quote|dtl/route_quote|dtl/farm_info|dtl/season_info|dtl/leaderboard|dtl/nft721/owner|dtl/nft1155/owner|v1/) {
+        proxy_pass http://__RPC_TARGET__;
+        proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -66,12 +114,7 @@ server {
     }
 
     location / {
-        proxy_pass http://__RPC_TARGET__;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        return 404;
     }
 }
 NGINX
@@ -98,7 +141,18 @@ $target = "$GatewayUser@$GatewayHost"
 $envPrefix = "IDE_USER=$(Quote-Sh $IdeUser) IDE_PASSWORD=$(Quote-Sh $IdePassword) RPC_TARGET=$(Quote-Sh $RpcTarget) PUBLIC_HOST=$(Quote-Sh $GatewayHost)"
 
 Write-Host "Deploying MSC public UI gateway on $target..."
-$remote | ssh -i $KeyPath -o StrictHostKeyChecking=no $target "$envPrefix bash -s"
+Write-Host "Uploading static UI from $UiSource..."
+$uiArchive = Join-Path ([System.IO.Path]::GetTempPath()) ("msc-ui-upload-{0}.tar" -f ([System.Guid]::NewGuid().ToString("N")))
+try {
+    tar -cf $uiArchive -C $UiSource .
+    scp -i $KeyPath -o StrictHostKeyChecking=no $uiArchive "${target}:/tmp/msc-ui-upload.tar"
+    ssh -i $KeyPath -o StrictHostKeyChecking=no $target "rm -rf /tmp/msc-ui-upload && mkdir -p /tmp/msc-ui-upload && tar -xf /tmp/msc-ui-upload.tar -C /tmp/msc-ui-upload"
+    $remote | ssh -i $KeyPath -o StrictHostKeyChecking=no $target "$envPrefix bash -s"
+} finally {
+    if (Test-Path -LiteralPath $uiArchive) {
+        Remove-Item -LiteralPath $uiArchive -Force
+    }
+}
 
 Write-Host ""
 Write-Host "Gateway local-on-EC2 checks passed. Public URLs:"

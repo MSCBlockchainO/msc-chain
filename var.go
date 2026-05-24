@@ -1473,7 +1473,7 @@ type Mempool struct {
 	nextNonceBySender    map[string]int
 }
 
-var GenesisHashExpected = "2529673d9a1bc5343e62e20d53cc463f07f9be61815d00ee7e2105f0a85a00ab"
+var GenesisHashExpected = "758c62b26cb50ce80450684ae86bdf5681e37776e1c73309169e27dd3d14e71b"
 
 var GenesisHash = GenesisHashExpected
 
