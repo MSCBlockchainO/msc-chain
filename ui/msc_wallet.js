@@ -819,7 +819,25 @@ const concatBytes = (parts) => {
   return out;
 };
 
+const hasSubtleCrypto = () =>
+  typeof crypto !== "undefined" && crypto && crypto.subtle;
+
+const requireCryptoFallback = () => {
+  if (
+    !window.MSC_CRYPTO_FALLBACK ||
+    typeof window.MSC_CRYPTO_FALLBACK.sha256 !== "function" ||
+    typeof window.MSC_CRYPTO_FALLBACK.hmacSha512 !== "function" ||
+    typeof window.MSC_CRYPTO_FALLBACK.pbkdf2HmacSha512 !== "function"
+  ) {
+    throw new Error("Browser crypto unavailable. Open over HTTPS or localhost.");
+  }
+  return window.MSC_CRYPTO_FALLBACK;
+};
+
 const sha256 = async (bytes) => {
+  if (!hasSubtleCrypto()) {
+    return requireCryptoFallback().sha256(bytes);
+  }
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   return new Uint8Array(hash);
 };
@@ -934,6 +952,9 @@ const ser32BE = (value) => {
 };
 
 const hmacSha512 = async (keyBytes, dataBytes) => {
+  if (!hasSubtleCrypto()) {
+    return requireCryptoFallback().hmacSha512(keyBytes, dataBytes);
+  }
   const key = await crypto.subtle.importKey(
     "raw",
     keyBytes,
@@ -1257,7 +1278,15 @@ const addressFromPublicKey = async (pubKey, chainId) => {
   return `MSC${bytesToHex(addressBytes)}`;
 };
 
-const deriveKey = async (password, salt, iterations = 150000) => {
+const LEGACY_AES_GCM_ITERATIONS = 150000;
+// HTTP public-IP pages do not get SubtleCrypto, so keep this fallback responsive.
+// Production wallet hosting should use HTTPS, which uses LEGACY_AES_GCM_ITERATIONS.
+const SECRETBOX_FALLBACK_ITERATIONS = 2048;
+
+const deriveAesGcmKey = async (password, salt, iterations = LEGACY_AES_GCM_ITERATIONS) => {
+  if (!hasSubtleCrypto()) {
+    throw new Error("WebCrypto unavailable for AES-GCM wallet");
+  }
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
     enc.encode(password),
@@ -1279,24 +1308,90 @@ const deriveKey = async (password, salt, iterations = 150000) => {
   );
 };
 
+const deriveSecretboxKey = async (
+  password,
+  salt,
+  iterations = SECRETBOX_FALLBACK_ITERATIONS,
+) => {
+  if (hasSubtleCrypto()) {
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(password),
+      "PBKDF2",
+      false,
+      ["deriveBits"],
+    );
+    const bits = await crypto.subtle.deriveBits(
+      {
+        name: "PBKDF2",
+        salt,
+        iterations,
+        hash: "SHA-512",
+      },
+      keyMaterial,
+      256,
+    );
+    return new Uint8Array(bits);
+  }
+  return requireCryptoFallback().pbkdf2HmacSha512(
+    enc.encode(password),
+    salt,
+    iterations,
+    nacl.secretbox.keyLength,
+  );
+};
+
 const encryptSecretKey = async (secretKey, password) => {
   const salt = crypto.getRandomValues(new Uint8Array(16));
+  if (!hasSubtleCrypto()) {
+    const nonce = crypto.getRandomValues(new Uint8Array(nacl.secretbox.nonceLength));
+    const key = await deriveSecretboxKey(password, salt);
+    const cipher = nacl.secretbox(secretKey, nonce, key);
+    return {
+      cipher: "nacl-secretbox-xsalsa20poly1305",
+      kdf: "pbkdf2-hmac-sha512",
+      ciphertext: bytesToHex(cipher),
+      nonce: bytesToHex(nonce),
+      salt: bytesToHex(salt),
+      iterations: SECRETBOX_FALLBACK_ITERATIONS,
+    };
+  }
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(password, salt);
+  const key = await deriveAesGcmKey(password, salt);
   const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, secretKey);
   return {
+    cipher: "aes-256-gcm",
+    kdf: "pbkdf2-sha256",
     ciphertext: bytesToHex(new Uint8Array(cipher)),
     iv: bytesToHex(iv),
     salt: bytesToHex(salt),
-    iterations: 150000,
+    iterations: LEGACY_AES_GCM_ITERATIONS,
   };
 };
 
 const decryptSecretKey = async (cryptoData, password) => {
   const salt = hexToBytes(cryptoData.salt);
+  if (cryptoData.cipher === "nacl-secretbox-xsalsa20poly1305") {
+    const nonce = hexToBytes(cryptoData.nonce);
+    const ciphertext = hexToBytes(cryptoData.ciphertext);
+    const key = await deriveSecretboxKey(
+      password,
+      salt,
+      cryptoData.iterations || SECRETBOX_FALLBACK_ITERATIONS,
+    );
+    const plain = nacl.secretbox.open(ciphertext, nonce, key);
+    if (!plain) {
+      throw new Error("invalid password");
+    }
+    return plain;
+  }
   const iv = hexToBytes(cryptoData.iv);
   const ciphertext = hexToBytes(cryptoData.ciphertext);
-  const key = await deriveKey(password, salt, cryptoData.iterations || 150000);
+  const key = await deriveAesGcmKey(
+    password,
+    salt,
+    cryptoData.iterations || LEGACY_AES_GCM_ITERATIONS,
+  );
   const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
   return new Uint8Array(plain);
 };
@@ -4330,10 +4425,21 @@ const createWallet = async (event) => {
     return;
   }
 
-  const mnemonic = await bip39.generateMnemonic(256);
-  const { keyPair, hd } = await deriveHDKeyPairFromMnemonic(mnemonic, password, hdSelection);
-  const address = await addressFromPublicKey(keyPair.publicKey, state.chainId);
-  const cryptoData = await encryptSecretKey(keyPair.secretKey, password);
+  let mnemonic;
+  let keyPair;
+  let hd;
+  let address;
+  let cryptoData;
+  try {
+    mnemonic = await bip39.generateMnemonic(256);
+    ({ keyPair, hd } = await deriveHDKeyPairFromMnemonic(mnemonic, password, hdSelection));
+    address = await addressFromPublicKey(keyPair.publicKey, state.chainId);
+    cryptoData = await encryptSecretKey(keyPair.secretKey, password);
+  } catch (err) {
+    setStatus(el("walletState"), err.message || "Wallet create failed", "error");
+    logActivity(`Wallet create failed: ${err.message || err}`);
+    return;
+  }
 
   const wallet = {
     address,
@@ -6087,6 +6193,7 @@ const init = () => {
   });
 
   connectToRPC({ persist: false });
+  window.MSC_WALLET_APP_READY = true;
 };
 
 init();

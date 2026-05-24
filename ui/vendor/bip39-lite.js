@@ -22,7 +22,16 @@
     return new Uint8Array(bytes);
   };
 
+  const hasSubtleCrypto = () =>
+    typeof crypto !== "undefined" && crypto && crypto.subtle;
+
   const sha256 = async (bytes) => {
+    if (!hasSubtleCrypto()) {
+      if (!global.MSC_CRYPTO_FALLBACK || typeof global.MSC_CRYPTO_FALLBACK.sha256 !== "function") {
+        throw new Error("secure crypto unavailable");
+      }
+      return global.MSC_CRYPTO_FALLBACK.sha256(bytes);
+    }
     const hash = await crypto.subtle.digest("SHA-256", bytes);
     return new Uint8Array(hash);
   };
@@ -107,6 +116,20 @@
   const mnemonicToSeed = async (mnemonic, passphrase = "") => {
     const phrase = normalize(mnemonic);
     const salt = normalize("mnemonic" + passphrase);
+    if (!hasSubtleCrypto()) {
+      if (
+        !global.MSC_CRYPTO_FALLBACK ||
+        typeof global.MSC_CRYPTO_FALLBACK.pbkdf2HmacSha512 !== "function"
+      ) {
+        throw new Error("secure crypto unavailable");
+      }
+      return global.MSC_CRYPTO_FALLBACK.pbkdf2HmacSha512(
+        encoder.encode(phrase),
+        encoder.encode(salt),
+        2048,
+        64,
+      );
+    }
     const keyMaterial = await crypto.subtle.importKey(
       "raw",
       encoder.encode(phrase),
