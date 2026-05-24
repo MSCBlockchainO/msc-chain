@@ -23198,6 +23198,8 @@ func StartNode(
 
 		peerToValidator: make(map[string]string),
 
+		validatorToPeer: make(map[string]string),
+
 		peerRole: make(map[string]string),
 
 		peerAckHeight: make(map[string]uint64),
@@ -23521,6 +23523,18 @@ func StartNode(
 	}
 
 	node.bootstrapGenesisValidators(genesisDisk)
+	if node.Role == "validator" && !ValidatorAllowIdentityRotationOnExistingChain && isValidatorKeyUsable(vKey) {
+		selfID := normalizeValidatorID(node.ID)
+		if genesisPK, ok := GenesisValidatorPubKeys[selfID]; ok && len(genesisPK) == ed25519.PublicKeySize && !bytes.Equal(genesisPK, vKey.PublicKey) {
+			expectedFP := validatorKeyFingerprint(genesisPK)
+			log.Printf("[FATAL] duplicate validator node id rejected id=%s expected_genesis_fingerprint=%s local_fingerprint=%s reason=genesis_validator_key_mismatch",
+				selfID,
+				expectedFP,
+				keyFP,
+			)
+			return nil
+		}
+	}
 	node.ensureRegistrySnapshot(uint64(node.Blockchain.Height()), "startup")
 	node.replayMisbehaviorSlashingThresholds("startup")
 	if chainHeight := uint64(node.Blockchain.Height()); chainHeight > 0 {

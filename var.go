@@ -1730,6 +1730,7 @@ type Node struct {
 	peerHashMatch           map[string]bool   // peerID -> hash match
 	peerHelloOK             map[string]bool   // peerID -> handshake complete
 	peerToValidator         map[string]string // peerID -> validator ID
+	validatorToPeer         map[string]string // validator ID -> peerID
 	peerRole                map[string]string // peerID -> role (validator|full|light)
 	peerAckHeight           map[string]uint64 // peerID -> last acknowledged height
 	peerDriftState          map[string]PeerDriftState

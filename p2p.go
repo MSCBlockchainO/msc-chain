@@ -5842,6 +5842,11 @@ func (n *Node) clearPeerState(peerID string) {
 	delete(n.peerSuspectAt, peerID)
 	delete(n.peerHashMatch, peerID)
 	delete(n.peerToValidator, peerID)
+	for validatorID, mappedPeerID := range n.validatorToPeer {
+		if mappedPeerID == peerID {
+			delete(n.validatorToPeer, validatorID)
+		}
+	}
 	delete(n.peerRole, peerID)
 	delete(n.peerSetHash, peerID)
 	delete(n.peerTipHash, peerID)
@@ -6104,6 +6109,69 @@ func peerHelloAdvertisedPeerID(hello PeerHello) string {
 	return strings.TrimSpace(pid)
 }
 
+func validatorIdentityPeerID(peerAddr, advertisedAddr string) string {
+	if pid, ok := peerIdentityFromAddrOrID(peerAddr); ok {
+		return strings.TrimSpace(pid)
+	}
+	_, pid, ok := splitPeerAddress(strings.TrimSpace(advertisedAddr))
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(pid)
+}
+
+func (n *Node) reserveValidatorPeerIdentity(peerID, validatorID, advertisedAddr string) bool {
+	if n == nil {
+		return true
+	}
+	validatorID = normalizeValidatorID(validatorID)
+	peerID = strings.TrimSpace(peerID)
+	if validatorID == "" || peerID == "" {
+		return true
+	}
+	selfPeerID := ""
+	if n.Host != nil {
+		selfPeerID = n.Host.ID().String()
+	}
+	if selfID := normalizeValidatorID(n.ID); selfID != "" && validatorID == selfID && peerID != selfPeerID {
+		log.Printf("[DUPLICATE-NODE-ID] validator=%s existing_peer=%s new_peer=%s action=reject reason=local_validator_id_claim",
+			validatorID, selfPeerID, peerID)
+		n.disconnectPeerID(peerID, "duplicate_local_validator_id")
+		return false
+	}
+
+	if advertisedPeerID := strings.TrimSpace(peerHelloAdvertisedPeerID(PeerHello{P2PAddr: advertisedAddr})); advertisedPeerID != "" && advertisedPeerID != peerID {
+		log.Printf("[DUPLICATE-NODE-ID] validator=%s advertised_peer=%s remote_peer=%s action=reject reason=advertised_peer_mismatch",
+			validatorID, advertisedPeerID, peerID)
+		n.disconnectPeerID(peerID, "duplicate_validator_peer_mismatch")
+		return false
+	}
+
+	ValidatorAddrBook.mu.Lock()
+	oldAddr := strings.TrimSpace(ValidatorAddrBook.m[validatorID])
+	ValidatorAddrBook.mu.Unlock()
+	if oldPeerID := strings.TrimSpace(peerHelloAdvertisedPeerID(PeerHello{P2PAddr: oldAddr})); oldPeerID != "" && oldPeerID != peerID {
+		log.Printf("[DUPLICATE-NODE-ID] validator=%s existing_peer=%s new_peer=%s action=reject reason=address_book_conflict",
+			validatorID, oldPeerID, peerID)
+		n.disconnectPeerID(peerID, "duplicate_validator_id")
+		return false
+	}
+
+	n.ensurePeerIsolationMaps()
+	n.peerStateMu.Lock()
+	existingPeerID := strings.TrimSpace(n.validatorToPeer[validatorID])
+	if existingPeerID != "" && existingPeerID != peerID {
+		n.peerStateMu.Unlock()
+		log.Printf("[DUPLICATE-NODE-ID] validator=%s existing_peer=%s new_peer=%s action=reject reason=live_peer_conflict",
+			validatorID, existingPeerID, peerID)
+		n.disconnectPeerID(peerID, "duplicate_validator_id")
+		return false
+	}
+	n.validatorToPeer[validatorID] = peerID
+	n.peerStateMu.Unlock()
+	return true
+}
+
 func peerHelloNonce() string {
 	var b [16]byte
 	if _, err := crand.Read(b[:]); err != nil {
@@ -6256,6 +6324,9 @@ func (n *Node) validatePeerHello(peerID string, hello PeerHello) bool {
 			n.disconnectPeerID(peerID, "peer_hello_replay")
 			return false
 		}
+	}
+	if !n.reserveValidatorPeerIdentity(validatorIdentityPeerID(peerID, hello.P2PAddr), hello.ValidatorID, hello.P2PAddr) {
+		return false
 	}
 	n.applyPeerHelloPubKey(hello)
 	n.peerStateMu.Lock()
@@ -8351,6 +8422,9 @@ func (n *Node) HandlePeerHello(peerAddr, validatorID, advertisedAddr string) {
 				advertisedAddr = fixedAddr
 			}
 		}
+	}
+	if !n.reserveValidatorPeerIdentity(validatorIdentityPeerID(peerAddr, advertisedAddr), validatorID, advertisedAddr) {
+		return
 	}
 	updated := false
 	ValidatorAddrBook.mu.Lock()

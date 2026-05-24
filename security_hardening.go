@@ -54,6 +54,9 @@ func (n *Node) ensurePeerIsolationMaps() {
 	if n.peerToValidator == nil {
 		n.peerToValidator = make(map[string]string)
 	}
+	if n.validatorToPeer == nil {
+		n.validatorToPeer = make(map[string]string)
+	}
 	if n.peerRole == nil {
 		n.peerRole = make(map[string]string)
 	}

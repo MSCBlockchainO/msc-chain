@@ -107,6 +107,79 @@ func TestValidatePeerHelloAcceptsMatchingAdvertisedPeerID(t *testing.T) {
 	}
 }
 
+func TestReserveValidatorPeerIdentityRejectsLocalNodeIDClone(t *testing.T) {
+	remotePeerID := "12D3KooWSjgBtznLkWFcuKkib3o4GAxxREFUPrRtcYqwTAUruXJo"
+	node := &Node{ID: "A"}
+	node.ensurePeerIsolationMaps()
+
+	if node.reserveValidatorPeerIdentity(remotePeerID, "A", "/ip4/127.0.0.1/tcp/7002/p2p/"+remotePeerID) {
+		t.Fatal("remote peer must not be allowed to claim the local validator/node id")
+	}
+	if !node.isPeerQuarantined(remotePeerID) {
+		t.Fatal("duplicate node id peer should be quarantined")
+	}
+	if got := node.validatorToPeer["A"]; got != "" {
+		t.Fatalf("duplicate node id must not reserve validator mapping, got=%s", got)
+	}
+}
+
+func TestReserveValidatorPeerIdentityRejectsAddressBookConflict(t *testing.T) {
+	oldPeerID := "12D3KooWSjgBtznLkWFcuKkib3o4GAxxREFUPrRtcYqwTAUruXJo"
+	newPeerID := "12D3KooWRgzavLAH2MjsQc6H7ku4oyKexEBWNPpQggV1wyj8uYLW"
+	oldAddrBook := map[string]string{}
+	ValidatorAddrBook.mu.Lock()
+	for id, addr := range ValidatorAddrBook.m {
+		oldAddrBook[id] = addr
+	}
+	ValidatorAddrBook.m = map[string]string{
+		"B": "/ip4/127.0.0.1/tcp/7002/p2p/" + oldPeerID,
+	}
+	ValidatorAddrBook.mu.Unlock()
+	defer func() {
+		ValidatorAddrBook.mu.Lock()
+		ValidatorAddrBook.m = oldAddrBook
+		ValidatorAddrBook.mu.Unlock()
+	}()
+
+	node := &Node{ID: "A"}
+	node.ensurePeerIsolationMaps()
+	if node.reserveValidatorPeerIdentity(newPeerID, "B", "/ip4/127.0.0.1/tcp/7003/p2p/"+newPeerID) {
+		t.Fatal("same validator id with a different peer id must be rejected")
+	}
+	if !node.isPeerQuarantined(newPeerID) {
+		t.Fatal("conflicting validator id peer should be quarantined")
+	}
+}
+
+func TestReserveValidatorPeerIdentityAllowsSameValidatorSamePeer(t *testing.T) {
+	peerID := "12D3KooWSjgBtznLkWFcuKkib3o4GAxxREFUPrRtcYqwTAUruXJo"
+	oldAddrBook := map[string]string{}
+	ValidatorAddrBook.mu.Lock()
+	for id, addr := range ValidatorAddrBook.m {
+		oldAddrBook[id] = addr
+	}
+	ValidatorAddrBook.m = map[string]string{}
+	ValidatorAddrBook.mu.Unlock()
+	defer func() {
+		ValidatorAddrBook.mu.Lock()
+		ValidatorAddrBook.m = oldAddrBook
+		ValidatorAddrBook.mu.Unlock()
+	}()
+
+	node := &Node{ID: "A"}
+	node.ensurePeerIsolationMaps()
+
+	if !node.reserveValidatorPeerIdentity(peerID, "B", "/ip4/127.0.0.1/tcp/7002/p2p/"+peerID) {
+		t.Fatal("first validator peer mapping should be accepted")
+	}
+	if !node.reserveValidatorPeerIdentity(peerID, "B", "/ip4/127.0.0.1/tcp/7002/p2p/"+peerID) {
+		t.Fatal("same validator id from same peer should remain accepted")
+	}
+	if got := node.validatorToPeer["B"]; got != peerID {
+		t.Fatalf("validator mapping mismatch: got=%s want=%s", got, peerID)
+	}
+}
+
 func TestValidatorSetHashCanonical(t *testing.T) {
 	a := []string{"C", "A", "B", "A", " "}
 	b := []string{"B", "C", "A"}
