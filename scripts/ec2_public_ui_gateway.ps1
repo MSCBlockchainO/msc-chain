@@ -43,7 +43,7 @@ sudo htpasswd -bc /etc/nginx/msc_ide.htpasswd "$IDE_USER" "$IDE_PASSWORD" >/dev/
 sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
 sudo mkdir -p /var/www/msc-ui
 sudo find /var/www/msc-ui -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-sudo cp -a /tmp/msc-ui-upload/. /var/www/msc-ui/
+sudo cp -a "$HOME/msc-ui-upload/." /var/www/msc-ui/
 sudo find /var/www/msc-ui -type f -exec chmod 0644 {} \;
 sudo find /var/www/msc-ui -type d -exec chmod 0755 {} \;
 sudo tee /etc/nginx/sites-available/msc-ui >/dev/null <<'NGINX'
@@ -145,8 +145,9 @@ Write-Host "Uploading static UI from $UiSource..."
 $uiArchive = Join-Path ([System.IO.Path]::GetTempPath()) ("msc-ui-upload-{0}.tar" -f ([System.Guid]::NewGuid().ToString("N")))
 try {
     tar -cf $uiArchive -C $UiSource .
-    scp -i $KeyPath -o StrictHostKeyChecking=no $uiArchive "${target}:/tmp/msc-ui-upload.tar"
-    ssh -i $KeyPath -o StrictHostKeyChecking=no $target "rm -rf /tmp/msc-ui-upload && mkdir -p /tmp/msc-ui-upload && tar -xf /tmp/msc-ui-upload.tar -C /tmp/msc-ui-upload"
+    ssh -i $KeyPath -o StrictHostKeyChecking=no $target "rm -rf ~/msc-ui-upload ~/msc-ui-upload.tar && mkdir -p ~/msc-ui-upload"
+    scp -i $KeyPath -o StrictHostKeyChecking=no $uiArchive "${target}:msc-ui-upload.tar"
+    ssh -i $KeyPath -o StrictHostKeyChecking=no $target "tar -xf ~/msc-ui-upload.tar -C ~/msc-ui-upload"
     $remote | ssh -i $KeyPath -o StrictHostKeyChecking=no $target "$envPrefix bash -s"
 } finally {
     if (Test-Path -LiteralPath $uiArchive) {
