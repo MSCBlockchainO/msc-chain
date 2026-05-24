@@ -27418,6 +27418,18 @@ func normalizeListenMultiaddr(addr string) (string, error) {
 
 }
 
+func applyP2PCLIListenAddr(addr string) (string, int, error) {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return "", 0, nil
+	}
+	normalized, err := normalizeListenMultiaddr(addr)
+	if err != nil {
+		return "", 0, err
+	}
+	return normalized, portFromMultiaddr(normalized), nil
+}
+
 func normalizeExternalMultiaddr(addr string) (string, bool, error) {
 
 	addr = strings.TrimSpace(addr)
@@ -31858,10 +31870,15 @@ func main() {
 
 	if *p2pAddr != "" {
 
-		if port := ExtractPort(*p2pAddr); port > 0 {
-
+		addr, port, err := applyP2PCLIListenAddr(*p2pAddr)
+		if err != nil {
+			log.Fatalf("[FATAL] invalid --p2p listen address %q: %v", *p2pAddr, err)
+		}
+		if addr != "" {
+			ConfigP2PListenAddr = addr
+		}
+		if port > 0 {
 			*listenPort = port
-
 		}
 
 	}
