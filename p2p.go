@@ -819,7 +819,10 @@ type execVoteRebroadcastState struct {
 	LastForcedAt   time.Time
 }
 
-const localExecVoteStaleRoundReleaseGap uint32 = 8
+// Local execution vote markers must survive short retry churn, but once the
+// proposal switch gap has passed an evidence-free marker is stale enough to
+// release so validators can join the higher-round failover proposal.
+const localExecVoteStaleRoundReleaseGap uint32 = execProposalSwitchRoundGap + 1
 
 func legacyProposalVoteKey(height uint64) string {
 	return fmt.Sprintf("legacy|%d", height)
