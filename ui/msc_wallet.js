@@ -4265,8 +4265,10 @@ const updateWalletUI = () => {
   if (state.secretKey) {
     setStatus(el("walletState"), "Unlocked", "success");
   } else if (wallet) {
+    setExportedPrivateKey("");
     setStatus(el("walletState"), "Locked", "info");
   } else {
+    setExportedPrivateKey("");
     setStatus(el("walletState"), "No wallet", "error");
   }
   if (authStatus) {
@@ -4584,6 +4586,7 @@ const lockWallet = () => {
   }
   state.secretKey = null;
   state.pendingNonces = {};
+  setExportedPrivateKey("");
   updateWalletUI();
   setStatus(el("walletState"), "Locked", "info");
   logActivity("Wallet locked");
@@ -4591,13 +4594,69 @@ const lockWallet = () => {
   loadTxHistory({ force: true });
 };
 
+const setExportedPrivateKey = (value) => {
+  const box = el("exportKeyBox");
+  const copyBtn = el("copyPrivateKey");
+  const privateKey = String(value || "").trim();
+  if (box) {
+    if ("value" in box) {
+      box.value = privateKey || "Private key will appear here";
+    } else {
+      box.textContent = privateKey || "Private key will appear here";
+    }
+    box.dataset.empty = privateKey ? "0" : "1";
+  }
+  if (copyBtn) {
+    copyBtn.disabled = !privateKey;
+  }
+};
+
+const getExportedPrivateKey = () => {
+  const box = el("exportKeyBox");
+  if (!box) return "";
+  const raw = "value" in box ? box.value : box.textContent;
+  const value = String(raw || "").trim();
+  return /^[0-9a-fA-F]{128}$/.test(value) ? value : "";
+};
+
 const exportPrivateKey = () => {
   if (!state.secretKey) {
     setStatus(el("walletState"), "Unlock wallet first", "error");
     return;
   }
-  el("exportKeyBox").textContent = bytesToHex(state.secretKey);
+  const privateKey = bytesToHex(state.secretKey);
+  setExportedPrivateKey(privateKey);
+  const box = el("exportKeyBox");
+  if (box && typeof box.focus === "function") {
+    box.focus();
+    if (typeof box.select === "function") {
+      box.select();
+    }
+  }
+  setStatus(el("walletState"), "Private key visible", "success");
   logActivity("Private key exported");
+};
+
+const copyPrivateKey = async () => {
+  const privateKey = getExportedPrivateKey();
+  if (!privateKey) {
+    setStatus(el("walletState"), "Export private key first", "error");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(privateKey);
+    setStatus(el("walletState"), "Private key copied", "success");
+    logActivity("Private key copied");
+  } catch (err) {
+    const box = el("exportKeyBox");
+    if (box && typeof box.focus === "function") {
+      box.focus();
+      if (typeof box.select === "function") {
+        box.select();
+      }
+    }
+    setStatus(el("walletState"), "Select and copy manually", "info");
+  }
 };
 
 const copyAddress = async () => {
@@ -5932,6 +5991,10 @@ const init = () => {
   el("unlockForm").addEventListener("submit", unlockWallet);
   el("lockWallet").addEventListener("click", lockWallet);
   el("exportKey").addEventListener("click", exportPrivateKey);
+  const copyPrivateKeyBtn = el("copyPrivateKey");
+  if (copyPrivateKeyBtn) {
+    copyPrivateKeyBtn.addEventListener("click", copyPrivateKey);
+  }
   el("copyAddress").addEventListener("click", copyAddress);
   const copyPublicKeyBtn = el("copyPublicKey");
   if (copyPublicKeyBtn) {

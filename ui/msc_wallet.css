@@ -257,6 +257,37 @@ button:hover {
   color: var(--muted);
 }
 
+.secret-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.compact-head {
+  align-items: flex-end;
+}
+
+.secret-key-output {
+  width: 100%;
+  min-height: 118px;
+  resize: vertical;
+  line-height: 1.55;
+  color: var(--ink);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.secret-key-output::selection {
+  background: rgba(42, 209, 163, 0.35);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
 .tabs {
   display: flex;
   gap: 6px;

@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="msc_wallet.css?v=20260304a" />
+  <link rel="stylesheet" href="msc_wallet.css?v=20260525a" />
 </head>
 <body>
   <div class="noise"></div>
@@ -130,7 +130,16 @@
       </div>
       <div class="helper">Keys are encrypted locally with AES‑GCM (never sent to server).</div>
 
-      <div id="exportKeyBox" class="secret">Private key will appear here</div>
+      <div class="secret-panel" id="exportKeyPanel">
+        <div class="panel-head compact-head">
+          <div>
+            <div class="label">Private Key</div>
+            <div class="helper">Visible only after export. Keep it offline.</div>
+          </div>
+          <button id="copyPrivateKey" class="ghost small" type="button" disabled>Copy Private Key</button>
+        </div>
+        <textarea id="exportKeyBox" class="secret secret-key-output" readonly spellcheck="false" rows="4">Private key will appear here</textarea>
+      </div>
 
       <div class="tabs">
         <button class="tab active" data-tab="unlock">Unlock</button>
@@ -888,6 +897,6 @@
   <script src="vendor/bip39-lite.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="vendor/qrcode.js"></script>
-  <script src="msc_wallet.js?v=20260524b"></script>
+  <script src="msc_wallet.js?v=20260525a"></script>
 </body>
 </html>
