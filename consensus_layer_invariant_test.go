@@ -158,6 +158,7 @@ func TestConsensusLayerIrreversibleRootRejectsFinalizedReorg(t *testing.T) {
 	if err := node.persistFinalityCheckpoint(block); err != nil {
 		t.Fatalf("persist finality checkpoint: %v", err)
 	}
+	node.Blockchain.ReplaceChain([]Block{block})
 
 	reorg := block
 	reorg.StateRoot = "reorg-state-root"

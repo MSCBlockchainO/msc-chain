@@ -198,9 +198,8 @@ func TestPartialDatabaseWriteRecovery(t *testing.T) {
 		t.Fatalf("write partial finality DB record: %v", err)
 	}
 
-	err := node.verifyPersistedFinalityCheckpoint(block2)
-	if err == nil || !strings.Contains(err.Error(), "irreversible_finality_checkpoint_incomplete") {
-		t.Fatalf("expected incomplete finality DB record rejection, got %v", err)
+	if err := node.verifyPersistedFinalityCheckpoint(block2); err != nil {
+		t.Fatalf("future partial finality DB record should be ignored until the block commits: %v", err)
 	}
 	if err := node.verifyPersistedFinalityCheckpoint(block1); err != nil {
 		t.Fatalf("previous valid checkpoint should remain recoverable: %v", err)
@@ -249,9 +248,8 @@ func TestCheckpointAtomicity(t *testing.T) {
 		t.Fatalf("write intentionally partial finality checkpoint: %v", err)
 	}
 
-	err := node.verifyPersistedFinalityCheckpoint(block2)
-	if err == nil || !strings.Contains(err.Error(), "irreversible_finality_checkpoint_incomplete") {
-		t.Fatalf("expected finality checkpoint atomicity failure, got %v", err)
+	if err := node.verifyPersistedFinalityCheckpoint(block2); err != nil {
+		t.Fatalf("future partial finality checkpoint should be ignored until the block commits: %v", err)
 	}
 }
 

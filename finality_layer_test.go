@@ -122,6 +122,7 @@ func TestFinalityCheckpointPersistenceRejectsConflictingAnchor(t *testing.T) {
 	if err := node.persistFinalityCheckpoint(block); err != nil {
 		t.Fatalf("persist finality checkpoint: %v", err)
 	}
+	node.Blockchain.ReplaceChain([]Block{block})
 
 	conflict := block
 	conflict.StateRoot = "different-finalized-state-root"
@@ -144,6 +145,7 @@ func TestVerifyFinalityCommitmentsRejectPersistedIrreversibleRootMismatch(t *tes
 	if err := node.persistFinalityCheckpoint(block); err != nil {
 		t.Fatalf("persist finality checkpoint: %v", err)
 	}
+	node.Blockchain.ReplaceChain([]Block{block})
 
 	conflict := block
 	conflict.ValidatorSetRoot = "different-validator-set-root"

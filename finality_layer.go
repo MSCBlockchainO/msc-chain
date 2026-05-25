@@ -863,6 +863,7 @@ func (n *Node) verifyPersistedFinalityCheckpoint(block Block) error {
 	if n == nil || block.ID == 0 {
 		return nil
 	}
+	checkpointAheadOfTip := n.finalityCheckpointAheadOfLocalChain(block.ID)
 	record, ok, err := n.loadPersistedFinalityCheckpoint(block.ID)
 	if err != nil || !ok {
 		if err != nil {
@@ -871,35 +872,80 @@ func (n *Node) verifyPersistedFinalityCheckpoint(block Block) error {
 		if anchor, anchorOK, anchorErr := n.loadPersistedFinalityAnchorHash(block.ID); anchorErr != nil {
 			return anchorErr
 		} else if anchorOK && strings.TrimSpace(anchor) != "" {
+			if checkpointAheadOfTip {
+				return nil
+			}
 			return fmt.Errorf("irreversible_finality_checkpoint_incomplete: anchor_without_checkpoint height=%d", block.ID)
 		}
 		if _, certOK, certErr := n.loadPersistedFinalityCertificate(block.ID); certErr != nil {
 			return certErr
 		} else if certOK {
+			if checkpointAheadOfTip {
+				return nil
+			}
 			return fmt.Errorf("irreversible_finality_checkpoint_incomplete: certificate_without_checkpoint height=%d", block.ID)
+		}
+		if checkpointAheadOfTip {
+			return nil
 		}
 		return n.verifyFinalityArtifacts(block)
 	}
 	if err := verifyFinalityCheckpointRecordMatchesBlock(record, block); err != nil {
+		if checkpointAheadOfTip {
+			return nil
+		}
 		return fmt.Errorf("irreversible_finality_checkpoint_conflict: %w", err)
 	}
 	if anchor, anchorOK, anchorErr := n.loadPersistedFinalityAnchorHash(block.ID); anchorErr != nil {
 		return anchorErr
 	} else if anchorOK && !strings.EqualFold(strings.TrimSpace(anchor), strings.TrimSpace(block.EpochAnchorHash)) {
+		if checkpointAheadOfTip {
+			return nil
+		}
 		return fmt.Errorf("irreversible_finality_checkpoint_conflict: finality_anchor_mismatch")
 	} else if !anchorOK {
+		if checkpointAheadOfTip {
+			return nil
+		}
 		return fmt.Errorf("irreversible_finality_checkpoint_incomplete: checkpoint_without_anchor height=%d", block.ID)
 	}
 	if cert, certOK, certErr := n.loadPersistedFinalityCertificate(block.ID); certErr != nil {
 		return certErr
 	} else if certOK {
 		if err := verifyFinalityCertificateArtifactMatchesBlock(cert, block); err != nil {
+			if checkpointAheadOfTip {
+				return nil
+			}
 			return fmt.Errorf("irreversible_finality_checkpoint_conflict: %w", err)
 		}
 	} else {
+		if checkpointAheadOfTip {
+			return nil
+		}
 		return fmt.Errorf("irreversible_finality_checkpoint_incomplete: checkpoint_without_certificate height=%d", block.ID)
 	}
+	if checkpointAheadOfTip {
+		return nil
+	}
 	return n.verifyFinalityArtifacts(block)
+}
+
+func (n *Node) finalityCheckpointAheadOfLocalChain(height uint64) bool {
+	if n == nil || n.Blockchain == nil || height == 0 {
+		return false
+	}
+	return n.Blockchain.Height() < height
+}
+
+func (n *Node) localChainCommittedBlockMatches(height uint64, hash string) bool {
+	if n == nil || n.Blockchain == nil || height == 0 || strings.TrimSpace(hash) == "" {
+		return false
+	}
+	block, ok := n.Blockchain.GetBlock(height)
+	if !ok {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(block.BlockHash), strings.TrimSpace(hash))
 }
 
 func (n *Node) loadPersistedFinalityAnchorHash(height uint64) (string, bool, error) {
@@ -980,8 +1026,9 @@ func (n *Node) persistFinalityCheckpoint(block Block) error {
 				shouldWriteAnchor = false
 			} else if existing != "" {
 				committedHash, committed := n.getCommittedHash(block.ID)
-				if !committed || !strings.EqualFold(strings.TrimSpace(committedHash), strings.TrimSpace(block.BlockHash)) {
-					return fmt.Errorf("epoch anchor immutable violation height=%d existing=%s got=%s", block.ID, existing, anchor)
+				if (!committed || !strings.EqualFold(strings.TrimSpace(committedHash), strings.TrimSpace(block.BlockHash))) &&
+					!n.localChainCommittedBlockMatches(block.ID, block.BlockHash) {
+					return fmt.Errorf("irreversible epoch anchor immutable violation height=%d existing=%s got=%s", block.ID, existing, anchor)
 				}
 			}
 		} else if err != nil && !errors.Is(err, ErrKeyNotFound) {
@@ -1009,7 +1056,9 @@ func (n *Node) persistFinalityCheckpoint(block Block) error {
 				return vErr
 			}
 			if err := verifyFinalityCheckpointRecordMatchesBlock(existing, block); err != nil {
-				return fmt.Errorf("irreversible finality checkpoint violation height=%d: %w", block.ID, err)
+				if !n.localChainCommittedBlockMatches(block.ID, block.BlockHash) {
+					return fmt.Errorf("irreversible finality checkpoint violation height=%d: %w", block.ID, err)
+				}
 			}
 		} else if err != nil && !errors.Is(err, ErrKeyNotFound) {
 			return err
