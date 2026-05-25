@@ -23811,11 +23811,15 @@ func StartNode(
 
 			} else {
 
+				selfAddr := node.Host.Addrs()[0]
+				if advertised := selectAdvertisedHostAddr(node.Host.Addrs()); advertised != nil {
+					selfAddr = advertised
+				}
 				node.SelfAddr = fmt.Sprintf(
 
 					"%s/p2p/%s",
 
-					node.Host.Addrs()[0],
+					selfAddr,
 
 					node.Host.ID(),
 				)

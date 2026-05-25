@@ -10273,6 +10273,33 @@ func (n *Node) GetPublicMultiaddr() string {
 	return fmt.Sprintf("%s/p2p/%s", n.Host.Addrs()[0], n.Host.ID())
 }
 
+func selectAdvertisedHostAddr(addrs []ma.Multiaddr) ma.Multiaddr {
+	if len(addrs) == 0 {
+		return nil
+	}
+	for _, addr := range addrs {
+		if !multiaddrHasLoopbackOrUnspecifiedIP(addr) {
+			return addr
+		}
+	}
+	return addrs[0]
+}
+
+func multiaddrHasLoopbackOrUnspecifiedIP(addr ma.Multiaddr) bool {
+	if addr == nil {
+		return true
+	}
+	if raw, err := addr.ValueForProtocol(ma.P_IP4); err == nil {
+		ip := net.ParseIP(raw)
+		return ip == nil || ip.IsLoopback() || ip.IsUnspecified()
+	}
+	if raw, err := addr.ValueForProtocol(ma.P_IP6); err == nil {
+		ip := net.ParseIP(raw)
+		return ip == nil || ip.IsLoopback() || ip.IsUnspecified()
+	}
+	return false
+}
+
 // Helper function for public IP detection
 func GetPublicIP() (string, error) {
 	resp, err := http.Get("https://api.ipify.org?format=text")
