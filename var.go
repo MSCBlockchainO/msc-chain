@@ -2000,8 +2000,9 @@ type Node struct {
 	heightReports         map[uint64]map[string]time.Time // height -> validator -> last report time
 	validatorReportHeight map[string]uint64               // validator -> last reported height
 
-	snapshotOfferMu   sync.Mutex
-	snapshotOfferSent map[string]uint64 // validator -> last offered height
+	snapshotOfferMu     sync.Mutex
+	snapshotOfferSent   map[string]uint64    // validator -> last offered height
+	snapshotOfferSentAt map[string]time.Time // validator -> last offer wall time
 
 	snapshotExecutionLedgerMu       sync.Mutex
 	snapshotExecutionLedgerByHeight map[uint64]Ledger

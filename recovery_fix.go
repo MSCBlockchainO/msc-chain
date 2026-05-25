@@ -725,11 +725,36 @@ func (n *Node) maybeOfferSnapshotToValidator(validatorID string, _ uint64) {
 	if n.snapshotOfferSent == nil {
 		n.snapshotOfferSent = make(map[string]uint64)
 	}
+	if n.snapshotOfferSentAt == nil {
+		n.snapshotOfferSentAt = make(map[string]time.Time)
+	}
+	now := time.Now()
+	const snapshotOfferReannounceCooldown = 15 * time.Second
 	if last, ok := n.snapshotOfferSent[validatorID]; ok && last >= snap.Height {
+		if lastAt := n.snapshotOfferSentAt[validatorID]; !lastAt.IsZero() && now.Sub(lastAt) < snapshotOfferReannounceCooldown {
+			n.snapshotOfferMu.Unlock()
+			return
+		}
+	}
+	if len(n.snapshotOfferSentAt) > 1024 {
+		cutoff := now.Add(-5 * time.Minute)
+		for id, sentAt := range n.snapshotOfferSentAt {
+			if sentAt.Before(cutoff) {
+				delete(n.snapshotOfferSentAt, id)
+				delete(n.snapshotOfferSent, id)
+			}
+		}
+	}
+	if len(n.snapshotOfferSentAt) > 2048 {
+		n.snapshotOfferSentAt = make(map[string]time.Time)
+		n.snapshotOfferSent = make(map[string]uint64)
+	}
+	if last, ok := n.snapshotOfferSent[validatorID]; ok && last > snap.Height {
 		n.snapshotOfferMu.Unlock()
 		return
 	}
 	n.snapshotOfferSent[validatorID] = snap.Height
+	n.snapshotOfferSentAt[validatorID] = now
 	n.snapshotOfferMu.Unlock()
 
 	offer := SnapshotOffer{

@@ -23354,7 +23354,8 @@ func StartNode(
 			Reason: "not_initialized",
 		},
 
-		snapshotOfferSent: make(map[string]uint64),
+		snapshotOfferSent:   make(map[string]uint64),
+		snapshotOfferSentAt: make(map[string]time.Time),
 
 		snapshotExecutionLedgerByHeight: make(map[uint64]Ledger),
 
