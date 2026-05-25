@@ -3110,6 +3110,13 @@ func activeSetModeAdaptiveCommittee() bool {
 	return normalizeActiveSetMode(ValidatorActiveSetMode) == "adaptive_committee"
 }
 
+func displayActiveSetMode() string {
+	if GenesisValidatorSetFrozen {
+		return "genesis_frozen"
+	}
+	return normalizeActiveSetMode(ValidatorActiveSetMode)
+}
+
 type validatorOnboardingEval struct {
 	ID                string
 	JoinHeight        uint64
@@ -34585,6 +34592,20 @@ func (s *Server) handleStatus(
 	}
 	statusFastPath := !fullStatus || runtime.Syncing || !runtime.SyncComplete || !runtime.Ready
 	if statusFastPath {
+		committeeSizeLite := runtime.RequiredQuorum
+		committeeTargetLite := runtime.RequiredQuorum
+		if GenesisValidatorSetFrozen && GenesisFrozenValidatorSetSize > 0 {
+			committeeSizeLite = GenesisFrozenValidatorSetSize
+			committeeTargetLite = GenesisFrozenValidatorSetSize
+		}
+		selfInFrozenSetNextLite := runtime.SelfInFrozenSetNext
+		onboardingStateLite := runtime.OnboardingState
+		activationBlockerLite := runtime.ActivationBlockerReason
+		if GenesisValidatorSetFrozen && containsNormalizedValidatorID(s.Node.GenesisValidators, s.Node.ID) {
+			selfInFrozenSetNextLite = true
+			onboardingStateLite = string(OnboardingStateActive)
+			activationBlockerLite = "active"
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"node_id":                                    s.Node.ID,
@@ -34684,13 +34705,13 @@ func (s *Server) handleStatus(
 			"tx_lane_status":                             runtime.TxLaneStatus,
 			"tx_lane_reason":                             runtime.TxLaneReason,
 			"mempool_depth":                              runtime.MempoolDepth,
-			"self_in_frozen_set_next":                    runtime.SelfInFrozenSetNext,
+			"self_in_frozen_set_next":                    selfInFrozenSetNextLite,
 			"self_active_reason_next":                    runtime.SelfActiveReasonNext,
 			"self_pending_add_height":                    runtime.SelfPendingAddHeight,
-			"onboarding_state":                           runtime.OnboardingState,
+			"onboarding_state":                           onboardingStateLite,
 			"scheduled_height":                           runtime.ScheduledHeight,
 			"effective_height":                           runtime.EffectiveHeight,
-			"activation_blocker_reason":                  runtime.ActivationBlockerReason,
+			"activation_blocker_reason":                  activationBlockerLite,
 			"activation_delay_model":                     runtime.ActivationDelayModel,
 			"activation_delay_model_switch_height":       runtime.ActivationDelayModelSwitchHeight,
 			"barrier_retry_mode":                         runtime.BarrierRetryMode,
@@ -34708,9 +34729,9 @@ func (s *Server) handleStatus(
 			"genesis_validator_set_frozen":               GenesisValidatorSetFrozen,
 			"genesis_frozen_validator_set_size":          GenesisFrozenValidatorSetSize,
 			"wait_reason":                                runtime.WaitReason,
-			"active_set_mode":                            normalizeActiveSetMode(ValidatorActiveSetMode),
-			"committee_size":                             runtime.RequiredQuorum,
-			"committee_target":                           runtime.RequiredQuorum,
+			"active_set_mode":                            displayActiveSetMode(),
+			"committee_size":                             committeeSizeLite,
+			"committee_target":                           committeeTargetLite,
 			"committee_height":                           runtime.Height + 1,
 			"committee_live_count":                       runtime.LiveValidators,
 			"committee_offline_count":                    0,
@@ -35086,7 +35107,7 @@ func (s *Server) handleStatus(
 		"consensus_set_frozen":                         consensusSetFrozen,
 		"consensus_set_hash_height":                    consensusSetHashHeight,
 		"startup_recovery_applied":                     startupRecoveryApplied,
-		"active_set_mode":                              normalizeActiveSetMode(ValidatorActiveSetMode),
+		"active_set_mode":                              displayActiveSetMode(),
 		"committee_size":                               committeeSize,
 		"committee_target":                             committeeTarget,
 		"committee_rotation_blocks":                    committeeRotationBlocks(),
