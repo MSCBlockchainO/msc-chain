@@ -23986,11 +23986,49 @@ func loadGenesisFromDisk(path string) (*Genesis, error) {
 
 }
 
+func normalizeGenesisAllocation(name string, allocation *GenesisAllocation, minLockEpochs uint64) error {
+
+	if allocation == nil {
+
+		return nil
+
+	}
+
+	allocation.Wallet = strings.TrimSpace(displayAddress(allocation.Wallet))
+
+	if allocation.Allocation < 0 {
+
+		return fmt.Errorf("genesis %s allocation cannot be negative", name)
+
+	}
+
+	if allocation.Allocation > 0 && allocation.Wallet == "" {
+
+		return fmt.Errorf("genesis %s allocation missing wallet", name)
+
+	}
+
+	if allocation.Locked && allocation.LockEpochs != 0 && allocation.LockEpochs < minLockEpochs {
+
+		return fmt.Errorf("genesis %s lock_epochs %d below min %d", name, allocation.LockEpochs, minLockEpochs)
+
+	}
+
+	return nil
+
+}
+
 func validateAndNormalizeGenesisBootstrapConfig(g *Genesis) error {
 
 	if g == nil {
 
 		return nil
+
+	}
+
+	if g.Decimals != 0 && g.Decimals != CoinDecimals {
+
+		return fmt.Errorf("genesis decimals %d does not match coin decimals %d", g.Decimals, CoinDecimals)
 
 	}
 
@@ -24023,6 +24061,18 @@ func validateAndNormalizeGenesisBootstrapConfig(g *Genesis) error {
 	}
 
 	minLockEpochs := minUnstakeEpochs()
+
+	if err := normalizeGenesisAllocation("foundation", &g.Foundation, minLockEpochs); err != nil {
+
+		return err
+
+	}
+
+	if err := normalizeGenesisAllocation("treasury", &g.Treasury, minLockEpochs); err != nil {
+
+		return err
+
+	}
 
 	for vid, raw := range g.GenesisStakes {
 

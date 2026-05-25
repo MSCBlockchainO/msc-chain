@@ -9,7 +9,7 @@ This file records the production genesis artifact for MSC mainnet. It is a launc
 | Network | MSC Mainnet |
 | Chain ID | `91938` |
 | Genesis file | `genesis.json` |
-| Genesis SHA256 | `758c62b26cb50ce80450684ae86bdf5681e37776e1c73309169e27dd3d14e71b` |
+| Genesis SHA256 | `757cfedec4d164c077a5efaaa7a85e0386940cbfbe955812651e406acf09e0a0` |
 
 `config.toml` and the compiled `GenesisHashExpected` default must both point at this hash.
 
@@ -26,15 +26,20 @@ This file records the production genesis artifact for MSC mainnet. It is a launc
 
 | Account | Balance |
 | --- | ---: |
+| `MSC017d78d2c1920db5321271a2d594a4995a3c5ba99d` | `1379173540` |
+| `MSC01102bdf87789381354be6ec8af1f49688306ea83c` | `4597011801` |
+| `MSC01dc7b2c81d1211199f209a52a9688a31352f3b800` | `100000` |
+| `MSC01d8f4952c11e683aac3cf6652513cd90982e4a938` | `100000` |
 | `USER_REW` | `1000000` |
-| `TREASURY` | `4596911801` |
-| `FOUNDATION` | `1379073540` |
-| `A` | `100000` |
-| `B` | `100000` |
-| `C` | `100000` |
-| `D` | `100000` |
 
 Frozen explicit genesis balance total: `5977385341`.
+
+## Frozen Foundation And Treasury
+
+| Pool | Wallet | Allocation | Lock |
+| --- | --- | ---: | --- |
+| Foundation | `MSC017d78d2c1920db5321271a2d594a4995a3c5ba99d` | `1379073540` | locked for `19872000` epochs |
+| Treasury | `MSC01102bdf87789381354be6ec8af1f49688306ea83c` | `4596911801` | locked, governance-only |
 
 ## Production Rules
 

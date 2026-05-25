@@ -15,7 +15,7 @@ import (
 const (
 	productionChainID          = "91938"
 	productionGenesisPath      = "genesis.json"
-	productionGenesisSHA256    = "758c62b26cb50ce80450684ae86bdf5681e37776e1c73309169e27dd3d14e71b"
+	productionGenesisSHA256    = "757cfedec4d164c077a5efaaa7a85e0386940cbfbe955812651e406acf09e0a0"
 	productionStakeAmount      = 100
 	productionStakeLockEpochs  = uint64(19872000)
 	productionLedgerTotalCoins = 5977385341
@@ -43,13 +43,11 @@ var productionStakeWalletPubKeys = map[string]string{
 }
 
 var productionBalances = map[string]int{
-	"USER_REW":   1000000,
-	"TREASURY":   4596911801,
-	"FOUNDATION": 1379073540,
-	"A":          100000,
-	"B":          100000,
-	"C":          100000,
-	"D":          100000,
+	"MSC017d78d2c1920db5321271a2d594a4995a3c5ba99d": 1379173540,
+	"MSC01102bdf87789381354be6ec8af1f49688306ea83c": 4597011801,
+	"MSC01dc7b2c81d1211199f209a52a9688a31352f3b800": 100000,
+	"MSC01d8f4952c11e683aac3cf6652513cd90982e4a938": 100000,
+	"USER_REW": 1000000,
 }
 
 var forbiddenTemporaryGenesisNeedles = []string{
@@ -85,9 +83,31 @@ func TestProductionGenesisFreeze(t *testing.T) {
 	if genesis.ChainID != productionChainID {
 		t.Fatalf("chain id = %q, want %q", genesis.ChainID, productionChainID)
 	}
+	if genesis.Decimals != CoinDecimals {
+		t.Fatalf("genesis decimals = %d, want %d", genesis.Decimals, CoinDecimals)
+	}
+	if !genesis.GenesisLocked {
+		t.Fatalf("production genesis must be locked")
+	}
+	if !genesis.ValidatorSetFrozen {
+		t.Fatalf("production validator set must be frozen")
+	}
 	assertStringMapExact(t, "validators", genesis.Validators, productionValidators)
 	assertStringMapExact(t, "reward wallets", genesis.RewardWallets, productionRewardWallets)
 	assertIntMapExact(t, "balances", genesis.Balances, productionBalances)
+
+	if !addressesEqual(genesis.Foundation.Wallet, productionRewardWallets["A"]) {
+		t.Fatalf("foundation wallet = %q, want %q", genesis.Foundation.Wallet, productionRewardWallets["A"])
+	}
+	if genesis.Foundation.Allocation != 1379073540 || !genesis.Foundation.Locked || genesis.Foundation.LockEpochs != productionStakeLockEpochs {
+		t.Fatalf("unexpected foundation allocation/lock: %+v", genesis.Foundation)
+	}
+	if !addressesEqual(genesis.Treasury.Wallet, productionRewardWallets["B"]) {
+		t.Fatalf("treasury wallet = %q, want %q", genesis.Treasury.Wallet, productionRewardWallets["B"])
+	}
+	if genesis.Treasury.Allocation != 4596911801 || !genesis.Treasury.Locked || !genesis.Treasury.GovernanceOnly {
+		t.Fatalf("unexpected treasury allocation/lock: %+v", genesis.Treasury)
+	}
 
 	total := 0
 	for _, amount := range genesis.Balances {

@@ -1473,7 +1473,7 @@ type Mempool struct {
 	nextNonceBySender    map[string]int
 }
 
-var GenesisHashExpected = "758c62b26cb50ce80450684ae86bdf5681e37776e1c73309169e27dd3d14e71b"
+var GenesisHashExpected = "757cfedec4d164c077a5efaaa7a85e0386940cbfbe955812651e406acf09e0a0"
 
 var GenesisHash = GenesisHashExpected
 
@@ -2293,11 +2293,16 @@ type ValidatorActivationTracker struct {
 }
 
 type Genesis struct {
-	ChainID       string                  `json:"chain_id"`
-	Validators    map[string]string       `json:"validators"` // nodeID -> pubkey(hex)
-	Balances      map[string]int          `json:"balances,omitempty"`
-	RewardWallets map[string]string       `json:"reward_wallets,omitempty"` // validatorID -> wallet address
-	GenesisStakes map[string]GenesisStake `json:"genesis_stakes,omitempty"`
+	ChainID            string                  `json:"chain_id"`
+	Decimals           int                     `json:"decimals,omitempty"`
+	GenesisLocked      bool                    `json:"genesis_locked,omitempty"`
+	ValidatorSetFrozen bool                    `json:"validator_set_frozen,omitempty"`
+	Validators         map[string]string       `json:"validators"` // nodeID -> pubkey(hex)
+	Balances           map[string]int          `json:"balances,omitempty"`
+	RewardWallets      map[string]string       `json:"reward_wallets,omitempty"` // validatorID -> wallet address
+	Foundation         GenesisAllocation       `json:"foundation,omitempty"`
+	Treasury           GenesisAllocation       `json:"treasury,omitempty"`
+	GenesisStakes      map[string]GenesisStake `json:"genesis_stakes,omitempty"`
 }
 
 type GenesisStake struct {
@@ -2305,6 +2310,14 @@ type GenesisStake struct {
 	WalletPubKey string `json:"wallet_pubkey,omitempty"`
 	Amount       int    `json:"amount"`
 	LockEpochs   uint64 `json:"lock_epochs,omitempty"`
+}
+
+type GenesisAllocation struct {
+	Wallet         string `json:"wallet,omitempty"`
+	Allocation     int    `json:"allocation,omitempty"`
+	Locked         bool   `json:"locked,omitempty"`
+	LockEpochs     uint64 `json:"lock_epochs,omitempty"`
+	GovernanceOnly bool   `json:"governance_only,omitempty"`
 }
 
 type genesisBootstrapWalletBinding struct {

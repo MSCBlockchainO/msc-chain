@@ -2,7 +2,7 @@
 chain_id = "91938"
 moniker = "Mainnet-Node-1"
 genesis_path = "genesis.json"
-genesis_hash = "758c62b26cb50ce80450684ae86bdf5681e37776e1c73309169e27dd3d14e71b"
+genesis_hash = "757cfedec4d164c077a5efaaa7a85e0386940cbfbe955812651e406acf09e0a0"
 
 [p2p]
 laddr = ""
