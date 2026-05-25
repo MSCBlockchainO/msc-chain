@@ -15,17 +15,17 @@ import (
 const (
 	productionChainID          = "91938"
 	productionGenesisPath      = "genesis.json"
-	productionGenesisSHA256    = "757cfedec4d164c077a5efaaa7a85e0386940cbfbe955812651e406acf09e0a0"
+	productionGenesisSHA256    = "d6d7d96ea1a70d2aca31389ce7ef7953794ce77b4c933828295269702768fa3c"
 	productionStakeAmount      = 100
 	productionStakeLockEpochs  = uint64(19872000)
 	productionLedgerTotalCoins = 5977385341
 )
 
 var productionValidators = map[string]string{
-	"A": "ee8d74edce9d8b17f814be3d76eb8b1c47ea4aec85db9d0b69eb1c6d3123e897",
-	"B": "fa810f44ad831ed6be3ab7e1ccece48972eb2572d521369f9f4055a9972d3932",
-	"C": "0f71ba143c9a7b2f614733888774c6113aea766402ad5e2c2848af205446fd3a",
-	"D": "d6766aec7323b5d425bdb861ee3b8b34794fd07bed9a6b92606c64ad18e28ce8",
+	"A": "f180a970fa11c67b961d79b9fe4cd362da47e5f2816ab1654d4032af0b23658b",
+	"B": "bbd7aac5cf70150dd2565a67342950e79f7eeb7a3fbd2ebc353b1d95302d0a88",
+	"C": "d3d2c0a3201f85f83c857103803915200616378263e48da0fe973e7e6ff6fa88",
+	"D": "e26e21281f1adf98dfde8c76cd858edd21b0c323e55f6bd80623bb0354eafec4",
 }
 
 var productionRewardWallets = map[string]string{
@@ -51,10 +51,6 @@ var productionBalances = map[string]int{
 }
 
 var forbiddenTemporaryGenesisNeedles = []string{
-	"f180a970",
-	"bbd7aac5",
-	"d3d2c0",
-	"e26e212",
 	"a8f8f4f6",
 }
 
