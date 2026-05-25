@@ -6470,8 +6470,19 @@ func (n *Node) sendPeerHello(pid peer.ID) {
 		return
 	}
 	defer s.Close()
+	deadline := time.Now().Add(5 * time.Second)
+	_ = s.SetDeadline(deadline)
 	hello := n.outboundPeerHello()
-	_ = json.NewEncoder(s).Encode(hello)
+	enc := json.NewEncoder(s)
+	dec := json.NewDecoder(s)
+	_ = enc.Encode(hello)
+	var raw json.RawMessage
+	if err := dec.Decode(&raw); err == nil {
+		peerInfo, derr := decodePeerHelloPayload(raw)
+		if derr == nil && n.validatePeerHello(pid.String(), peerInfo) {
+			n.applyPeerInfo(pid.String(), peerInfo)
+		}
+	}
 	n.recordDialSuccess(pid.String())
 }
 func decodePeerHelloPayload(raw json.RawMessage) (PeerHello, error) {
