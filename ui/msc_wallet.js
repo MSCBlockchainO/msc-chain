@@ -1410,6 +1410,24 @@ const loadWallet = () => {
   }
 };
 
+const normalizeWalletFromSecretKey = async (wallet, secretKey) => {
+  if (!wallet || !secretKey || secretKey.length !== 64) return wallet;
+  const publicKeyBytes = secretKey.slice(32);
+  const publicKey = bytesToHex(publicKeyBytes);
+  const address = await addressFromPublicKey(publicKeyBytes, state.chainId);
+  if (wallet.publicKey === publicKey && wallet.address === address) {
+    return wallet;
+  }
+  const normalized = {
+    ...wallet,
+    address,
+    publicKey,
+  };
+  storeWallet(normalized);
+  logActivity("Wallet address normalized from private key");
+  return normalized;
+};
+
 const api = async (path, { method = "GET", body, baseUrl } = {}) => {
   const headers = {};
   if (method !== "GET") {
@@ -4560,7 +4578,8 @@ const unlockWallet = async (event) => {
   }
   try {
     const secretKey = await decryptSecretKey(wallet.crypto, password);
-    state.wallet = wallet;
+    const normalizedWallet = await normalizeWalletFromSecretKey(wallet, secretKey);
+    state.wallet = normalizedWallet;
     state.secretKey = secretKey;
     state.pendingNonces = {};
     el("unlockPassword").value = "";
