@@ -222,6 +222,36 @@ func TestFrozenGenesisRuntimePolicyLocksValidatorSet(t *testing.T) {
 	}
 }
 
+func TestFrozenGenesisConsensusIgnoresIncompleteCommitteeHint(t *testing.T) {
+	oldFrozen := GenesisValidatorSetFrozen
+	oldFrozenSize := GenesisFrozenValidatorSetSize
+	oldMode := ValidatorActiveSetMode
+	defer func() {
+		GenesisValidatorSetFrozen = oldFrozen
+		GenesisFrozenValidatorSetSize = oldFrozenSize
+		ValidatorActiveSetMode = oldMode
+	}()
+
+	GenesisValidatorSetFrozen = true
+	GenesisFrozenValidatorSetSize = len(productionValidators)
+	ValidatorActiveSetMode = "adaptive_committee"
+
+	node := &Node{
+		ID:                "A",
+		DataDir:           t.TempDir(),
+		GenesisValidators: []string{"A", "B", "C", "D"},
+	}
+	got := node.freezeValidatorSetForHeight(100, []string{"A", "B"})
+	want := []string{"A", "B", "C", "D"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("frozen genesis committee = %v, want %v", got, want)
+	}
+
+	if activeSetModeAdaptiveCommittee() {
+		t.Fatalf("frozen genesis must bypass adaptive committee selection")
+	}
+}
+
 func assertStringMapExact(t *testing.T, name string, got, want map[string]string) {
 	t.Helper()
 	if strings.Join(sortedStringKeys(got), ",") != strings.Join(sortedStringKeys(want), ",") {

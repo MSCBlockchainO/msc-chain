@@ -3104,6 +3104,9 @@ func (n *Node) validatorRegistryCommitmentRequiredAt(height uint64) bool {
 }
 
 func activeSetModeAdaptiveCommittee() bool {
+	if GenesisValidatorSetFrozen {
+		return false
+	}
 	return normalizeActiveSetMode(ValidatorActiveSetMode) == "adaptive_committee"
 }
 
@@ -4728,6 +4731,11 @@ func (n *Node) freezeValidatorSetForHeight(height uint64, hint []string) []strin
 	}
 
 	candidate := canonicalValidatorIDs(append([]string{}, hint...))
+	if GenesisValidatorSetFrozen {
+		if genesis := canonicalValidatorIDs(n.GenesisValidators); len(genesis) > 0 {
+			candidate = genesis
+		}
+	}
 	if activeSetModeAdaptiveCommittee() && len(candidate) > 0 {
 		candidate = n.committeeForHeight(height, candidate)
 	}
@@ -17140,6 +17148,12 @@ func (n *Node) consensusValidatorsForHeight(height uint64) []string {
 			return nil
 		}
 		return n.applyCoreConsensusFilter(height, canonical)
+	}
+
+	if GenesisValidatorSetFrozen {
+		if genesis := canonicalValidatorIDs(n.GenesisValidators); len(genesis) > 0 {
+			return finalize(genesis, "", "genesis_frozen", nil)
+		}
 	}
 
 	// Rule 1: lock validator-set by finalized height H-1.
@@ -34690,6 +34704,9 @@ func (s *Server) handleStatus(
 			"got_vset_hash":                              runtime.GotVsetHash,
 			"barrier_votes":                              runtime.BarrierVotes,
 			"barrier_votes_required":                     runtime.BarrierVotesRequired,
+			"genesis_locked":                             GenesisRuntimeLocked,
+			"genesis_validator_set_frozen":               GenesisValidatorSetFrozen,
+			"genesis_frozen_validator_set_size":          GenesisFrozenValidatorSetSize,
 			"wait_reason":                                runtime.WaitReason,
 			"active_set_mode":                            normalizeActiveSetMode(ValidatorActiveSetMode),
 			"committee_size":                             runtime.RequiredQuorum,
@@ -35037,6 +35054,9 @@ func (s *Server) handleStatus(
 		"got_vset_hash":                              runtime.GotVsetHash,
 		"barrier_votes":                              runtime.BarrierVotes,
 		"barrier_votes_required":                     runtime.BarrierVotesRequired,
+		"genesis_locked":                             GenesisRuntimeLocked,
+		"genesis_validator_set_frozen":               GenesisValidatorSetFrozen,
+		"genesis_frozen_validator_set_size":          GenesisFrozenValidatorSetSize,
 
 		"wait_reason":                                  runtime.WaitReason,
 		"validator_key_loaded":                         validatorKeyLoaded,
