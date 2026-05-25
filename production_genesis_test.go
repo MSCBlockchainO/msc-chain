@@ -139,6 +139,11 @@ func TestProductionGenesisConfigLock(t *testing.T) {
 			GenesisPath string `toml:"genesis_path"`
 			GenesisHash string `toml:"genesis_hash"`
 		} `toml:"chain"`
+		Validators struct {
+			ActiveSetSize                  int `toml:"active_set_size"`
+			OnboardingMaxNewSlots          int `toml:"onboarding_max_new_slots"`
+			OnboardingBootstrapMaxNewSlots int `toml:"onboarding_bootstrap_max_new_slots"`
+		} `toml:"validators"`
 	}
 	if _, err := toml.DecodeFile("config.toml", &cfg); err != nil {
 		t.Fatalf("decode config.toml: %v", err)
@@ -152,6 +157,14 @@ func TestProductionGenesisConfigLock(t *testing.T) {
 	if strings.ToLower(strings.TrimSpace(cfg.Chain.GenesisHash)) != productionGenesisSHA256 {
 		t.Fatalf("config genesis_hash = %q, want %q", cfg.Chain.GenesisHash, productionGenesisSHA256)
 	}
+	if cfg.Validators.ActiveSetSize != len(productionValidators) {
+		t.Fatalf("active_set_size = %d, want %d frozen genesis validators", cfg.Validators.ActiveSetSize, len(productionValidators))
+	}
+	if cfg.Validators.OnboardingMaxNewSlots != 0 || cfg.Validators.OnboardingBootstrapMaxNewSlots != 0 {
+		t.Fatalf("frozen production genesis must not admit new validators automatically: onboarding=%d bootstrap=%d",
+			cfg.Validators.OnboardingMaxNewSlots,
+			cfg.Validators.OnboardingBootstrapMaxNewSlots)
+	}
 	varSource, err := os.ReadFile("var.go")
 	if err != nil {
 		t.Fatalf("read var.go: %v", err)
@@ -159,6 +172,53 @@ func TestProductionGenesisConfigLock(t *testing.T) {
 	wantDefault := `var GenesisHashExpected = "` + productionGenesisSHA256 + `"`
 	if !strings.Contains(string(varSource), wantDefault) {
 		t.Fatalf("compiled genesis hash default is not pinned to %s", productionGenesisSHA256)
+	}
+}
+
+func TestProductionGenesisLegacyLoaderReadsStructuredValidators(t *testing.T) {
+	genesis := LoadGenesisFile(productionGenesisPath)
+	if genesis.ChainID != productionChainID {
+		t.Fatalf("legacy loader chain id = %q, want %q", genesis.ChainID, productionChainID)
+	}
+	assertStringMapExact(t, "legacy loader validators", genesis.Validators, productionValidators)
+}
+
+func TestFrozenGenesisRuntimePolicyLocksValidatorSet(t *testing.T) {
+	oldLocked := GenesisRuntimeLocked
+	oldFrozen := GenesisValidatorSetFrozen
+	oldFrozenSize := GenesisFrozenValidatorSetSize
+	oldActiveSet := ValidatorActiveSetSize
+	oldOnboarding := ValidatorOnboardingMaxNewSlots
+	oldBootstrap := ValidatorOnboardingBootstrapMaxNewSlots
+	defer func() {
+		GenesisRuntimeLocked = oldLocked
+		GenesisValidatorSetFrozen = oldFrozen
+		GenesisFrozenValidatorSetSize = oldFrozenSize
+		ValidatorActiveSetSize = oldActiveSet
+		ValidatorOnboardingMaxNewSlots = oldOnboarding
+		ValidatorOnboardingBootstrapMaxNewSlots = oldBootstrap
+	}()
+
+	ValidatorActiveSetSize = 50
+	ValidatorOnboardingMaxNewSlots = 2
+	ValidatorOnboardingBootstrapMaxNewSlots = 2
+	applyGenesisRuntimePolicy(&Genesis{
+		GenesisLocked:      true,
+		ValidatorSetFrozen: true,
+		Validators:         productionValidators,
+	})
+
+	if !GenesisRuntimeLocked || !GenesisValidatorSetFrozen {
+		t.Fatalf("expected genesis runtime locks to be enabled")
+	}
+	if GenesisFrozenValidatorSetSize != len(productionValidators) {
+		t.Fatalf("frozen validator set size = %d, want %d", GenesisFrozenValidatorSetSize, len(productionValidators))
+	}
+	if ValidatorActiveSetSize != len(productionValidators) {
+		t.Fatalf("active set target = %d, want %d", ValidatorActiveSetSize, len(productionValidators))
+	}
+	if ValidatorOnboardingMaxNewSlots != 0 || ValidatorOnboardingBootstrapMaxNewSlots != 0 {
+		t.Fatalf("onboarding slots not disabled: regular=%d bootstrap=%d", ValidatorOnboardingMaxNewSlots, ValidatorOnboardingBootstrapMaxNewSlots)
 	}
 }
 

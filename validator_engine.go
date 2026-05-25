@@ -1269,6 +1269,9 @@ func (n *Node) activeSetTarget() int {
 	if n == nil {
 		return minActiveValidatorsFloor()
 	}
+	if GenesisValidatorSetFrozen && GenesisFrozenValidatorSetSize > 0 {
+		return GenesisFrozenValidatorSetSize
+	}
 	if ValidatorActiveSetSize < 0 {
 		return ValidatorActiveSetSize
 	}

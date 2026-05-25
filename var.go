@@ -479,6 +479,13 @@ var ValidatorCoreEnvPasswordAllowed = false
 var ValidatorCorePasswordFile = ""
 var ValidatorPasswordMode = "file_or_prompt"
 
+// Genesis runtime locks are set from production genesis during node startup.
+// A frozen genesis validator set may observe candidates, but it must not admit
+// them into the consensus set without an explicit protocol/governance change.
+var GenesisRuntimeLocked = false
+var GenesisValidatorSetFrozen = false
+var GenesisFrozenValidatorSetSize = 0
+
 // Round-based proposer failover controls.
 var ProposerRoundTimeout = 15 * time.Second
 

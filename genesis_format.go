@@ -11,6 +11,67 @@ type genesisValidatorJSON struct {
 	RewardWallet    string `json:"reward_wallet,omitempty"`
 }
 
+func parseGenesisValidatorMap(rawValidators map[string]json.RawMessage, rawRewardWallets map[string]string) (map[string]string, map[string]string, error) {
+	validators := make(map[string]string, len(rawValidators))
+	rewardWallets := make(map[string]string, len(rawRewardWallets)+len(rawValidators))
+	for id, wallet := range rawRewardWallets {
+		if strings.TrimSpace(id) != "" && strings.TrimSpace(wallet) != "" {
+			rewardWallets[id] = wallet
+		}
+	}
+
+	for id, payload := range rawValidators {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+
+		var pubkey string
+		if err := json.Unmarshal(payload, &pubkey); err == nil {
+			validators[id] = strings.TrimSpace(pubkey)
+			continue
+		}
+
+		var spec genesisValidatorJSON
+		if err := json.Unmarshal(payload, &spec); err != nil {
+			return nil, nil, fmt.Errorf("genesis validator %s invalid format: %w", id, err)
+		}
+		pubkey = strings.TrimSpace(spec.ConsensusPubKey)
+		if pubkey == "" {
+			return nil, nil, fmt.Errorf("genesis validator %s missing consensus_pubkey", id)
+		}
+		validators[id] = pubkey
+
+		wallet := strings.TrimSpace(spec.RewardWallet)
+		if wallet == "" {
+			continue
+		}
+		if existing := strings.TrimSpace(rewardWallets[id]); existing != "" && !addressesEqual(existing, wallet) {
+			return nil, nil, fmt.Errorf("genesis validator %s reward_wallet mismatch", id)
+		}
+		rewardWallets[id] = wallet
+	}
+
+	return validators, rewardWallets, nil
+}
+
+func (g *GenesisFile) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		ChainID    string                     `json:"chain_id"`
+		Validators map[string]json.RawMessage `json:"validators"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	validators, _, err := parseGenesisValidatorMap(raw.Validators, nil)
+	if err != nil {
+		return err
+	}
+	g.ChainID = raw.ChainID
+	g.Validators = validators
+	return nil
+}
+
 func (g *Genesis) UnmarshalJSON(data []byte) error {
 	var raw struct {
 		ChainID            string                     `json:"chain_id"`
@@ -29,44 +90,9 @@ func (g *Genesis) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	validators := make(map[string]string, len(raw.Validators))
-	rewardWallets := make(map[string]string, len(raw.RewardWallets)+len(raw.Validators))
-	for id, wallet := range raw.RewardWallets {
-		if strings.TrimSpace(id) != "" && strings.TrimSpace(wallet) != "" {
-			rewardWallets[id] = wallet
-		}
-	}
-
-	for id, payload := range raw.Validators {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-
-		var pubkey string
-		if err := json.Unmarshal(payload, &pubkey); err == nil {
-			validators[id] = strings.TrimSpace(pubkey)
-			continue
-		}
-
-		var spec genesisValidatorJSON
-		if err := json.Unmarshal(payload, &spec); err != nil {
-			return fmt.Errorf("genesis validator %s invalid format: %w", id, err)
-		}
-		pubkey = strings.TrimSpace(spec.ConsensusPubKey)
-		if pubkey == "" {
-			return fmt.Errorf("genesis validator %s missing consensus_pubkey", id)
-		}
-		validators[id] = pubkey
-
-		wallet := strings.TrimSpace(spec.RewardWallet)
-		if wallet == "" {
-			continue
-		}
-		if existing := strings.TrimSpace(rewardWallets[id]); existing != "" && !addressesEqual(existing, wallet) {
-			return fmt.Errorf("genesis validator %s reward_wallet mismatch", id)
-		}
-		rewardWallets[id] = wallet
+	validators, rewardWallets, err := parseGenesisValidatorMap(raw.Validators, raw.RewardWallets)
+	if err != nil {
+		return err
 	}
 
 	g.ChainID = raw.ChainID

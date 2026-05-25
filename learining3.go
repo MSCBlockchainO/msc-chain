@@ -17337,6 +17337,12 @@ func (n *Node) queuePendingValidator(id string, activationHeight uint64) {
 		return
 
 	}
+	if GenesisValidatorSetFrozen && !validatorHasGenesisPubKey(id) {
+		if DebugConsensus {
+			fmt.Printf("[ONBOARDING-LOCKED] id=%s scheduled=%d reason=genesis_validator_set_frozen\n", id, activationHeight)
+		}
+		return
+	}
 
 	n.validatorSetMu.Lock()
 
@@ -17786,6 +17792,9 @@ func (n *Node) observeDeterministicOnboardingCandidatesOnCommit(block Block) {
 	if n == nil || block.ID == 0 || !DeterministicValidatorSelection {
 		return
 	}
+	if GenesisValidatorSetFrozen {
+		return
+	}
 
 	committeeHeight := block.ID + 1
 	registrySnapshot := n.validatorRegistrySnapshotForHeight(committeeHeight)
@@ -17929,6 +17938,9 @@ func (n *Node) observeCandidatesOnCommit(block Block) {
 
 		return
 
+	}
+	if GenesisValidatorSetFrozen {
+		return
 	}
 
 	if DeterministicValidatorSelection {
@@ -23543,6 +23555,7 @@ func StartNode(
 
 	}
 
+	applyGenesisRuntimePolicy(genesisDisk)
 	node.bootstrapGenesisValidators(genesisDisk)
 	if node.Role == "validator" && !ValidatorAllowIdentityRotationOnExistingChain && isValidatorKeyUsable(vKey) {
 		selfID := normalizeValidatorID(node.ID)
@@ -23984,6 +23997,30 @@ func loadGenesisFromDisk(path string) (*Genesis, error) {
 
 	return &g, nil
 
+}
+
+func applyGenesisRuntimePolicy(g *Genesis) {
+	GenesisRuntimeLocked = false
+	GenesisValidatorSetFrozen = false
+	GenesisFrozenValidatorSetSize = 0
+	if g == nil {
+		return
+	}
+
+	GenesisRuntimeLocked = g.GenesisLocked
+	GenesisValidatorSetFrozen = g.ValidatorSetFrozen
+	if !g.ValidatorSetFrozen {
+		return
+	}
+
+	ids := canonicalValidatorIDsFromMapKeys(g.Validators)
+	if len(ids) == 0 {
+		return
+	}
+	GenesisFrozenValidatorSetSize = len(ids)
+	ValidatorActiveSetSize = len(ids)
+	ValidatorOnboardingMaxNewSlots = 0
+	ValidatorOnboardingBootstrapMaxNewSlots = 0
 }
 
 func normalizeGenesisAllocation(name string, allocation *GenesisAllocation, minLockEpochs uint64) error {
