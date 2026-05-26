@@ -100,6 +100,49 @@ func TestCorruptSnapshotBackupImportRejected(t *testing.T) {
 	}
 }
 
+func TestRecoveryBackupVerifyRejectsCorruptSnapshotEvenWithUpdatedFileChecksum(t *testing.T) {
+	base := t.TempDir()
+	source, cleanupSource := newBackupRecoveryTestNode(t, filepath.Join(base, "source"), "A")
+	defer cleanupSource()
+	_, snapshot := storeBackupRecoverySnapshot(t, source, 10, "block-9", NewLedger())
+
+	backup, err := source.ExportSnapshotBackup(snapshot.Height, "corrupt_verify")
+	if err != nil {
+		t.Fatalf("ExportSnapshotBackup: %v", err)
+	}
+	payloadPath := filepath.Join(backup.BackupDir, recoveryBackupSnapshotFile)
+	payload, err := os.ReadFile(payloadPath)
+	if err != nil {
+		t.Fatalf("read snapshot payload: %v", err)
+	}
+	if err := os.WriteFile(payloadPath, append(payload, 0x42), 0o600); err != nil {
+		t.Fatalf("corrupt snapshot payload: %v", err)
+	}
+	manifestPath := filepath.Join(backup.BackupDir, recoveryBackupManifestFile)
+	manifest, err := readRecoveryBackupManifest(backup.BackupDir)
+	if err != nil {
+		t.Fatalf("read backup manifest: %v", err)
+	}
+	hash, size, err := checksumFile(payloadPath)
+	if err != nil {
+		t.Fatalf("checksum corrupt payload: %v", err)
+	}
+	for i := range manifest.Files {
+		if manifest.Files[i].Path == recoveryBackupSnapshotFile {
+			manifest.Files[i].SHA256 = hash
+			manifest.Files[i].Size = size
+		}
+	}
+	if err := writeJSONAtomic(manifestPath, manifest); err != nil {
+		t.Fatalf("rewrite backup manifest: %v", err)
+	}
+
+	_, _, err = verifyRecoveryBackupDir(backup.BackupDir)
+	if err == nil || !strings.Contains(err.Error(), "payload size") {
+		t.Fatalf("expected corrupt snapshot payload rejection, got %v", err)
+	}
+}
+
 func TestAutomaticBackupRetentionPrunesOldBackups(t *testing.T) {
 	base := t.TempDir()
 	node, cleanup := newBackupRecoveryTestNode(t, base, "A")

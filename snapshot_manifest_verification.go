@@ -17,6 +17,12 @@ func verifySnapshotPayloadAgainstManifest(payload []byte, manifest *SnapshotMani
 	if chunkSize == 0 {
 		return nil, fmt.Errorf("invalid snapshot manifest")
 	}
+	if manifest.SnapshotSizeBytes > 0 && uint64(len(payload)) != manifest.SnapshotSizeBytes {
+		return nil, fmt.Errorf("snapshot manifest payload size mismatch")
+	}
+	if maxPayload := manifest.ChunkCount * chunkSize; maxPayload > 0 && uint64(len(payload)) > maxPayload {
+		return nil, fmt.Errorf("snapshot manifest payload size mismatch")
+	}
 	for idx := uint64(0); idx < manifest.ChunkCount; idx++ {
 		start := idx * chunkSize
 		end := start + chunkSize

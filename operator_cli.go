@@ -48,7 +48,7 @@ func runOperatorCLI(args []string) (bool, int) {
 
 func isOperatorCLICommand(cmd string) bool {
 	switch strings.ToLower(strings.TrimSpace(cmd)) {
-	case "wallet", "balance", "send", "validator-keygen", "validator-pubkey", "validator", "stake", "unstake", "claim-rewards", "status", "peers", "sync-status", "help":
+	case "wallet", "balance", "send", "validator-keygen", "validator-pubkey", "validator", "stake", "unstake", "claim-rewards", "status", "peers", "sync-status", "backup", "snapshot", "help":
 		return true
 	default:
 		return false
@@ -84,6 +84,10 @@ func operatorRun(cmd string, args []string) error {
 		return operatorStatusCommand(args, false)
 	case "peers":
 		return operatorPeersCommand(args)
+	case "backup":
+		return operatorBackupCommand(args)
+	case "snapshot":
+		return operatorSnapshotCommand(args)
 	default:
 		return fmt.Errorf("unknown command %q", cmd)
 	}
@@ -114,6 +118,13 @@ func operatorPrintHelp() {
 	fmt.Println("  status --rpc http://127.0.0.1:26657")
 	fmt.Println("  peers --rpc http://127.0.0.1:26657")
 	fmt.Println("  sync-status --rpc http://127.0.0.1:26657")
+	fmt.Println()
+	fmt.Println("Backup / recovery:")
+	fmt.Println("  backup export --id A --datadir data/A [--height 0]")
+	fmt.Println("  backup verify --path data/A/node_A/backups/backup_...")
+	fmt.Println("  backup import --id RESTORE --datadir /tmp/restore --path /tmp/backup --apply")
+	fmt.Println("  backup recover --id A --datadir data/A --height 1000")
+	fmt.Println("  snapshot export|import|verify ...  (aliases for backup commands)")
 }
 
 func operatorWalletCommand(args []string) error {
@@ -616,6 +627,174 @@ func operatorPeersCommand(args []string) error {
 	return nil
 }
 
+func operatorBackupCommand(args []string) error {
+	if len(args) == 0 {
+		return errors.New("backup subcommand required (export/import/verify/recover)")
+	}
+	sub := strings.ToLower(strings.TrimSpace(args[0]))
+	switch sub {
+	case "export":
+		return operatorBackupExport(args[1:])
+	case "import":
+		return operatorBackupImport(args[1:])
+	case "verify":
+		return operatorBackupVerify(args[1:])
+	case "recover":
+		return operatorBackupRecover(args[1:])
+	default:
+		return fmt.Errorf("unknown backup command %q", sub)
+	}
+}
+
+func operatorSnapshotCommand(args []string) error {
+	if len(args) == 0 {
+		return errors.New("snapshot subcommand required (export/import/verify)")
+	}
+	sub := strings.ToLower(strings.TrimSpace(args[0]))
+	switch sub {
+	case "export":
+		return operatorBackupExport(args[1:])
+	case "import":
+		return operatorBackupImport(args[1:])
+	case "verify":
+		return operatorBackupVerify(args[1:])
+	default:
+		return fmt.Errorf("unknown snapshot command %q", sub)
+	}
+}
+
+func operatorBackupExport(args []string) error {
+	fs := flag.NewFlagSet("backup export", flag.ContinueOnError)
+	id := fs.String("id", "", "node id")
+	dataDir := fs.String("datadir", "data", "base data directory")
+	nodePathFlag := fs.String("nodepath", "", "direct node data path override")
+	height := fs.Uint64("height", 0, "snapshot height; 0 uses best snapshot")
+	reason := fs.String("reason", "operator_backup_export", "backup reason")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	node, cleanup, err := operatorOpenRecoveryNode(*id, *dataDir, *nodePathFlag)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	manifest, err := node.ExportSnapshotBackup(*height, *reason)
+	if err != nil {
+		return err
+	}
+	operatorPrintJSON(map[string]any{
+		"command":       "backup export",
+		"height":        manifest.Height,
+		"snapshot_hash": manifest.SnapshotHash,
+		"state_root":    manifest.StateRoot,
+		"backup_dir":    operatorCleanPath(manifest.BackupDir),
+		"files":         manifest.Files,
+	})
+	return nil
+}
+
+func operatorBackupImport(args []string) error {
+	fs := flag.NewFlagSet("backup import", flag.ContinueOnError)
+	id := fs.String("id", "", "node id")
+	dataDir := fs.String("datadir", "data", "base data directory")
+	nodePathFlag := fs.String("nodepath", "", "direct node data path override")
+	path := fs.String("path", "", "backup directory")
+	apply := fs.Bool("apply", true, "apply snapshot after storing")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*path) == "" {
+		return errors.New("--path required")
+	}
+	node, cleanup, err := operatorOpenRecoveryNode(*id, *dataDir, *nodePathFlag)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	result, err := node.ImportSnapshotBackup(operatorResolvePath(*path), *apply)
+	if err != nil {
+		return err
+	}
+	operatorPrintJSON(map[string]any{
+		"command":       "backup import",
+		"height":        result.Height,
+		"snapshot_hash": result.SnapshotHash,
+		"backup_dir":    operatorCleanPath(result.BackupDir),
+		"stored":        result.Stored,
+		"applied":       result.Applied,
+		"node_root":     operatorCleanPath(node.recoveryNodeRoot()),
+	})
+	return nil
+}
+
+func operatorBackupVerify(args []string) error {
+	fs := flag.NewFlagSet("backup verify", flag.ContinueOnError)
+	path := fs.String("path", "", "backup directory")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*path) == "" {
+		return errors.New("--path required")
+	}
+	manifest, snapshot, err := verifyRecoveryBackupDir(operatorResolvePath(*path))
+	if err != nil {
+		return err
+	}
+	size := uint64(0)
+	if manifest.SnapshotManifest != nil {
+		size = manifest.SnapshotManifest.SnapshotSizeBytes
+	}
+	operatorPrintJSON(map[string]any{
+		"command":             "backup verify",
+		"ok":                  true,
+		"height":              manifest.Height,
+		"snapshot_hash":       manifest.SnapshotHash,
+		"state_root":          manifest.StateRoot,
+		"snapshot_size_bytes": size,
+		"validated_height":    snapshot.Height,
+		"backup_dir":          operatorCleanPath(manifest.BackupDir),
+	})
+	return nil
+}
+
+func operatorBackupRecover(args []string) error {
+	fs := flag.NewFlagSet("backup recover", flag.ContinueOnError)
+	id := fs.String("id", "", "node id")
+	dataDir := fs.String("datadir", "data", "base data directory")
+	nodePathFlag := fs.String("nodepath", "", "direct node data path override")
+	height := fs.Uint64("height", 0, "target height")
+	allowFinalizedRollback := fs.Bool("allow-finalized-rollback", false, "allow rollback below local finalized height")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	node, cleanup, err := operatorOpenRecoveryNode(*id, *dataDir, *nodePathFlag)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	report, err := node.RecoverToPointWithOptions(PointInTimeRecoveryOptions{
+		TargetHeight:            *height,
+		Apply:                   true,
+		AllowFinalizedRollback:  *allowFinalizedRollback,
+		VerifyReplayStateRoot:   true,
+		RequireContiguousReplay: true,
+	})
+	if err != nil {
+		return err
+	}
+	operatorPrintJSON(map[string]any{
+		"command":         "backup recover",
+		"target_height":   report.TargetHeight,
+		"base_height":     report.BaseHeight,
+		"replayed_blocks": report.ReplayedBlocks,
+		"snapshot_hash":   report.SnapshotHash,
+		"backup_dir":      operatorCleanPath(report.BackupDir),
+		"applied":         report.Applied,
+		"node_root":       operatorCleanPath(node.recoveryNodeRoot()),
+	})
+	return nil
+}
+
 func operatorFetchBalance(rpcFlags *operatorRPCFlags, address string, coin string) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("address", address)
@@ -733,6 +912,53 @@ func operatorValidatorNodePath(id, dataDir, nodePathFlag string) (string, string
 		nodePath = abs
 	}
 	return nodePath, id, nil
+}
+
+func operatorRecoveryNodeLocation(id, dataDir, nodePathFlag string) (string, string, string, error) {
+	nodePathFlag = strings.TrimSpace(nodePathFlag)
+	if nodePathFlag == "" {
+		nodePath, nodeID, err := operatorValidatorNodePath(id, dataDir, "")
+		if err != nil {
+			return "", "", "", err
+		}
+		return dataDir, nodeID, nodePath, nil
+	}
+	nodePath := operatorResolvePath(nodePathFlag)
+	if abs, err := filepath.Abs(nodePath); err == nil {
+		nodePath = abs
+	}
+	baseName := filepath.Base(nodePath)
+	derivedID := strings.TrimPrefix(baseName, "node_")
+	nodeID := normalizeValidatorID(id)
+	if nodeID == "" {
+		nodeID = normalizeValidatorID(derivedID)
+	}
+	if nodeID == "" || baseName != "node_"+nodeID {
+		return "", "", "", fmt.Errorf("--nodepath must point to a node_<id> directory")
+	}
+	baseDir := filepath.Dir(nodePath)
+	return baseDir, nodeID, nodePath, nil
+}
+
+func operatorOpenRecoveryNode(id, dataDir, nodePathFlag string) (*Node, func(), error) {
+	baseDir, nodeID, nodePath, err := operatorRecoveryNodeLocation(id, dataDir, nodePathFlag)
+	if err != nil {
+		return nil, nil, err
+	}
+	db := OpenNodeDB(nodePath)
+	node := &Node{
+		ID:         nodeID,
+		DataDir:    baseDir,
+		DB:         db,
+		Blockchain: &Blockchain{},
+		Ledger:     NewLedger(),
+	}
+	cleanup := func() {
+		if db != nil {
+			_ = db.Close()
+		}
+	}
+	return node, cleanup, nil
 }
 
 func operatorReadValidatorPubkey(nodePath string) (string, error) {

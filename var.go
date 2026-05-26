@@ -2684,6 +2684,7 @@ type SnapshotManifest struct {
 	FinalizedHash         string            `json:"finalized_hash,omitempty"`
 	EpochAnchorHash       string            `json:"epoch_anchor_hash,omitempty"`
 	FinalityRoot          string            `json:"finality_root,omitempty"`
+	SnapshotSizeBytes     uint64            `json:"snapshot_size_bytes,omitempty"`
 	ChunkSize             uint64            `json:"chunk_size"`
 	ChunkCount            uint64            `json:"chunk_count"`
 	ChunkHashes           []string          `json:"chunk_hashes,omitempty"`

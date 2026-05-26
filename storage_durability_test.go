@@ -388,6 +388,15 @@ func TestCorruptSnapshotManifestRejected(t *testing.T) {
 	if _, err := verifySnapshotPayloadAgainstManifest(payload, &corruptRoot, 0); err == nil || !strings.Contains(err.Error(), "state root") {
 		t.Fatalf("expected corrupt manifest state root rejection, got %v", err)
 	}
+	corruptTail := append(append([]byte{}, payload...), 0x42)
+	corruptSize := *manifest
+	corruptSize.ChunkSize = uint64(len(payload))
+	corruptSize.ChunkCount = 1
+	corruptSize.ChunkHashes = []string{snapshotChunkHash(payload)}
+	corruptSize.SnapshotSizeBytes = uint64(len(payload))
+	if _, err := verifySnapshotPayloadAgainstManifest(corruptTail, &corruptSize, 0); err == nil || !strings.Contains(err.Error(), "payload size") {
+		t.Fatalf("expected corrupt manifest payload size rejection, got %v", err)
+	}
 }
 
 func TestCorruptFECRejected(t *testing.T) {

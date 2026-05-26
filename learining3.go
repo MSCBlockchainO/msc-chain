@@ -9454,6 +9454,8 @@ func snapshotManifestHash(manifest *SnapshotManifest) string {
 	b.WriteByte('|')
 	b.WriteString(clone.FinalityRoot)
 	b.WriteByte('|')
+	b.WriteString(strconv.FormatUint(clone.SnapshotSizeBytes, 10))
+	b.WriteByte('|')
 	b.WriteString(strconv.FormatUint(clone.ChunkSize, 10))
 	b.WriteByte('|')
 	b.WriteString(strconv.FormatUint(clone.ChunkCount, 10))
@@ -9509,6 +9511,7 @@ func snapshotManifestFromSnapshot(snapshot *StateSnapshot) (*SnapshotManifest, [
 		FinalizedHash:         strings.TrimSpace(snapshot.FinalizedHash),
 		EpochAnchorHash:       strings.TrimSpace(snapshot.EpochAnchorHash),
 		FinalityRoot:          strings.TrimSpace(snapshot.FinalityRoot),
+		SnapshotSizeBytes:     uint64(len(payload)),
 		ChunkSize:             chunkSize,
 		ChunkCount:            totalChunks,
 		ChunkHashes:           chunkHashes,

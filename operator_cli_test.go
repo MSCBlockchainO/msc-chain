@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	cryptorand "crypto/rand"
 	"encoding/hex"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -48,12 +49,24 @@ func TestOperatorEndpointNormalizesBaseURL(t *testing.T) {
 }
 
 func TestOperatorCLICommandRecognition(t *testing.T) {
-	for _, cmd := range []string{"wallet", "validator-keygen", "validator-pubkey", "validator", "stake", "unstake", "claim-rewards", "status", "peers", "sync-status"} {
+	for _, cmd := range []string{"wallet", "validator-keygen", "validator-pubkey", "validator", "stake", "unstake", "claim-rewards", "status", "peers", "sync-status", "backup", "snapshot"} {
 		if !isOperatorCLICommand(cmd) {
 			t.Fatalf("expected %s to be an operator command", cmd)
 		}
 	}
 	if isOperatorCLICommand("--mode") || isOperatorCLICommand("node") || strings.TrimSpace(" ") != "" {
 		t.Fatalf("unexpected operator command recognition")
+	}
+}
+
+func TestOperatorRecoveryNodeLocationFromNodePath(t *testing.T) {
+	root := t.TempDir()
+	nodePath := filepath.Join(root, "node_RESTORE")
+	base, id, gotPath, err := operatorRecoveryNodeLocation("", "", nodePath)
+	if err != nil {
+		t.Fatalf("operatorRecoveryNodeLocation: %v", err)
+	}
+	if id != "RESTORE" || base != root || gotPath != nodePath {
+		t.Fatalf("unexpected location base=%q id=%q path=%q", base, id, gotPath)
 	}
 }

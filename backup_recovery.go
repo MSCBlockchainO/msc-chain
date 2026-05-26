@@ -408,6 +408,42 @@ func verifyRecoveryBackupFiles(dir string, manifest *RecoveryBackupManifest) err
 	return nil
 }
 
+func verifyRecoveryBackupDir(dir string) (*RecoveryBackupManifest, *StateSnapshot, error) {
+	manifest, err := readRecoveryBackupManifest(dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := verifyRecoveryBackupFiles(dir, manifest); err != nil {
+		return nil, nil, err
+	}
+	payload, err := os.ReadFile(filepath.Join(dir, recoveryBackupSnapshotFile))
+	if err != nil {
+		return nil, nil, err
+	}
+	var snapManifest SnapshotManifest
+	rawManifest, err := os.ReadFile(filepath.Join(dir, recoveryBackupSnapshotMetaFile))
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := json.Unmarshal(rawManifest, &snapManifest); err != nil {
+		return nil, nil, err
+	}
+	snapshot, err := verifySnapshotPayloadAgainstManifest(payload, &snapManifest, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(snapshot.SnapshotHash), manifest.SnapshotHash) || snapshot.Height != manifest.Height {
+		return nil, nil, fmt.Errorf("backup manifest snapshot mismatch")
+	}
+	if manifest.SnapshotManifest != nil && !snapshotManifestMatches(&snapManifest, manifest.SnapshotManifest) {
+		return nil, nil, fmt.Errorf("backup embedded snapshot manifest mismatch")
+	}
+	if err := (SnapshotVerifier{}).Verify(snapshot); err != nil {
+		return nil, nil, err
+	}
+	return manifest, snapshot, nil
+}
+
 func (n *Node) ImportSnapshotBackup(dir string, apply bool) (*RecoveryImportResult, error) {
 	if n == nil {
 		return nil, fmt.Errorf("node unavailable")
@@ -416,36 +452,8 @@ func (n *Node) ImportSnapshotBackup(dir string, apply bool) (*RecoveryImportResu
 	if dir == "" {
 		return nil, fmt.Errorf("backup dir required")
 	}
-	manifest, err := readRecoveryBackupManifest(dir)
+	manifest, snapshot, err := verifyRecoveryBackupDir(dir)
 	if err != nil {
-		return nil, err
-	}
-	if err := verifyRecoveryBackupFiles(dir, manifest); err != nil {
-		return nil, err
-	}
-	payload, err := os.ReadFile(filepath.Join(dir, recoveryBackupSnapshotFile))
-	if err != nil {
-		return nil, err
-	}
-	var snapManifest SnapshotManifest
-	rawManifest, err := os.ReadFile(filepath.Join(dir, recoveryBackupSnapshotMetaFile))
-	if err != nil {
-		return nil, err
-	}
-	if err := json.Unmarshal(rawManifest, &snapManifest); err != nil {
-		return nil, err
-	}
-	snapshot, err := verifySnapshotPayloadAgainstManifest(payload, &snapManifest, 0)
-	if err != nil {
-		return nil, err
-	}
-	if !strings.EqualFold(strings.TrimSpace(snapshot.SnapshotHash), manifest.SnapshotHash) || snapshot.Height != manifest.Height {
-		return nil, fmt.Errorf("backup manifest snapshot mismatch")
-	}
-	if manifest.SnapshotManifest != nil && !snapshotManifestMatches(&snapManifest, manifest.SnapshotManifest) {
-		return nil, fmt.Errorf("backup embedded snapshot manifest mismatch")
-	}
-	if err := (SnapshotVerifier{}).Verify(snapshot); err != nil {
 		return nil, err
 	}
 	if n.DB == nil || n.DB.SnapshotStore() == nil {
