@@ -570,6 +570,7 @@ const activeValidatorList = el("activeValidatorList");
 const inactiveValidatorList = el("inactiveValidatorList");
 const pendingValidatorList = el("pendingValidatorList");
 const stakeValidatorState = el("stakeValidatorState");
+const stakeActivationHint = el("stakeActivationHint");
 const stakeValidatorPubKeyInput = el("stakeValidatorPubKey");
 const stakeValidatorPubKeyState = el("stakeValidatorPubKeyState");
 const stakeValidatorPubKeyHint = el("stakeValidatorPubKeyHint");
@@ -3807,6 +3808,12 @@ const focusStakeValidatorPubKeyField = () => {
   }
 };
 
+const setStakeActivationHint = (message) => {
+  if (stakeActivationHint) {
+    stakeActivationHint.textContent = message;
+  }
+};
+
 const updateStakeValidatorPubKeyUI = () => {
   if (!stakeValidatorPubKeyInput) return;
 
@@ -3963,10 +3970,12 @@ const updateStakeValidatorStatus = () => {
       `Wallet already bound to validator ${walletValidator}`,
       "error",
     );
+    setStakeActivationHint("Use this wallet's bound validator id before changing stake.");
     return;
   }
   if (!id || !state.validatorSnapshot) {
     setStatus(stakeValidatorState, "Validator status: —", "info");
+    setStakeActivationHint("Activation depends on validator stake, consensus pubkey, and scheduling.");
     return;
   }
 
@@ -3992,9 +4001,11 @@ const updateStakeValidatorStatus = () => {
   if (isActive) {
     if (isOffline) {
       setStatus(stakeValidatorState, `Validator ${id}: ACTIVE (OFFLINE)`, "error");
+      setStakeActivationHint("Validator is in the active set but currently offline.");
       return;
     }
     setStatus(stakeValidatorState, `Validator ${id}: ACTIVE`, "success");
+    setStakeActivationHint("Validator is active in the current validator set.");
     return;
   }
   const pendingAdd = pendingAdds.find((p) => sameValidatorID(p.id, id));
@@ -4005,6 +4016,7 @@ const updateStakeValidatorStatus = () => {
       `Validator ${id}: PENDING (${remaining} blocks)`,
       "info",
     );
+    setStakeActivationHint(`Pending add activates at height ${formatNumber(pendingAdd.activation_height)} (${remaining} blocks).`);
     return;
   }
   if (pendingRemove) {
@@ -4014,9 +4026,27 @@ const updateStakeValidatorStatus = () => {
       `Validator ${id}: LEAVING (${remaining} blocks)`,
       "error",
     );
+    setStakeActivationHint(`Pending remove activates at height ${formatNumber(pendingRemove.activation_height)} (${remaining} blocks).`);
     return;
   }
   setStatus(stakeValidatorState, `Validator ${id}: INACTIVE`, "error");
+  const walletStatus = state.walletStatus || {};
+  const walletStake = Number(walletStatus.stake || 0);
+  const matchesWalletValidator = sameValidatorID(id, walletStatus.validator_id || "");
+  if (
+    matchesWalletValidator &&
+    walletStake > 0 &&
+    !walletStatus.validator_consensus_pubkey_anchored
+  ) {
+    setStakeActivationHint("Stake exists, but validator consensus pubkey is not anchored yet.");
+  } else if (
+    sameValidatorID(id, walletStatus.local_validator_id || "") &&
+    !walletStatus.local_validator_key_loaded
+  ) {
+    setStakeActivationHint("This public node has no loaded validator key; run a validator node or paste its consensus pubkey.");
+  } else {
+    setStakeActivationHint("Inactive validators need valid stake, an anchored consensus pubkey, and scheduler admission.");
+  }
 };
 
 const applyWalletStatusUI = () => {
