@@ -23100,7 +23100,8 @@ func StartNode(
 	role string,
 
 ) *Node {
-	role = normalizeNodeRole(role)
+	requestedRole := normalizeRequestedNodeRole(role)
+	role = requestedRole
 
 	// =====================================================
 
@@ -23187,7 +23188,14 @@ func StartNode(
 	vKey := LoadOrCreateValidatorKey(nodeID, absPath)
 	keyLoaded := isValidatorKeyUsable(vKey)
 	keyHealth := CollectValidatorKeyHealth(nodeID, absPath, vKey)
-	if role == "validator" && !isValidatorKeyUsable(vKey) {
+	if requestedRole == "auto" {
+		resolvedRole, roleReason := resolveAutoNodeRole(requestedRole, keyLoaded)
+		role = resolvedRole
+		log.Printf("[ROLE-AUTO] id=%s resolved=%s reason=%s key_loaded=%t", nodeID, role, roleReason, keyLoaded)
+	} else {
+		role = normalizeNodeRole(requestedRole)
+	}
+	if role == "validator" && !keyLoaded {
 		if ValidatorFailOnKeyUnavailable {
 			log.Printf("[FATAL] validator key unavailable for %s; startup aborted (validators.fail_on_key_unavailable=true)", nodeID)
 			return nil
@@ -31921,7 +31929,7 @@ func main() {
 
 	nodeID := flag.String("id", "", "Node ID (A/B/C...)")
 
-	role := flag.String("role", "validator", "validator | full | light")
+	role := flag.String("role", "auto", "auto | validator | full | light")
 
 	listenPort := flag.Int("port", 0, "LibP2P listen port (0 = auto)")
 
@@ -31957,13 +31965,13 @@ func main() {
 		switch modeValue {
 		case "light":
 			*role = "light"
-		case "full-node", "fullnode":
-			*role = "full"
 		case "validator":
 			*role = "validator"
+		default:
+			*role = "auto"
 		}
 	}
-	*role = normalizeNodeRole(*role)
+	*role = normalizeRequestedNodeRole(*role)
 
 	cfgPath, cfgPathErr := resolveConfigPath(*configPath, *nodeID, configExplicit)
 	if cfgPathErr != nil {
@@ -33695,6 +33703,42 @@ func normalizeNodeRole(role string) string {
 		return "light"
 	default:
 		return "validator"
+	}
+}
+
+func normalizeRequestedNodeRole(role string) string {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "", "auto":
+		return "auto"
+	case "validator":
+		return "validator"
+	case "full", "full-node", "fullnode":
+		return "full"
+	case "light", "light-node", "lightnode":
+		return "light"
+	default:
+		return "auto"
+	}
+}
+
+func resolveAutoNodeRole(requestedRole string, keyLoaded bool) (string, string) {
+	switch normalizeRequestedNodeRole(requestedRole) {
+	case "auto":
+		if keyLoaded {
+			return "validator", "validator_key_loaded"
+		}
+		return "full", "validator_key_unavailable"
+	case "validator":
+		return "validator", "explicit_validator"
+	case "full":
+		return "full", "explicit_full"
+	case "light":
+		return "light", "explicit_light"
+	default:
+		if keyLoaded {
+			return "validator", "validator_key_loaded"
+		}
+		return "full", "validator_key_unavailable"
 	}
 }
 
