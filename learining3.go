@@ -31920,6 +31920,12 @@ func main() {
 
 	enableUTF8Console()
 	log.SetOutput(os.Stdout)
+	if handled, code := runOperatorCLI(os.Args[1:]); handled {
+		if code != 0 {
+			os.Exit(code)
+		}
+		return
+	}
 
 	// =====================================================
 
