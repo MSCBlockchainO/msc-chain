@@ -20663,6 +20663,9 @@ func ApplyBlockState(
 			rec := newLedger.Stakes[key]
 
 			rec.ValidatorID = validatorID
+			if normalizedPubKey := normalizeConsensusPubKeyHex(tx.ValidatorPubKey); normalizedPubKey != "" {
+				rec.ConsensusPubKey = normalizedPubKey
+			}
 
 			rec.Amount += tx.Amount
 
@@ -38150,6 +38153,19 @@ func (s *Server) handleWalletStatus(
 		}
 	}
 
+	validatorConsensusPubKey := ""
+	validatorConsensusPubKeyAnchored := false
+	validatorConsensusPubKeySource := "none"
+	if s.Node != nil && validatorID != "" {
+		snapshotHeight := height + 1
+		if snapshotHeight == 0 {
+			snapshotHeight = 1
+		}
+		registrySnapshot := s.Node.validatorRegistrySnapshotForHeight(snapshotHeight)
+		validatorConsensusPubKey = validatorConsensusPubKeyHexFromSnapshot(registrySnapshot, validatorID)
+		validatorConsensusPubKeyAnchored, validatorConsensusPubKeySource = s.Node.validatorConsensusPubKeyStatus(validatorID, registrySnapshot)
+	}
+
 	localValidatorID := ""
 	localValidatorKeyLoaded := false
 	localValidatorConsensusPubKey := ""
@@ -38193,6 +38209,10 @@ func (s *Server) handleWalletStatus(
 		"pending_add_height": pendingAddHeight,
 
 		"pending_remove_height": pendingRemoveHeight,
+
+		"validator_consensus_pubkey":          validatorConsensusPubKey,
+		"validator_consensus_pubkey_anchored": validatorConsensusPubKeyAnchored,
+		"validator_consensus_pubkey_source":   validatorConsensusPubKeySource,
 
 		"local_validator_id":                        localValidatorID,
 		"local_validator_key_loaded":                localValidatorKeyLoaded,

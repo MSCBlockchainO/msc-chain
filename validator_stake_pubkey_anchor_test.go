@@ -123,6 +123,83 @@ func TestUpdateValidatorMetricsFromBlockAnchorsConsensusPubKeyFromStake(t *testi
 	}
 }
 
+func TestApplyBlockStatePersistsStakeConsensusPubKeyInLedger(t *testing.T) {
+	defer withStakeConsensusPubKeyGlobals(t)()
+
+	ConfigAuthCoreValidators = []string{"A", "B", "C", "D"}
+	GlobalValidatorRegistry.Load(nil)
+
+	wallet := newStakeConsensusPubKeyTestWallet(t, "stake-pass")
+	ledger := GenesisLedger()
+	addBalance(&ledger, CoinSymbol, wallet.Address, 10_000)
+
+	validatorPub, _, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatalf("validator keygen failed: %v", err)
+	}
+	validatorPubHex := strings.ToLower(hex.EncodeToString(validatorPub))
+
+	tx, err := BuildSignedStakeTxSecure(wallet, "stake-pass", "F", validatorPubHex, 100, getNonce(ledger, wallet.Address), CoinSymbol, DefaultStakeLockEpochs)
+	if err != nil {
+		t.Fatalf("build stake tx: %v", err)
+	}
+	next, err := ApplyBlockState(ledger, Block{ID: 1, Transactions: []Transaction{tx}})
+	if err != nil {
+		t.Fatalf("apply block: %v", err)
+	}
+	lock := next.Stakes[stakeKey(wallet.Address, "F")]
+	if lock.ConsensusPubKey != validatorPubHex {
+		t.Fatalf("stake lock consensus pubkey = %q, want %q", lock.ConsensusPubKey, validatorPubHex)
+	}
+}
+
+func TestUpdateValidatorMetricsSchedulesAlreadyStakedValidatorWhenPubKeyAnchored(t *testing.T) {
+	defer withStakeConsensusPubKeyGlobals(t)()
+
+	oldFrozen := GenesisValidatorSetFrozen
+	defer func() { GenesisValidatorSetFrozen = oldFrozen }()
+	GenesisValidatorSetFrozen = false
+
+	ConfigAuthCoreValidators = []string{"A", "B", "C", "D"}
+	GlobalValidatorRegistry.Load(map[string]ValidatorRecord{
+		"F": {
+			ID:         "F",
+			Stake:      ValidatorMinStake,
+			Status:     ValidatorPending,
+			JoinHeight: 0,
+		},
+	})
+
+	wallet := newStakeConsensusPubKeyTestWallet(t, "stake-pass")
+	validatorPub, _, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatalf("validator keygen failed: %v", err)
+	}
+	validatorPubHex := strings.ToLower(hex.EncodeToString(validatorPub))
+	tx, err := BuildSignedStakeTxSecure(wallet, "stake-pass", "F", validatorPubHex, 1, 0, CoinSymbol, DefaultStakeLockEpochs)
+	if err != nil {
+		t.Fatalf("build stake tx: %v", err)
+	}
+
+	const height uint64 = 10
+	node := &Node{
+		ID:                       "A",
+		pendingValidators:        map[string]uint64{},
+		pendingValidatorRemovals: map[string]uint64{},
+	}
+	node.UpdateValidatorMetricsFromBlock(Block{ID: height, Transactions: []Transaction{tx}})
+
+	snapshot := GlobalValidatorRegistry.Snapshot()
+	rec := snapshot["F"]
+	if rec.ConsensusPubKey != validatorPubHex {
+		t.Fatalf("expected registry to anchor validator pubkey, got=%q want=%q", rec.ConsensusPubKey, validatorPubHex)
+	}
+	wantActivation := height + validatorSetActivationDelayBlocks()
+	if got := node.onboardingPendingAddHeight("F"); got != wantActivation {
+		t.Fatalf("pending add height = %d, want %d", got, wantActivation)
+	}
+}
+
 func TestValidateStakeTransactionRejectsConflictingAnchoredValidatorPubKey(t *testing.T) {
 	defer withStakeConsensusPubKeyGlobals(t)()
 

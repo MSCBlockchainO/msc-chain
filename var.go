@@ -2896,10 +2896,11 @@ type Ledger struct {
 
 // StakeLock tracks locked stake for a delegator -> validator pair.
 type StakeLock struct {
-	ValidatorID string `json:"validator_id"`
-	Amount      int    `json:"amount"`
-	LockedUntil uint64 `json:"locked_until_epoch"`
-	Burned      int    `json:"burned_amount,omitempty"`
+	ValidatorID     string `json:"validator_id"`
+	ConsensusPubKey string `json:"consensus_pubkey,omitempty"`
+	Amount          int    `json:"amount"`
+	LockedUntil     uint64 `json:"locked_until_epoch"`
+	Burned          int    `json:"burned_amount,omitempty"`
 }
 
 type Reward struct {

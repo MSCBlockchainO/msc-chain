@@ -3812,6 +3812,12 @@ const updateStakeValidatorPubKeyUI = () => {
 
   const selectedValidatorID = el("stakeValidator")?.value.trim() || "";
   const localValidatorID = String(state.walletStatus?.local_validator_id || "").trim();
+  const walletValidatorID = String(state.walletStatus?.validator_id || "").trim();
+  const walletStake = Number(state.walletStatus?.stake || 0);
+  const walletAnchored = Boolean(state.walletStatus?.validator_consensus_pubkey_anchored);
+  const walletSource = String(
+    state.walletStatus?.validator_consensus_pubkey_source || "none",
+  ).trim();
   const localKeyLoaded = Boolean(state.walletStatus?.local_validator_key_loaded);
   const localAnchored = Boolean(state.walletStatus?.local_validator_consensus_pubkey_anchored);
   const localSource = String(
@@ -3826,6 +3832,14 @@ const updateStakeValidatorPubKeyUI = () => {
   } catch (_) {
     localValidatorPubKey = "";
   }
+  let walletValidatorPubKey = "";
+  try {
+    walletValidatorPubKey = normalizeValidatorPubKeyHex(
+      state.walletStatus?.validator_consensus_pubkey || "",
+    );
+  } catch (_) {
+    walletValidatorPubKey = "";
+  }
 
   if (stakeValidatorPubKeyWasAutofilled() && !sameValidatorID(selectedValidatorID, localValidatorID)) {
     setStakeValidatorPubKeyFieldState({ value: "", autofilled: false, userEdited: false });
@@ -3833,6 +3847,7 @@ const updateStakeValidatorPubKeyUI = () => {
 
   const currentValue = String(stakeValidatorPubKeyInput.value || "").trim();
   const matchesLocalValidator = sameValidatorID(selectedValidatorID, localValidatorID);
+  const matchesWalletValidator = sameValidatorID(selectedValidatorID, walletValidatorID);
 
   if (!selectedValidatorID) {
     setStakeValidatorPubKeyMessage("Validator pubkey: —", "info");
@@ -3876,6 +3891,32 @@ const updateStakeValidatorPubKeyUI = () => {
         "Validator pubkey: local key unavailable",
         "error",
         "This node does not currently have a loaded validator consensus key. Paste the validator consensus pubkey manually for first non-core stake.",
+      );
+      return;
+    }
+  }
+
+  if (matchesWalletValidator && walletStake > 0) {
+    if (walletAnchored && walletValidatorPubKey) {
+      if (!currentValue && !stakeValidatorPubKeyWasUserEdited()) {
+        setStakeValidatorPubKeyFieldState({
+          value: walletValidatorPubKey,
+          autofilled: true,
+          userEdited: false,
+        });
+      }
+      setStakeValidatorPubKeyMessage(
+        "Validator pubkey: anchored",
+        "success",
+        `Wallet validator pubkey is anchored via ${walletSource.replace(/_/g, " ")}.`,
+      );
+      return;
+    }
+    if (!currentValue) {
+      setStakeValidatorPubKeyMessage(
+        "Validator pubkey: required",
+        "error",
+        "This wallet already has stake, but validator consensus pubkey is not anchored. Paste the validator pubkey and submit Add Stake once.",
       );
       return;
     }

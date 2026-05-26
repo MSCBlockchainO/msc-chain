@@ -1044,9 +1044,11 @@ func (n *Node) UpdateValidatorMetricsFromBlock(block Block) {
 		if rec == nil {
 			continue
 		}
+		hadConsensusPubKey := normalizeConsensusPubKeyHex(rec.ConsensusPubKey) != ""
 		if tx.Type == TxStake {
 			anchorConsensusPubKeyOnValidatorRecord(rec, vid, tx.ValidatorPubKey)
 		}
+		hasConsensusPubKey := normalizeConsensusPubKeyHex(rec.ConsensusPubKey) != ""
 		oldStake := rec.Stake
 		delta := int64(tx.Amount)
 		if tx.Type == TxUnstake {
@@ -1061,6 +1063,12 @@ func (n *Node) UpdateValidatorMetricsFromBlock(block Block) {
 			rec.JoinHeight = 0
 			pendingDrops[vid] = height + validatorSetActivationDelayBlocks()
 		} else if gainedStakeGate {
+			activationHeight := height + validatorSetActivationDelayBlocks()
+			if rec.JoinHeight == 0 || rec.JoinHeight <= height || activationHeight < rec.JoinHeight {
+				rec.JoinHeight = activationHeight
+			}
+			pendingAdds[vid] = rec.JoinHeight
+		} else if tx.Type == TxStake && validatorPassesStakeGate(vid, rec.Stake) && !hadConsensusPubKey && hasConsensusPubKey {
 			activationHeight := height + validatorSetActivationDelayBlocks()
 			if rec.JoinHeight == 0 || rec.JoinHeight <= height || activationHeight < rec.JoinHeight {
 				rec.JoinHeight = activationHeight
@@ -1160,6 +1168,7 @@ func (n *Node) reconcileSnapshotRegistryStakeFromLedger(ledger Ledger, height ui
 		return
 	}
 	stakeTotals := make(map[string]int64)
+	consensusPubKeys := make(map[string]string)
 	for key, rec := range ledger.Stakes {
 		if rec.Amount <= 0 {
 			continue
@@ -1174,6 +1183,9 @@ func (n *Node) reconcileSnapshotRegistryStakeFromLedger(ledger Ledger, height ui
 			continue
 		}
 		stakeTotals[keyID] += int64(rec.Amount)
+		if pubKey := normalizeConsensusPubKeyHex(rec.ConsensusPubKey); pubKey != "" {
+			consensusPubKeys[keyID] = pubKey
+		}
 	}
 	if len(stakeTotals) == 0 {
 		return
@@ -1184,9 +1196,13 @@ func (n *Node) reconcileSnapshotRegistryStakeFromLedger(ledger Ledger, height ui
 	for id, total := range stakeTotals {
 		rec, ok := GlobalValidatorRegistry.records[id]
 		if !ok || rec == nil {
+			consensusPubKey := consensusPubKeyHexForValidatorID(id)
+			if pubKey := consensusPubKeys[id]; pubKey != "" {
+				consensusPubKey = pubKey
+			}
 			rec = &ValidatorRecord{
 				ID:              id,
-				ConsensusPubKey: consensusPubKeyHexForValidatorID(id),
+				ConsensusPubKey: consensusPubKey,
 				Stake:           0,
 				Reputation:      ValidatorReputationInitial,
 				Status:          ValidatorPending,
@@ -1198,6 +1214,9 @@ func (n *Node) reconcileSnapshotRegistryStakeFromLedger(ledger Ledger, height ui
 		}
 		if rec.JoinHeight == 0 {
 			rec.JoinHeight = height
+		}
+		if rec.ConsensusPubKey == "" {
+			rec.ConsensusPubKey = consensusPubKeys[id]
 		}
 		if rec.Stake != total {
 			rec.Stake = total
