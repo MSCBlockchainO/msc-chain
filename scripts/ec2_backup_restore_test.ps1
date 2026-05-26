@@ -7,7 +7,7 @@ param(
     [string]$TargetUser = "ubuntu",
     [string]$TargetHost = "50.19.167.221",
     [string]$TargetNodeId = "RESTORE",
-    [string]$RepoPath = "~/msc-chain",
+    [string]$RepoPath = "msc-chain",
     [int]$RecoveryTargetSeconds = 300,
     [switch]$KeepRemoteArtifacts
 )
@@ -57,6 +57,28 @@ function Copy-ToRemote {
     }
 }
 
+function Invoke-SSHScript {
+    param(
+        [string]$User,
+        [string]$HostName,
+        [string]$ScriptText
+    )
+    $name = "msc_ec2_restore_" + ([Guid]::NewGuid().ToString("N")) + ".sh"
+    $localScript = Join-Path $env:TEMP $name
+    $remoteScript = "/tmp/$name"
+    Set-Content -Encoding ASCII -NoNewline -Path $localScript -Value $ScriptText
+    try {
+        Copy-ToRemote -User $User -HostName $HostName -LocalPath $localScript -RemotePath $remoteScript
+        $out = Invoke-SSH -User $User -HostName $HostName -Command ("bash " + (Quote-BashArg $remoteScript))
+        Invoke-SSH -User $User -HostName $HostName -Command ("rm -f " + (Quote-BashArg $remoteScript)) | Out-Null
+        return $out
+    } finally {
+        if (Test-Path $localScript) {
+            Remove-Item -Force -LiteralPath $localScript
+        }
+    }
+}
+
 $stamp = Get-Date -Format "yyyyMMddHHmmss"
 $localRoot = Join-Path $env:TEMP "msc-restore-test-$stamp"
 New-Item -ItemType Directory -Force -Path $localRoot | Out-Null
@@ -73,6 +95,12 @@ if (-not [string]::IsNullOrWhiteSpace($SourceRPCToken)) {
 $sourceScript = @"
 set -euo pipefail
 repo="$RepoPath"
+case "`$repo" in
+  /*) ;;
+  "~") repo="`$HOME" ;;
+  "~/"*) repo="`$HOME/`$`{repo#~/`}" ;;
+  *) repo="`$HOME/`$repo" ;;
+esac
 stamp="$stamp"
 cd "`$repo"
 curl -fsS -X POST $sourceAuthHeader "$SourceRPC/backup/export" > "/tmp/msc_backup_export_`$stamp.json"
@@ -84,7 +112,7 @@ printf '%s\n%s\n' "`$archive" "`$backup_base" > "/tmp/msc_backup_archive_`$stamp
 cat "/tmp/msc_backup_archive_`$stamp.txt"
 "@
 
-$sourceInfoRaw = Invoke-SSH -User $SourceUser -HostName $SourceHost -Command ("bash -lc " + (Quote-BashArg $sourceScript))
+$sourceInfoRaw = Invoke-SSHScript -User $SourceUser -HostName $SourceHost -ScriptText $sourceScript
 $sourceInfo = @($sourceInfoRaw | Where-Object { $_ -ne "" })
 if ($sourceInfo.Count -lt 2) {
     throw "source did not return archive info"
@@ -103,6 +131,12 @@ Copy-ToRemote -User $TargetUser -HostName $TargetHost -LocalPath $localArchive -
 $targetScript = @"
 set -euo pipefail
 repo="$RepoPath"
+case "`$repo" in
+  /*) ;;
+  "~") repo="`$HOME" ;;
+  "~/"*) repo="`$HOME/`$`{repo#~/`}" ;;
+  *) repo="`$HOME/`$repo" ;;
+esac
 stamp="$stamp"
 root="/tmp/msc-restore-test-`$stamp"
 mkdir -p "`$root/input"
@@ -127,8 +161,17 @@ import os
 root=os.environ["ROOT"]
 duration=int(os.environ["DURATION"])
 target=int(os.environ["TARGET_SECONDS"])
-verify=json.load(open(root + "/verify.json"))
-imp=json.load(open(root + "/import.json"))
+def load_json_tail(path):
+    raw=open(path, encoding="utf-8", errors="replace").read()
+    start=raw.rfind("\n{")
+    if start >= 0:
+        raw=raw[start+1:]
+    else:
+        start=raw.find("{")
+        raw=raw[start:] if start >= 0 else raw
+    return json.loads(raw)
+verify=load_json_tail(root + "/verify.json")
+imp=load_json_tail(root + "/import.json")
 print(json.dumps({
   "restore_seconds": duration,
   "target_seconds": target,
@@ -146,7 +189,7 @@ if [ "`$duration" -gt "$RecoveryTargetSeconds" ]; then
 fi
 "@
 
-Invoke-SSH -User $TargetUser -HostName $TargetHost -Command ("bash -lc " + (Quote-BashArg $targetScript))
+Invoke-SSHScript -User $TargetUser -HostName $TargetHost -ScriptText $targetScript
 
 if (-not $KeepRemoteArtifacts.IsPresent) {
     Invoke-SSH -User $SourceUser -HostName $SourceHost -Command ("rm -f " + (Quote-BashArg $remoteArchive))
