@@ -1,4 +1,69 @@
 groups:
+  - name: msc-mainnet-launch-gates
+    rules:
+      - alert: NoBlockFor60Seconds
+        expr: msc_consensus_last_block_age_seconds{job="msc_nodes"} > 60
+        for: 60s
+        labels:
+          severity: critical
+        annotations:
+          summary: "No MSC block for more than 60 seconds"
+          description: "{{ $labels.node_id }} has not observed a committed block for {{ $value }} seconds."
+
+      - alert: FinalityGapOver20
+        expr: msc_finality_gap{job="msc_nodes"} > 20
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC finality gap above 20 blocks"
+          description: "{{ $labels.node_id }} finality gap is {{ $value }} blocks."
+
+      - alert: PeersBelow3
+        expr: msc_peers_connected{job="msc_nodes"} < 3
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC node has fewer than 3 peers"
+          description: "{{ $labels.node_id }} has only {{ $value }} connected peers."
+
+      - alert: DiskUsageOver80Percent
+        expr: msc_disk_usage_percent{job="msc_nodes"} > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC node disk usage above 80 percent"
+          description: "{{ $labels.node_id }} disk usage is {{ $value }} percent."
+
+      - alert: QuorumFailure
+        expr: msc_quorum_failures_total{job="msc_nodes"} > 0 or msc_quorum_observed{job="msc_nodes"} < msc_quorum_required{job="msc_nodes"}
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC strict quorum failure"
+          description: "{{ $labels.node_id }} observed quorum is below required quorum."
+
+      - alert: ValidatorOffline
+        expr: msc_validator_health_offline{job="msc_nodes"} > 0 or msc_validator_online{job="msc_nodes"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC validator offline"
+          description: "{{ $labels.node_id }} reports an offline validator or validator {{ $labels.validator }} is offline."
+
+      - alert: SnapshotFailure
+        expr: increase(msc_snapshot_failures_total{job="msc_nodes"}[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC snapshot failure"
+          description: "{{ $labels.node_id }} reported snapshot create/load/apply failure."
+
   - name: msc-node-health
     rules:
       - alert: MSCNodeDown
@@ -182,13 +247,13 @@ groups:
           description: "{{ $labels.node_id }} reported replay/rebuild failures."
 
       - alert: MSCStorageUsageHigh
-        expr: msc_storage_size_bytes{job="msc_nodes"} > 0 and msc_storage_size_bytes{job="msc_nodes"} > 0.8 * 100 * 1024 * 1024 * 1024
+        expr: msc_disk_usage_percent{job="msc_nodes"} > 80 or (msc_storage_size_bytes{job="msc_nodes"} > 0 and msc_storage_size_bytes{job="msc_nodes"} > 0.8 * 100 * 1024 * 1024 * 1024)
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: "MSC storage usage high"
-          description: "{{ $labels.node_id }} local storage is above the validator target warning threshold."
+          description: "{{ $labels.node_id }} local storage is above the validator target warning threshold or disk usage is above 80 percent."
 
       - alert: MSCRPCRateLimitHigh
         expr: increase(msc_rpc_rate_limited_total{job="msc_nodes"}[5m]) > 50

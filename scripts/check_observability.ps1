@@ -16,6 +16,7 @@ param(
     [int]$FinalityCriticalBlocks = 20,
     [int]$NoBlockCriticalSeconds = 60,
     [int]$MinPeers = 3,
+    [int]$DiskCriticalPercent = 80,
     [switch]$SkipUnreachable
 )
 
@@ -82,6 +83,8 @@ foreach ($targetRaw in $Targets) {
         $quorumFailure = Metric $metrics "msc_quorum_failures_total"
         $lastBlockAge = Metric $metrics "msc_consensus_last_block_age_seconds"
         $peers = Metric $metrics "msc_peers_connected"
+        $diskPercent = Metric $metrics "msc_disk_usage_percent"
+        $validatorOffline = Metric $metrics "msc_validator_health_offline"
         $snapshotFailures = Metric $metrics "msc_snapshot_failures_total"
         $replayFailures = Metric $metrics "msc_replay_failures_total"
         $checkpointConflicts = Metric $metrics "msc_checkpoint_conflicts_total"
@@ -97,6 +100,10 @@ foreach ($targetRaw in $Targets) {
             $status = "WARN"
             [void]$reasons.Add("peers=$peers")
         }
+        if ($diskPercent -gt $DiskCriticalPercent) {
+            $status = "CRITICAL"
+            [void]$reasons.Add("disk=${diskPercent}%")
+        }
         if ($finalityGap -gt $FinalityCriticalBlocks) {
             $status = "CRITICAL"
             [void]$reasons.Add("finality_gap=$finalityGap")
@@ -104,6 +111,10 @@ foreach ($targetRaw in $Targets) {
         if ($quorumFailure -gt 0) {
             $status = "CRITICAL"
             [void]$reasons.Add("quorum_failure")
+        }
+        if ($validatorOffline -gt 0) {
+            $status = "CRITICAL"
+            [void]$reasons.Add("validator_offline=$validatorOffline")
         }
         if ($lastBlockAge -gt $NoBlockCriticalSeconds) {
             $status = "CRITICAL"
@@ -133,6 +144,7 @@ foreach ($targetRaw in $Targets) {
             Lag          = $lag
             FinalityGap  = $finalityGap
             Peers        = $peers
+            DiskPct      = $diskPercent
             Quorum       = "$(Metric $metrics "msc_quorum_observed")/$(Metric $metrics "msc_quorum_required")"
             SyncMode     = Metric $metrics "msc_sync_mode"
             LastBlockSec = $lastBlockAge
@@ -150,6 +162,7 @@ foreach ($targetRaw in $Targets) {
             Lag          = 0
             FinalityGap  = 0
             Peers        = 0
+            DiskPct      = 0
             Quorum       = "0/0"
             SyncMode     = 0
             LastBlockSec = 0

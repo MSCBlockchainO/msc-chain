@@ -18,10 +18,10 @@ scrape_configs:
           - localhost:9090
 
   - job_name: msc_nodes
-    scheme: https
+    # Local nodes expose plain HTTP by default. Switch to https only when
+    # the node is behind a TLS proxy or TLS is enabled on the RPC server.
+    scheme: http
     metrics_path: /metrics
-    tls_config:
-      insecure_skip_verify: true
     static_configs:
       - targets:
           - host.docker.internal:26657

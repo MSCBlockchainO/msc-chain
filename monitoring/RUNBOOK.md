@@ -18,6 +18,19 @@ For a node that requires bearer auth:
 
 ## Critical Alerts
 
+### NoBlockFor60Seconds
+
+Meaning: `msc_consensus_last_block_age_seconds > 60`.
+
+Checks:
+- Confirm quorum health: `msc_quorum_observed >= msc_quorum_required`.
+- Confirm peer floor: `msc_peers_connected >= 3`.
+- Check proposer logs for stalled commit/proposal loop.
+
+Actions:
+- Restart only the stalled node first.
+- If multiple validators show the same alert, inspect network partition and quorum before restarting more nodes.
+
 ### MSCFinalityLagHigh
 
 Meaning: `msc_finality_gap > 20`.
@@ -45,6 +58,19 @@ Actions:
 - Bring back enough validators to satisfy strict quorum.
 - Fix unstable peers or wrong genesis/config first.
 - Avoid force-finalizing blocks while quorum is below requirement.
+
+### ValidatorOffline
+
+Meaning: `msc_validator_health_offline > 0` or a per-validator `msc_validator_online == 0`.
+
+Checks:
+- Find the validator label in Grafana or Prometheus.
+- Confirm process, disk, and peer count on that validator.
+- Compare with `msc_validator_ready` and `msc_validator_last_seen_seconds`.
+
+Actions:
+- Restart the offline validator only after verifying it has the correct genesis, chain ID, and validator key.
+- Use snapshot restore if it is behind by many blocks.
 
 ### MSCBlockProductionStalled
 
@@ -103,6 +129,7 @@ Actions:
 ### MSCStorageUsageHigh
 
 Actions:
+- Check `msc_disk_usage_percent`; if above 80, prune/export before disk reaches 90.
 - Confirm validator is not running archive mode.
 - Check `msc_storage_pruned_states_total`, `msc_storage_gc_cycles_total`, and `msc_cold_storage_size_bytes`.
 - Run storage manager after a finalized epoch, then verify snapshots were compacted.

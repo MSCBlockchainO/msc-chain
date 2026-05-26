@@ -138,6 +138,8 @@ func TestHandleMetricsExposesCoreMetrics(t *testing.T) {
 		"msc_replay_digest_match",
 		"msc_replay_digest_mismatch_total",
 		"msc_storage_size_bytes",
+		"msc_disk_usage_percent",
+		"msc_storage_disk_usage_percent",
 		"msc_storage_pruned_states_total",
 		"msc_storage_pruned_snapshots_total",
 		"msc_storage_gc_cycles_total",

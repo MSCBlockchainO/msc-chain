@@ -36385,6 +36385,7 @@ func (s *Server) handleMetrics(
 	}
 	syncModeCode := syncModeMetricCode(runtime.SyncStage, runtime.SyncMode)
 	storageRootSizeBytes, coldStorageSizeBytes := s.Node.storageDirectorySizeSnapshot()
+	storageDiskUsagePercent := diskUsagePercent(nodeDataPath(s.Node.DataDir, s.Node.ID))
 	storagePrunedStates := obs.StoragePrunedStatesTotal
 	storagePrunedSnapshots := obs.StoragePrunedSnapshotsTotal
 	storageGCCycles := obs.StorageGCCyclesTotal
@@ -36560,6 +36561,8 @@ func (s *Server) handleMetrics(
 	appendPromGauge(&out, "msc_security_deterministic_tx_order_enforced", "Security: deterministic tx-order enforcement enabled (1/0).", baseLabels, boolToPromFloat(EnforceDeterministicTxOrder))
 
 	appendPromGauge(&out, "msc_storage_size_bytes", "Approximate on-disk node data size in bytes.", baseLabels, float64(storageRootSizeBytes))
+	appendPromGauge(&out, "msc_disk_usage_percent", "Filesystem disk usage percent for the node data volume.", baseLabels, storageDiskUsagePercent)
+	appendPromGauge(&out, "msc_storage_disk_usage_percent", "Alias for filesystem disk usage percent for the node data volume.", baseLabels, storageDiskUsagePercent)
 	appendPromGauge(&out, "msc_storage_pruned_states_total", "Highest state height boundary pruned by the storage manager.", baseLabels, float64(storagePrunedStates))
 	appendPromGauge(&out, "msc_storage_pruned_snapshots_total", "Snapshots pruned by the storage manager.", baseLabels, float64(storagePrunedSnapshots))
 	appendPromGauge(&out, "msc_storage_gc_cycles_total", "Storage manager GC/compaction cycles observed.", baseLabels, float64(storageGCCycles))

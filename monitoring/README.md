@@ -20,6 +20,7 @@ This folder provides a ready setup for:
   - snapshot create/load/apply timing, failures, and bootstrap counters
   - replay/rebuild timing, replayed blocks, failures, and digest health
   - storage size, pruning, GC, cold-storage, and finality artifact counters
+  - node disk usage percentage for validator disk-pressure alerts
   - sync mode, sync lag, peer quarantine, rate-limit drops, and bad snapshot proofs
   - RPC request rate, body rejects, rate limits, unauthorized requests, and concurrency
 
@@ -60,6 +61,13 @@ cd ..
   - password: `admin`
 
 ## Default Alerts
+- `NoBlockFor60Seconds`
+- `FinalityGapOver20`
+- `PeersBelow3`
+- `DiskUsageOver80Percent`
+- `QuorumFailure`
+- `ValidatorOffline`
+- `SnapshotFailure`
 - `MSCNodeDown`
 - `MSCNodeNotReady`
 - `MSCFinalityStalled`
@@ -98,6 +106,7 @@ cd ..
 - `MSC Storage`
 - `MSC Security`
 - `MSC RPC API`
+- `MSC Mainnet Launch Gates`
 
 The readiness dashboards split the Tier 2 public-mainnet signals into operator views:
 chain overview, validators, sync/bootstrap, storage/GC, and security.
