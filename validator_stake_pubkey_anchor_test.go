@@ -82,6 +82,26 @@ func TestValidateStakeTransactionRequiresValidatorPubKeyForFirstNonCoreStake(t *
 	}
 }
 
+func TestValidateStakeTransactionRejectsWalletPublicKeyAsValidatorPubKey(t *testing.T) {
+	defer withStakeConsensusPubKeyGlobals(t)()
+
+	ConfigAuthCoreValidators = []string{"A", "B", "C", "D"}
+	GlobalValidatorRegistry.Load(nil)
+
+	wallet := newStakeConsensusPubKeyTestWallet(t, "stake-pass")
+	ledger := GenesisLedger()
+	addBalance(&ledger, CoinSymbol, wallet.Address, 10_000)
+
+	tx, err := BuildSignedStakeTxSecure(wallet, "stake-pass", "F", wallet.PublicKey, 100, getNonce(ledger, wallet.Address), CoinSymbol, DefaultStakeLockEpochs)
+	if err != nil {
+		t.Fatalf("build stake tx: %v", err)
+	}
+
+	if err := (&Mempool{}).ValidateTransaction(tx, &ledger); err == nil || !strings.Contains(err.Error(), "not wallet public key") {
+		t.Fatalf("expected wallet public key rejection, got=%v", err)
+	}
+}
+
 func TestUpdateValidatorMetricsFromBlockAnchorsConsensusPubKeyFromStake(t *testing.T) {
 	defer withStakeConsensusPubKeyGlobals(t)()
 

@@ -5834,6 +5834,24 @@ const sendStake = async (event) => {
     focusStakeValidatorPubKeyField();
     return;
   }
+  if (
+    validatorPubKey &&
+    state.wallet.publicKey &&
+    validatorPubKey.toLowerCase() === String(state.wallet.publicKey).trim().toLowerCase()
+  ) {
+    setStakeValidatorPubKeyMessage(
+      "Validator pubkey: wallet key",
+      "error",
+      "Use the validator node consensus pubkey, not this wallet public key.",
+    );
+    setStatus(
+      el("stakeStatus"),
+      "Validator consensus pubkey cannot be the wallet public key",
+      "error",
+    );
+    focusStakeValidatorPubKeyField();
+    return;
+  }
 
   state.staking = true;
   const stakeBtn = el("stakeForm").querySelector("button[type='submit']");

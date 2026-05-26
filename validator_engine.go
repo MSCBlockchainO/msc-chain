@@ -435,6 +435,10 @@ func validateStakeConsensusPubKey(tx Transaction, snapshot map[string]ValidatorR
 	if len(provided) == ed25519.PublicKeySize {
 		providedHex = strings.ToLower(hex.EncodeToString(provided))
 	}
+	walletPubHex := normalizeConsensusPubKeyHex(tx.PublicKey)
+	if providedHex != "" && walletPubHex != "" && strings.EqualFold(providedHex, walletPubHex) {
+		return "", errors.New("validator_pubkey must be validator consensus key, not wallet public key")
+	}
 	if anchored != "" {
 		if providedHex != "" && !strings.EqualFold(providedHex, anchored) {
 			return "", fmt.Errorf("validator_pubkey conflicts with anchored consensus pubkey")
