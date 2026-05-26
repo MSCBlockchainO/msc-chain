@@ -3104,14 +3104,11 @@ func (n *Node) validatorRegistryCommitmentRequiredAt(height uint64) bool {
 }
 
 func activeSetModeAdaptiveCommittee() bool {
-	if GenesisValidatorSetFrozen {
-		return false
-	}
 	return normalizeActiveSetMode(ValidatorActiveSetMode) == "adaptive_committee"
 }
 
 func displayActiveSetMode() string {
-	if GenesisValidatorSetFrozen {
+	if GenesisValidatorSetFrozen && GenesisFrozenValidatorSetSize > 0 {
 		return "genesis_frozen"
 	}
 	return normalizeActiveSetMode(ValidatorActiveSetMode)
@@ -3609,6 +3606,20 @@ func containsNormalizedValidatorID(ids []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func isSubsetValidatorSet(subset []string, superset []string) bool {
+	subset = canonicalValidatorIDs(subset)
+	superset = canonicalValidatorIDs(superset)
+	if len(subset) == 0 || len(superset) == 0 || len(subset) > len(superset) {
+		return false
+	}
+	for _, id := range subset {
+		if !containsNormalizedValidatorID(superset, id) {
+			return false
+		}
+	}
+	return true
 }
 
 // chainDerivedValidatorAuthorityForHeight resolves validator authority from
@@ -4738,17 +4749,39 @@ func (n *Node) freezeValidatorSetForHeight(height uint64, hint []string) []strin
 	}
 
 	candidate := canonicalValidatorIDs(append([]string{}, hint...))
+	genesisCandidate := []string(nil)
+	plannedCandidate := false
 	if GenesisValidatorSetFrozen {
-		if genesis := canonicalValidatorIDs(n.GenesisValidators); len(genesis) > 0 {
+		if planned := n.plannedValidatorSetForHeightFromChain(height); len(planned) > 0 {
+			candidate = planned
+			plannedCandidate = true
+		} else if height <= 1 || len(candidate) == 0 {
+			if genesis := canonicalValidatorIDs(n.GenesisValidators); len(genesis) > 0 {
+				candidate = genesis
+				genesisCandidate = genesis
+			}
+		} else if genesis := canonicalValidatorIDs(n.GenesisValidators); len(genesis) > 0 &&
+			len(candidate) < len(genesis) &&
+			isSubsetValidatorSet(candidate, genesis) {
 			candidate = genesis
+			genesisCandidate = genesis
+		} else if genesis := canonicalValidatorIDs(n.GenesisValidators); len(genesis) > 0 {
+			genesisCandidate = genesis
 		}
 	}
-	if activeSetModeAdaptiveCommittee() && len(candidate) > 0 {
+	applyAdaptiveCommittee := activeSetModeAdaptiveCommittee()
+	if GenesisValidatorSetFrozen {
+		if plannedCandidate ||
+			(len(genesisCandidate) > 0 && (sameStringSlice(candidate, genesisCandidate) || len(candidate) > len(genesisCandidate))) {
+			applyAdaptiveCommittee = false
+		}
+	}
+	if applyAdaptiveCommittee && len(candidate) > 0 {
 		candidate = n.committeeForHeight(height, candidate)
 	}
 	if len(candidate) == 0 {
 		candidate = canonicalValidatorIDs(n.consensusValidatorsForHeight(height))
-		if activeSetModeAdaptiveCommittee() && len(candidate) > 0 {
+		if applyAdaptiveCommittee && len(candidate) > 0 {
 			candidate = n.committeeForHeight(height, candidate)
 		}
 	}
@@ -17114,6 +17147,10 @@ func (n *Node) consensusValidatorsForHeight(height uint64) []string {
 	if n == nil || height == 0 {
 		return nil
 	}
+	chainHeight := uint64(0)
+	if n.Blockchain != nil {
+		chainHeight = n.Blockchain.Height()
+	}
 	expectedHash := ""
 	if height > 1 && validatorSetCommitmentV2EnabledAt(height-1) {
 		if committed, ok := n.chainParentCommittedValidatorSetHash(height); ok {
@@ -17157,7 +17194,7 @@ func (n *Node) consensusValidatorsForHeight(height uint64) []string {
 		return n.applyCoreConsensusFilter(height, canonical)
 	}
 
-	if GenesisValidatorSetFrozen {
+	if GenesisValidatorSetFrozen && (height <= 1 || chainHeight == 0) {
 		if genesis := canonicalValidatorIDs(n.GenesisValidators); len(genesis) > 0 {
 			return finalize(genesis, "", "genesis_frozen", nil)
 		}
@@ -17183,9 +17220,7 @@ func (n *Node) consensusValidatorsForHeight(height uint64) []string {
 
 	// Chain-native fallback: a committed block carries the active validator set
 	// in `Signatures` and binds it via `validator_set_hash`.
-	chainHeight := uint64(0)
 	if n.Blockchain != nil {
-		chainHeight = n.Blockchain.Height()
 		if resolved, resolvedHash, source, ok := n.resolveCommittedValidatorSetForHeight(height); ok {
 			return finalize(resolved, resolvedHash, source, nil)
 		}
@@ -17359,10 +17394,13 @@ func (n *Node) queuePendingValidator(id string, activationHeight uint64) {
 
 	}
 	if GenesisValidatorSetFrozen && !validatorHasGenesisPubKey(id) {
-		if DebugConsensus {
-			fmt.Printf("[ONBOARDING-LOCKED] id=%s scheduled=%d reason=genesis_validator_set_frozen\n", id, activationHeight)
+		rec, ok := GlobalValidatorRegistry.Get(id)
+		if !ok || rec == nil || !validatorPassesStakeGate(id, rec.Stake) || normalizeConsensusPubKeyHex(rec.ConsensusPubKey) == "" {
+			if DebugConsensus {
+				fmt.Printf("[ONBOARDING-LOCKED] id=%s scheduled=%d reason=missing_stake_or_consensus_key_under_genesis_freeze\n", id, activationHeight)
+			}
+			return
 		}
-		return
 	}
 
 	n.validatorSetMu.Lock()
@@ -17813,10 +17851,6 @@ func (n *Node) observeDeterministicOnboardingCandidatesOnCommit(block Block) {
 	if n == nil || block.ID == 0 || !DeterministicValidatorSelection {
 		return
 	}
-	if GenesisValidatorSetFrozen {
-		return
-	}
-
 	committeeHeight := block.ID + 1
 	registrySnapshot := n.validatorRegistrySnapshotForHeight(committeeHeight)
 	if len(registrySnapshot) == 0 {
@@ -17893,6 +17927,35 @@ func (n *Node) observeDeterministicOnboardingCandidatesOnCommit(block Block) {
 		)
 		appendAdmitted(lane)
 	}
+	if GenesisValidatorSetFrozen {
+		capacity := len(candidateBase)
+		if target := n.activeSetTarget(); target >= 0 {
+			capacity = target - len(authoritativeSet)
+			if capacity < 0 {
+				capacity = 0
+			}
+		}
+		for _, id := range candidateBase {
+			if len(admitted) >= capacity {
+				break
+			}
+			norm := normalizeValidatorID(id)
+			if norm == "" || containsNormalizedValidatorID(authoritativeSet, norm) {
+				continue
+			}
+			if containsNormalizedValidatorID(n.GenesisValidators, norm) || validatorHasGenesisPubKey(norm) {
+				continue
+			}
+			if _, seen := admittedSeen[norm]; seen {
+				continue
+			}
+			eval := evaluateValidatorOnboardingFromSnapshot(norm, committeeHeight, registrySnapshot)
+			if !eval.Eligible && !eval.BootstrapEligible {
+				continue
+			}
+			appendAdmitted([]string{norm})
+		}
+	}
 	if len(admitted) == 0 {
 		return
 	}
@@ -17912,6 +17975,18 @@ func (n *Node) observeDeterministicOnboardingCandidatesOnCommit(block Block) {
 		}
 
 		ready, reason := n.onboardingActivationReady(norm, committeeHeight, registrySnapshot)
+		if !ready && GenesisValidatorSetFrozen &&
+			!containsNormalizedValidatorID(n.GenesisValidators, norm) &&
+			!validatorHasGenesisPubKey(norm) {
+			eval := evaluateValidatorOnboardingFromSnapshot(norm, committeeHeight, registrySnapshot)
+			if eval.Eligible || eval.BootstrapEligible {
+				ready = true
+				reason = strings.TrimSpace(eval.Reason)
+				if reason == "" || reason == "grace_expired" {
+					reason = "bootstrap_lane"
+				}
+			}
+		}
 		if !ready {
 			continue
 		}
@@ -17960,10 +18035,6 @@ func (n *Node) observeCandidatesOnCommit(block Block) {
 		return
 
 	}
-	if GenesisValidatorSetFrozen {
-		return
-	}
-
 	if DeterministicValidatorSelection {
 		n.observeDeterministicOnboardingCandidatesOnCommit(block)
 		return
@@ -24043,9 +24114,6 @@ func applyGenesisRuntimePolicy(g *Genesis) {
 		return
 	}
 	GenesisFrozenValidatorSetSize = len(ids)
-	ValidatorActiveSetSize = len(ids)
-	ValidatorOnboardingMaxNewSlots = 0
-	ValidatorOnboardingBootstrapMaxNewSlots = 0
 }
 
 func normalizeGenesisAllocation(name string, allocation *GenesisAllocation, minLockEpochs uint64) error {

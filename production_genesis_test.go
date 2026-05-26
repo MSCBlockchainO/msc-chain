@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -157,11 +158,11 @@ func TestProductionGenesisConfigLock(t *testing.T) {
 	if strings.ToLower(strings.TrimSpace(cfg.Chain.GenesisHash)) != productionGenesisSHA256 {
 		t.Fatalf("config genesis_hash = %q, want %q", cfg.Chain.GenesisHash, productionGenesisSHA256)
 	}
-	if cfg.Validators.ActiveSetSize != len(productionValidators) {
-		t.Fatalf("active_set_size = %d, want %d frozen genesis validators", cfg.Validators.ActiveSetSize, len(productionValidators))
+	if cfg.Validators.ActiveSetSize < len(productionValidators) {
+		t.Fatalf("active_set_size = %d, want at least %d genesis validators", cfg.Validators.ActiveSetSize, len(productionValidators))
 	}
 	if cfg.Validators.OnboardingMaxNewSlots != 0 || cfg.Validators.OnboardingBootstrapMaxNewSlots != 0 {
-		t.Fatalf("frozen production genesis must not admit new validators automatically: onboarding=%d bootstrap=%d",
+		t.Fatalf("production genesis must not admit unstaked validators automatically: onboarding=%d bootstrap=%d",
 			cfg.Validators.OnboardingMaxNewSlots,
 			cfg.Validators.OnboardingBootstrapMaxNewSlots)
 	}
@@ -214,27 +215,38 @@ func TestFrozenGenesisRuntimePolicyLocksValidatorSet(t *testing.T) {
 	if GenesisFrozenValidatorSetSize != len(productionValidators) {
 		t.Fatalf("frozen validator set size = %d, want %d", GenesisFrozenValidatorSetSize, len(productionValidators))
 	}
-	if ValidatorActiveSetSize != len(productionValidators) {
-		t.Fatalf("active set target = %d, want %d", ValidatorActiveSetSize, len(productionValidators))
+	if ValidatorActiveSetSize != 50 {
+		t.Fatalf("active set target = %d, want configured growth capacity 50", ValidatorActiveSetSize)
 	}
-	if ValidatorOnboardingMaxNewSlots != 0 || ValidatorOnboardingBootstrapMaxNewSlots != 0 {
-		t.Fatalf("onboarding slots not disabled: regular=%d bootstrap=%d", ValidatorOnboardingMaxNewSlots, ValidatorOnboardingBootstrapMaxNewSlots)
+	if ValidatorOnboardingMaxNewSlots != 2 || ValidatorOnboardingBootstrapMaxNewSlots != 2 {
+		t.Fatalf("onboarding slots were overwritten: regular=%d bootstrap=%d", ValidatorOnboardingMaxNewSlots, ValidatorOnboardingBootstrapMaxNewSlots)
 	}
 }
 
 func TestFrozenGenesisConsensusIgnoresIncompleteCommitteeHint(t *testing.T) {
+	defer withStakeConsensusPubKeyGlobals(t)()
+
 	oldFrozen := GenesisValidatorSetFrozen
 	oldFrozenSize := GenesisFrozenValidatorSetSize
 	oldMode := ValidatorActiveSetMode
+	oldActiveSet := ValidatorActiveSetSize
 	defer func() {
 		GenesisValidatorSetFrozen = oldFrozen
 		GenesisFrozenValidatorSetSize = oldFrozenSize
 		ValidatorActiveSetMode = oldMode
+		ValidatorActiveSetSize = oldActiveSet
 	}()
 
 	GenesisValidatorSetFrozen = true
 	GenesisFrozenValidatorSetSize = len(productionValidators)
 	ValidatorActiveSetMode = "adaptive_committee"
+	ValidatorActiveSetSize = 50
+	registry := make(map[string]ValidatorRecord, len(productionValidators)+1)
+	for id, pub := range productionValidators {
+		registry[id] = ValidatorRecord{ID: id, Stake: ValidatorMinStake, ConsensusPubKey: pub}
+	}
+	registry["F"] = ValidatorRecord{ID: "F", Stake: ValidatorMinStake, ConsensusPubKey: strings.Repeat("ab", 32)}
+	GlobalValidatorRegistry.Load(registry)
 
 	node := &Node{
 		ID:                "A",
@@ -247,8 +259,111 @@ func TestFrozenGenesisConsensusIgnoresIncompleteCommitteeHint(t *testing.T) {
 		t.Fatalf("frozen genesis committee = %v, want %v", got, want)
 	}
 
-	if activeSetModeAdaptiveCommittee() {
-		t.Fatalf("frozen genesis must bypass adaptive committee selection")
+	got = node.freezeValidatorSetForHeight(101, []string{"A", "B", "C", "D", "F"})
+	want = []string{"A", "B", "C", "D", "F"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("post-genesis staked transition committee = %v, want %v", got, want)
+	}
+
+	if !activeSetModeAdaptiveCommittee() {
+		t.Fatalf("adaptive committee mode should remain available after genesis bootstrap")
+	}
+}
+
+func TestFrozenGenesisAllowsStakedNonCorePendingActivation(t *testing.T) {
+	defer withStakeConsensusPubKeyGlobals(t)()
+
+	oldFrozen := GenesisValidatorSetFrozen
+	oldFrozenSize := GenesisFrozenValidatorSetSize
+	oldActiveSet := ValidatorActiveSetSize
+	oldDeterministic := DeterministicValidatorSelection
+	defer func() {
+		GenesisValidatorSetFrozen = oldFrozen
+		GenesisFrozenValidatorSetSize = oldFrozenSize
+		ValidatorActiveSetSize = oldActiveSet
+		DeterministicValidatorSelection = oldDeterministic
+	}()
+
+	GenesisValidatorSetFrozen = true
+	GenesisFrozenValidatorSetSize = len(productionValidators)
+	ValidatorActiveSetSize = 50
+	DeterministicValidatorSelection = true
+	GlobalValidatorRegistry.Load(map[string]ValidatorRecord{
+		"F": {
+			ID:              "F",
+			Stake:           ValidatorMinStake,
+			ConsensusPubKey: strings.Repeat("ab", 32),
+			JoinHeight:      25,
+		},
+	})
+
+	chain := NewBlockchain()
+	chain.Blocks = append(chain.Blocks, Block{ID: 30, Signatures: []string{"A", "B", "C", "D"}})
+	node := &Node{
+		ID:                       "A",
+		Blockchain:               &chain,
+		DataDir:                  t.TempDir(),
+		GenesisValidators:        []string{"A", "B", "C", "D"},
+		candidates:               map[string]*CandidateStatus{"F": {ID: "F", LastHeartbeatAt: time.Now()}},
+		pendingValidators:        map[string]uint64{},
+		pendingValidatorRemovals: map[string]uint64{},
+	}
+	node.queuePendingValidator("F", 25)
+	if got := node.onboardingPendingAddHeight("F"); got != 25 {
+		t.Fatalf("staked non-core pending activation height = %d, want 25", got)
+	}
+}
+
+func TestFrozenGenesisRecoveryQueuesExistingStakedNonCore(t *testing.T) {
+	defer withStakeConsensusPubKeyGlobals(t)()
+
+	oldFrozen := GenesisValidatorSetFrozen
+	oldFrozenSize := GenesisFrozenValidatorSetSize
+	oldActiveSet := ValidatorActiveSetSize
+	oldDeterministic := DeterministicValidatorSelection
+	defer func() {
+		GenesisValidatorSetFrozen = oldFrozen
+		GenesisFrozenValidatorSetSize = oldFrozenSize
+		ValidatorActiveSetSize = oldActiveSet
+		DeterministicValidatorSelection = oldDeterministic
+	}()
+
+	GenesisValidatorSetFrozen = true
+	GenesisFrozenValidatorSetSize = len(productionValidators)
+	ValidatorActiveSetSize = 50
+	DeterministicValidatorSelection = true
+
+	registry := make(map[string]ValidatorRecord, len(productionValidators)+1)
+	for id, pub := range productionValidators {
+		registry[id] = ValidatorRecord{
+			ID:              id,
+			Stake:           ValidatorMinStake,
+			ConsensusPubKey: pub,
+			JoinHeight:      1,
+		}
+	}
+	registry["F"] = ValidatorRecord{
+		ID:              "F",
+		Stake:           ValidatorMinStake,
+		ConsensusPubKey: strings.Repeat("ab", 32),
+		JoinHeight:      25,
+	}
+	GlobalValidatorRegistry.Load(registry)
+
+	chain := NewBlockchain()
+	chain.Blocks = append(chain.Blocks, Block{ID: 30, Signatures: []string{"A", "B", "C", "D"}})
+	node := &Node{
+		ID:                       "A",
+		Blockchain:               &chain,
+		DataDir:                  t.TempDir(),
+		GenesisValidators:        []string{"A", "B", "C", "D"},
+		candidates:               map[string]*CandidateStatus{"F": {ID: "F", LastHeartbeatAt: time.Now()}},
+		pendingValidators:        map[string]uint64{},
+		pendingValidatorRemovals: map[string]uint64{},
+	}
+	node.observeDeterministicOnboardingCandidatesOnCommit(Block{ID: 30})
+	if got := node.onboardingPendingAddHeight("F"); got == 0 {
+		t.Fatalf("expected existing staked non-core validator to be queued")
 	}
 }
 
