@@ -2,8 +2,8 @@ param(
     [string]$KeyPath = "C:\Users\Mohammad Talha\Downloads\msc-key.pem",
     [string]$SourceUser = "ubuntu",
     [string]$SourceHost = "54.80.4.133",
-    [string]$SourceNodeId = "A",
-    [string]$SourceDataDir = "runtime-data/distributed/A",
+    [string]$SourceRPC = "http://127.0.0.1:26657",
+    [string]$SourceRPCToken = $env:MSC_RPC_TOKEN,
     [string]$TargetUser = "ubuntu",
     [string]$TargetHost = "50.19.167.221",
     [string]$TargetNodeId = "RESTORE",
@@ -62,15 +62,20 @@ $localRoot = Join-Path $env:TEMP "msc-restore-test-$stamp"
 New-Item -ItemType Directory -Force -Path $localRoot | Out-Null
 
 Write-Host "== MSC backup/restore EC2 test =="
-Write-Host "source: $SourceUser@$SourceHost node=$SourceNodeId datadir=$SourceDataDir"
+Write-Host "source: $SourceUser@$SourceHost rpc=$SourceRPC"
 Write-Host "target: $TargetUser@$TargetHost temp node=$TargetNodeId"
+
+$sourceAuthHeader = ""
+if (-not [string]::IsNullOrWhiteSpace($SourceRPCToken)) {
+    $sourceAuthHeader = "-H " + (Quote-BashArg ("Authorization: Bearer " + $SourceRPCToken))
+}
 
 $sourceScript = @"
 set -euo pipefail
 repo="$RepoPath"
 stamp="$stamp"
 cd "`$repo"
-./msc-node backup export --id "$SourceNodeId" --datadir "$SourceDataDir" --reason "fresh_ec2_restore_test" > "/tmp/msc_backup_export_`$stamp.json"
+curl -fsS -X POST $sourceAuthHeader "$SourceRPC/backup/export" > "/tmp/msc_backup_export_`$stamp.json"
 backup_dir=`$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["backup_dir"])' "/tmp/msc_backup_export_`$stamp.json")
 backup_base=`$(basename "`$backup_dir")
 archive="/tmp/msc_backup_`$stamp.tgz"
