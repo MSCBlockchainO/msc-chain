@@ -955,6 +955,7 @@ func TestMaybeExitSyncModeArmsWarmupAfterCatchup(t *testing.T) {
 
 	node.syncMu.Lock()
 	node.syncWarmupJoinHeight = 0
+	node.syncWarmupEligible = true
 	node.syncMu.Unlock()
 
 	if cleared := node.maybeExitSyncMode("rejoin_catchup_complete"); !cleared {
@@ -969,6 +970,34 @@ func TestMaybeExitSyncModeArmsWarmupAfterCatchup(t *testing.T) {
 	}
 	if runtime.VoteEnabled {
 		t.Fatal("expected voting to remain disabled during rejoin warmup")
+	}
+}
+
+func TestSnapshotWarmupUsesLocalTipForProposalHeight(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	for height := uint64(1); height <= 12; height++ {
+		block := node.BuildLeaderBlock(height)
+		block.BlockTime = LogicalTimeForEpochTick(block.ID, TickFinalize)
+		block.Timestamp = int64(SystemTimeUnits(block.BlockTime))
+		block.BlockHash = HashBlock(block)
+		node.Blockchain.AddBlock(block)
+	}
+
+	node.setSnapshotWarmupJoinHeight(node.Blockchain.Height())
+	node.syncMu.Lock()
+	node.syncWarmupStartAt = time.Now().Add(-2 * syncSnapshotWarmupDuration())
+	node.syncWarmupLastHeight = node.Blockchain.Height()
+	node.syncWarmupLastHeightAt = time.Now().Add(-2 * syncSnapshotWarmupDuration())
+	node.syncWarmupQuorumSince = time.Now().Add(-2 * syncSnapshotWarmupDuration())
+	node.syncMu.Unlock()
+
+	_ = node.snapshotWarmupActive(node.Blockchain.Height() + 1)
+
+	node.syncMu.Lock()
+	got := node.syncWarmupLastHeight
+	node.syncMu.Unlock()
+	if got != node.Blockchain.Height() {
+		t.Fatalf("snapshot warmup should evaluate at local tip, got height=%d want=%d", got, node.Blockchain.Height())
 	}
 }
 

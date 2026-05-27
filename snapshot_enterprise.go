@@ -268,9 +268,7 @@ func (n *Node) snapshotWarmupRemaining(currentHeight uint64) uint64 {
 	if n == nil {
 		return 0
 	}
-	if currentHeight == 0 && n.Blockchain != nil {
-		currentHeight = n.Blockchain.Height()
-	}
+	currentHeight = n.snapshotWarmupReferenceHeight(currentHeight)
 	active, remaining := n.snapshotWarmupState(currentHeight)
 	if !active {
 		return 0
@@ -286,11 +284,23 @@ func (n *Node) snapshotWarmupActive(currentHeight uint64) bool {
 	if n == nil {
 		return false
 	}
-	if currentHeight == 0 && n.Blockchain != nil {
-		currentHeight = n.Blockchain.Height()
-	}
+	currentHeight = n.snapshotWarmupReferenceHeight(currentHeight)
 	active, _ := n.snapshotWarmupState(currentHeight)
 	return active
+}
+
+func (n *Node) snapshotWarmupReferenceHeight(requested uint64) uint64 {
+	if n == nil || n.Blockchain == nil {
+		return requested
+	}
+	tip := n.Blockchain.Height()
+	if tip == 0 {
+		return requested
+	}
+	if requested == 0 || requested > tip {
+		return tip
+	}
+	return requested
 }
 
 func syncSnapshotWarmupDuration() time.Duration {
