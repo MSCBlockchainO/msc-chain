@@ -89,6 +89,28 @@ const isLoopbackHost = (host) => {
   return h === "localhost" || h === "::1" || /^127(?:\.\d{1,3}){1,3}$/.test(h);
 };
 
+const isHTTPSPage = () => String(window.location.protocol || "").toLowerCase() === "https:";
+
+const isPublicGatewayPage = () => {
+  try {
+    return !isLoopbackHost(window.location.hostname) && isHTTPSPage();
+  } catch (_) {
+    return false;
+  }
+};
+
+const shouldKeepSavedRPCForCurrentPage = (rpc) => {
+  try {
+    const url = new URL(rpc, window.location.href);
+    if (isLoopbackHost(window.location.hostname)) return true;
+    if (isLoopbackHost(url.hostname)) return false;
+    if (isHTTPSPage() && url.protocol !== "https:") return false;
+    return true;
+  } catch (_) {
+    return false;
+  }
+};
+
 const inferDefaultRPCBase = () => {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -110,18 +132,11 @@ const savedRPCListForCurrentPage = () => {
     .map((item) => normalizeRPCBaseURL(item.trim()))
     .filter(Boolean);
   if (!values.length) return [];
-  if (isLoopbackHost(window.location.hostname)) return values;
-  return values.filter((rpc) => {
-    try {
-      const url = new URL(rpc, window.location.href);
-      return !isLoopbackHost(url.hostname);
-    } catch (_) {
-      return false;
-    }
-  });
+  return values.filter(shouldKeepSavedRPCForCurrentPage);
 };
 
 const initialRPCBase = () => {
+  if (isPublicGatewayPage()) return window.location.origin;
   const saved = savedRPCListForCurrentPage();
   return saved.length ? saved[0] : inferDefaultRPCBase();
 };
