@@ -15,6 +15,7 @@ func TestWalletPublicGatewayIgnoresUnsafeSavedRPC(t *testing.T) {
 	required := []string{
 		"const isPublicGatewayPage = () =>",
 		"const shouldKeepSavedRPCForCurrentPage = (rpc) =>",
+		"if (isPublicGatewayPage()) return url.origin === window.location.origin;",
 		`if (isHTTPSPage() && url.protocol !== "https:") return false;`,
 		"if (isPublicGatewayPage()) return window.location.origin;",
 	}

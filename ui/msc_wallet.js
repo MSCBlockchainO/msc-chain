@@ -103,6 +103,7 @@ const shouldKeepSavedRPCForCurrentPage = (rpc) => {
   try {
     const url = new URL(rpc, window.location.href);
     if (isLoopbackHost(window.location.hostname)) return true;
+    if (isPublicGatewayPage()) return url.origin === window.location.origin;
     if (isLoopbackHost(url.hostname)) return false;
     if (isHTTPSPage() && url.protocol !== "https:") return false;
     return true;
