@@ -1,0 +1,192 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+type ConsensusDetectorMode string
+
+const (
+	ConsensusDetectorNormal    ConsensusDetectorMode = "NORMAL"
+	ConsensusDetectorStrict    ConsensusDetectorMode = "STRICT"
+	ConsensusDetectorRecovery  ConsensusDetectorMode = "RECOVERY"
+	ConsensusDetectorDegraded  ConsensusDetectorMode = "DEGRADED"
+	ConsensusDetectorEmergency ConsensusDetectorMode = "EMERGENCY"
+	ConsensusDetectorHalted    ConsensusDetectorMode = "HALTED"
+	ConsensusDetectorPartition ConsensusDetectorMode = "PARTITION"
+	ConsensusDetectorAttack    ConsensusDetectorMode = "ATTACK"
+)
+
+type ConsensusDetectorMetrics struct {
+	Height            uint64
+	FinalizedHeight   uint64
+	TotalValidators   int
+	ActiveValidators  int
+	Quorum            int
+	MaxValidatorLag   uint64
+	PeerCount         int
+	MissedVotes       int
+	BlockTimeMS       int64
+	DoubleSign        bool
+	ForkDetected      bool
+	SyncingValidators int
+	LastFinalitySec   int64
+	PartitionRisk     bool
+	FinalityLagBlocks uint64
+}
+
+type ConsensusDetectorResult struct {
+	Mode              ConsensusDetectorMode
+	Code              int
+	Reason            string
+	FinalityLagBlocks uint64
+	LastFinalitySec   int64
+	PartitionRisk     bool
+	Attack            bool
+}
+
+func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
+	finalityLag := m.FinalityLagBlocks
+	if finalityLag == 0 && m.Height > m.FinalizedHeight {
+		finalityLag = m.Height - m.FinalizedHeight
+	}
+
+	result := ConsensusDetectorResult{
+		Mode:              ConsensusDetectorNormal,
+		Reason:            "healthy",
+		FinalityLagBlocks: finalityLag,
+		LastFinalitySec:   m.LastFinalitySec,
+		PartitionRisk:     m.PartitionRisk,
+		Attack:            m.DoubleSign || m.ForkDetected,
+	}
+
+	switch {
+	case m.DoubleSign || m.ForkDetected:
+		result.Mode = ConsensusDetectorAttack
+		result.Reason = "attack_signal"
+	case m.LastFinalitySec > 60:
+		result.Mode = ConsensusDetectorHalted
+		result.Reason = "finality_timeout"
+	case m.Quorum > 0 && m.ActiveValidators < m.Quorum:
+		result.Mode = ConsensusDetectorEmergency
+		result.Reason = fmt.Sprintf("active_validators_%d_below_quorum_%d", m.ActiveValidators, m.Quorum)
+	case m.PartitionRisk:
+		result.Mode = ConsensusDetectorPartition
+		result.Reason = "partition_risk"
+	case m.SyncingValidators > 0 || m.MaxValidatorLag > 100:
+		result.Mode = ConsensusDetectorRecovery
+		result.Reason = "validator_recovery"
+	case m.Quorum > 0 && m.ActiveValidators == m.Quorum:
+		result.Mode = ConsensusDetectorStrict
+		result.Reason = "minimum_quorum_active"
+	case m.BlockTimeMS > 5000 || m.MissedVotes > 0:
+		result.Mode = ConsensusDetectorDegraded
+		result.Reason = "slow_or_missed_votes"
+	default:
+		result.Mode = ConsensusDetectorNormal
+		result.Reason = "healthy"
+	}
+	result.Code = consensusDetectorModeCode(result.Mode)
+	return result
+}
+
+func consensusDetectorModeCode(mode ConsensusDetectorMode) int {
+	switch mode {
+	case ConsensusDetectorNormal:
+		return 0
+	case ConsensusDetectorStrict:
+		return 1
+	case ConsensusDetectorRecovery:
+		return 2
+	case ConsensusDetectorDegraded:
+		return 3
+	case ConsensusDetectorEmergency:
+		return 4
+	case ConsensusDetectorHalted:
+		return 5
+	case ConsensusDetectorPartition:
+		return 6
+	case ConsensusDetectorAttack:
+		return 7
+	default:
+		return -1
+	}
+}
+
+func (n *Node) consensusDetectorMetricsFromRuntime(runtime RuntimeStatusSnapshot) ConsensusDetectorMetrics {
+	total := len(n.GetConsensusValidators(int(runtime.Height + 1)))
+	if total == 0 {
+		total = GenesisFrozenValidatorSetSize
+	}
+	if total == 0 && runtime.RequiredQuorum > 0 {
+		total = runtime.RequiredQuorum
+	}
+	quorum := runtime.RequiredQuorum
+	if quorum == 0 {
+		quorum = runtime.StrictQuorum
+	}
+	if quorum == 0 {
+		quorum = runtime.NetworkQuorumRequired
+	}
+
+	finalityLag := uint64(0)
+	if runtime.Height > runtime.FinalizedHeight {
+		finalityLag = runtime.Height - runtime.FinalizedHeight
+	}
+	lastFinalitySec := int64(runtime.LastBlockAgeSeconds)
+	if finalityLag > 0 && lastFinalitySec == 0 {
+		lastFinalitySec = int64(finalityLag)
+	}
+
+	syncingValidators := 0
+	if runtime.Syncing || !runtime.SyncComplete {
+		syncingValidators = 1
+	}
+	if strings.Contains(strings.ToLower(runtime.ValidatorState), "sync") ||
+		strings.Contains(strings.ToLower(runtime.WaitReason), "sync") ||
+		strings.Contains(strings.ToLower(runtime.WaitReason), "snapshot") {
+		if syncingValidators < 1 {
+			syncingValidators = 1
+		}
+	}
+
+	partitionRisk := runtime.NetworkLagBlocks > validatorLivenessMaxHeightDriftBlocks()*2
+	if runtime.Peers > 0 && runtime.Peers < 3 && runtime.NetworkBestHeight > runtime.Height {
+		partitionRisk = true
+	}
+	if runtime.NetworkQuorumRequired > 0 && runtime.NetworkQuorumVotes > 0 && runtime.NetworkQuorumVotes < runtime.NetworkQuorumRequired {
+		partitionRisk = true
+	}
+
+	return ConsensusDetectorMetrics{
+		Height:            runtime.Height,
+		FinalizedHeight:   runtime.FinalizedHeight,
+		TotalValidators:   total,
+		ActiveValidators:  runtime.LiveValidators,
+		Quorum:            quorum,
+		MaxValidatorLag:   runtime.NetworkLagBlocks,
+		PeerCount:         runtime.Peers,
+		MissedVotes:       runtime.LiveOutOfDriftCount,
+		BlockTimeMS:       int64(runtime.LastBlockAgeSeconds) * 1000,
+		ForkDetected:      runtime.ExecMismatchUniqueSignersCurrentEpoch > 0,
+		SyncingValidators: syncingValidators,
+		LastFinalitySec:   lastFinalitySec,
+		PartitionRisk:     partitionRisk,
+		FinalityLagBlocks: finalityLag,
+	}
+}
+
+func (n *Node) applyConsensusModeDetector(out *RuntimeStatusSnapshot) {
+	if n == nil || out == nil {
+		return
+	}
+	result := DetectConsensusMode(n.consensusDetectorMetricsFromRuntime(*out))
+	out.ConsensusDetectorMode = string(result.Mode)
+	out.ConsensusDetectorCode = result.Code
+	out.ConsensusDetectorReason = result.Reason
+	out.ConsensusDetectorFinalityLagBlocks = result.FinalityLagBlocks
+	out.ConsensusDetectorLastFinalitySec = result.LastFinalitySec
+	out.ConsensusDetectorPartitionRisk = result.PartitionRisk
+	out.ConsensusDetectorAttack = result.Attack
+}

@@ -652,7 +652,7 @@ func TestEnterProposerRoundRecoveryModePausesConsensus(t *testing.T) {
 	}
 }
 
-func TestPauseConsensusForLivenessShortfallPausesConsensus(t *testing.T) {
+func TestPauseConsensusForLivenessShortfallRecordsNonBlockingPause(t *testing.T) {
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	height := uint64(747)
 	snap := CommitteeLivenessSnapshot{
@@ -678,8 +678,11 @@ func TestPauseConsensusForLivenessShortfallPausesConsensus(t *testing.T) {
 	if until.IsZero() {
 		t.Fatalf("expected liveness pause deadline to be set")
 	}
-	if node.Consensus == nil || !node.Consensus.Paused {
-		t.Fatalf("expected consensus to be paused during liveness shortfall")
+	if node.Consensus != nil && node.Consensus.Paused {
+		t.Fatalf("expected liveness shortfall pause to stay non-blocking")
+	}
+	if node.consensusRecomputePauseActive() {
+		t.Fatalf("expected liveness shortfall pause not to block proposal vote/finality paths")
 	}
 }
 

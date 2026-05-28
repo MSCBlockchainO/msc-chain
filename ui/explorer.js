@@ -47,6 +47,7 @@
     finalized: byId("finalized"),
     peerCount: byId("peerCount"),
     quorum: byId("quorum"),
+    consensusDetectorMode: byId("consensusDetectorMode"),
     waitReason: byId("waitReason"),
     livenessMode: byId("livenessMode"),
     livenessDriftLimit: byId("livenessDriftLimit"),
@@ -360,6 +361,7 @@
     els.finalized.textContent = String(status.finalized_height ?? "-");
     els.peerCount.textContent = String(status.peers ?? "-");
     els.quorum.textContent = `${quorumLive === null ? "-" : quorumLive} / ${requiredQuorum === null ? "-" : requiredQuorum}`;
+    els.consensusDetectorMode.textContent = asTextOrDash(status.consensus_detector_mode);
     els.waitReason.textContent = status.wait_reason || "-";
     els.livenessMode.textContent = asTextOrDash(status.validator_liveness_mode);
     els.livenessDriftLimit.textContent = driftLimit === null ? "-" : `${driftLimit} blocks`;

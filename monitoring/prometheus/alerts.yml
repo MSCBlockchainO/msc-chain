@@ -46,6 +46,42 @@ groups:
           summary: "MSC strict quorum failure"
           description: "{{ $labels.node_id }} observed quorum is below required quorum."
 
+      - alert: ConsensusModeStrict
+        expr: msc_consensus_mode{job="msc_nodes"} == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC consensus running at strict minimum quorum"
+          description: "{{ $labels.node_id }} is alive but only at minimum quorum."
+
+      - alert: ConsensusModeEmergency
+        expr: msc_consensus_mode{job="msc_nodes"} == 4
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC consensus emergency"
+          description: "{{ $labels.node_id }} reports quorum unavailable."
+
+      - alert: ConsensusModeHalted
+        expr: msc_consensus_mode{job="msc_nodes"} == 5
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC consensus halted"
+          description: "{{ $labels.node_id }} reports no recent finality."
+
+      - alert: ConsensusModeAttack
+        expr: msc_consensus_mode{job="msc_nodes"} == 7
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC consensus attack signal"
+          description: "{{ $labels.node_id }} detected double-sign, fork, or equivocation evidence."
+
       - alert: ValidatorOffline
         expr: msc_validator_health_offline{job="msc_nodes"} > 0 or msc_validator_online{job="msc_nodes"} == 0
         for: 2m

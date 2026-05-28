@@ -10451,6 +10451,20 @@ func consensusRecomputePauseDurationFor(reason string) time.Duration {
 	return pause
 }
 
+func consensusRecomputePauseReasonBlocksConsensus(reason string) bool {
+	reason = strings.ToLower(strings.TrimSpace(reason))
+	if reason == "" {
+		return true
+	}
+	// Liveness shortfall is an observation, not a validator-set mutation. Do not
+	// suppress verified proposal votes while the network is trying to recover
+	// quorum; finality still requires the normal strict vote threshold.
+	if strings.Contains(reason, "live_quorum_unavailable") {
+		return false
+	}
+	return true
+}
+
 func doubleProposalEvidenceKey(height uint64, round uint32, proposer, prevHash, gotHash string) string {
 	proposer = normalizeValidatorID(proposer)
 	if proposer == "" || height == 0 {
@@ -10914,6 +10928,7 @@ func (n *Node) requestConsensusRecomputePause(height uint64, reason string) {
 	logReason := reason
 	logHeight := height
 	logUntil := until
+	pauseBlocksConsensus := true
 
 	n.recomputePauseMu.Lock()
 	prevUntil := n.recomputePauseUntil
@@ -10939,6 +10954,7 @@ func (n *Node) requestConsensusRecomputePause(height uint64, reason string) {
 		logHeight = n.recomputePauseHeight
 	}
 	logUntil = n.recomputePauseUntil
+	pauseBlocksConsensus = consensusRecomputePauseReasonBlocksConsensus(n.recomputePauseReason)
 	if (reasonChanged || extended || prevUntil.IsZero()) &&
 		(now.Sub(n.recomputePauseLastLog) >= time.Second) {
 		n.recomputePauseLastLog = now
@@ -10948,7 +10964,7 @@ func (n *Node) requestConsensusRecomputePause(height uint64, reason string) {
 
 	if n.Consensus != nil {
 		n.Consensus.mu.Lock()
-		if !n.Consensus.Syncing && !n.Consensus.Paused {
+		if pauseBlocksConsensus && !n.Consensus.Syncing && !n.Consensus.Paused {
 			n.Consensus.Paused = true
 			n.recomputePauseMu.Lock()
 			n.recomputePauseApplied = true
@@ -10976,12 +10992,14 @@ func (n *Node) consensusRecomputePauseActive() bool {
 		height       uint64
 		active       bool
 		pauseApplied bool
+		activeReason string
 	)
 
 	n.recomputePauseMu.Lock()
 	if !n.recomputePauseUntil.IsZero() && now.Before(n.recomputePauseUntil) {
 		active = true
 		pauseApplied = n.recomputePauseApplied
+		activeReason = n.recomputePauseReason
 	} else if !n.recomputePauseUntil.IsZero() {
 		release = true
 		wasApplied = n.recomputePauseApplied
@@ -10996,6 +11014,19 @@ func (n *Node) consensusRecomputePauseActive() bool {
 	n.recomputePauseMu.Unlock()
 
 	if active {
+		if !consensusRecomputePauseReasonBlocksConsensus(activeReason) {
+			if pauseApplied && n.Consensus != nil {
+				n.Consensus.mu.Lock()
+				if !n.Consensus.Syncing {
+					n.Consensus.Paused = false
+				}
+				n.Consensus.mu.Unlock()
+				n.recomputePauseMu.Lock()
+				n.recomputePauseApplied = false
+				n.recomputePauseMu.Unlock()
+			}
+			return false
+		}
 		if n.Consensus != nil {
 			n.Consensus.mu.Lock()
 			if !n.Consensus.Syncing && !n.Consensus.Paused {
@@ -33368,6 +33399,7 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/unstake", s.handleUnstake)
 
 	mux.HandleFunc("/status", s.handleStatus)
+	mux.HandleFunc("/consensus/mode", s.handleConsensusMode)
 
 	mux.HandleFunc("/snapshot/latest", s.handleSnapshotLatest)
 
@@ -33435,6 +33467,7 @@ func (s *Server) Start(addr string) {
 
 	// Versioned exchange/API endpoints.
 	mux.HandleFunc("/v1/status", s.handleV1Status)
+	mux.HandleFunc("/v1/consensus/mode", s.handleV1ConsensusMode)
 	mux.HandleFunc("/v1/snapshot/latest", s.handleV1SnapshotLatest)
 	mux.HandleFunc("/v1/snapshot/create", s.handleV1SnapshotCreate)
 	mux.HandleFunc("/v1/snapshot/export", s.handleV1SnapshotExport)
@@ -33638,6 +33671,13 @@ type RuntimeStatusSnapshot struct {
 	ValidatorGossipActive                 bool
 	ConsensusRunning                      bool
 	ConsensusMode                         string
+	ConsensusDetectorMode                 string
+	ConsensusDetectorCode                 int
+	ConsensusDetectorReason               string
+	ConsensusDetectorFinalityLagBlocks    uint64
+	ConsensusDetectorLastFinalitySec      int64
+	ConsensusDetectorPartitionRisk        bool
+	ConsensusDetectorAttack               bool
 	VoteEnabled                           bool
 	ProposeEnabled                        bool
 	ConsensusReady                        bool
@@ -33949,6 +33989,7 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 		out.NetworkLagBlocks = out.NetworkBestHeight - out.Height
 	}
 	n.populateNetworkHealthSnapshot(&out)
+	n.applyConsensusModeDetector(&out)
 	return out
 }
 
@@ -34681,6 +34722,7 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 	}
 
 	n.populateNetworkHealthSnapshot(&out)
+	n.applyConsensusModeDetector(&out)
 	return out
 }
 
@@ -34799,6 +34841,13 @@ func (s *Server) handleStatus(
 			"validator_gossip_active":                    runtime.ValidatorGossipActive,
 			"consensus_running":                          runtime.ConsensusRunning,
 			"consensus_mode":                             runtime.ConsensusMode,
+			"consensus_detector_mode":                    runtime.ConsensusDetectorMode,
+			"consensus_detector_code":                    runtime.ConsensusDetectorCode,
+			"consensus_detector_reason":                  runtime.ConsensusDetectorReason,
+			"consensus_detector_finality_lag_blocks":     runtime.ConsensusDetectorFinalityLagBlocks,
+			"consensus_detector_last_finality_seconds":   runtime.ConsensusDetectorLastFinalitySec,
+			"consensus_detector_partition_risk":          runtime.ConsensusDetectorPartitionRisk,
+			"consensus_detector_attack":                  runtime.ConsensusDetectorAttack,
 			"vote_enabled":                               runtime.VoteEnabled,
 			"propose_enabled":                            runtime.ProposeEnabled,
 			"consensus_ready":                            runtime.ConsensusReady,
@@ -35141,10 +35190,17 @@ func (s *Server) handleStatus(
 		"tx_gossip_active":        runtime.TxGossipActive,
 		"validator_gossip_active": runtime.ValidatorGossipActive,
 
-		"consensus_running": runtime.ConsensusRunning,
-		"consensus_mode":    runtime.ConsensusMode,
-		"vote_enabled":      runtime.VoteEnabled,
-		"propose_enabled":   runtime.ProposeEnabled,
+		"consensus_running":                        runtime.ConsensusRunning,
+		"consensus_mode":                           runtime.ConsensusMode,
+		"consensus_detector_mode":                  runtime.ConsensusDetectorMode,
+		"consensus_detector_code":                  runtime.ConsensusDetectorCode,
+		"consensus_detector_reason":                runtime.ConsensusDetectorReason,
+		"consensus_detector_finality_lag_blocks":   runtime.ConsensusDetectorFinalityLagBlocks,
+		"consensus_detector_last_finality_seconds": runtime.ConsensusDetectorLastFinalitySec,
+		"consensus_detector_partition_risk":        runtime.ConsensusDetectorPartitionRisk,
+		"consensus_detector_attack":                runtime.ConsensusDetectorAttack,
+		"vote_enabled":                             runtime.VoteEnabled,
+		"propose_enabled":                          runtime.ProposeEnabled,
 
 		"consensus_ready": runtime.ConsensusReady,
 
@@ -35377,6 +35433,80 @@ func (s *Server) handleStatus(
 		"current_supply": currentCoinSupply(&s.Node.Ledger, CoinSymbol),
 	})
 
+}
+
+func consensusModeResponse(runtime RuntimeStatusSnapshot, metrics ConsensusDetectorMetrics) map[string]any {
+	return map[string]any{
+		"mode":                           runtime.ConsensusDetectorMode,
+		"code":                           runtime.ConsensusDetectorCode,
+		"reason":                         runtime.ConsensusDetectorReason,
+		"height":                         runtime.Height,
+		"finalized_height":               runtime.FinalizedHeight,
+		"active_validators":              metrics.ActiveValidators,
+		"total_validators":               metrics.TotalValidators,
+		"quorum":                         metrics.Quorum,
+		"finality_lag":                   runtime.ConsensusDetectorFinalityLagBlocks,
+		"last_finality_seconds":          runtime.ConsensusDetectorLastFinalitySec,
+		"max_validator_lag":              metrics.MaxValidatorLag,
+		"peer_count":                     metrics.PeerCount,
+		"syncing_validators":             metrics.SyncingValidators,
+		"partition_risk":                 runtime.ConsensusDetectorPartitionRisk,
+		"attack":                         runtime.ConsensusDetectorAttack,
+		"network_health":                 runtime.NetworkHealth,
+		"block_production_status":        runtime.BlockProductionStatus,
+		"block_production_reason":        runtime.BlockProductionReason,
+		"validator_participation_mode":   runtime.ConsensusMode,
+		"validator_participation_ready":  runtime.ConsensusReady,
+		"validator_participation_reason": runtime.WaitReason,
+		"mainnet_safety":                 "observe_classify_alert_only",
+	}
+}
+
+func (s *Server) consensusModeSnapshotResponse() (map[string]any, int, string) {
+	if s == nil || s.Node == nil {
+		return nil, http.StatusServiceUnavailable, "node unavailable"
+	}
+	runtime := s.Node.runtimeStatusSnapshot()
+	metrics := s.Node.consensusDetectorMetricsFromRuntime(runtime)
+	return consensusModeResponse(runtime, metrics), http.StatusOK, ""
+}
+
+func (s *Server) handleConsensusMode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !authorized(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	resp, status, errMsg := s.consensusModeSnapshotResponse()
+	if status != http.StatusOK {
+		http.Error(w, errMsg, status)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if r.Method != http.MethodHead {
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func (s *Server) handleV1ConsensusMode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeV1Error(w, http.StatusMethodNotAllowed, "", "method not allowed")
+		return
+	}
+	if !authorized(r) {
+		writeV1Error(w, http.StatusUnauthorized, "", "unauthorized")
+		return
+	}
+	resp, status, errMsg := s.consensusModeSnapshotResponse()
+	if status != http.StatusOK {
+		writeV1Error(w, status, "", errMsg)
+		return
+	}
+	writeV1Data(w, http.StatusOK, resp)
 }
 
 func promEscapeLabelValue(v string) string {
@@ -36445,6 +36575,12 @@ func (s *Server) handleMetrics(
 	appendPromGauge(&out, "msc_local_height", "Local block height used for network-lag comparison.", baseLabels, float64(runtime.Height))
 	appendPromGauge(&out, "msc_consensus_finality_lag_blocks", "Local height minus finalized height.", baseLabels, float64(finalityLagBlocks))
 	appendPromGauge(&out, "msc_consensus_last_block_age_seconds", "Seconds since the last observed committed block.", baseLabels, float64(runtime.LastBlockAgeSeconds))
+	appendPromGauge(&out, "msc_consensus_mode", "Consensus Mode Detector code: 0=NORMAL, 1=STRICT, 2=RECOVERY, 3=DEGRADED, 4=EMERGENCY, 5=HALTED, 6=PARTITION, 7=ATTACK.", baseLabels, float64(runtime.ConsensusDetectorCode))
+	appendPromGauge(&out, "msc_consensus_detector_mode", "Consensus Mode Detector active mode label; active mode has value 1.", promLabels(baseLabels, map[string]string{"mode": runtime.ConsensusDetectorMode, "reason": runtime.ConsensusDetectorReason}), 1)
+	appendPromGauge(&out, "msc_consensus_detector_finality_lag_blocks", "Consensus Mode Detector finality lag input in blocks.", baseLabels, float64(runtime.ConsensusDetectorFinalityLagBlocks))
+	appendPromGauge(&out, "msc_consensus_detector_last_finality_seconds", "Consensus Mode Detector last finality age input in seconds.", baseLabels, float64(runtime.ConsensusDetectorLastFinalitySec))
+	appendPromGauge(&out, "msc_consensus_detector_partition_risk", "Consensus Mode Detector partition risk signal (1/0).", baseLabels, boolToPromFloat(runtime.ConsensusDetectorPartitionRisk))
+	appendPromGauge(&out, "msc_consensus_detector_attack_signal", "Consensus Mode Detector attack signal (1/0).", baseLabels, boolToPromFloat(runtime.ConsensusDetectorAttack))
 	appendPromGauge(&out, "msc_consensus_block_production_status", "Current block production status; active status has value 1.", promLabels(baseLabels, map[string]string{"status": runtime.BlockProductionStatus, "reason": runtime.BlockProductionReason}), 1)
 	appendPromGauge(&out, "msc_consensus_tx_lane_status", "Current transaction lane status; active status has value 1.", promLabels(baseLabels, map[string]string{"status": runtime.TxLaneStatus, "reason": runtime.TxLaneReason}), 1)
 	appendPromGauge(&out, "msc_quorum_required", "Strict quorum required for consensus readiness/finality.", baseLabels, float64(quorumRequired))
@@ -39790,6 +39926,13 @@ func (s *Server) handleV1Status(w http.ResponseWriter, r *http.Request) {
 		"wait_reason":                                runtime.WaitReason,
 		"consensus_running":                          runtime.ConsensusRunning,
 		"consensus_mode":                             runtime.ConsensusMode,
+		"consensus_detector_mode":                    runtime.ConsensusDetectorMode,
+		"consensus_detector_code":                    runtime.ConsensusDetectorCode,
+		"consensus_detector_reason":                  runtime.ConsensusDetectorReason,
+		"consensus_detector_finality_lag_blocks":     runtime.ConsensusDetectorFinalityLagBlocks,
+		"consensus_detector_last_finality_seconds":   runtime.ConsensusDetectorLastFinalitySec,
+		"consensus_detector_partition_risk":          runtime.ConsensusDetectorPartitionRisk,
+		"consensus_detector_attack":                  runtime.ConsensusDetectorAttack,
 		"vote_enabled":                               runtime.VoteEnabled,
 		"propose_enabled":                            runtime.ProposeEnabled,
 		"consensus_ready":                            runtime.ConsensusReady,
@@ -41562,7 +41705,7 @@ func authorized(r *http.Request) bool {
 
 		switch path {
 
-		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
+		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/consensus/mode", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/consensus/mode", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
 
 			return true
 
