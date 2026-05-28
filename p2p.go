@@ -1060,9 +1060,6 @@ func (n *Node) acceptedProposalVoteLockForRound(epoch uint64, incomingRound uint
 	if votes <= 0 {
 		return Block{}, 0, false, ""
 	}
-	if n.acceptedProposalSoftLockExpired(epoch) {
-		return Block{}, votes, false, ""
-	}
 	if executionOK, _ := n.proposalMatchesLocalExecution(block); !executionOK {
 		return Block{}, votes, false, ""
 	}
@@ -1344,19 +1341,28 @@ func (n *Node) setAcceptedProposalLocked(block Block, reason string, force bool)
 		prevExecutionOK, prevExpectedRoot := n.proposalMatchesLocalExecution(prevBlock)
 		softLockExpired := n.acceptedProposalSoftLockExpired(block.ID)
 		incomingVotes := n.proposalVoteCount(block)
+		incomingHasHigherRoundQuorum := false
+		if prevBlock.ID == block.ID && proposalConflictsWithAcceptedLock(prevBlock, block) {
+			_, _, incomingHasHigherRoundQuorum = n.higherRoundQuorumSeenForProposal(block.ID, prevBlock, block, incomingVotes)
+		}
 		if !force {
 			switch {
 			case block.Round <= prevRound:
 				return false
-			case prevBlock.ID == block.ID && prevVotes > 0 && !softLockExpired && !proposalHasObservedExecutionProof(block, incomingVotes):
+			case prevBlock.ID == block.ID && prevVotes > 0 && proposalConflictsWithAcceptedLock(prevBlock, block) && !incomingHasHigherRoundQuorum:
 				if DebugConsensus {
-					fmt.Printf("[EXEC-PROPOSAL-KEEP] height=%d locked_round=%d locked_block=%s incoming_round=%d incoming_block=%s votes=%d reason=accepted_vote_lock\n",
+					reason := "accepted_vote_lock"
+					if softLockExpired {
+						reason = "accepted_vote_lock_soft_expired"
+					}
+					fmt.Printf("[EXEC-PROPOSAL-KEEP] height=%d locked_round=%d locked_block=%s incoming_round=%d incoming_block=%s votes=%d reason=%s\n",
 						block.ID,
 						prevRound,
 						ShortHash(prevBlockHash),
 						block.Round,
 						ShortHash(block.BlockHash),
 						prevVotes,
+						reason,
 					)
 				}
 				return false
@@ -1373,7 +1379,7 @@ func (n *Node) setAcceptedProposalLocked(block Block, reason string, force bool)
 						ShortHash(prevExpectedRoot),
 					)
 				}
-			case prevBlock.ID == block.ID && prevRound > 0 && !softLockExpired && !proposalHasObservedExecutionProof(block, n.proposalVoteCount(block)):
+			case prevBlock.ID == block.ID && prevRound > 0 && !softLockExpired && !proposalHasObservedExecutionProof(block, incomingVotes):
 				if DebugConsensus {
 					fmt.Printf("[EXEC-PROPOSAL-KEEP] height=%d locked_round=%d locked_block=%s incoming_round=%d incoming_block=%s votes=%d reason=sticky_proposal_lock\n",
 						block.ID,
@@ -1385,7 +1391,7 @@ func (n *Node) setAcceptedProposalLocked(block Block, reason string, force bool)
 					)
 				}
 				return false
-			case prevBlock.ID == block.ID && prevRound > 0 && softLockExpired && !proposalHasObservedExecutionProof(block, n.proposalVoteCount(block)):
+			case prevBlock.ID == block.ID && prevRound > 0 && softLockExpired && prevVotes <= 0 && !proposalHasObservedExecutionProof(block, incomingVotes):
 				if DebugConsensus {
 					fmt.Printf("[EXEC-PROPOSAL-RELEASE] height=%d locked_round=%d locked_block=%s incoming_round=%d incoming_block=%s votes=%d reason=sticky_soft_lock_expired\n",
 						block.ID,

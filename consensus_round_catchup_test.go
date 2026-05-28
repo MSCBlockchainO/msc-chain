@@ -1250,6 +1250,66 @@ func TestAcceptedProposalVoteLockKeepsRoundZeroWithoutHigherProof(t *testing.T) 
 	}
 }
 
+func TestAcceptedProposalVoteLockSurvivesSoftLockExpiry(t *testing.T) {
+	setProposerRoundMaxForTest(t, 0)
+	oldValidatorPubKeys := ValidatorPubKeys
+	oldGenesisValidatorPubKeys := GenesisValidatorPubKeys
+	t.Cleanup(func() {
+		ValidatorPubKeys = oldValidatorPubKeys
+		GenesisValidatorPubKeys = oldGenesisValidatorPubKeys
+	})
+	resetExecPoolForTest(t)
+
+	validators := []string{"A", "B", "C", "D"}
+	ValidatorPubKeys = make(map[string]ed25519.PublicKey, len(validators))
+	GenesisValidatorPubKeys = make(map[string]ed25519.PublicKey, len(validators))
+	sources := make(map[string]*Node, len(validators))
+	for _, id := range validators {
+		pub, priv, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatalf("keygen failed: %v", err)
+		}
+		ValidatorPubKeys[id] = pub
+		GenesisValidatorPubKeys[id] = pub
+		sources[id] = newValidatorRoundTestNode(t, t.TempDir(), id, validators, pub, priv)
+	}
+
+	target := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	const epoch uint64 = 1
+	lowBlock := buildProposalForRound(t, epoch, 1, validators, sources)
+	highBlock := buildProposalForRound(t, epoch, 1+execProposalSwitchRoundGap+1, validators, sources)
+	for highBlock.BlockHash == lowBlock.BlockHash {
+		highBlock = buildProposalForRound(t, epoch, highBlock.Round+1, validators, sources)
+	}
+	if !target.storeLeaderBlock(lowBlock) {
+		t.Fatalf("failed to store lower-round proposal")
+	}
+	lockedKey := target.currentProposalVoteKey(epoch)
+	if !target.markExecSignerSeenForProposal(epoch, lockedKey, "A") {
+		t.Fatalf("expected local vote marker on locked proposal")
+	}
+	target.lastCommitAt = time.Now().Add(-blockProductionStaleThreshold() - time.Second)
+	if !target.acceptedProposalSoftLockExpired(epoch) {
+		t.Fatalf("expected accepted proposal soft lock to be expired")
+	}
+
+	lockedBlock, lockedVotes, locked, reason := target.acceptedProposalVoteLockForRound(epoch, highBlock.Round)
+	if !locked || lockedVotes != 1 || reason != "accepted_vote_lock" || lockedBlock.BlockHash != lowBlock.BlockHash {
+		t.Fatalf("expected expired single-vote proposal to stay locked, locked=%t votes=%d reason=%q block=%s",
+			locked, lockedVotes, reason, ShortHash(lockedBlock.BlockHash))
+	}
+
+	target.execResultsMu.Lock()
+	changed := target.setAcceptedProposalLocked(highBlock, "observed_after_soft_expiry", false)
+	target.execResultsMu.Unlock()
+	if changed {
+		t.Fatalf("expected no-proof higher-round proposal to be rejected after soft lock expiry")
+	}
+	if got := target.currentProposalVoteKey(epoch); got != lockedKey {
+		t.Fatalf("expected voted proposal to remain current after soft expiry: got=%s want=%s", got, lockedKey)
+	}
+}
+
 func TestStoreLeaderBlockAllowsNearbyHigherRoundAfterLocalPrevote(t *testing.T) {
 	setProposerRoundMaxForTest(t, 0)
 	oldValidatorPubKeys := ValidatorPubKeys
