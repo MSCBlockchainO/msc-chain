@@ -321,12 +321,23 @@ func (n *Node) snapshotWarmupQuorumState(currentHeight uint64) (int, int, string
 		return 0, 0, "", false, 0
 	}
 	required := execQuorumRequired(total)
+	validatorSet := make(map[string]struct{}, total)
+	for _, id := range validators {
+		if norm := normalizeValidatorID(id); norm != "" {
+			validatorSet[norm] = struct{}{}
+		}
+	}
 	hashVotes := make(map[string]int, total)
+	counted := make(map[string]struct{}, total)
 	now := time.Now()
 	maxAge := validatorLivenessHeartbeatTTL() + validatorLivenessGrace()
 	n.validatorMu.RLock()
 	for _, id := range validators {
-		st := n.validatorStatus[id]
+		normID := normalizeValidatorID(id)
+		if normID == "" {
+			continue
+		}
+		st := n.validatorStatus[normID]
 		if st == nil {
 			continue
 		}
@@ -338,14 +349,49 @@ func (n *Node) snapshotWarmupQuorumState(currentHeight uint64) (int, int, string
 			continue
 		}
 		hashVotes[hash]++
+		counted[normID] = struct{}{}
 	}
 	n.validatorMu.RUnlock()
 	if total > 0 {
 		localHash := strings.ToLower(strings.TrimSpace(n.validatorSetHashFromFinalizedSnapshot(currentHeight, validators)))
+		selfID := normalizeValidatorID(n.ID)
 		if localHash != "" {
-			hashVotes[localHash]++
+			if _, ok := validatorSet[selfID]; ok && selfID != "" {
+				if _, seen := counted[selfID]; !seen {
+					hashVotes[localHash]++
+					counted[selfID] = struct{}{}
+				}
+			} else if selfID == "" {
+				hashVotes[localHash]++
+			}
 		}
 	}
+	n.peerStateMu.Lock()
+	for peerID, role := range n.peerRole {
+		if normalizeNodeRole(role) != "validator" || !n.peerHelloOK[peerID] {
+			continue
+		}
+		validatorID := normalizeValidatorID(n.peerToValidator[peerID])
+		if validatorID == "" {
+			continue
+		}
+		if _, ok := validatorSet[validatorID]; !ok {
+			continue
+		}
+		if _, seen := counted[validatorID]; seen {
+			continue
+		}
+		ackHeight := n.peerAckHeight[peerID]
+		if currentHeight > 0 && ackHeight > 0 && !nearSyncTip(ackHeight, currentHeight) {
+			continue
+		}
+		hash := strings.ToLower(strings.TrimSpace(n.peerSetHash[peerID]))
+		if hash != "" {
+			hashVotes[hash]++
+			counted[validatorID] = struct{}{}
+		}
+	}
+	n.peerStateMu.Unlock()
 	if len(hashVotes) == 0 {
 		return 0, required, "", false, total
 	}
@@ -391,7 +437,8 @@ func (n *Node) snapshotWarmupState(currentHeight uint64) (bool, time.Duration) {
 	}
 	votes, required, hash, single, total := n.snapshotWarmupQuorumState(currentHeight)
 	quorumStable := time.Duration(0)
-	if votes >= required && single && hash != "" {
+	stableHash := single && hash != ""
+	if stableHash {
 		if hash != lastHash || votes != lastVotes {
 			lastQuorumSince = now
 		}
@@ -411,13 +458,23 @@ func (n *Node) snapshotWarmupState(currentHeight uint64) (bool, time.Duration) {
 	n.syncWarmupQuorumSince = lastQuorumSince
 	n.syncMu.Unlock()
 
-	if total < 3 {
+	localTrusted := false
+	if hash != "" {
+		validators := n.GetConsensusValidators(int(currentHeight))
+		localHash := strings.ToLower(strings.TrimSpace(n.validatorSetHashFromFinalizedSnapshot(currentHeight, validators)))
+		localTrusted = localHash != "" && strings.EqualFold(localHash, hash)
+	}
+
+	if total < 3 && !localTrusted {
 		return true, warmupDuration
 	}
-	if votes < required || !single || hash == "" {
+	if !stableHash {
 		return true, warmupDuration
 	}
-	if quorumStable >= warmupDuration && warmupElapsed >= warmupDuration {
+	if votes >= required && quorumStable >= warmupDuration && warmupElapsed >= warmupDuration {
+		return false, 0
+	}
+	if localTrusted && quorumStable >= warmupDuration && warmupElapsed >= warmupDuration {
 		return false, 0
 	}
 	remaining := warmupDuration

@@ -1001,6 +1001,83 @@ func TestSnapshotWarmupUsesLocalTipForProposalHeight(t *testing.T) {
 	}
 }
 
+func TestSnapshotWarmupClearsWithStableLocalFinalizedSet(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.ID = "A"
+	for height := uint64(1); height <= 12; height++ {
+		block := node.BuildLeaderBlock(height)
+		block.BlockTime = LogicalTimeForEpochTick(block.ID, TickFinalize)
+		block.Timestamp = int64(SystemTimeUnits(block.BlockTime))
+		block.BlockHash = HashBlock(block)
+		node.Blockchain.AddBlock(block)
+	}
+
+	tip := node.Blockchain.Height()
+	validators := node.GetConsensusValidators(int(tip))
+	localHash := strings.ToLower(strings.TrimSpace(node.validatorSetHashFromFinalizedSnapshot(tip, validators)))
+	if localHash == "" {
+		t.Fatal("expected local finalized validator-set hash")
+	}
+
+	node.setSnapshotWarmupJoinHeight(tip)
+	old := time.Now().Add(-2 * syncSnapshotWarmupDuration())
+	node.syncMu.Lock()
+	node.syncWarmupStartAt = old
+	node.syncWarmupLastHeight = tip
+	node.syncWarmupLastHeightAt = old
+	node.syncWarmupQuorumHash = localHash
+	node.syncWarmupQuorumVotes = 1
+	node.syncWarmupQuorumSince = old
+	node.syncMu.Unlock()
+
+	if node.snapshotWarmupActive(tip) {
+		t.Fatal("expected stable local finalized validator-set hash to clear warmup after duration")
+	}
+}
+
+func TestSnapshotWarmupKeepsBlockingOnConflictingValidatorSetHash(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.ID = "A"
+	for height := uint64(1); height <= 12; height++ {
+		block := node.BuildLeaderBlock(height)
+		block.BlockTime = LogicalTimeForEpochTick(block.ID, TickFinalize)
+		block.Timestamp = int64(SystemTimeUnits(block.BlockTime))
+		block.BlockHash = HashBlock(block)
+		node.Blockchain.AddBlock(block)
+	}
+
+	tip := node.Blockchain.Height()
+	validators := node.GetConsensusValidators(int(tip))
+	localHash := strings.ToLower(strings.TrimSpace(node.validatorSetHashFromFinalizedSnapshot(tip, validators)))
+	if localHash == "" {
+		t.Fatal("expected local finalized validator-set hash")
+	}
+
+	node.validatorMu.Lock()
+	node.validatorStatus["B"] = &ValidatorStatus{
+		LastSeen:         time.Now(),
+		ReportedHeight:   tip,
+		FinalizedHeight:  tip,
+		ValidatorSetHash: "conflicting-validator-set-hash",
+	}
+	node.validatorMu.Unlock()
+
+	node.setSnapshotWarmupJoinHeight(tip)
+	old := time.Now().Add(-2 * syncSnapshotWarmupDuration())
+	node.syncMu.Lock()
+	node.syncWarmupStartAt = old
+	node.syncWarmupLastHeight = tip
+	node.syncWarmupLastHeightAt = old
+	node.syncWarmupQuorumHash = localHash
+	node.syncWarmupQuorumVotes = 1
+	node.syncWarmupQuorumSince = old
+	node.syncMu.Unlock()
+
+	if !node.snapshotWarmupActive(tip) {
+		t.Fatal("expected conflicting validator-set hash to keep warmup active")
+	}
+}
+
 func TestApplyScheduledValidatorUpdatesTraceNonTransitionPath(t *testing.T) {
 	withScheduledUpdateTraceGlobals(t, true)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
