@@ -31991,6 +31991,8 @@ func main() {
 
 	p2pAddr := flag.String("p2p", "", "P2P address (e.g. :7001)")
 
+	p2pExternalAddr := flag.String("p2p-external", "", "external P2P advertise address (e.g. /ip4/10.0.0.10/tcp/7001)")
+
 	peers := flag.String("peers", "", "comma-separated peer addresses")
 
 	dataDir := flag.String("datadir", "data", "Base data directory")
@@ -32015,6 +32017,17 @@ func main() {
 			peersExplicit = true
 		}
 	})
+	if strings.TrimSpace(*peers) == "" {
+		if envPeers := strings.TrimSpace(os.Getenv("MSC_P2P_PEERS")); envPeers != "" {
+			*peers = envPeers
+			peersExplicit = true
+		}
+	}
+	if strings.TrimSpace(*p2pExternalAddr) == "" {
+		if envExternal := strings.TrimSpace(os.Getenv("MSC_P2P_EXTERNAL_ADDR")); envExternal != "" {
+			*p2pExternalAddr = envExternal
+		}
+	}
 	modeValue := strings.ToLower(strings.TrimSpace(*mode))
 	*mode = modeValue
 	if !roleExplicit {
@@ -32149,6 +32162,17 @@ func main() {
 			*listenPort = port
 		}
 
+	}
+
+	if strings.TrimSpace(*p2pExternalAddr) != "" {
+		addr, hasPeerID, err := normalizeExternalMultiaddr(*p2pExternalAddr)
+		if err != nil {
+			log.Fatalf("[FATAL] invalid --p2p-external address %q: %v", *p2pExternalAddr, err)
+		}
+		if addr != "" {
+			ConfigP2PExternalAddr = addr
+			ConfigP2PExternalHasPeerID = hasPeerID
+		}
 	}
 
 	if err := os.MkdirAll(*dataDir, 0700); err != nil {

@@ -7,18 +7,8 @@ genesis_hash = "d6d7d96ea1a70d2aca31389ce7ef7953794ce77b4c933828295269702768fa3c
 [p2p]
 laddr = ""
 external_address = ""
-seeds = [
-  "/ip4/127.0.0.1/tcp/7001/p2p/12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg",
-  "/ip4/127.0.0.1/tcp/7002/p2p/12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk",
-  "/ip4/127.0.0.1/tcp/7003/p2p/12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8",
-  "/ip4/127.0.0.1/tcp/7004/p2p/12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W"
-]
-persistent_peers = [
-  "/ip4/127.0.0.1/tcp/7001/p2p/12D3KooWGpHi5kd7qv2bb4kt8mj82B5qZKPvfyTxEcg5XvbxaTXg",
-  "/ip4/127.0.0.1/tcp/7002/p2p/12D3KooWHdmUKc1bYKY3scg6TqGhK3SutwH9hu1aAez4VmvwkEyk",
-  "/ip4/127.0.0.1/tcp/7003/p2p/12D3KooWD9ed8zJXbW8uUU6XHD2UYrsQQEvnuXReJWFeo52dvdf8",
-  "/ip4/127.0.0.1/tcp/7004/p2p/12D3KooWE7bMkbbpLoSHKB43JdTZm9zkgqvf1iCQdGAqFFBDa42W"
-]
+seeds = []
+persistent_peers = []
 persist_peer_id_refresh=false
 prune_localhost_on_refused = true
 prune_localhost_refused_failures = 3
