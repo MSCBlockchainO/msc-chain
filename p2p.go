@@ -2364,7 +2364,7 @@ func executionVoteTooFarBehind(currentEpoch uint64, voteHeight uint64) bool {
 
 func benignExecutionVoteIngressReason(reason string) bool {
 	switch strings.TrimSpace(reason) {
-	case "ignored_late_vote", "ignored_late_vote_cached":
+	case "ignored_committed_vote", "ignored_committed_vote_cached", "ignored_late_vote", "ignored_late_vote_cached":
 		return true
 	default:
 		return false
@@ -2380,6 +2380,12 @@ func (n *Node) allowExecutionVoteNetworkIngress(res ExecutionResultMsg) (bool, s
 		return false, "invalid_vote"
 	}
 	currentEpoch := n.currentEpoch()
+	if n.isCommittedReplayHeight(res.HeightHint) {
+		if n.markStaleExecutionVoteNetworkIngress(res) {
+			return false, "ignored_committed_vote_cached"
+		}
+		return false, "ignored_committed_vote"
+	}
 	if executionVoteTooFarBehind(currentEpoch, res.HeightHint) {
 		if n.markStaleExecutionVoteNetworkIngress(res) {
 			return false, "ignored_late_vote_cached"
@@ -2797,10 +2803,38 @@ func (n *Node) allowExecutionVoteIngress(signer string, epoch uint64, proposalKe
 	return true, ""
 }
 
+func shouldThrottleExecutionVoteDrop(reason string) bool {
+	switch strings.TrimSpace(reason) {
+	case "duplicate_exec_vote", "duplicate_signer_proposal", "rate_limited", "replay_cache", "stale_committed_height":
+		return true
+	default:
+		return false
+	}
+}
+
+func (n *Node) shouldLogExecutionVoteDrop(reason string, res ExecutionResultMsg, proposalSnap execProposalSnapshot) bool {
+	if n == nil || !shouldThrottleExecutionVoteDrop(reason) {
+		return true
+	}
+	key := fmt.Sprintf("exec_vote_drop:%s:%d:%d:%s:%s:%s:%s",
+		reason,
+		res.HeightHint,
+		res.RoundHint,
+		normalizeValidatorID(res.Signer),
+		ShortHash(strings.TrimSpace(res.BlockHashHint)),
+		ShortHash(strings.TrimSpace(res.ExecHash)),
+		ShortHash(strings.TrimSpace(proposalSnap.ProposalKey)),
+	)
+	return n.shouldLogLivenessReason(key, livenessReasonLogCooldown)
+}
+
 func (n *Node) logExecutionVoteDrop(reason string, res ExecutionResultMsg, proposalSnap execProposalSnapshot) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		reason = "unknown"
+	}
+	if !n.shouldLogExecutionVoteDrop(reason, res, proposalSnap) {
+		return
 	}
 	log.Printf("[VOTE-DROP] reason=%s signer=%s height=%d round=%d vote_block=%s current_block=%s proposal=%s exec=%s tx_merkle=%s",
 		reason,

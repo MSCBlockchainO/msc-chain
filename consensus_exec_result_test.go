@@ -1585,6 +1585,13 @@ func TestProcessExecutionResultMsgRejectsCommittedEpochVoteReplay(t *testing.T) 
 	})
 
 	target.processExecutionResultMsg(msg, false)
+	target.processExecutionResultMsg(msg, false)
+	if allowed, reason := target.allowExecutionVoteNetworkIngress(msg); allowed || reason != "ignored_committed_vote" {
+		t.Fatalf("expected committed vote to be stopped at network ingress, allowed=%t reason=%q", allowed, reason)
+	}
+	if allowed, reason := target.allowExecutionVoteNetworkIngress(msg); allowed || reason != "ignored_committed_vote_cached" {
+		t.Fatalf("expected committed vote replay to be cached at network ingress, allowed=%t reason=%q", allowed, reason)
+	}
 
 	proposalKey := proposalVoteKey(epoch, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot)
 	if got := getExecCountGlobal(epoch, proposalKey, block.StateRoot, block.MempoolRoot); got != 0 {
@@ -1596,6 +1603,9 @@ func TestProcessExecutionResultMsgRejectsCommittedEpochVoteReplay(t *testing.T) 
 	out := buf.String()
 	if !strings.Contains(out, "[VOTE-DROP] reason=stale_committed_height signer=B height=1 round=10") {
 		t.Fatalf("expected committed-height replay drop log, got: %s", out)
+	}
+	if got := strings.Count(out, "[VOTE-DROP] reason=stale_committed_height signer=B height=1 round=10"); got != 1 {
+		t.Fatalf("expected committed-height replay drop to be log-rate-limited, got %d logs: %s", got, out)
 	}
 	if strings.Contains(out, "[VOTE-ACCEPT]") {
 		t.Fatalf("committed-height replay must not be accepted, got: %s", out)
