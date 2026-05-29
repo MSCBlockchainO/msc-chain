@@ -2663,10 +2663,14 @@ func (n *Node) releaseStaleLocalExecutionVoteMarkerLocked(epoch uint64, existing
 	if existingKey == "" || incomingKey == "" || existingKey == incomingKey {
 		return false
 	}
-	if incomingRound <= existingRound || incomingRound-existingRound < localExecVoteStaleRoundReleaseGap {
+	if incomingRound <= existingRound {
 		return false
 	}
 	if n.localExecutionVoteMarkerHasEvidenceLocked(epoch, existingKey) {
+		return false
+	}
+	roundGap := incomingRound - existingRound
+	if roundGap < localExecVoteStaleRoundReleaseGap && !n.localExecutionVoteMarkerNearQuorumLocked(epoch, incomingKey) {
 		return false
 	}
 	log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=release_stale_cross_round_marker existing_round=%d existing=%s incoming=%s",
@@ -2680,13 +2684,13 @@ func (n *Node) releaseStaleLocalExecutionVoteMarkerLocked(epoch uint64, existing
 	return true
 }
 
-func (n *Node) localExecutionVoteMarkerHasEvidenceLocked(epoch uint64, proposalKey string) bool {
+func (n *Node) localExecutionVoteMarkerEvidenceCountLocked(epoch uint64, proposalKey string) int {
 	if n == nil || epoch == 0 {
-		return false
+		return 0
 	}
 	proposalKey = strings.TrimSpace(proposalKey)
 	if proposalKey == "" {
-		return false
+		return 0
 	}
 	evidenceCount := n.acceptedProposalVoteCountLocked(epoch, proposalKey)
 	_, _, blockHash, txMerkle, stateRoot, ok := proposalVoteKeyParts(proposalKey)
@@ -2703,6 +2707,26 @@ func (n *Node) localExecutionVoteMarkerHasEvidenceLocked(epoch uint64, proposalK
 			}
 		}
 	}
+	return evidenceCount
+}
+
+func (n *Node) localExecutionVoteMarkerNearQuorumLocked(epoch uint64, proposalKey string) bool {
+	evidenceCount := n.localExecutionVoteMarkerEvidenceCountLocked(epoch, proposalKey)
+	if evidenceCount <= 0 {
+		return false
+	}
+	required := n.executionQuorumRequiredForEpoch(epoch)
+	if required <= 1 {
+		return evidenceCount > 0
+	}
+	return evidenceCount >= required-1
+}
+
+func (n *Node) localExecutionVoteMarkerHasEvidenceLocked(epoch uint64, proposalKey string) bool {
+	if n == nil || epoch == 0 {
+		return false
+	}
+	evidenceCount := n.localExecutionVoteMarkerEvidenceCountLocked(epoch, proposalKey)
 	if evidenceCount <= 0 {
 		return false
 	}

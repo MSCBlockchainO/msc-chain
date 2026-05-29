@@ -129,6 +129,38 @@ func TestLocalExecutionVoteGuardReleasesStaleMinorityRoundMarker(t *testing.T) {
 	}
 }
 
+func TestLocalExecutionVoteGuardReleasesNonQuorumMarkerForNearQuorumProposal(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.ID = "B"
+	node.localExecVoteByRound = make(map[uint64]map[uint32]string)
+
+	epoch := uint64(81)
+	stale := proposalVoteKey(epoch, 1, "stale-block", "", "stale-root")
+	fresh := proposalVoteKey(epoch, 2, "fresh-block", "", "fresh-root")
+	node.localExecVoteByRound[epoch] = map[uint32]string{1: stale}
+	node.execSignerSeen = map[uint64]map[string]map[string]bool{
+		epoch: {
+			execPoolScopeKey(epoch, stale): {
+				"B": true,
+			},
+			execPoolScopeKey(epoch, fresh): {
+				"A": true,
+				"D": true,
+			},
+		},
+	}
+
+	if !node.allowLocalExecutionVoteRound(epoch, 2, fresh) {
+		t.Fatalf("expected near-quorum higher-round proposal to release non-quorum stale marker")
+	}
+	if got := node.localExecVoteByRound[epoch][2]; got != fresh {
+		t.Fatalf("fresh marker not stored after near-quorum release: got=%q", got)
+	}
+	if _, ok := node.localExecVoteByRound[epoch][1]; ok {
+		t.Fatalf("stale marker should be deleted after near-quorum release")
+	}
+}
+
 func TestLocalExecutionVoteGuardKeepsStaleQuorumRoundMarker(t *testing.T) {
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	node.ID = "A"
