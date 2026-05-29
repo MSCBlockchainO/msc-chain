@@ -132,6 +132,15 @@ func (n *Node) ReceiveBlock(block Block, bc *Blockchain) error {
 		if strings.TrimSpace(syncStage) == "" {
 			return
 		}
+		if !DebugSync && !DebugConsensus {
+			if strings.TrimSpace(syncStage) == "idle" {
+				return
+			}
+			key := fmt.Sprintf("sync_commit_phase:%s:%s", strings.TrimSpace(syncStage), ShortID(syncProvider))
+			if !n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+				return
+			}
+		}
 		fmt.Printf("[SYNC-COMMIT-PHASE] node=%s stage=%s provider=%s height=%d local=%d phase=%s\n",
 			ShortID(n.ID),
 			syncStage,
