@@ -30,7 +30,7 @@ func TestConsensusMetadataCoveredByBlockSignature(t *testing.T) {
 	}
 }
 
-func TestInvalidSnapshotProofGossipPenalizesAndQuarantinesPeer(t *testing.T) {
+func TestInvalidSnapshotProofPenalizesSnapshotProviderWithoutQuarantine(t *testing.T) {
 	oldThreshold := SyncSnapshotInvalidProofQuarantineAfter
 	SyncSnapshotInvalidProofQuarantineAfter = 2
 	defer func() { SyncSnapshotInvalidProofQuarantineAfter = oldThreshold }()
@@ -58,8 +58,11 @@ func TestInvalidSnapshotProofGossipPenalizesAndQuarantinesPeer(t *testing.T) {
 	}
 
 	node.handleSnapshotProofFromPeer(proof, peerID)
-	if !node.isPeerQuarantined(peerID) {
-		t.Fatalf("peer should be quarantined after repeated invalid snapshot proofs")
+	if node.isPeerQuarantined(peerID) {
+		t.Fatalf("peer should not be transport-quarantined for snapshot proof failures")
+	}
+	if class := node.syncPeerReputationClass(peerID); class != "avoid" {
+		t.Fatalf("expected invalid snapshot provider to be avoided, got class=%q", class)
 	}
 }
 

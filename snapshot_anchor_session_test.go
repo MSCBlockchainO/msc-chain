@@ -1353,7 +1353,7 @@ func TestRuntimeStatusReportsRealtimeGossipPipelineWhenSynced(t *testing.T) {
 	}
 }
 
-func TestRecordSyncPeerInvalidProofQuarantinesAfterThreshold(t *testing.T) {
+func TestRecordSyncPeerInvalidProofAvoidsProviderWithoutTransportQuarantine(t *testing.T) {
 	defer withOnboardingStrictActivationGlobals(t)()
 	configureStrictActivationDefaults()
 
@@ -1376,8 +1376,11 @@ func TestRecordSyncPeerInvalidProofQuarantinesAfterThreshold(t *testing.T) {
 		t.Fatalf("peer should not be quarantined after first invalid proof")
 	}
 	n.recordSyncPeerInvalidProof(peerID)
-	if !n.isPeerQuarantined(peerID) {
-		t.Fatalf("peer should be quarantined after threshold invalid proofs")
+	if n.isPeerQuarantined(peerID) {
+		t.Fatalf("peer should not be transport-quarantined by snapshot proof score")
+	}
+	if class := n.syncPeerReputationClass(peerID); class != "avoid" {
+		t.Fatalf("expected snapshot provider to be avoided, got class=%q", class)
 	}
 }
 

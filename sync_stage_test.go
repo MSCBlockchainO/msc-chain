@@ -245,6 +245,29 @@ func TestSyncActionSnapshotReportsDirectGossipStage(t *testing.T) {
 	}
 }
 
+func TestSyncActionSnapshotReportsNearTipLagWhenConsensusNotPaused(t *testing.T) {
+	oldDirect := SyncDirectGossipMaxBlocks
+	t.Cleanup(func() {
+		SyncDirectGossipMaxBlocks = oldDirect
+	})
+	SyncDirectGossipMaxBlocks = 128
+
+	n := &Node{}
+	stage, mode, lag, action := n.syncActionSnapshot(9635, 9641, false)
+	if stage != "direct_gossip" {
+		t.Fatalf("expected near-tip lag to report direct_gossip stage, got=%q", stage)
+	}
+	if mode != "blocks" {
+		t.Fatalf("expected blocks mode, got=%q", mode)
+	}
+	if lag != 6 {
+		t.Fatalf("unexpected lag: got=%d want=6", lag)
+	}
+	if action != "direct_gossip" {
+		t.Fatalf("unexpected action: got=%q want=direct_gossip", action)
+	}
+}
+
 func TestSyncCatchupPlanSelectsExecutionMethodAndBatch(t *testing.T) {
 	oldDirect := SyncDirectGossipMaxBlocks
 	oldFast := SyncFastBlockSyncMaxBlocks

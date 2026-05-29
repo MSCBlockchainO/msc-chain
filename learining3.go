@@ -9922,7 +9922,6 @@ func (n *Node) recordSyncPeerInvalidProof(peerID string) {
 	if n == nil || strings.TrimSpace(peerID) == "" {
 		return
 	}
-	penalty := uint64(0)
 	n.syncPeerScoreMu.Lock()
 	if n.syncPeerScores == nil {
 		n.syncPeerScores = make(map[string]*SyncPeerScore)
@@ -9935,12 +9934,12 @@ func (n *Node) recordSyncPeerInvalidProof(peerID string) {
 	score.InvalidProofCount++
 	score.SnapshotFail++
 	score.UpdatedAt = time.Now()
-	penalty = score.InvalidProofCount
 	n.syncPeerScoreMu.Unlock()
-	if penalty >= syncSnapshotInvalidProofQuarantineAfter() {
-		n.ensurePeerIsolationMaps()
-		n.disconnectPeerID(peerID, "snapshot_invalid_proof")
-	}
+
+	// Snapshot proof failures should poison only snapshot-provider selection.
+	// Disconnecting the peer here also removes it from consensus gossip and can
+	// halt a small validator set when a stale/partial snapshot proof is seen.
+	n.setSyncAvoidProviderOnce(peerID)
 }
 
 func (n *Node) syncActionSnapshot(localHeight, targetHeight uint64, syncing bool) (stage string, mode string, lag uint64, action string) {
@@ -9977,6 +9976,23 @@ func (n *Node) syncActionSnapshot(localHeight, targetHeight uint64, syncing bool
 		}
 	}
 	if !syncing {
+		if lag > 0 {
+			if plan.Stage != "" {
+				stage = plan.Stage
+			}
+			if plan.Mode != "" {
+				mode = plan.Mode
+			}
+			if plan.Action != "" {
+				action = plan.Action
+			} else if action == "" {
+				action = syncStageStatusAction(stage)
+			}
+			if action == "" {
+				action = "catch_up"
+			}
+			return stage, mode, lag, action
+		}
 		if stage == "" {
 			stage = "idle"
 		}
