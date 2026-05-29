@@ -3,7 +3,7 @@ param(
     [int]$DurationMinutes = 0,
     [int]$WarmupSeconds = 90,
     [int]$NodeCount = 10,
-    [int]$ValidatorNodeCount = 5,
+    [int]$ValidatorNodeCount = 4,
     [string]$NodeIds = "",
     [string]$TopologyPath = "",
     [string]$RpcHost = "127.0.0.1",
@@ -37,6 +37,8 @@ param(
     [int]$SlowMinSeconds = 20,
     [int]$SlowMaxSeconds = 45,
     [int]$CpuPressureWorkers = 0,
+    [int]$MaxCpuPressureWorkers = 0,
+    [string]$SlowNodePriority = "BelowNormal",
     [int]$StaleSnapshotEverySeconds = 180,
     [int]$StaleSnapshotDownSeconds = 20,
     [int]$StaleSnapshotHideNewest = 1,
@@ -867,13 +869,29 @@ function Set-ProcessTreePriority {
     }
 }
 
+function Get-SafeCpuPressureWorkerCount {
+    if ($CpuPressureWorkers -le 0) {
+        return 0
+    }
+    $logicalCores = [Environment]::ProcessorCount
+    $reservedForNodes = [Math]::Max(1, @($script:ChaosNodes | Where-Object { $_.Local }).Count)
+    $safeCap = [Math]::Max(1, $logicalCores - $reservedForNodes)
+    if ($MaxCpuPressureWorkers -gt 0) {
+        $safeCap = [Math]::Min($safeCap, $MaxCpuPressureWorkers)
+    }
+    return [Math]::Min($CpuPressureWorkers, $safeCap)
+}
+
 function Start-CpuPressure {
     param([hashtable]$Node, [int]$Seconds)
     Stop-CpuPressure -Node $Node
     $workers = @()
-    for ($i = 0; $i -lt $CpuPressureWorkers; $i++) {
+    $workerCount = Get-SafeCpuPressureWorkerCount
+    for ($i = 0; $i -lt $workerCount; $i++) {
         $script = "`$deadline=(Get-Date).AddSeconds($Seconds); while((Get-Date) -lt `$deadline){ [Math]::Sqrt(123456.789) | Out-Null }"
-        $workers += Start-Process -FilePath "powershell" -WindowStyle Hidden -PassThru -ArgumentList @("-NoProfile", "-Command", $script)
+        $worker = Start-Process -FilePath "powershell" -WindowStyle Hidden -PassThru -ArgumentList @("-NoProfile", "-Command", $script)
+        try { $worker.PriorityClass = "Idle" } catch {}
+        $workers += $worker
     }
     $Node.CpuLoad = $workers
 }
@@ -900,7 +918,17 @@ function Start-SlowValidatorFault {
         }
         return
     }
-    Set-ProcessTreePriority -ProcessId ([int]$Node.Process.Id) -Priority "Idle"
+    try {
+        $proc = Get-Process -Id ([int]$Node.Process.Id) -ErrorAction SilentlyContinue
+        if ($proc -and -not $Node["OriginalPriority"]) {
+            $Node["OriginalPriority"] = "$($proc.PriorityClass)"
+        }
+    } catch {}
+    $priority = "$SlowNodePriority".Trim()
+    if ([string]::IsNullOrWhiteSpace($priority) -or $priority -eq "Idle") {
+        $priority = "BelowNormal"
+    }
+    Set-ProcessTreePriority -ProcessId ([int]$Node.Process.Id) -Priority $priority
     if ($CpuPressureWorkers -gt 0) {
         Start-CpuPressure -Node $Node -Seconds $Seconds
     }
@@ -908,8 +936,9 @@ function Start-SlowValidatorFault {
     Write-ChaosEvent -Path $EventsPath -Type "slow_validator_begin" -Fields @{
         node = $Node.Id
         seconds = $Seconds
-        priority = "Idle"
-        cpu_pressure_workers = $CpuPressureWorkers
+        priority = $priority
+        cpu_pressure_workers_requested = $CpuPressureWorkers
+        cpu_pressure_workers_started = @($Node.CpuLoad).Count
     }
 }
 
@@ -917,10 +946,15 @@ function Stop-SlowValidatorFault {
     param([hashtable]$Node, [string]$EventsPath)
     Stop-CpuPressure -Node $Node
     if ($Node.Local -and $Node.Process) {
-        Set-ProcessTreePriority -ProcessId ([int]$Node.Process.Id) -Priority "Normal"
+        $restorePriority = "$($Node["OriginalPriority"])"
+        if ([string]::IsNullOrWhiteSpace($restorePriority)) {
+            $restorePriority = "Normal"
+        }
+        Set-ProcessTreePriority -ProcessId ([int]$Node.Process.Id) -Priority $restorePriority
     }
     Write-ChaosEvent -Path $EventsPath -Type "slow_validator_end" -Fields @{ node = $Node.Id }
     $Node.SlowUntil = $null
+    $Node["OriginalPriority"] = $null
 }
 
 function Get-LatestSnapshotDirs {
@@ -1146,6 +1180,7 @@ if (-not [string]::IsNullOrWhiteSpace($TopologyPath)) {
     $ids = New-ChaosNodeIds -Count $NodeCount -RawIds $NodeIds
     $nodes = New-ChaosNodesFromDefaults -Ids $ids
 }
+$script:ChaosNodes = $nodes
 if ($nodes.Count -lt 1 -or $nodes.Count -gt 50) {
     throw "chaos topology must contain between 1 and 50 nodes; got $($nodes.Count)"
 }

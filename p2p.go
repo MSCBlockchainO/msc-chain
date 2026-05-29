@@ -2851,6 +2851,49 @@ func (n *Node) logExecutionVoteAccept(reason string, res ExecutionResultMsg, pro
 	)
 }
 
+func (n *Node) tryFinalizeExecutionQuorumFromPool(targetEpoch uint64, proposalSnap execProposalSnapshot, leaderBlock Block, execHash string, txMerkle string, reason string) bool {
+	if n == nil || targetEpoch == 0 || execHash == "" || targetEpoch != n.currentEpoch() {
+		return false
+	}
+	if leaderBlock.ID != targetEpoch || proposalSnap.BlockHash == "" || proposalSnap.BlockHash != leaderBlock.BlockHash {
+		return false
+	}
+	validators := n.freezeValidatorSetForHeight(targetEpoch, n.GetConsensusValidators(int(targetEpoch)))
+	total := len(validators)
+	required := n.executionQuorumRequired(targetEpoch)
+	if required == 0 {
+		required = strictExecSupermajority(total)
+	}
+	if total == 0 || required == 0 {
+		return false
+	}
+	storedCount := getExecCountGlobal(targetEpoch, proposalSnap.ProposalKey, execHash, txMerkle)
+	if storedCount < required {
+		return false
+	}
+	results, signers, _, ok := getExecResultsGlobal(targetEpoch, proposalSnap.ProposalKey, execHash, txMerkle)
+	if !ok || len(results) < required {
+		return false
+	}
+	for _, result := range results {
+		n.mirrorConsensusExecVote(targetEpoch, proposalSnap.BlockHash, result)
+	}
+	_ = n.maybeAdoptProposalOnExecutionVote(leaderBlock)
+	n.execResultsMu.Lock()
+	_ = n.setQuorumLockedProposalLocked(leaderBlock, "quorum_recover_"+strings.TrimSpace(reason), storedCount, required)
+	n.execResultsMu.Unlock()
+	freezeExecPool(targetEpoch, proposalSnap.ProposalKey, execHash)
+	log.Printf("[EXEC-QUORUM-RECOVER] height=%d reason=%s block=%s exec=%s votes=%d required=%d",
+		targetEpoch,
+		strings.TrimSpace(reason),
+		ShortHash(proposalSnap.BlockHash),
+		ShortHash(execHash),
+		storedCount,
+		required,
+	)
+	return n.finalizeExecutionResult(targetEpoch, execHash, txMerkle, results, signers)
+}
+
 // storeVoteButIgnoreForCommit keeps post-commit execution votes available for
 // diagnostics/replay visibility without letting them trigger a second commit.
 func (n *Node) storeVoteButIgnoreForCommit(epoch uint64, res ExecutionResultMsg, proposalSnap execProposalSnapshot, votes int) {
@@ -4885,6 +4928,9 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		return
 	}
 	if allowed, reason := n.allowExecutionVoteIngress(res.Signer, res.HeightHint, proposalSnap.ProposalKey, res.ExecHash, res.TxMerkle); !allowed {
+		if reason == "replay_cache" && n.tryFinalizeExecutionQuorumFromPool(targetEpoch, proposalSnap, leaderBlock, res.ExecHash, res.TxMerkle, reason) {
+			return
+		}
 		n.logExecutionVoteDrop(reason, res, proposalSnap)
 		return
 	}
@@ -5030,6 +5076,9 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		Signature:  strings.TrimSpace(res.Signature),
 	})
 	if equivocation {
+		if n.tryFinalizeExecutionQuorumFromPool(targetEpoch, proposalSnap, leaderBlock, res.ExecHash, res.TxMerkle, "equivocation_existing_quorum") {
+			return
+		}
 		if DebugConsensus {
 			fmt.Printf("Execution equivocation detected from %s @ epoch %d\n", ShortID(res.Signer), targetEpoch)
 		}
@@ -5038,10 +5087,16 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		return
 	}
 	if !ok {
+		if n.tryFinalizeExecutionQuorumFromPool(targetEpoch, proposalSnap, leaderBlock, res.ExecHash, res.TxMerkle, "duplicate_exec_vote") {
+			return
+		}
 		n.logExecutionVoteDrop("duplicate_exec_vote", res, proposalSnap)
 		return
 	}
 	if !n.markExecSignerSeenForProposal(targetEpoch, proposalSnap.ProposalKey, res.Signer) {
+		if n.tryFinalizeExecutionQuorumFromPool(targetEpoch, proposalSnap, leaderBlock, res.ExecHash, res.TxMerkle, "duplicate_signer_proposal") {
+			return
+		}
 		n.logExecutionVoteDrop("duplicate_signer_proposal", res, proposalSnap)
 		return
 	}

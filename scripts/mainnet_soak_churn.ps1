@@ -13,11 +13,11 @@ param(
 $ErrorActionPreference = "Stop"
 
 $nodes = @(
-    @{ Id = "A"; Port = 7001; Rpc = "127.0.0.1:26657"; PasswordEnv = "MSC_VALIDATOR_PASSWORD_A" },
-    @{ Id = "B"; Port = 7002; Rpc = "127.0.0.1:26658"; PasswordEnv = "MSC_VALIDATOR_PASSWORD_B" },
-    @{ Id = "C"; Port = 7003; Rpc = "127.0.0.1:26659"; PasswordEnv = "MSC_VALIDATOR_PASSWORD_C" },
-    @{ Id = "D"; Port = 7004; Rpc = "127.0.0.1:26660"; PasswordEnv = "MSC_VALIDATOR_PASSWORD_D" },
-    @{ Id = "F"; Port = 7005; Rpc = "127.0.0.1:26661"; PasswordEnv = "MSC_VALIDATOR_PASSWORD_F" }
+    @{ Id = "A"; Role = "validator"; Port = 7001; Rpc = "127.0.0.1:26657"; PasswordEnv = "MSC_VALIDATOR_PASSWORD_A" },
+    @{ Id = "B"; Role = "validator"; Port = 7002; Rpc = "127.0.0.1:26658"; PasswordEnv = "MSC_VALIDATOR_PASSWORD_B" },
+    @{ Id = "C"; Role = "validator"; Port = 7003; Rpc = "127.0.0.1:26659"; PasswordEnv = "MSC_VALIDATOR_PASSWORD_C" },
+    @{ Id = "D"; Role = "validator"; Port = 7004; Rpc = "127.0.0.1:26660"; PasswordEnv = "MSC_VALIDATOR_PASSWORD_D" },
+    @{ Id = "F"; Role = "full";      Port = 7005; Rpc = "127.0.0.1:26661"; PasswordEnv = "MSC_VALIDATOR_PASSWORD_F" }
 )
 
 function Get-NodePassword {
@@ -51,7 +51,7 @@ function Start-SoakNode {
     $command = @(
         "`$env:MSC_VALIDATOR_PASSWORD='$($password.Replace("'","''"))'",
         "Set-Location '$($RepoRoot.Replace("'","''"))'",
-        "go run . --mode=full --id=$id --port=$($Node.Port) --datadir=$dataDir --rpcaddr $($Node.Rpc) *> '$($nodeLog.Replace("'","''"))'"
+        "go run . --mode=full --role=$($Node.Role) --id=$id --port=$($Node.Port) --datadir=$dataDir --rpcaddr $($Node.Rpc) *> '$($nodeLog.Replace("'","''"))'"
     ) -join "; "
     $proc = Start-Process -FilePath "powershell" -WindowStyle Hidden -PassThru -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $command)
     $Node.Process = $proc

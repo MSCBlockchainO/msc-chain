@@ -1973,6 +1973,7 @@ const fetchNetworkStatus = async () => {
 
   setStatus(statusEls.connection, "Connected", "success");
   const waitReason = asTextOrDash(best.wait_reason);
+  const nodeRole = asTextOrDash(best.role).toLowerCase();
   const hasMismatchWait =
     waitReason !== "—" &&
     /validator_set_.*mismatch|validator-set-.*mismatch|validator[_-]set[_-]hash[_-]mismatch/i.test(waitReason);
@@ -1982,6 +1983,10 @@ const fetchNetworkStatus = async () => {
 
   if (hasMismatchWait) {
     setStatus(statusEls.validator, `Mismatch (${waitReason})`, "error");
+  } else if (nodeRole === "full" && best.sync_complete && !best.syncing) {
+    setStatus(statusEls.validator, "Synced", "success");
+    autoFillReceiveAddress();
+    maybeApplyPendingQr();
   } else if (best.sync_complete && best.ready) {
     setStatus(statusEls.validator, "Ready", "success");
     autoFillReceiveAddress();
@@ -4276,6 +4281,10 @@ const loadValidators = async ({ force = false } = {}) => {
 
       state.lastValidatorsSyncAt = Date.now();
       updateStakeValidatorStatus();
+      const best = state.network?.best || {};
+      if (statusEls.validator && best.sync_complete && !best.syncing) {
+        setStatus(statusEls.validator, "Validator set synced", "success");
+      }
     } catch (err) {
       applyRateLimitCooldown(err);
       validatorList.innerHTML = "";
