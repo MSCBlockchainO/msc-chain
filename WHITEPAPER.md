@@ -1,0 +1,476 @@
+# MSC Chain Whitepaper
+
+Status: Technical draft  
+Network: MSC Mainnet  
+Chain ID: `91938`  
+Coin: `MSC`  
+Decimals: `18`  
+Policy version: `mainnet-economic-v1`
+
+## Abstract
+
+MSC Chain is a Go-based blockchain network built around validator consensus, deterministic execution, finality certificates, native token workflows, fast snapshot synchronization, and hardened public gateway operation. The chain is designed to support a practical mainnet architecture: private validator RPC, public full-node gateway access, fixed-supply economics, stake-backed validator participation, protocol-native token logic through DTL, and operational tooling for chaos testing, monitoring, backup, and recovery.
+
+The central design choice of MSC Chain is to keep consensus-critical behavior deterministic and bounded. Token logic is implemented as a protocol-native Decentralized Token Ledger (DTL), rather than relying on arbitrary smart-contract execution in the default mainnet runtime. Validators finalize blocks through strict quorum evidence, and finalized state is anchored with verifiable finality certificates and snapshot checkpoints.
+
+## 1. Vision
+
+MSC Chain is intended to be a production-ready base layer for simple value transfer, validator-secured settlement, native token issuance, DeFi/GameFi primitives, wallet-first user flows, and explorer-visible transparency.
+
+The project prioritizes:
+
+- deterministic consensus and state execution;
+- strict validator identity and key lifecycle controls;
+- fixed-supply tokenomics with transparent emission policy;
+- native token logic that avoids common arbitrary-contract risk;
+- fast sync and recovery through trusted snapshots and finality anchors;
+- public access through hardened full-node gateways;
+- operational evidence through unit tests, replay tests, monitoring, and chaos-network scripts.
+
+## 2. Chain Identity
+
+MSC Mainnet is identified by chain ID `91938`. The frozen genesis artifact is `genesis.json`, with expected SHA256:
+
+```text
+d6d7d96ea1a70d2aca31389ce7ef7953794ce77b4c933828295269702768fa3c
+```
+
+The native asset is `MSC`, described in the codebase as `Mythical system coin`, with 18 decimals and a fixed total supply cap of `9,193,823,602 MSC`.
+
+Mainnet genesis is locked. Production nodes are expected to verify the genesis hash before startup. Mutating `genesis.json` after launch creates a different chain.
+
+## 3. System Architecture
+
+MSC Chain is composed of five primary layers:
+
+1. Consensus layer: validator proposal, execution vote, quorum tracking, final block construction, finality certificate generation, and committed-hash safety checks.
+2. Execution layer: deterministic transaction processing, ledger mutation, state root calculation, receipts, fees, staking, validator updates, and DTL operations.
+3. Networking layer: libp2p peer connectivity, peer hello validation, block and transaction propagation, block range sync, snapshot transfer, peer reputation, and rate limiting.
+4. Storage and sync layer: Pebble-backed state, block, snapshot, tx, and metadata stores, plus checkpointed snapshots and delta replay.
+5. Application layer: RPC APIs, explorer, wallet UI, DTL IDE, metrics, public gateway deployment scripts, and operator tools.
+
+The chain separates validator operation from public access. Validators should keep RPC private, while public users connect through full-node gateways, explorer endpoints, and wallet interfaces.
+
+## 4. Consensus And Finality
+
+MSC Chain uses a validator committee model with deterministic validator set resolution. Validators propose blocks, independently execute the proposed state transition, sign execution results, and finalize blocks once quorum evidence is available.
+
+The strict execution supermajority is:
+
+```text
+required = floor((2 * validator_count) / 3) + 1
+```
+
+This gives the familiar Byzantine-fault-tolerant threshold where a minority of faulty validators cannot finalize conflicting state under honest quorum assumptions.
+
+Each finalized block carries quorum metadata, including:
+
+- consensus mode;
+- quorum policy version;
+- active ready validator count;
+- required quorum;
+- strict quorum;
+- execution result signatures;
+- validator set commitments;
+- state root;
+- mempool root;
+- finality root.
+
+Finality is not only a height marker. The chain builds finality artifacts:
+
+- `FinalizedEpochCertificate`;
+- epoch anchor hash;
+- previous epoch anchor hash;
+- finality root;
+- validator commitment record;
+- irreversible root record.
+
+These artifacts bind finalized state to validator set identity, quorum policy, execution evidence, and the previous finality anchor. This makes finalized history auditable and gives snapshot sync a trust base.
+
+## 5. Block Safety Model
+
+The implementation defends against several classes of consensus failure:
+
+- forked finalized blocks are rejected through committed-hash checks;
+- unknown commit signers are rejected;
+- fake proposer signatures are rejected;
+- invalid execution result roots do not count toward quorum;
+- delayed old votes are replay-fenced after finality;
+- unsigned propagated quorum claims do not satisfy final execution quorum;
+- conflicting quorum propagation does not poison later valid quorum;
+- quorum metadata below mainnet floors is rejected.
+
+Blocks commit state roots, mempool roots, receipt roots, validator set hashes, next-validator-set hashes, and finality metadata. The safety goal is:
+
+```text
+same input block + same pre-state => same post-state + same receipts
+```
+
+## 6. Validator System
+
+MSC Mainnet launches with four frozen core validators:
+
+| Validator | Genesis stake | Lock epochs |
+| --- | ---: | ---: |
+| `A` | `100` | `19872000` |
+| `B` | `100` | `19872000` |
+| `C` | `100` | `19872000` |
+| `D` | `100` | `19872000` |
+
+Mainnet validator policy includes:
+
+- minimum active validators: `4`;
+- active set target: `50`;
+- maximum active committee: `512`;
+- minimum validator stake: `100 MSC`;
+- stake cap: `5%` of fixed supply;
+- deterministic and equal-chance validator selection enabled;
+- adaptive committee mode;
+- committee rotation every `32` blocks;
+- strict onboarding activation;
+- activation delay of `5` blocks;
+- one wallet bound to one validator at a time;
+- first non-core validator stake must include a consensus public key.
+
+Validator stake persists across restart and rejoin until the wallet submits an unstake transaction. A rejoining validator does not need to stake again if the stake was never unstaked.
+
+## 7. Validator Key Lifecycle
+
+Validator identity is rooted in the node's validator secret key. MSC Chain treats validator key lifecycle as consensus-adjacent infrastructure, not an operator convenience.
+
+The operator policy is:
+
+- `validator.sec` is the identity root;
+- fingerprint mismatch fails startup;
+- backup restore is preferred over chain reset;
+- key backup is required;
+- secure backups are stored under `secure-backups`;
+- identity rotation on an existing chain is disabled by default;
+- core validator startup can require prompt-only or file/prompt password flow.
+
+Core validator onboarding uses a signed registry and a two-phase flow:
+
+1. Add the validator as `pending`.
+2. Promote the validator to `active` after signed approval and effective-height buffer.
+
+This avoids chain reset, identity drift, and accidental proposer inclusion before the node is ready.
+
+## 8. Slashing And Liveness
+
+MSC Chain applies economic penalties for severe validator faults and inactivity.
+
+Severe faults include:
+
+- double proposal or double signing;
+- invalid block or invalid proposer behavior;
+- bad execution;
+- execution equivocation;
+- systematic censorship;
+- finality-breaking behavior.
+
+The configured severe slash burns `1000` basis points, or `10%`, from validator stake. After `3` severe slashes, the validator exits permanently.
+
+Inactivity penalties are tiered:
+
+- tier 1: half of the configured inactivity burn rate;
+- tier 2: full configured inactivity burn rate;
+- tier 3 and beyond: double, capped at `10000` basis points.
+
+Jailed or exited validators do not receive normal rewards. Blocked validator rewards are routed to treasury and burned according to policy.
+
+## 9. Native Asset And Tokenomics
+
+The native token is `MSC`.
+
+| Field | Value |
+| --- | --- |
+| Symbol | `MSC` |
+| Decimals | `18` |
+| Fixed supply cap | `9,193,823,602` |
+| Policy version | `mainnet-economic-v1` |
+| Chain ID | `91938` |
+
+The explicit frozen genesis balance total is `5,977,385,341 MSC`, allocated across foundation, treasury, validator wallets, and user reward pool.
+
+Mainnet genesis pools include:
+
+| Pool | Address | Notes |
+| --- | --- | --- |
+| Foundation | `MSC017d78d2c1920db5321271a2d594a4995a3c5ba99d` | Locked foundation allocation |
+| Treasury | `MSC01102bdf87789381354be6ec8af1f49688306ea83c` | Governance-only, locked |
+| User rewards | `USER_REW` | Genesis user reward allocation |
+
+Transaction fees route to `MSC_TREASURY`.
+
+Mainnet emission policy is deterministic and bounded:
+
+- emission enabled;
+- per-block emission reward range: `2` to `4`;
+- halving interval: `1,105,840` blocks;
+- treasury share: `2000` bps, or `20%`;
+- validator/proposer share: `7200` bps, or `72%`;
+- burn share: `800` bps, or `8%`;
+- configured burn floor: `62,000,000`;
+- random user reward chance: `2500` bps, or `25%`;
+- work block base reward: `2`.
+
+The fixed supply cap is enforced by policy. Scheduled emission cannot exceed the fixed total supply.
+
+## 10. Staking
+
+MSC Chain uses locked validator stake as part of validator eligibility and penalty enforcement.
+
+Mainnet staking rules:
+
+- minimum validator stake: `100 MSC`;
+- default lock: `19,872,000` epochs;
+- minimum unstake period: `23` months;
+- one wallet can bind to one validator at a time;
+- validator stake survives restarts and rejoins;
+- below-minimum stake transactions are rejected for validator positions;
+- first non-core stake must anchor a consensus public key.
+
+The stake lock is designed to make validator commitment long-lived and to give slashing meaningful weight.
+
+## 11. DTL: Decentralized Token Ledger
+
+MSC Chain includes DTL, a protocol-native token system for MSC. DTL is designed around a simple principle:
+
+```text
+No single key, no single node, and no single developer can unilaterally control a token.
+```
+
+DTL token rules are enforced by consensus, not by arbitrary user-deployed runtime code. In the current mainnet-oriented configuration, EVM execution is disabled and DTL is the native token workflow.
+
+DTL supports:
+
+- token creation;
+- token transfer;
+- governance-authorized mint;
+- burn;
+- AMM pool creation;
+- add and remove liquidity;
+- swaps;
+- commit-reveal duels;
+- lending markets;
+- collateral deposit;
+- borrow, repay, withdraw, and liquidate;
+- tournaments;
+- deterministic contract-style deploy/call operations.
+
+DTL governance uses a Governance Certificate, or GCERT. A GCERT binds:
+
+- token ID;
+- epoch;
+- action;
+- payload hash;
+- unique signer set;
+- signer public keys;
+- signatures;
+- threshold.
+
+Minting, pause/unpause, freeze/unfreeze, and authority rotation require valid threshold governance. This reduces the risk of hidden mint functions, proxy upgrade abuse, re-entrancy, and other common arbitrary-contract failure modes.
+
+## 12. Deterministic User Logic
+
+The codebase also defines a proposed DTL Logic Pack model for future user-authored logic without enabling arbitrary VM bytecode.
+
+The model is:
+
+1. User writes `dtl-script-v1`.
+2. Compiler emits canonical `logic_pack` JSON.
+3. Nodes statically validate the logic pack at deploy time.
+4. Calls execute bounded deterministic operations.
+5. All validators derive identical post-state.
+
+The proposed model disallows loops, recursion, floating point, wall-clock reads, network IO, and filesystem IO. It uses checked arithmetic, forward-only control flow, method step limits, read/write limits, and deterministic token transfer actions.
+
+## 13. Networking
+
+MSC Chain uses libp2p networking for peer connectivity and message propagation. The node includes:
+
+- peer hello validation;
+- chain ID and genesis hash checks;
+- persistent peer support;
+- mDNS and DHT configuration;
+- peer diversity limits;
+- peer reputation and quarantine;
+- stream-based block sync;
+- transaction gossip;
+- snapshot metadata and chunk gossip;
+- ping/pong keepalive;
+- block range serving with bounded request policy;
+- peer rate limits and resource limits.
+
+The default local development ports use P2P ports beginning at `7001` and RPC ports beginning at `26657`.
+
+## 14. Sync, Snapshots, And Recovery
+
+MSC Chain is designed for nodes to catch up through a combination of block replay and trusted snapshots.
+
+Mainnet sync settings include:
+
+- direct gossip max blocks: `128`;
+- fast block sync max blocks: `256`;
+- range fetch max blocks: `50000`;
+- snapshot threshold: `2000` blocks;
+- checkpoint interval: `32` blocks;
+- snapshot chunk size: `1 MiB`;
+- parallel snapshot chunks: `8`;
+- delta replay batch: `1024` blocks;
+- snapshot anchor timeout: `10` seconds;
+- invalid proof quarantine threshold: `3`.
+
+Snapshots include ledger state, validator state, DTL state, validator registry hashes, finalized height/hash, epoch anchor hash, finality root, and checkpoint proof. Snapshot application is guarded by finality and local anchor checks to prevent replay loops, stale snapshot regressions, and invalid state adoption.
+
+Storage is split into separate Pebble stores:
+
+- `state.db`;
+- `blocks.db`;
+- `snapshot.db`;
+- `tx.db`;
+- `meta.db`;
+- block files;
+- snapshot files;
+- checkpoints;
+- cold-storage archive.
+
+Database writes use synced Pebble batches, and the storage layer can quarantine corrupted DB paths during recovery.
+
+## 15. RPC, Explorer, And Wallet
+
+MSC Chain exposes RPC endpoints for node status, block data, transaction submission, tokenomics, governance, explorer views, wallet interactions, DTL token data, and observability.
+
+The repository includes:
+
+- web explorer UI;
+- MSC wallet UI;
+- DTL IDE;
+- token/logo/NFT image guidance;
+- public gateway deployment scripts;
+- TLS certificate generation tooling.
+
+Production public access should terminate at a full-node gateway, not a validator RPC port. Validator RPC should remain private or bound to localhost. Public gateway deployments should use HTTPS, nginx rate limits, node RPC limits, and private metrics scraping.
+
+## 16. Security Baseline
+
+MSC Chain's security model combines consensus rules, node hardening, operator policy, and public gateway separation.
+
+Security controls include:
+
+- chain ID enforcement;
+- frozen genesis hash verification;
+- finality certificate verification;
+- strict quorum metadata checks;
+- validator signer validation;
+- committed-hash fork rejection;
+- transaction signature and nonce validation;
+- transaction TTL and body-size limits;
+- mempool caps;
+- peer hello gating;
+- peer reputation and quarantine;
+- rate limits for RPC and gossip;
+- optional RPC auth tokens;
+- TLS support;
+- DB encryption key configuration;
+- validator key backup and fingerprint locking.
+
+The recommended local security baseline is to set:
+
+```powershell
+$env:MSC_RPC_TOKEN = "replace-with-strong-random-token"
+$env:MSC_DB_ENCRYPTION_KEY = "<base64-32-byte-key>"
+```
+
+For production, public validator RPC exposure should be avoided.
+
+## 17. Governance
+
+MSC Chain currently has three governance surfaces:
+
+1. Core validator registry governance: signed registry updates add, activate, retire, or enforce core validator identity.
+2. Validator update certificates: threshold-approved validator add/remove transactions prevent unilateral validator set mutation.
+3. DTL governance certificates: token-specific threshold governance controls minting, pause/unpause, freeze/unfreeze, and authority rotation.
+
+Treasury operations are disabled on mainnet unless explicitly enabled and authorized.
+
+## 18. Testing And Mainnet Readiness
+
+The repository includes extensive tests for:
+
+- validator onboarding;
+- validator liveness;
+- validator churn;
+- adaptive committee behavior;
+- finality certificates;
+- block verification;
+- Byzantine block rejection;
+- coordinated Byzantine minority behavior;
+- delayed vote replay;
+- timing attacks;
+- network partitions;
+- peer security;
+- RPC hardening;
+- storage durability;
+- snapshot verification;
+- sync recovery;
+- execution determinism;
+- economic policy;
+- tokenomics;
+- DTL state transitions.
+
+Mainnet chaos tooling tests survival under:
+
+- randomized validator and full-node restarts;
+- restart storms;
+- local firewall disconnect windows;
+- packet loss;
+- latency;
+- slow validators;
+- stale snapshot restarts;
+- transaction floods;
+- fork checks across finalized hashes.
+
+The Tier 1 survival pass condition is no finality stall beyond configured gap, reachable quorum above minimum, bounded finalized lag, bounded height lag, and no finalized block hash divergence across reachable nodes.
+
+## 19. Limitations And Risk Statement
+
+MSC Chain is an active implementation. The whitepaper describes the repository's current protocol direction and mainnet configuration, not a completed third-party security audit.
+
+Known risks and limitations:
+
+- the frozen genesis core set starts small, with four core validators;
+- validator decentralization depends on successful signed onboarding and operator participation;
+- DTL Logic Pack is proposed and should be activated only after testnet validation;
+- public gateway security depends on correct deployment and DNS/TLS setup;
+- validator key loss or poor backup hygiene can affect liveness;
+- any governance threshold can be compromised if enough signing keys are compromised;
+- production readiness should include independent audit, long-duration distributed chaos runs, and public monitoring.
+
+## 20. Roadmap
+
+Near-term roadmap:
+
+- enforce signed core registry after staged rollout;
+- complete public full-node gateway hardening;
+- run long-duration 10-node and 50-node chaos survival tests;
+- publish reproducible genesis and operator verification steps;
+- expand monitoring dashboards and alert thresholds;
+- harden wallet and explorer production deployment;
+- complete DTL Logic Pack testnet activation path;
+- prepare independent security review.
+
+Medium-term roadmap:
+
+- broader validator onboarding;
+- stronger on-chain governance workflows;
+- snapshot proof improvements;
+- deeper wallet support for DTL assets;
+- public token registry and metadata standards;
+- richer DeFi/GameFi primitives under deterministic execution limits.
+
+## Conclusion
+
+MSC Chain is a validator-secured blockchain focused on deterministic finality, fixed-supply economics, native token logic, and practical mainnet operation. Its design favors bounded protocol-native execution over arbitrary runtime complexity, strict validator identity over casual node churn, and finality-anchored snapshots over blind fast sync.
+
+The result is a chain architecture aimed at being understandable, auditable, and operator-friendly while still supporting native assets, DTL token issuance, DeFi/GameFi primitives, explorer access, wallet flows, and production-grade monitoring.
