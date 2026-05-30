@@ -21133,6 +21133,9 @@ func logScheduledUpdateTrace(stage string, provider string, state scheduledUpdat
 	}
 	writer := scheduledUpdateTraceOutput
 	if writer == nil {
+		if !DebugSync && !DebugConsensus {
+			return
+		}
 		writer = os.Stdout
 	}
 	fmt.Fprintf(writer, "[SYNC-SCHEDULED-UPDATES] stage=%s provider=%s current_height=%d step=%s update_height=%d due_transition=%t defer_for_sync=%t update_blocked=%t planned_only=%t updated=%t processed_adds=%d processed_removes=%d next_transition_height=%d transition_validators=%d next_validators=%d\n",

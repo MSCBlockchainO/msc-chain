@@ -117,9 +117,9 @@ const snapshotLedgerStageExecution = "execution"
 const SnapshotRetention = 1000
 
 var (
-	DebugConsensus                           = true
-	DebugNet                                 = true
-	DebugSync                                = false
+	DebugConsensus                           = envBool("MSC_DEBUG_CONSENSUS")
+	DebugNet                                 = envBool("MSC_DEBUG_NET")
+	DebugSync                                = envBool("MSC_DEBUG_SYNC")
 	ExecutionDeterminismGuardEnabled         = true
 	ResultGossipOnly                         = true
 	DisableDHT                               = false
