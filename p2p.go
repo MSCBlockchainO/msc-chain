@@ -495,8 +495,10 @@ func (n *Node) requestBlocksFromPeer(
 ) ([]Block, *StateSnapshot, *ExecPoolSnapshot, error) {
 	if !wantSnapshot {
 		if blocks, ok := n.localBlocksForRange(from, to); ok {
-			fmt.Printf("[SYNC-REQUEST-SKIP] peer=%s range=%d-%d reason=local_blocks_present count=%d\n",
-				ShortID(pid.String()), from, to, len(blocks))
+			if DebugSync || DebugConsensus {
+				fmt.Printf("[SYNC-REQUEST-SKIP] peer=%s range=%d-%d reason=local_blocks_present count=%d\n",
+					ShortID(pid.String()), from, to, len(blocks))
+			}
 			return blocks, nil, nil, nil
 		}
 	}
@@ -514,8 +516,11 @@ func (n *Node) requestBlocksFromPeerDirect(
 	}
 	timeout := syncPeerRequestTimeout()
 	peerLabel := ShortID(pid.String())
-	fmt.Printf("[SYNC-REQUEST-START] peer=%s range=%d-%d snapshot=%t snapshot_height=%d timeout_ms=%d\n",
-		peerLabel, from, to, wantSnapshot, snapshotHeight, timeout.Milliseconds())
+	traceRequest := DebugSync || DebugConsensus
+	if traceRequest {
+		fmt.Printf("[SYNC-REQUEST-START] peer=%s range=%d-%d snapshot=%t snapshot_height=%d timeout_ms=%d\n",
+			peerLabel, from, to, wantSnapshot, snapshotHeight, timeout.Milliseconds())
+	}
 
 	type openResult struct {
 		stream network.Stream
@@ -524,7 +529,9 @@ func (n *Node) requestBlocksFromPeerDirect(
 	openCtx, cancelOpen := context.WithTimeout(context.Background(), timeout)
 	defer cancelOpen()
 	openStarted := time.Now()
-	fmt.Printf("[SYNC-REQUEST-OPEN] peer=%s range=%d-%d\n", peerLabel, from, to)
+	if traceRequest {
+		fmt.Printf("[SYNC-REQUEST-OPEN] peer=%s range=%d-%d\n", peerLabel, from, to)
+	}
 	openCh := make(chan openResult, 1)
 	go func() {
 		stream, err := n.openStream(openCtx, pid, BlockSyncProtocol)
@@ -547,8 +554,10 @@ func (n *Node) requestBlocksFromPeerDirect(
 			return nil, nil, nil, err
 		}
 		s = out.stream
-		fmt.Printf("[SYNC-REQUEST-OPEN-OK] peer=%s range=%d-%d duration_ms=%d\n",
-			peerLabel, from, to, time.Since(openStarted).Milliseconds())
+		if traceRequest {
+			fmt.Printf("[SYNC-REQUEST-OPEN-OK] peer=%s range=%d-%d duration_ms=%d\n",
+				peerLabel, from, to, time.Since(openStarted).Milliseconds())
+		}
 	case <-openCtx.Done():
 		err := newBlockRequestPhaseError("open", pid, from, to, timeout, true, openCtx.Err())
 		fmt.Printf("[SYNC-REQUEST-OPEN-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, err)
@@ -566,7 +575,9 @@ func (n *Node) requestBlocksFromPeerDirect(
 	_ = s.SetWriteDeadline(time.Now().Add(timeout))
 	enc := json.NewEncoder(s)
 	encodeStarted := time.Now()
-	fmt.Printf("[SYNC-REQUEST-ENCODE] peer=%s range=%d-%d\n", peerLabel, from, to)
+	if traceRequest {
+		fmt.Printf("[SYNC-REQUEST-ENCODE] peer=%s range=%d-%d\n", peerLabel, from, to)
+	}
 	encodeCh := make(chan error, 1)
 	go func() {
 		encodeCh <- enc.Encode(req)
@@ -579,8 +590,10 @@ func (n *Node) requestBlocksFromPeerDirect(
 			fmt.Printf("[SYNC-REQUEST-ENCODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, wrapped)
 			return nil, nil, nil, wrapped
 		}
-		fmt.Printf("[SYNC-REQUEST-ENCODE-OK] peer=%s range=%d-%d duration_ms=%d\n",
-			peerLabel, from, to, time.Since(encodeStarted).Milliseconds())
+		if traceRequest {
+			fmt.Printf("[SYNC-REQUEST-ENCODE-OK] peer=%s range=%d-%d duration_ms=%d\n",
+				peerLabel, from, to, time.Since(encodeStarted).Milliseconds())
+		}
 	case <-time.After(timeout):
 		_ = s.Reset()
 		err := newBlockRequestPhaseError("encode", pid, from, to, timeout, true, context.DeadlineExceeded)
@@ -595,7 +608,9 @@ func (n *Node) requestBlocksFromPeerDirect(
 		err  error
 	}
 	decodeStarted := time.Now()
-	fmt.Printf("[SYNC-REQUEST-DECODE] peer=%s range=%d-%d\n", peerLabel, from, to)
+	if traceRequest {
+		fmt.Printf("[SYNC-REQUEST-DECODE] peer=%s range=%d-%d\n", peerLabel, from, to)
+	}
 	respCh := make(chan blockResponseResult, 1)
 	go func() {
 		var resp BlockResponse
@@ -611,8 +626,10 @@ func (n *Node) requestBlocksFromPeerDirect(
 			fmt.Printf("[SYNC-REQUEST-DECODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, err)
 			return nil, nil, nil, err
 		}
-		fmt.Printf("[SYNC-REQUEST-RESULT] peer=%s range=%d-%d count=%d snapshot=%t duration_ms=%d\n",
-			peerLabel, from, to, len(out.resp.Blocks), out.resp.Snapshot != nil, time.Since(decodeStarted).Milliseconds())
+		if traceRequest {
+			fmt.Printf("[SYNC-REQUEST-RESULT] peer=%s range=%d-%d count=%d snapshot=%t duration_ms=%d\n",
+				peerLabel, from, to, len(out.resp.Blocks), out.resp.Snapshot != nil, time.Since(decodeStarted).Milliseconds())
+		}
 		return out.resp.Blocks, out.resp.Snapshot, out.resp.ExecPool, nil
 	case <-time.After(timeout):
 		_ = s.Reset()
@@ -2805,7 +2822,7 @@ func (n *Node) allowExecutionVoteIngress(signer string, epoch uint64, proposalKe
 
 func shouldThrottleExecutionVoteDrop(reason string) bool {
 	switch strings.TrimSpace(reason) {
-	case "duplicate_exec_vote", "duplicate_signer_proposal", "rate_limited", "replay_cache", "stale_committed_height":
+	case "duplicate_exec_vote", "duplicate_signer_proposal", "rate_limited", "replay_cache", "stale_committed_height", "queued_future_epoch":
 		return true
 	default:
 		return false
@@ -2816,15 +2833,18 @@ func (n *Node) shouldLogExecutionVoteDrop(reason string, res ExecutionResultMsg,
 	if n == nil || !shouldThrottleExecutionVoteDrop(reason) {
 		return true
 	}
-	key := fmt.Sprintf("exec_vote_drop:%s:%d:%d:%s:%s:%s:%s",
-		reason,
-		res.HeightHint,
-		res.RoundHint,
-		normalizeValidatorID(res.Signer),
-		ShortHash(strings.TrimSpace(res.BlockHashHint)),
-		ShortHash(strings.TrimSpace(res.ExecHash)),
-		ShortHash(strings.TrimSpace(proposalSnap.ProposalKey)),
-	)
+	key := fmt.Sprintf("exec_vote_drop:%s:%s", reason, normalizeValidatorID(res.Signer))
+	if DebugConsensus || DebugSync || log.Writer() != os.Stderr {
+		key = fmt.Sprintf("exec_vote_drop:%s:%d:%d:%s:%s:%s:%s",
+			reason,
+			res.HeightHint,
+			res.RoundHint,
+			normalizeValidatorID(res.Signer),
+			ShortHash(strings.TrimSpace(res.BlockHashHint)),
+			ShortHash(strings.TrimSpace(res.ExecHash)),
+			ShortHash(strings.TrimSpace(proposalSnap.ProposalKey)),
+		)
+	}
 	return n.shouldLogLivenessReason(key, livenessReasonLogCooldown)
 }
 
@@ -2869,6 +2889,12 @@ func (n *Node) logExecutionVoteAccept(reason string, res ExecutionResultMsg, pro
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		reason = "recorded"
+	}
+	if n != nil && !DebugConsensus && !DebugSync && log.Writer() == os.Stderr {
+		key := fmt.Sprintf("exec_vote_accept:%s:%s", reason, normalizeValidatorID(res.Signer))
+		if !n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+			return
+		}
 	}
 	log.Printf("[VOTE-ACCEPT] reason=%s signer=%s height=%d round=%d vote_block=%s current_block=%s proposal=%s exec=%s tx_merkle=%s votes=%d required=%d",
 		reason,
