@@ -51,6 +51,9 @@ func (n *Node) ensurePeerIsolationMaps() {
 	if n.peerHashMatch == nil {
 		n.peerHashMatch = make(map[string]bool)
 	}
+	if n.nodeIDToPeer == nil {
+		n.nodeIDToPeer = make(map[string]string)
+	}
 	if n.peerToValidator == nil {
 		n.peerToValidator = make(map[string]string)
 	}

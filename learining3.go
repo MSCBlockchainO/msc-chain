@@ -23381,6 +23381,8 @@ func StartNode(
 
 		peerHelloOK: make(map[string]bool),
 
+		nodeIDToPeer: make(map[string]string),
+
 		peerToValidator: make(map[string]string),
 
 		validatorToPeer: make(map[string]string),
@@ -43283,9 +43285,9 @@ func (n *Node) MapStats() MapStats {
 
 	n.peerStateMu.Lock()
 
-	stats.PeerStateCount = len(n.peerSetHash) + len(n.peerHashMatch) + len(n.peerToValidator) +
+	stats.PeerStateCount = len(n.peerSetHash) + len(n.peerHashMatch) + len(n.nodeIDToPeer) + len(n.peerToValidator) +
 
-		len(n.peerAckHeight) + len(n.peerSuspectAt) + len(n.peerHelloSentAt) +
+		len(n.validatorToPeer) + len(n.peerAckHeight) + len(n.peerSuspectAt) + len(n.peerHelloSentAt) +
 
 		len(n.peerConnectedAt) + len(n.peerFlapTimes) + len(n.peerGraftAt) +
 

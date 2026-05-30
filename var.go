@@ -735,6 +735,7 @@ type PeerHello struct {
 	Version              string `json:"version"`
 	ConsensusHash        string `json:"consensus_hash"`
 	Role                 string `json:"role,omitempty"`
+	NodeID               string `json:"node_id,omitempty"`
 	ValidatorID          string `json:"validator_id"`
 	ValidatorPubKey      string `json:"validator_pubkey,omitempty"`
 	P2PAddr              string `json:"p2p_addr"`
@@ -1736,6 +1737,7 @@ type Node struct {
 	peerTipHash             map[string]string // peerID -> advertised chain tip hash
 	peerHashMatch           map[string]bool   // peerID -> hash match
 	peerHelloOK             map[string]bool   // peerID -> handshake complete
+	nodeIDToPeer            map[string]string // node ID -> peerID
 	peerToValidator         map[string]string // peerID -> validator ID
 	validatorToPeer         map[string]string // validator ID -> peerID
 	peerRole                map[string]string // peerID -> role (validator|full|light)

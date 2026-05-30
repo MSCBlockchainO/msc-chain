@@ -123,6 +123,78 @@ func TestReserveValidatorPeerIdentityRejectsLocalNodeIDClone(t *testing.T) {
 	}
 }
 
+func TestReserveNodePeerIdentityRejectsLocalNodeIDClone(t *testing.T) {
+	remotePeerID := "12D3KooWSjgBtznLkWFcuKkib3o4GAxxREFUPrRtcYqwTAUruXJo"
+	node := &Node{ID: "A"}
+	node.ensurePeerIsolationMaps()
+
+	if node.reserveNodePeerIdentity(remotePeerID, "A") {
+		t.Fatal("remote peer must not be allowed to claim the local node id")
+	}
+	if !node.isPeerQuarantined(remotePeerID) {
+		t.Fatal("duplicate node id peer should be quarantined")
+	}
+	if got := node.nodeIDToPeer["A"]; got != "" {
+		t.Fatalf("duplicate node id must not reserve node mapping, got=%s", got)
+	}
+}
+
+func TestReserveNodePeerIdentityRejectsLiveDuplicate(t *testing.T) {
+	oldPeerID := "12D3KooWSjgBtznLkWFcuKkib3o4GAxxREFUPrRtcYqwTAUruXJo"
+	newPeerID := "12D3KooWRgzavLAH2MjsQc6H7ku4oyKexEBWNPpQggV1wyj8uYLW"
+	node := &Node{ID: "A"}
+	node.ensurePeerIsolationMaps()
+
+	if !node.reserveNodePeerIdentity(oldPeerID, "F") {
+		t.Fatal("first node id mapping should be accepted")
+	}
+	if node.reserveNodePeerIdentity(newPeerID, "F") {
+		t.Fatal("same node id from a different peer id must be rejected")
+	}
+	if got := node.nodeIDToPeer["F"]; got != oldPeerID {
+		t.Fatalf("node id mapping changed after duplicate: got=%s want=%s", got, oldPeerID)
+	}
+	if !node.isPeerQuarantined(newPeerID) {
+		t.Fatal("conflicting node id peer should be quarantined")
+	}
+}
+
+func TestValidatePeerHelloRejectsDuplicateNodeID(t *testing.T) {
+	firstPeerID, firstHello := signedPeerHelloForTest(t)
+	firstHello.NodeID = "F"
+	secondPeerID, secondHello := signedPeerHelloForTest(t)
+	secondHello.NodeID = "F"
+	node := &Node{ID: "A"}
+	node.ensurePeerIsolationMaps()
+
+	if !node.validatePeerHello(firstPeerID, firstHello) {
+		t.Fatal("first node id claim should be accepted")
+	}
+	if node.validatePeerHello(secondPeerID, secondHello) {
+		t.Fatal("duplicate node id claim from another peer should be rejected")
+	}
+	if got := node.nodeIDToPeer["F"]; got != firstPeerID {
+		t.Fatalf("node id mapping changed after duplicate hello: got=%s want=%s", got, firstPeerID)
+	}
+	if !node.isPeerQuarantined(secondPeerID) {
+		t.Fatal("duplicate peer hello should quarantine the second peer")
+	}
+}
+
+func TestClearPeerStateReleasesNodeIDMapping(t *testing.T) {
+	peerID := "12D3KooWSjgBtznLkWFcuKkib3o4GAxxREFUPrRtcYqwTAUruXJo"
+	node := &Node{ID: "A"}
+	node.ensurePeerIsolationMaps()
+
+	if !node.reserveNodePeerIdentity(peerID, "F") {
+		t.Fatal("node id mapping should be accepted")
+	}
+	node.clearPeerState(peerID)
+	if got := node.nodeIDToPeer["F"]; got != "" {
+		t.Fatalf("clearPeerState should release node id mapping, got=%s", got)
+	}
+}
+
 func TestReserveValidatorPeerIdentityRejectsAddressBookConflict(t *testing.T) {
 	oldPeerID := "12D3KooWSjgBtznLkWFcuKkib3o4GAxxREFUPrRtcYqwTAUruXJo"
 	newPeerID := "12D3KooWRgzavLAH2MjsQc6H7ku4oyKexEBWNPpQggV1wyj8uYLW"
