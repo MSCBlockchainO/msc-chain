@@ -96,6 +96,8 @@ server {
     client_max_body_size 2m;
     proxy_read_timeout 60s;
     proxy_send_timeout 60s;
+    limit_req_status 429;
+    limit_conn_status 429;
     limit_conn msc_conn 20;
 
     add_header X-Content-Type-Options nosniff always;
