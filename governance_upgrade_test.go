@@ -229,6 +229,76 @@ func TestEmergencyGovernanceCanScheduleShortActivationWithStrictQuorum(t *testin
 	}
 }
 
+func TestEmergencyPauseGovernanceRequiresStrictQuorumAndActivation(t *testing.T) {
+	registry := governanceTestRegistry()
+	state := NewGovernanceState()
+	id, err := state.SubmitProposal(GovernanceProposal{
+		Kind:              GovernanceProposalEmergencyPause,
+		Title:             "pause unsafe upgrade lane",
+		Proposer:          "A",
+		CreatedHeight:     100,
+		VotingStartHeight: 100,
+		VotingEndHeight:   110,
+		ActivationHeight:  105,
+		PauseUntilHeight:  140,
+		PauseReason:       "operator-drill",
+	})
+	if err != nil {
+		t.Fatalf("submit emergency pause: %v", err)
+	}
+	if err := state.CastVote(id, "A", GovernanceVoteYes, 100, registry); err != nil {
+		t.Fatalf("vote A: %v", err)
+	}
+	if err := state.CastVote(id, "B", GovernanceVoteYes, 100, registry); err != nil {
+		t.Fatalf("vote B: %v", err)
+	}
+	tally, err := state.FinalizeProposal(id, 100, registry)
+	if err != nil {
+		t.Fatalf("finalize before quorum: %v", err)
+	}
+	if state.Proposals[id].Status == GovernanceProposalApproved {
+		t.Fatalf("pause approved before strict quorum: %+v", tally)
+	}
+	if err := state.CastVote(id, "C", GovernanceVoteYes, 100, registry); err != nil {
+		t.Fatalf("vote C: %v", err)
+	}
+	if _, err := state.FinalizeProposal(id, 100, registry); err != nil {
+		t.Fatalf("finalize at quorum: %v", err)
+	}
+	if err := state.ApplyApprovedProposal(id, 104); err == nil {
+		t.Fatalf("expected activation height gate before emergency pause")
+	}
+	if err := state.ApplyApprovedProposal(id, 105); err != nil {
+		t.Fatalf("apply emergency pause: %v", err)
+	}
+	if !state.EmergencyPause.Active || state.EmergencyPause.PauseUntilHeight != 140 || state.EmergencyPause.Reason != "operator-drill" {
+		t.Fatalf("unexpected emergency pause state: %+v", state.EmergencyPause)
+	}
+	if !state.EmergencyPauseActiveAt(140) {
+		t.Fatalf("pause should remain active through pause-until height")
+	}
+	if !state.ExpireEmergencyPause(141) || state.EmergencyPause.Active {
+		t.Fatalf("pause should expire after pause-until height: %+v", state.EmergencyPause)
+	}
+}
+
+func TestEmergencyPauseRejectsUnboundedWindow(t *testing.T) {
+	state := NewGovernanceState()
+	_, err := state.SubmitProposal(GovernanceProposal{
+		Kind:              GovernanceProposalEmergencyPause,
+		Title:             "too long pause",
+		Proposer:          "A",
+		CreatedHeight:     10,
+		VotingStartHeight: 10,
+		VotingEndHeight:   20,
+		ActivationHeight:  20,
+		PauseUntilHeight:  20 + defaultEmergencyPauseMaxBlocks + 1,
+	})
+	if err == nil || !strings.Contains(err.Error(), "exceeds max blocks") {
+		t.Fatalf("expected pause window guard, got %v", err)
+	}
+}
+
 func TestGovernanceStatePersistsInNodeDB(t *testing.T) {
 	db, cleanup := openNodeDBForTest(t)
 	defer cleanup()

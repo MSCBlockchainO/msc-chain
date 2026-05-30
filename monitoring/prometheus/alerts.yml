@@ -91,6 +91,15 @@ groups:
           summary: "MSC consensus attack signal"
           description: "{{ $labels.node_id }} detected double-sign, fork, or equivocation evidence."
 
+      - alert: GovernanceEmergencyPauseActive
+        expr: msc_governance_emergency_pause_active{job="msc_nodes"} == 1
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC governance emergency pause active"
+          description: "{{ $labels.node_id }} reports an active governance emergency pause. Follow the emergency upgrade/pause runbook."
+
       - alert: ValidatorOffline
         expr: msc_validator_health_offline{job="msc_nodes"} > 0 or msc_validator_online{job="msc_nodes"} == 0
         for: 2m

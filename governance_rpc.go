@@ -56,6 +56,7 @@ func governanceRPCStatus(state *GovernanceState) map[string]any {
 		"treasury_balance": state.TreasuryBalance,
 		"proposals":        state.Proposals,
 		"upgrade_manager":  state.UpgradeManager,
+		"emergency_pause":  state.EmergencyPause,
 		"protocol_gates": map[string]uint64{
 			ProtocolGateValidatorSetActivationModelV2: ValidatorSetActivationModelV2Height,
 			ProtocolGateValidatorSetCommitmentV2:      ValidatorSetCommitmentV2Height,

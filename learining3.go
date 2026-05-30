@@ -36885,6 +36885,8 @@ func (s *Server) handleMetrics(
 	appendPromGauge(&out, "msc_governance_treasury_balance", "Governance treasury balance tracked by the governance state.", baseLabels, float64(governanceMetrics.TreasuryBalance))
 	appendPromGauge(&out, "msc_protocol_upgrades_scheduled", "Protocol upgrades scheduled for activation.", baseLabels, float64(governanceMetrics.ProtocolScheduled))
 	appendPromGauge(&out, "msc_protocol_upgrades_activated", "Protocol upgrades activated locally.", baseLabels, float64(governanceMetrics.ProtocolActivated))
+	appendPromGauge(&out, "msc_governance_emergency_pause_active", "Governance emergency pause active flag.", baseLabels, boolToPromFloat(governanceMetrics.EmergencyPauseActive))
+	appendPromGauge(&out, "msc_governance_emergency_pause_until_height", "Governance emergency pause expiry height.", baseLabels, float64(governanceMetrics.EmergencyPauseUntil))
 	appendPromGauge(&out, "msc_protocol_gate_validator_set_activation_model_v2_height", "Configured validator-set activation model v2 gate height.", baseLabels, float64(ValidatorSetActivationModelV2Height))
 	appendPromGauge(&out, "msc_protocol_gate_validator_set_commitment_v2_height", "Configured validator-set commitment v2 gate height.", baseLabels, float64(ValidatorSetCommitmentV2Height))
 	appendPromGauge(&out, "msc_protocol_gate_validator_set_hash_v3_height", "Configured validator-set hash v3 gate height.", baseLabels, float64(ValidatorSetHashV3Height))

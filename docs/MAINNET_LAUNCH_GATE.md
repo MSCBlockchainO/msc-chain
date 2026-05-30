@@ -126,6 +126,19 @@ Required:
 - Corrupt snapshot rejected and older valid snapshot loaded.
 - Recovery artifacts kept off-validator where possible.
 
+## Governance Gate
+
+Required:
+
+- Proposal create tested.
+- Validator voting tested with strict quorum.
+- Protocol upgrade activation height tested.
+- Rollback protection tested.
+- Emergency pause/upgrade process tested.
+- Slashing and validator lifecycle tested.
+
+Runbook: `docs/governance_upgrade_slashing_runbook.md`.
+
 ## Launch Decision
 
 Launch only when all are true:

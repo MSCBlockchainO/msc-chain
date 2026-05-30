@@ -386,13 +386,16 @@ For production, public validator RPC exposure should be avoided.
 
 ## 17. Governance
 
-MSC Chain currently has three governance surfaces:
+MSC Chain currently has four governance surfaces:
 
 1. Core validator registry governance: signed registry updates add, activate, retire, or enforce core validator identity.
 2. Validator update certificates: threshold-approved validator add/remove transactions prevent unilateral validator set mutation.
 3. DTL governance certificates: token-specific threshold governance controls minting, pause/unpause, freeze/unfreeze, and authority rotation.
+4. On-chain governance proposals: validator voting, treasury voting, protocol upgrade scheduling, rollback-protected activation heights, and bounded emergency pause records.
 
 Treasury operations are disabled on mainnet unless explicitly enabled and authorized.
+
+Protocol upgrades are versioned and activated by height. Rollbacks are rejected unless the proposal explicitly declares rollback approval and receives strict quorum. Emergency upgrades can use a shorter activation path, but still require strict quorum. Emergency pause proposals are bounded, observable through RPC and Prometheus, and intended for operator coordination during incident response.
 
 ## 18. Testing And Mainnet Readiness
 

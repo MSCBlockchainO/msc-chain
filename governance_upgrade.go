@@ -17,6 +17,7 @@ const (
 	GovernanceProposalTreasury         GovernanceProposalKind = "treasury"
 	GovernanceProposalProtocolUpgrade  GovernanceProposalKind = "protocol_upgrade"
 	GovernanceProposalEmergency        GovernanceProposalKind = "emergency"
+	GovernanceProposalEmergencyPause   GovernanceProposalKind = "emergency_pause"
 )
 
 type GovernanceProposalStatus string
@@ -46,6 +47,7 @@ const (
 	ProtocolGateDTLV2                         = "dtl_v2_activation_height"
 
 	defaultProtocolUpgradeActivationDelay uint64 = 10
+	defaultEmergencyPauseMaxBlocks        uint64 = 1000
 )
 
 var governanceStateDBKey = []byte("governance:state:v1")
@@ -85,6 +87,8 @@ type GovernanceProposal struct {
 	ProtocolChanges      map[string]uint64         `json:"protocol_changes,omitempty"`
 	RollbackAllowed      bool                      `json:"rollback_allowed,omitempty"`
 	Emergency            bool                      `json:"emergency,omitempty"`
+	PauseUntilHeight     uint64                    `json:"pause_until_height,omitempty"`
+	PauseReason          string                    `json:"pause_reason,omitempty"`
 	Status               GovernanceProposalStatus  `json:"status"`
 	Votes                map[string]GovernanceVote `json:"votes,omitempty"`
 	Tally                GovernanceTally           `json:"tally"`
@@ -112,22 +116,34 @@ type ProtocolUpgradeManager struct {
 	LastActivatedHeight uint64                     `json:"last_activated_height,omitempty"`
 }
 
+type GovernanceEmergencyPauseState struct {
+	Active           bool   `json:"active"`
+	ProposalID       string `json:"proposal_id,omitempty"`
+	Reason           string `json:"reason,omitempty"`
+	ActivatedHeight  uint64 `json:"activated_height,omitempty"`
+	PauseUntilHeight uint64 `json:"pause_until_height,omitempty"`
+	ReleasedHeight   uint64 `json:"released_height,omitempty"`
+}
+
 type GovernanceState struct {
 	Proposals       map[string]*GovernanceProposal `json:"proposals"`
 	UpgradeManager  ProtocolUpgradeManager         `json:"upgrade_manager"`
 	TreasuryBalance int64                          `json:"treasury_balance"`
+	EmergencyPause  GovernanceEmergencyPauseState  `json:"emergency_pause"`
 }
 
 type GovernanceMetricsSnapshot struct {
-	ProposalsTotal     int
-	ProposalsActive    int
-	ProposalsApproved  int
-	ProposalsRejected  int
-	ProposalsScheduled int
-	ProposalsApplied   int
-	TreasuryBalance    int64
-	ProtocolScheduled  int
-	ProtocolActivated  int
+	ProposalsTotal       int
+	ProposalsActive      int
+	ProposalsApproved    int
+	ProposalsRejected    int
+	ProposalsScheduled   int
+	ProposalsApplied     int
+	TreasuryBalance      int64
+	ProtocolScheduled    int
+	ProtocolActivated    int
+	EmergencyPauseActive bool
+	EmergencyPauseUntil  uint64
 }
 
 func NewGovernanceState() *GovernanceState {
@@ -312,6 +328,10 @@ func (s *GovernanceState) ApplyApprovedProposal(proposalID string, height uint64
 		if _, err := s.UpgradeManager.ActivateDue(height); err != nil {
 			return err
 		}
+	case GovernanceProposalEmergencyPause:
+		if err := s.activateEmergencyPause(p, height); err != nil {
+			return err
+		}
 	case GovernanceProposalValidatorUpgrade:
 		// Validator add/remove execution remains handled by TxValidatorUpdate.
 		// This governance path records the approved intent and final activation.
@@ -321,6 +341,55 @@ func (s *GovernanceState) ApplyApprovedProposal(proposalID string, height uint64
 	p.Status = GovernanceProposalApplied
 	p.AppliedAtHeight = height
 	return nil
+}
+
+func (s *GovernanceState) activateEmergencyPause(p *GovernanceProposal, height uint64) error {
+	if s == nil || p == nil {
+		return errors.New("governance emergency pause proposal is nil")
+	}
+	if p.PauseUntilHeight == 0 {
+		return errors.New("emergency pause until height is required")
+	}
+	if p.PauseUntilHeight <= height {
+		return fmt.Errorf("emergency pause until height must be above current height: current=%d until=%d", height, p.PauseUntilHeight)
+	}
+	reason := strings.TrimSpace(p.PauseReason)
+	if reason == "" {
+		reason = strings.TrimSpace(p.Title)
+	}
+	s.EmergencyPause = GovernanceEmergencyPauseState{
+		Active:           true,
+		ProposalID:       strings.TrimSpace(p.ID),
+		Reason:           reason,
+		ActivatedHeight:  height,
+		PauseUntilHeight: p.PauseUntilHeight,
+	}
+	return nil
+}
+
+func (s *GovernanceState) EmergencyPauseActiveAt(height uint64) bool {
+	if s == nil || !s.EmergencyPause.Active {
+		return false
+	}
+	if s.EmergencyPause.PauseUntilHeight == 0 {
+		return true
+	}
+	if height == 0 {
+		return true
+	}
+	return height <= s.EmergencyPause.PauseUntilHeight
+}
+
+func (s *GovernanceState) ExpireEmergencyPause(height uint64) bool {
+	if s == nil || !s.EmergencyPause.Active || height == 0 {
+		return false
+	}
+	if s.EmergencyPause.PauseUntilHeight == 0 || height <= s.EmergencyPause.PauseUntilHeight {
+		return false
+	}
+	s.EmergencyPause.Active = false
+	s.EmergencyPause.ReleasedHeight = height
+	return true
 }
 
 func (s *GovernanceState) scheduleProposalUpgrade(p *GovernanceProposal, currentHeight uint64) error {
@@ -481,6 +550,14 @@ func (n *Node) governanceMetricsSnapshot() GovernanceMetricsSnapshot {
 		ProtocolScheduled: len(state.UpgradeManager.Scheduled),
 		ProtocolActivated: len(state.UpgradeManager.Activated),
 	}
+	height := uint64(0)
+	if n.Blockchain != nil {
+		if h := n.Blockchain.Height(); h > 0 {
+			height = uint64(h)
+		}
+	}
+	out.EmergencyPauseActive = state.EmergencyPauseActiveAt(height)
+	out.EmergencyPauseUntil = state.EmergencyPause.PauseUntilHeight
 	for _, proposal := range state.Proposals {
 		if proposal == nil {
 			continue
@@ -577,9 +654,10 @@ func normalizeGovernanceProposal(p *GovernanceProposal) {
 	p.UpgradeName = strings.TrimSpace(p.UpgradeName)
 	p.UpgradeVersion = strings.TrimSpace(p.UpgradeVersion)
 	p.Kind = GovernanceProposalKind(strings.TrimSpace(string(p.Kind)))
-	if p.Kind == GovernanceProposalEmergency {
+	if p.Kind == GovernanceProposalEmergency || p.Kind == GovernanceProposalEmergencyPause {
 		p.Emergency = true
 	}
+	p.PauseReason = strings.TrimSpace(p.PauseReason)
 	if p.ProtocolChanges != nil {
 		p.ProtocolChanges = copyProtocolGateMap(p.ProtocolChanges)
 	}
@@ -590,7 +668,7 @@ func normalizeGovernanceProposal(p *GovernanceProposal) {
 
 func validateGovernanceProposal(p GovernanceProposal) error {
 	switch p.Kind {
-	case GovernanceProposalValidatorUpgrade, GovernanceProposalTreasury, GovernanceProposalProtocolUpgrade, GovernanceProposalEmergency:
+	case GovernanceProposalValidatorUpgrade, GovernanceProposalTreasury, GovernanceProposalProtocolUpgrade, GovernanceProposalEmergency, GovernanceProposalEmergencyPause:
 	default:
 		return fmt.Errorf("unsupported governance proposal kind: %s", p.Kind)
 	}
@@ -618,6 +696,21 @@ func validateGovernanceProposal(p GovernanceProposal) error {
 		}
 		if err := validateProtocolGateChanges(p.ProtocolChanges, p.RollbackAllowed); err != nil {
 			return err
+		}
+	}
+	if p.Kind == GovernanceProposalEmergencyPause {
+		activation := p.ActivationHeight
+		if activation == 0 {
+			activation = p.CreatedHeight
+		}
+		if p.PauseUntilHeight == 0 {
+			return errors.New("emergency pause until height is required")
+		}
+		if activation > 0 && p.PauseUntilHeight <= activation {
+			return errors.New("emergency pause until height must be above activation height")
+		}
+		if activation > 0 && defaultEmergencyPauseMaxBlocks > 0 && p.PauseUntilHeight-activation > defaultEmergencyPauseMaxBlocks {
+			return fmt.Errorf("emergency pause window exceeds max blocks: got=%d max=%d", p.PauseUntilHeight-activation, defaultEmergencyPauseMaxBlocks)
 		}
 	}
 	return nil

@@ -157,3 +157,76 @@ func TestV1GovernanceStatusWrapsUpgradeManager(t *testing.T) {
 		t.Fatalf("unexpected v1 response: %+v", resp)
 	}
 }
+
+func TestGovernanceRPCEmergencyPauseLifecyclePersists(t *testing.T) {
+	server, cleanup := setupGovernanceRPCTest(t)
+	defer cleanup()
+
+	if err := server.Node.PersistGovernanceState(NewGovernanceState()); err != nil {
+		t.Fatalf("seed governance state: %v", err)
+	}
+
+	proposal := GovernanceProposal{
+		Kind:              GovernanceProposalEmergencyPause,
+		Title:             "rpc emergency pause",
+		Proposer:          "A",
+		CreatedHeight:     50,
+		VotingStartHeight: 50,
+		VotingEndHeight:   60,
+		ActivationHeight:  55,
+		PauseUntilHeight:  75,
+		PauseReason:       "rpc-drill",
+	}
+	rr := httptest.NewRecorder()
+	server.handleGovernancePropose(rr, governanceRPCJSONRequest(t, http.MethodPost, "/governance/propose", proposal))
+	var proposed struct {
+		ProposalID string `json:"proposal_id"`
+	}
+	decodeGovernanceRPCResponse(t, rr, &proposed)
+
+	for _, voter := range []string{"A", "B", "C"} {
+		rr = httptest.NewRecorder()
+		server.handleGovernanceVote(rr, governanceRPCJSONRequest(t, http.MethodPost, "/governance/vote", governanceVoteRequest{
+			ProposalID: proposed.ProposalID,
+			Voter:      voter,
+			Choice:     GovernanceVoteYes,
+			Height:     50,
+		}))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("vote %s status=%d body=%s", voter, rr.Code, rr.Body.String())
+		}
+	}
+
+	rr = httptest.NewRecorder()
+	server.handleGovernanceFinalize(rr, governanceRPCJSONRequest(t, http.MethodPost, "/governance/finalize", governanceActionRequest{
+		ProposalID: proposed.ProposalID,
+		Height:     50,
+	}))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("finalize status=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	server.handleGovernanceApply(rr, governanceRPCJSONRequest(t, http.MethodPost, "/governance/apply", governanceActionRequest{
+		ProposalID: proposed.ProposalID,
+		Height:     55,
+	}))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("apply status=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
+	server.handleGovernanceStatus(rr, governanceRPCJSONRequest(t, http.MethodGet, "/governance/status", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var status struct {
+		EmergencyPause GovernanceEmergencyPauseState `json:"emergency_pause"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &status); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	if !status.EmergencyPause.Active || status.EmergencyPause.PauseUntilHeight != 75 || status.EmergencyPause.Reason != "rpc-drill" {
+		t.Fatalf("unexpected emergency pause status: %+v", status.EmergencyPause)
+	}
+}

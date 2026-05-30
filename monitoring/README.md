@@ -68,6 +68,7 @@ cd ..
 - `DiskUsageOver90Percent`
 - `MSCValidatorDiskTargetExceeded`
 - `QuorumFailure`
+- `GovernanceEmergencyPauseActive`
 - `ValidatorOffline`
 - `SnapshotFailure`
 - `MSCNodeDown`
