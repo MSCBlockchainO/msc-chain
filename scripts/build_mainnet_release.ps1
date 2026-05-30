@@ -110,6 +110,9 @@ $manifestPath = Join-Path $releaseDir "release-manifest.json"
 $manifest | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 -LiteralPath $manifestPath
 
 $checksumPath = Join-Path $releaseDir "checksums.txt"
+if (Test-Path -LiteralPath $checksumPath) {
+    Remove-Item -LiteralPath $checksumPath -Force
+}
 Get-ChildItem -LiteralPath $releaseDir -File |
     Sort-Object Name |
     ForEach-Object {
