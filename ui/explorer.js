@@ -199,6 +199,38 @@
     if (tone) els.connState.classList.add(tone);
   };
 
+  const stripHTMLForError = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (!/<[a-z][\s\S]*>/i.test(raw)) return raw;
+    const withoutComments = raw.replace(/<!--[\s\S]*?-->/g, " ");
+    const titleMatch = withoutComments.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const h1Match = withoutComments.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+    const picked = titleMatch?.[1] || h1Match?.[1] || withoutComments;
+    return picked
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&amp;/gi, "&")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  const friendlyHTTPErrorMessage = (status, data, text, statusText) => {
+    if (status === 429) return "Rate limit hit — wait a few seconds";
+    if (data && typeof data === "object") {
+      if (typeof data.error === "string") return data.error;
+      if (data.error && typeof data.error.message === "string") return data.error.message;
+      if (typeof data.message === "string") return data.message;
+    }
+    const cleanText = stripHTMLForError(typeof data === "string" ? data : text);
+    if (/too many requests/i.test(cleanText)) return "Rate limit hit — wait a few seconds";
+    return cleanText || statusText || "Request failed";
+  };
+
   const api = async (path) => {
     const headers = {};
     if (state.apiToken) headers.Authorization = `Bearer ${state.apiToken}`;
@@ -213,14 +245,7 @@
       }
     }
     if (!res.ok) {
-      let message = text || res.statusText;
-      if (data && typeof data === "object") {
-        if (typeof data.error === "string") {
-          message = data.error;
-        } else if (data.error && typeof data.error.message === "string") {
-          message = data.error.message;
-        }
-      }
+      const message = friendlyHTTPErrorMessage(res.status, data, text, res.statusText);
       const err = new Error(message);
       err.status = res.status;
       err.payload = data;

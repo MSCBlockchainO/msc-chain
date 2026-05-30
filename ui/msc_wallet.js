@@ -778,6 +778,44 @@ const parseRetryAfterMs = (value) => {
   return 0;
 };
 
+const stripHTMLForError = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (!/<[a-z][\s\S]*>/i.test(raw)) {
+    return raw;
+  }
+  const withoutComments = raw.replace(/<!--[\s\S]*?-->/g, " ");
+  const titleMatch = withoutComments.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const h1Match = withoutComments.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  const picked = titleMatch?.[1] || h1Match?.[1] || withoutComments;
+  return picked
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+const friendlyHTTPErrorMessage = (status, data, text, statusText) => {
+  if (status === 429) {
+    return "Rate limit hit — wait a few seconds";
+  }
+  if (data && typeof data === "object") {
+    if (typeof data.error === "string") return data.error;
+    if (data.error && typeof data.error.message === "string") return data.error.message;
+    if (typeof data.message === "string") return data.message;
+  }
+  const cleanText = stripHTMLForError(typeof data === "string" ? data : text);
+  if (/too many requests/i.test(cleanText)) {
+    return "Rate limit hit — wait a few seconds";
+  }
+  return cleanText || statusText || "Request failed";
+};
+
 const applyRateLimitCooldown = (err) => {
   if (!err || err.status !== 429) return;
   const retryAfterMs = Number(err.retryAfterMs || 0);
@@ -1500,7 +1538,7 @@ const api = async (path, { method = "GET", body, baseUrl } = {}) => {
     }
   }
   if (!res.ok) {
-    const message = (data && data.error) || (data && data.message) || text || res.statusText;
+    const message = friendlyHTTPErrorMessage(res.status, data, text, res.statusText);
     const apiErr = new Error(message);
     apiErr.status = res.status;
     apiErr.data = data;
@@ -2315,9 +2353,10 @@ const enqueueBridgeApproval = (details) =>
 
 const getErrorText = (err) => {
   if (!err) return "";
+  if (err.status === 429) return "Rate limit hit — wait a few seconds";
   if (typeof err === "string") return err;
   if (err.message) return err.message;
-  if (typeof err.data === "string") return err.data;
+  if (typeof err.data === "string") return stripHTMLForError(err.data);
   if (err.data && typeof err.data === "object") {
     if (err.data.error) return err.data.error;
     if (err.data.message) return err.data.message;

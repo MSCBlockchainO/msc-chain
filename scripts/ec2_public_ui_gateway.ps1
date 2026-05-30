@@ -77,10 +77,10 @@ elif [ ! -f /etc/nginx/msc_ide.htpasswd ]; then
 fi
 
 sudo tee /etc/nginx/conf.d/msc_public_gateway_limits.conf >/dev/null <<'NGINX'
-limit_req_zone $binary_remote_addr zone=msc_static:10m rate=240r/m;
-limit_req_zone $binary_remote_addr zone=msc_read:10m rate=120r/m;
-limit_req_zone $binary_remote_addr zone=msc_write:10m rate=20r/m;
-limit_req_zone $binary_remote_addr zone=msc_rpc:10m rate=60r/m;
+limit_req_zone $binary_remote_addr zone=msc_static:10m rate=600r/m;
+limit_req_zone $binary_remote_addr zone=msc_read:10m rate=600r/m;
+limit_req_zone $binary_remote_addr zone=msc_write:10m rate=60r/m;
+limit_req_zone $binary_remote_addr zone=msc_rpc:10m rate=120r/m;
 limit_conn_zone $binary_remote_addr zone=msc_conn:10m;
 NGINX
 
@@ -98,6 +98,7 @@ server {
     proxy_send_timeout 60s;
     limit_req_status 429;
     limit_conn_status 429;
+    error_page 429 = @msc_rate_limited;
     limit_conn msc_conn 20;
 
     add_header X-Content-Type-Options nosniff always;
@@ -184,6 +185,14 @@ server {
 
     location = /metrics {
         return 404;
+    }
+
+    location @msc_rate_limited {
+        internal;
+        default_type application/json;
+        add_header Retry-After 5 always;
+        add_header Cache-Control "no-store" always;
+        return 429 '{"error":"rate_limited","message":"Too many requests. Wait a few seconds and refresh."}';
     }
 
     location / {
