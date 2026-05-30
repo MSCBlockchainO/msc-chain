@@ -33,6 +33,13 @@ NODE_LOG="$LOG_ROOT/${NODE_ID}.node.log"
 SUPERVISOR_LOG="$LOG_ROOT/${NODE_ID}.supervisor.log"
 SUPERVISOR_PID_FILE="$LOG_ROOT/${NODE_ID}.supervisor.pid"
 PID_FILE="$LOG_ROOT/${NODE_ID}.pid"
+LOCK_FILE="$LOG_ROOT/${NODE_ID}.supervisor.lock"
+
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  printf '[%s] supervisor already running for node=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$NODE_ID" | tee -a "$SUPERVISOR_LOG"
+  exit 0
+fi
 
 NODE_PID=""
 restart_backoff="$START_BACKOFF_SECONDS"
@@ -54,7 +61,25 @@ stop_node() {
   rm -f "$PID_FILE"
 }
 
+stop_stale_node_processes() {
+  local stale_pids=()
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    [[ -n "${NODE_PID:-}" && "$pid" == "$NODE_PID" ]] && continue
+    stale_pids+=("$pid")
+  done < <(ps -eo pid=,args= | awk -v id="$NODE_ID" '$0 ~ /--mode=full/ && $0 ~ ("--id=" id) {print $1}')
+
+  if (( ${#stale_pids[@]} == 0 )); then
+    return
+  fi
+  log "stopping stale node processes node=$NODE_ID pids=${stale_pids[*]}"
+  kill "${stale_pids[@]}" >/dev/null 2>&1 || true
+  sleep 2
+  kill -9 "${stale_pids[@]}" >/dev/null 2>&1 || true
+}
+
 start_node() {
+  stop_stale_node_processes
   local peer_args=()
   local env_args=(
     "MSC_ALLOW_VALIDATOR_KEY_CREATE=1"
