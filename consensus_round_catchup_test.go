@@ -52,7 +52,7 @@ func resetExecPoolForTest(t *testing.T) {
 	})
 }
 
-func TestLocalExecutionVoteGuardRejectsCrossRoundEquivocation(t *testing.T) {
+func TestLocalExecutionVoteGuardAllowsCrossRoundProposalSwitch(t *testing.T) {
 	node := &Node{
 		ID:                   "A",
 		localExecVoteByRound: make(map[uint64]map[uint32]string),
@@ -61,7 +61,7 @@ func TestLocalExecutionVoteGuardRejectsCrossRoundEquivocation(t *testing.T) {
 	first := proposalVoteKey(epoch, 1, "block-a", "", "root-a")
 	sameRoundConflict := proposalVoteKey(epoch, 1, "block-b", "", "root-b")
 	higherRoundConflict := proposalVoteKey(epoch, 3, "block-c", "", "root-c")
-	higherRoundSameBlock := proposalVoteKey(epoch, 3, "block-a", "", "root-a")
+	higherRoundSameBlock := proposalVoteKey(epoch, 4, "block-a", "", "root-a")
 
 	if !node.allowLocalExecutionVoteRound(epoch, 1, first) {
 		t.Fatalf("expected first local vote to be allowed")
@@ -69,14 +69,14 @@ func TestLocalExecutionVoteGuardRejectsCrossRoundEquivocation(t *testing.T) {
 	if node.allowLocalExecutionVoteRound(epoch, 1, sameRoundConflict) {
 		t.Fatalf("expected conflicting same-round local vote to be blocked")
 	}
-	if node.allowLocalExecutionVoteRound(epoch, 3, higherRoundConflict) {
-		t.Fatalf("expected conflicting higher-round local vote to be blocked")
+	if !node.allowLocalExecutionVoteRound(epoch, 3, higherRoundConflict) {
+		t.Fatalf("expected higher-round proposal switch to be allowed")
 	}
-	if !node.allowLocalExecutionVoteRound(epoch, 3, higherRoundSameBlock) {
-		t.Fatalf("expected same block higher-round rebroadcast to be allowed")
+	if !node.allowLocalExecutionVoteRound(epoch, 4, higherRoundSameBlock) {
+		t.Fatalf("expected higher-round same-block rebroadcast to be allowed")
 	}
 	if !node.allowLocalExecutionVoteRound(epoch, 2, first) {
-		t.Fatalf("expected rebroadcast of same local vote to be allowed")
+		t.Fatalf("expected lower unused round with prior proposal to be allowed")
 	}
 }
 
@@ -180,11 +180,14 @@ func TestLocalExecutionVoteGuardKeepsStaleQuorumRoundMarker(t *testing.T) {
 		},
 	}
 
-	if node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
-		t.Fatalf("expected quorum-backed stale marker to remain locked")
+	if !node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
+		t.Fatalf("expected higher-round proposal switch despite quorum-backed earlier marker")
 	}
 	if got := node.localExecVoteByRound[epoch][0]; got != stale {
-		t.Fatalf("quorum-backed stale marker should remain, got=%q", got)
+		t.Fatalf("quorum-backed earlier-round marker should remain for audit history, got=%q", got)
+	}
+	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != fresh {
+		t.Fatalf("fresh higher-round marker not stored: got=%q", got)
 	}
 }
 

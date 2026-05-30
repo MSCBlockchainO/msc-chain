@@ -2629,35 +2629,19 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 	}
 	existing := strings.TrimSpace(n.localExecVoteByRound[epoch][round])
 	if existing == "" {
-		sameKeySeen := false
-		incomingScope := execPoolScopeKey(epoch, proposalKey)
 		for existingRound, existingKey := range n.localExecVoteByRound[epoch] {
 			existingKey = strings.TrimSpace(existingKey)
 			if existingKey == "" {
 				continue
 			}
-			if existingKey == proposalKey || execPoolScopeKey(epoch, existingKey) == incomingScope {
-				sameKeySeen = true
+			if existingRound == round {
 				continue
 			}
 			if n.releaseStaleLocalExecutionVoteMarkerLocked(epoch, existingRound, round, existingKey, proposalKey) {
 				delete(n.localExecVoteByRound[epoch], existingRound)
-				continue
 			}
-			log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=skip_cross_round_equivocation existing_round=%d existing=%s incoming=%s",
-				ShortID(n.ID),
-				epoch,
-				round,
-				existingRound,
-				existingKey,
-				proposalKey,
-			)
-			return false
 		}
 		n.localExecVoteByRound[epoch][round] = proposalKey
-		if sameKeySeen {
-			return true
-		}
 		return true
 	}
 	if existing == proposalKey {
