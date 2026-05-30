@@ -472,6 +472,186 @@ Medium-term roadmap:
 - public token registry and metadata standards;
 - richer DeFi/GameFi primitives under deterministic execution limits.
 
+## 21. Operator Terminal Command Reference
+
+This section is the production command reference for operators. Do not commit validator passwords, wallet passwords, private keys, SSH keys, or mnemonic phrases. Use environment variables, local secret files, or an interactive terminal.
+
+### Build And Test
+
+```powershell
+go test . -run "TestOperator|TestProductionGenesis|TestConsensusMode|TestGovernance|TestProtocolUpgrade|TestEmergency" -count=1
+go build -o msc-node.exe .
+.\msc-node.exe help
+```
+
+### Local Node Startup
+
+Use `--role=auto` for normal startup. A node whose validator key, stake, and wallet auth are present becomes validator-ready automatically; otherwise it remains a full node.
+
+```powershell
+$env:MSC_ALLOW_VALIDATOR_KEY_CREATE = "1"
+$env:MSC_VALIDATOR_PASSWORD = "<local-validator-password>"
+go run . --mode=full --role=auto --id=A --port=7001 --datadir=data/A --rpcaddr 127.0.0.1:26657
+```
+
+Local four-validator layout:
+
+```powershell
+go run . --mode=full --role=auto --id=A --port=7001 --datadir=data/A --rpcaddr 127.0.0.1:26657
+go run . --mode=full --role=auto --id=B --port=7002 --datadir=data/B --rpcaddr 127.0.0.1:26658
+go run . --mode=full --role=auto --id=C --port=7003 --datadir=data/C --rpcaddr 127.0.0.1:26659
+go run . --mode=full --role=auto --id=D --port=7004 --datadir=data/D --rpcaddr 127.0.0.1:26660
+```
+
+### Operator CLI
+
+Wallet commands:
+
+```powershell
+.\msc-node.exe wallet new --wallet .\.msc\secure_wallet.json --show-mnemonic
+.\msc-node.exe wallet import --private-key <hex> --wallet .\.msc\secure_wallet.json
+.\msc-node.exe wallet import --mnemonic "word1 word2 ..." --wallet .\.msc\secure_wallet.json
+.\msc-node.exe wallet export-public --wallet .\.msc\secure_wallet.json
+```
+
+Validator key commands:
+
+```powershell
+.\msc-node.exe validator-keygen --id F --datadir data/F
+.\msc-node.exe validator-pubkey --id F --datadir data/F
+.\msc-node.exe validator create --wallet .\.msc\secure_wallet.json --validator F --validator-pubkey <32-byte-ed25519-pubkey-hex> --amount 100 --rpc https://mscblockexplorer.in
+```
+
+Transaction and staking commands:
+
+```powershell
+.\msc-node.exe balance --address MSC... --rpc https://mscblockexplorer.in
+.\msc-node.exe send --wallet .\.msc\secure_wallet.json --to MSC... --amount 10 --rpc https://mscblockexplorer.in
+.\msc-node.exe stake --wallet .\.msc\secure_wallet.json --validator F --validator-pubkey <32-byte-ed25519-pubkey-hex> --amount 100 --rpc https://mscblockexplorer.in
+.\msc-node.exe unstake --wallet .\.msc\secure_wallet.json --validator F --amount 100 --rpc https://mscblockexplorer.in
+.\msc-node.exe claim-rewards --wallet .\.msc\secure_wallet.json --rpc https://mscblockexplorer.in
+```
+
+Node status commands:
+
+```powershell
+.\msc-node.exe status --rpc https://mscblockexplorer.in
+.\msc-node.exe peers --rpc https://mscblockexplorer.in
+.\msc-node.exe sync-status --rpc https://mscblockexplorer.in
+```
+
+### RPC And Metrics Checks
+
+```powershell
+Invoke-RestMethod https://mscblockexplorer.in/status
+Invoke-RestMethod https://mscblockexplorer.in/consensus/mode
+Invoke-RestMethod https://mscblockexplorer.in/v1/peers
+Invoke-WebRequest -UseBasicParsing https://mscblockexplorer.in/metrics
+```
+
+Validator RPC should stay private or bound to localhost. Public traffic should use the full-node gateway only:
+
+```text
+Explorer: https://mscblockexplorer.in/explorer.html
+Wallet:   https://mscblockexplorer.in/msc_wallet.html
+DTL IDE:  https://mscblockexplorer.in/dtl_ide.html
+RPC:      https://mscblockexplorer.in
+```
+
+### Backup, Snapshot, And Recovery
+
+```powershell
+.\msc-node.exe backup export --id A --datadir data/A
+.\msc-node.exe backup verify --path data/A/node_A/backups/backup_...
+.\msc-node.exe backup import --id RESTORE --datadir data/RESTORE --path .\backup --apply
+.\msc-node.exe backup recover --id A --datadir data/A --height 1000
+.\msc-node.exe snapshot export --id A --datadir data/A
+.\msc-node.exe snapshot verify --path data/A/node_A/backups/backup_...
+.\msc-node.exe snapshot import --id RESTORE --datadir data/RESTORE --path .\backup --apply
+```
+
+Fresh EC2 restore test:
+
+```powershell
+.\scripts\ec2_backup_restore_test.ps1 -KeyPath "C:\Users\Mohammad Talha\Downloads\msc-key.pem" -SourceUser ubuntu -SourceHost 54.80.4.133 -TargetUser ubuntu -TargetHost 50.19.167.221
+```
+
+### Chaos, Sync, And DDoS Tests
+
+```powershell
+.\scripts\mainnet_chaos_network.ps1 -Tier1Survival -DurationMinutes 60 -NodeCount 10 -ValidatorNodeCount 4 -AutoLocalPeers -NetworkChaos -PacketLoss -TxFlood
+.\scripts\mainnet_sync_gap_test.ps1
+.\scripts\mainnet_soak_churn.ps1
+.\scripts\mainnet_ddos_spam_test.ps1 -TargetBase https://mscblockexplorer.in -DurationSeconds 300
+.\scripts\multi_arch_determinism.ps1
+```
+
+### Monitoring Stack
+
+```powershell
+Set-Location monitoring
+docker compose up -d
+docker compose logs -f prometheus
+docker compose logs -f grafana
+```
+
+Prometheus alerts must include no block for more than `60` seconds, finality gap greater than `20`, peers below `3`, disk usage above `80%`, quorum failure, validator offline, and snapshot failure.
+
+### GitHub Release And EC2 Deploy
+
+Every fix should be committed and pushed first:
+
+```powershell
+git status --short
+git add WHITEPAPER.md
+git commit -m "Document operator terminal commands"
+git push origin main
+```
+
+Then each EC2 node pulls from GitHub and rebuilds locally:
+
+```powershell
+$key = "C:\Users\Mohammad Talha\Downloads\msc-key.pem"
+ssh -i $key ubuntu@54.80.4.133
+```
+
+Run on the EC2 host:
+
+```bash
+cd ~/msc-chain
+git fetch origin main
+git pull --ff-only origin main
+GOMAXPROCS=2 go build -o msc-node.new .
+chmod +x msc-node.new
+ts=$(date -u +%Y%m%d%H%M%S)
+[ -x ./msc-node ] && mv ./msc-node ./msc-node.prev-$ts
+mv ./msc-node.new ./msc-node
+kill "$(cat runtime-logs/distributed/A.pid)"
+tail -f runtime-logs/distributed/A.supervisor.log
+```
+
+Use the matching node ID and log path for each host:
+
+| Node | SSH target | RPC | Role |
+| --- | --- | --- | --- |
+| `A` | `ubuntu@54.80.4.133` | `26657` | Validator |
+| `B` | `ec2-user@98.90.205.156` | `26658` | Validator |
+| `C` | `ec2-user@3.88.214.207` | `26659` | Validator |
+| `D` | `ec2-user@34.201.64.103` | `26660` | Validator |
+| `F` | `ubuntu@50.19.167.221` | `26665` | Public full node |
+| `G` | `ubuntu@54.89.222.13` | `26666` | Full node |
+
+EC2 health checks:
+
+```bash
+curl -s http://127.0.0.1:26657/status
+curl -s http://127.0.0.1:26657/consensus/mode
+curl -s http://127.0.0.1:26657/v1/peers
+curl -s http://127.0.0.1:26657/metrics | head
+pgrep -af './msc-node'
+tail -f runtime-logs/distributed/A.node.log
+```
+
 ## Conclusion
 
 MSC Chain is a validator-secured blockchain focused on deterministic finality, fixed-supply economics, native token logic, and practical mainnet operation. Its design favors bounded protocol-native execution over arbitrary runtime complexity, strict validator identity over casual node churn, and finality-anchored snapshots over blind fast sync.
