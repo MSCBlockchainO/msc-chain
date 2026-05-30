@@ -1779,6 +1779,41 @@ func TestRuntimeStatusTreatsNearTipTargetCompleteAfterConsensusStarted(t *testin
 	}
 }
 
+func TestRuntimeStatusKeepsMultiBlockLagSyncingAfterConsensusStarted(t *testing.T) {
+	defer withOnboardingStrictActivationGlobals(t)()
+	configureStrictActivationDefaults()
+
+	ConfigAuthRequireWallet = false
+	ValidatorRequireStake = false
+
+	prevStarted := consensusStarted.Load()
+	consensusStarted.Store(true)
+	t.Cleanup(func() {
+		consensusStarted.Store(prevStarted)
+	})
+
+	n := makeStrictActivationNode(50)
+	n.Consensus = &ConsensusState{
+		Syncing:    false,
+		SyncTarget: n.Blockchain.Height() + 2,
+	}
+	setStrictActivationObservedHeight(n, n.Blockchain.Height()+2)
+
+	status := n.runtimeStatusSnapshot()
+	if !status.Syncing {
+		t.Fatalf("expected multi-block lag to remain syncing after consensus started")
+	}
+	if status.SyncComplete {
+		t.Fatalf("expected multi-block lag to remain incomplete")
+	}
+	if status.WaitReason != "syncing" {
+		t.Fatalf("expected syncing wait reason, got=%q", status.WaitReason)
+	}
+	if status.DeltaRemainingBlocks != 2 {
+		t.Fatalf("unexpected delta remaining: got=%d want=2", status.DeltaRemainingBlocks)
+	}
+}
+
 func TestRuntimeStatusFastPathKeepsRecentDegradedPolicyVisible(t *testing.T) {
 	defer withOnboardingStrictActivationGlobals(t)()
 	configureStrictActivationDefaults()

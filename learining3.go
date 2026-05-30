@@ -6553,14 +6553,11 @@ func (n *Node) startupRemoteObservedSyncHeight() (uint64, int) {
 }
 
 func syncNearTipGraceBlocks() uint64 {
-	grace := validatorLivenessMaxHeightDriftBlocks()
-	if grace == 0 {
-		return 1
-	}
-	if grace > 8 {
-		return 8
-	}
-	return grace
+	// Consensus re-entry must be tighter than the liveness drift window.
+	// A validator that rejoins while several blocks behind can keep signing an
+	// old height and never fully catch up under pressure. Keep only a one-block
+	// near-tip bypass; block-range sync handles anything larger.
+	return 1
 }
 
 func nearSyncTip(localHeight, targetHeight uint64) bool {
