@@ -65,6 +65,8 @@ cd ..
 - `FinalityGapOver20`
 - `PeersBelow3`
 - `DiskUsageOver80Percent`
+- `DiskUsageOver90Percent`
+- `MSCValidatorDiskTargetExceeded`
 - `QuorumFailure`
 - `ValidatorOffline`
 - `SnapshotFailure`

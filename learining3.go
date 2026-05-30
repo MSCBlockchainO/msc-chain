@@ -27365,6 +27365,40 @@ type StorageConfig struct {
 	EncryptionKeyHex string `toml:"encryption_key_hex"`
 
 	EncryptionKeyBase64 string `toml:"encryption_key_base64"`
+
+	EpochLengthBlocks *uint64 `toml:"epoch_length_blocks"`
+
+	ValidatorRetainedEpochs *uint64 `toml:"validator_retained_epochs"`
+
+	ValidatorRollbackWindowBlocks *uint64 `toml:"validator_rollback_window_blocks"`
+
+	ValidatorSnapshotKeepLast *uint64 `toml:"validator_snapshot_keep_last"`
+
+	ValidatorRecentBlockWindow *uint64 `toml:"validator_recent_block_window"`
+
+	FullNodeHistoryBlocks *uint64 `toml:"full_node_history_blocks"`
+
+	HourlySnapshotRetain *uint64 `toml:"hourly_snapshot_retain"`
+
+	DailySnapshotRetain *uint64 `toml:"daily_snapshot_retain"`
+
+	WeeklySnapshotRetain *uint64 `toml:"weekly_snapshot_retain"`
+
+	MonthlySnapshotRetain *uint64 `toml:"monthly_snapshot_retain"`
+
+	HourlySnapshotIntervalBlocks *uint64 `toml:"hourly_snapshot_interval_blocks"`
+
+	ColdExportEnabled *bool `toml:"cold_export_enabled"`
+
+	ColdExportCompression string `toml:"cold_export_compression"`
+
+	ParallelGCWorkers *uint64 `toml:"parallel_gc_workers"`
+
+	StateRentEnabled *bool `toml:"state_rent_enabled"`
+
+	StateRentArchiveInactiveAfterEpochs *uint64 `toml:"state_rent_archive_inactive_after_epochs"`
+
+	StateLayoutMode string `toml:"state_layout_mode"`
 }
 
 type ConfigFile struct {
@@ -28526,6 +28560,91 @@ func applyStorageConfig(sc StorageConfig) bool {
 
 	if strings.TrimSpace(sc.EncryptionKeyBase64) != "" {
 		ConfigStorageEncryptionKeyBase64 = strings.TrimSpace(sc.EncryptionKeyBase64)
+		changed = true
+	}
+
+	if sc.EpochLengthBlocks != nil && *sc.EpochLengthBlocks > 0 {
+		StorageEpochLengthBlocks = *sc.EpochLengthBlocks
+		changed = true
+	}
+
+	if sc.ValidatorRetainedEpochs != nil {
+		StorageValidatorRetainedEpochs = *sc.ValidatorRetainedEpochs
+		changed = true
+	}
+
+	if sc.ValidatorRollbackWindowBlocks != nil {
+		StorageValidatorRollbackWindowBlocks = *sc.ValidatorRollbackWindowBlocks
+		changed = true
+	}
+
+	if sc.ValidatorSnapshotKeepLast != nil {
+		StorageValidatorSnapshotKeepLast = *sc.ValidatorSnapshotKeepLast
+		changed = true
+	}
+
+	if sc.ValidatorRecentBlockWindow != nil {
+		StorageValidatorRecentBlockWindow = *sc.ValidatorRecentBlockWindow
+		changed = true
+	}
+
+	if sc.FullNodeHistoryBlocks != nil {
+		StorageFullNodeHistoryBlocks = *sc.FullNodeHistoryBlocks
+		changed = true
+	}
+
+	if sc.HourlySnapshotRetain != nil {
+		StorageHourlySnapshotRetain = *sc.HourlySnapshotRetain
+		changed = true
+	}
+
+	if sc.DailySnapshotRetain != nil {
+		StorageDailySnapshotRetain = *sc.DailySnapshotRetain
+		changed = true
+	}
+
+	if sc.WeeklySnapshotRetain != nil {
+		StorageWeeklySnapshotRetain = *sc.WeeklySnapshotRetain
+		changed = true
+	}
+
+	if sc.MonthlySnapshotRetain != nil {
+		StorageMonthlySnapshotRetain = *sc.MonthlySnapshotRetain
+		changed = true
+	}
+
+	if sc.HourlySnapshotIntervalBlocks != nil && *sc.HourlySnapshotIntervalBlocks > 0 {
+		StorageHourlySnapshotIntervalBlocks = *sc.HourlySnapshotIntervalBlocks
+		changed = true
+	}
+
+	if sc.ColdExportEnabled != nil {
+		StorageColdExportEnabled = *sc.ColdExportEnabled
+		changed = true
+	}
+
+	if compression := strings.ToLower(strings.TrimSpace(sc.ColdExportCompression)); compression != "" {
+		StorageColdExportCompression = compression
+		changed = true
+	}
+
+	if sc.ParallelGCWorkers != nil && *sc.ParallelGCWorkers > 0 {
+		StorageParallelGCWorkers = *sc.ParallelGCWorkers
+		changed = true
+	}
+
+	if sc.StateRentEnabled != nil {
+		StorageStateRentEnabled = *sc.StateRentEnabled
+		changed = true
+	}
+
+	if sc.StateRentArchiveInactiveAfterEpochs != nil {
+		StorageStateRentArchiveInactiveAfterEpochs = *sc.StateRentArchiveInactiveAfterEpochs
+		changed = true
+	}
+
+	if mode := strings.ToLower(strings.TrimSpace(sc.StateLayoutMode)); mode != "" {
+		StorageStateLayoutMode = mode
 		changed = true
 	}
 

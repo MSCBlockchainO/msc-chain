@@ -37,6 +37,15 @@ groups:
           summary: "MSC node disk usage above 80 percent"
           description: "{{ $labels.node_id }} disk usage is {{ $value }} percent."
 
+      - alert: DiskUsageOver90Percent
+        expr: msc_disk_usage_percent{job="msc_nodes"} > 90
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC node disk usage above 90 percent"
+          description: "{{ $labels.node_id }} is near disk-full failure at {{ $value }} percent."
+
       - alert: QuorumFailure
         expr: msc_quorum_failures_total{job="msc_nodes"} > 0 or msc_quorum_observed{job="msc_nodes"} < msc_quorum_required{job="msc_nodes"}
         for: 1m
@@ -290,6 +299,15 @@ groups:
         annotations:
           summary: "MSC storage usage high"
           description: "{{ $labels.node_id }} local storage is above the validator target warning threshold or disk usage is above 80 percent."
+
+      - alert: MSCValidatorDiskTargetExceeded
+        expr: msc_storage_size_bytes{job="msc_nodes"} > 100 * 1024 * 1024 * 1024
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC validator storage target exceeded"
+          description: "{{ $labels.node_id }} local storage is above the 100 GB validator target. Check pruning, snapshots, and archive mode separation."
 
       - alert: MSCRPCRateLimitHigh
         expr: increase(msc_rpc_rate_limited_total{job="msc_nodes"}[5m]) > 50

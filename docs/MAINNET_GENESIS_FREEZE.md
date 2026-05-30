@@ -54,3 +54,11 @@ Guard test:
 ```powershell
 go test . -run "TestProductionGenesis" -count=1
 ```
+
+Release gate:
+
+```powershell
+.\scripts\build_mainnet_release.ps1 -VersionTag v1.0.0-mainnet
+```
+
+Publish `genesis.json` SHA256 together with the binary checksums from `dist/<version>/checksums.txt`.
