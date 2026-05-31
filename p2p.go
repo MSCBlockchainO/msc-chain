@@ -904,13 +904,7 @@ func (n *Node) acceptedProposalVoteCountLocked(epoch uint64, proposalKey string)
 	if n == nil || epoch == 0 || proposalKey == "" {
 		return 0
 	}
-	scopeKey := execPoolScopeKey(epoch, proposalKey)
 	count := 0
-	if n.execSignerSeen != nil {
-		if byProposal, ok := n.execSignerSeen[epoch]; ok {
-			count = len(byProposal[scopeKey])
-		}
-	}
 	if n.acceptedProposalBlocks != nil {
 		if block, ok := n.acceptedProposalBlocks[proposalKey]; ok && block.ID == epoch {
 			execHash := strings.TrimSpace(block.StateRoot)
@@ -932,6 +926,38 @@ func (n *Node) acceptedProposalVoteCountLocked(epoch uint64, proposalKey string)
 		}
 	}
 	return count
+}
+
+func execVoteCreditedGlobal(epoch uint64, proposalKey string, signer string, execHash string, txMerkle string) bool {
+	signer = normalizeValidatorID(signer)
+	if epoch == 0 || proposalKey == "" || signer == "" || execHash == "" {
+		return false
+	}
+	poolScopeKey := execPoolScopeKey(epoch, proposalKey)
+	scopedExecKey := execPoolResultKey(epoch, poolScopeKey, execHash)
+	choice := execBroadcastKey(execHash, txMerkle)
+
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+	if byHash, ok := ExecPool.pool[epoch]; ok {
+		if bySigner, ok := byHash[scopedExecKey]; ok {
+			if existing, ok := bySigner[signer]; ok {
+				if strings.TrimSpace(txMerkle) == "" || strings.TrimSpace(existing.TxMerkle) == strings.TrimSpace(txMerkle) {
+					return true
+				}
+			}
+		}
+	}
+	if byScope, ok := ExecPool.signers[epoch]; ok {
+		if signers := byScope[poolScopeKey]; signers != nil && signers[signer] {
+			if byChoice, ok := ExecPool.choice[epoch]; ok {
+				if choices := byChoice[poolScopeKey]; choices != nil && strings.TrimSpace(choices[signer]) == choice {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func (n *Node) proposalVoteCount(block Block) int {
@@ -2591,6 +2617,8 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 	}
 	existing := strings.TrimSpace(n.localExecVoteByRound[epoch][round])
 	if existing == "" {
+		blockedExistingRound := uint32(0)
+		blockedExistingKey := ""
 		for existingRound, existingKey := range n.localExecVoteByRound[epoch] {
 			existingKey = strings.TrimSpace(existingKey)
 			if existingKey == "" {
@@ -2599,9 +2627,27 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 			if existingRound == round {
 				continue
 			}
+			if existingKey == proposalKey || execPoolScopeKey(epoch, existingKey) == execPoolScopeKey(epoch, proposalKey) {
+				continue
+			}
 			if n.releaseStaleLocalExecutionVoteMarkerLocked(epoch, existingRound, round, existingKey, proposalKey) {
 				delete(n.localExecVoteByRound[epoch], existingRound)
+				continue
 			}
+			blockedExistingRound = existingRound
+			blockedExistingKey = existingKey
+			break
+		}
+		if blockedExistingKey != "" {
+			log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=skip_conflicting_cross_round_vote existing_round=%d existing=%s incoming=%s",
+				ShortID(n.ID),
+				epoch,
+				round,
+				blockedExistingRound,
+				blockedExistingKey,
+				proposalKey,
+			)
+			return false
 		}
 		n.localExecVoteByRound[epoch][round] = proposalKey
 		return true
@@ -2751,7 +2797,7 @@ func (n *Node) allowExecutionVoteIngress(signer string, epoch uint64, proposalKe
 		return false, "rate_limited"
 	}
 
-	if last, ok := n.execVoteSeen[key]; ok && now.Sub(last) <= execVoteReplayTTL {
+	if last, ok := n.execVoteSeen[key]; ok && now.Sub(last) <= execVoteReplayTTL && execVoteCreditedGlobal(epoch, proposalKey, signer, execHash, txMerkle) {
 		return false, "replay_cache"
 	}
 	n.execVoteSeen[key] = now
@@ -4596,6 +4642,9 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 			len(commitSigners),
 			policy.StrictRequired,
 		)
+	}
+	if policy.ActiveReadyCount < len(commitSigners) {
+		policy.ActiveReadyCount = len(commitSigners)
 	}
 	final.ConsensusMode = policy.Mode
 	final.QuorumPolicyVersion = policy.Version

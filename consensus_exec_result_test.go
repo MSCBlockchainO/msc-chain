@@ -1172,13 +1172,26 @@ func TestProcessExecutionResultMsgIgnoresStaleProposalWithoutStrike(t *testing.T
 }
 
 func TestAllowExecutionVoteIngressScopesReplayByProposalAndSigner(t *testing.T) {
+	resetExecPoolForTest(t)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 
 	if ok, reason := node.allowExecutionVoteIngress("A", 7, "proposal-1", "exec-1", "tx-1"); !ok {
 		t.Fatalf("expected first tuple to pass, reason=%s", reason)
 	}
-	if ok, _ := node.allowExecutionVoteIngress("A", 7, "proposal-1", "exec-1", "tx-1"); ok {
-		t.Fatalf("expected duplicate tuple to be deduped")
+	if ok, reason := node.allowExecutionVoteIngress("A", 7, "proposal-1", "exec-1", "tx-1"); !ok {
+		t.Fatalf("expected uncredited duplicate tuple to retry, reason=%s", reason)
+	}
+	count, ok, equivocation := recordExecResultGlobal(7, "proposal-1", "exec-1", "tx-1", ExecutionResult{
+		Height:     7,
+		Signer:     "A",
+		ResultHash: "exec-1",
+		TxMerkle:   "tx-1",
+	})
+	if !ok || equivocation || count != 1 {
+		t.Fatalf("expected tuple to be credited, count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}
+	if ok, reason := node.allowExecutionVoteIngress("A", 7, "proposal-1", "exec-1", "tx-1"); ok || reason != "replay_cache" {
+		t.Fatalf("expected credited duplicate tuple to be deduped, ok=%t reason=%s", ok, reason)
 	}
 	if ok, reason := node.allowExecutionVoteIngress("A", 7, "proposal-2", "exec-1", "tx-1"); !ok {
 		t.Fatalf("expected different proposal to bypass replay cache, reason=%s", reason)
@@ -1669,6 +1682,7 @@ func TestExecPoolSharesVotesAcrossRoundsForSameBlockHash(t *testing.T) {
 }
 
 func TestExecutionVoteStateSurvivesRoundChangeForSameBlock(t *testing.T) {
+	resetExecPoolForTest(t)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 
 	const epoch uint64 = 9
@@ -1709,8 +1723,22 @@ func TestExecutionVoteStateSurvivesRoundChangeForSameBlock(t *testing.T) {
 	if allowed, reason := node.allowExecutionVoteIngress("A", epoch, round10Key, execHash, txMerkle); !allowed {
 		t.Fatalf("expected first ingress vote to pass, reason=%s", reason)
 	}
+	if allowed, reason := node.allowExecutionVoteIngress("A", epoch, round11Key, execHash, txMerkle); !allowed {
+		t.Fatalf("expected uncredited same-block higher-round retry to pass, reason=%s", reason)
+	}
+	count, ok, equivocation := recordExecResultGlobal(epoch, round10Key, execHash, txMerkle, ExecutionResult{
+		Height:     epoch,
+		Round:      10,
+		BlockHash:  blockHash,
+		Signer:     "A",
+		ResultHash: execHash,
+		TxMerkle:   txMerkle,
+	})
+	if !ok || equivocation || count != 1 {
+		t.Fatalf("expected same-block vote to be credited, count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}
 	if allowed, reason := node.allowExecutionVoteIngress("A", epoch, round11Key, execHash, txMerkle); allowed || reason != "replay_cache" {
-		t.Fatalf("expected same-block higher-round vote to hit replay cache, allowed=%t reason=%s", allowed, reason)
+		t.Fatalf("expected credited same-block higher-round vote to hit replay cache, allowed=%t reason=%s", allowed, reason)
 	}
 
 	const cooldown = 40 * time.Millisecond

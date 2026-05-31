@@ -52,7 +52,7 @@ func resetExecPoolForTest(t *testing.T) {
 	})
 }
 
-func TestLocalExecutionVoteGuardAllowsCrossRoundProposalSwitch(t *testing.T) {
+func TestLocalExecutionVoteGuardBlocksUnsafeCrossRoundProposalSwitch(t *testing.T) {
 	node := &Node{
 		ID:                   "A",
 		localExecVoteByRound: make(map[uint64]map[uint32]string),
@@ -69,8 +69,8 @@ func TestLocalExecutionVoteGuardAllowsCrossRoundProposalSwitch(t *testing.T) {
 	if node.allowLocalExecutionVoteRound(epoch, 1, sameRoundConflict) {
 		t.Fatalf("expected conflicting same-round local vote to be blocked")
 	}
-	if !node.allowLocalExecutionVoteRound(epoch, 3, higherRoundConflict) {
-		t.Fatalf("expected higher-round proposal switch to be allowed")
+	if node.allowLocalExecutionVoteRound(epoch, 3, higherRoundConflict) {
+		t.Fatalf("expected conflicting higher-round proposal switch to be blocked before stale release gap")
 	}
 	if !node.allowLocalExecutionVoteRound(epoch, 4, higherRoundSameBlock) {
 		t.Fatalf("expected higher-round same-block rebroadcast to be allowed")
@@ -103,6 +103,48 @@ func TestLocalExecutionVoteGuardReleasesStaleEvidenceFreeRoundMarker(t *testing.
 	}
 }
 
+func TestAcceptedProposalVoteCountIgnoresUncreditedSignerMarkers(t *testing.T) {
+	resetExecPoolForTest(t)
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+
+	block := Block{
+		ID:          82,
+		Round:       0,
+		BlockHash:   "block-82",
+		StateRoot:   "root-82",
+		MempoolRoot: "tx-82",
+	}
+	proposalKey := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot)
+	node.acceptedProposalBlocks = map[string]Block{proposalKey: block}
+	node.execSignerSeen = map[uint64]map[string]map[string]bool{
+		block.ID: {
+			execPoolScopeKey(block.ID, proposalKey): {
+				"A": true,
+				"B": true,
+				"C": true,
+			},
+		},
+	}
+
+	if got := node.acceptedProposalVoteCountLocked(block.ID, proposalKey); got != 0 {
+		t.Fatalf("uncredited signer markers must not count as quorum evidence, got=%d", got)
+	}
+	count, ok, equivocation := recordExecResultGlobal(block.ID, proposalKey, block.StateRoot, block.MempoolRoot, ExecutionResult{
+		Height:     block.ID,
+		Round:      block.Round,
+		BlockHash:  block.BlockHash,
+		Signer:     "A",
+		ResultHash: block.StateRoot,
+		TxMerkle:   block.MempoolRoot,
+	})
+	if !ok || equivocation || count != 1 {
+		t.Fatalf("expected credited vote count=1, count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}
+	if got := node.acceptedProposalVoteCountLocked(block.ID, proposalKey); got != 1 {
+		t.Fatalf("credited payload vote should count, got=%d", got)
+	}
+}
+
 func TestLocalExecutionVoteGuardReleasesStaleMinorityRoundMarker(t *testing.T) {
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	node.ID = "A"
@@ -130,6 +172,7 @@ func TestLocalExecutionVoteGuardReleasesStaleMinorityRoundMarker(t *testing.T) {
 }
 
 func TestLocalExecutionVoteGuardReleasesNonQuorumMarkerForNearQuorumProposal(t *testing.T) {
+	resetExecPoolForTest(t)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	node.ID = "B"
 	node.localExecVoteByRound = make(map[uint64]map[uint32]string)
@@ -138,16 +181,18 @@ func TestLocalExecutionVoteGuardReleasesNonQuorumMarkerForNearQuorumProposal(t *
 	stale := proposalVoteKey(epoch, 1, "stale-block", "", "stale-root")
 	fresh := proposalVoteKey(epoch, 2, "fresh-block", "", "fresh-root")
 	node.localExecVoteByRound[epoch] = map[uint32]string{1: stale}
-	node.execSignerSeen = map[uint64]map[string]map[string]bool{
-		epoch: {
-			execPoolScopeKey(epoch, stale): {
-				"B": true,
-			},
-			execPoolScopeKey(epoch, fresh): {
-				"A": true,
-				"D": true,
-			},
-		},
+	for _, signer := range []string{"A", "D"} {
+		count, ok, equivocation := recordExecResultGlobal(epoch, fresh, "fresh-root", "", ExecutionResult{
+			Height:     epoch,
+			Round:      2,
+			BlockHash:  "fresh-block",
+			Signer:     signer,
+			ResultHash: "fresh-root",
+			TxMerkle:   "",
+		})
+		if !ok || equivocation || count <= 0 {
+			t.Fatalf("seed fresh near-quorum vote signer=%s count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
+		}
 	}
 
 	if !node.allowLocalExecutionVoteRound(epoch, 2, fresh) {
@@ -162,6 +207,7 @@ func TestLocalExecutionVoteGuardReleasesNonQuorumMarkerForNearQuorumProposal(t *
 }
 
 func TestLocalExecutionVoteGuardKeepsStaleQuorumRoundMarker(t *testing.T) {
+	resetExecPoolForTest(t)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	node.ID = "A"
 	node.localExecVoteByRound = make(map[uint64]map[uint32]string)
@@ -170,24 +216,28 @@ func TestLocalExecutionVoteGuardKeepsStaleQuorumRoundMarker(t *testing.T) {
 	stale := proposalVoteKey(epoch, 0, "stale-block", "", "stale-root")
 	fresh := proposalVoteKey(epoch, localExecVoteStaleRoundReleaseGap+1, "fresh-block", "", "fresh-root")
 	node.localExecVoteByRound[epoch] = map[uint32]string{0: stale}
-	node.execSignerSeen = map[uint64]map[string]map[string]bool{
-		epoch: {
-			execPoolScopeKey(epoch, stale): {
-				"A": true,
-				"B": true,
-				"C": true,
-			},
-		},
+	for _, signer := range []string{"A", "B", "C"} {
+		count, ok, equivocation := recordExecResultGlobal(epoch, stale, "stale-root", "", ExecutionResult{
+			Height:     epoch,
+			Round:      0,
+			BlockHash:  "stale-block",
+			Signer:     signer,
+			ResultHash: "stale-root",
+			TxMerkle:   "",
+		})
+		if !ok || equivocation || count <= 0 {
+			t.Fatalf("seed stale quorum vote signer=%s count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
+		}
 	}
 
-	if !node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
-		t.Fatalf("expected higher-round proposal switch despite quorum-backed earlier marker")
+	if node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
+		t.Fatalf("expected quorum-backed earlier marker to block conflicting higher-round vote")
 	}
 	if got := node.localExecVoteByRound[epoch][0]; got != stale {
 		t.Fatalf("quorum-backed earlier-round marker should remain for audit history, got=%q", got)
 	}
-	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != fresh {
-		t.Fatalf("fresh higher-round marker not stored: got=%q", got)
+	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != "" {
+		t.Fatalf("fresh higher-round marker should not be stored, got=%q", got)
 	}
 }
 
@@ -225,6 +275,7 @@ func TestRecordExecResultGlobalRejectsSignerSameRoundEquivocationAcrossProposals
 	conflict := proposalVoteKey(epoch, 1, "block-b", "", "root-b")
 	if count, ok, equivocation := recordExecResultGlobal(epoch, first, "root-a", "", ExecutionResult{
 		Height:     epoch,
+		Round:      1,
 		BlockHash:  "block-a",
 		Signer:     "A",
 		ResultHash: "root-a",
@@ -252,6 +303,7 @@ func TestRecordExecResultGlobalRejectsSignerCrossRoundEquivocationAcrossProposal
 	higher := proposalVoteKey(epoch, 4, "block-b", "", "root-b")
 	if count, ok, equivocation := recordExecResultGlobal(epoch, first, "root-a", "", ExecutionResult{
 		Height:     epoch,
+		Round:      1,
 		BlockHash:  "block-a",
 		Signer:     "A",
 		ResultHash: "root-a",
@@ -260,6 +312,7 @@ func TestRecordExecResultGlobalRejectsSignerCrossRoundEquivocationAcrossProposal
 	}
 	if count, ok, equivocation := recordExecResultGlobal(epoch, higher, "root-b", "", ExecutionResult{
 		Height:     epoch,
+		Round:      4,
 		BlockHash:  "block-b",
 		Signer:     "A",
 		ResultHash: "root-b",
