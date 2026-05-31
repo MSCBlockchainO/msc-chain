@@ -48,6 +48,25 @@ func TestSyncCatchupStageThresholds(t *testing.T) {
 	}
 }
 
+func TestSyncReasonPreemptsInFlightStallWatchdog(t *testing.T) {
+	preemptReasons := []string{
+		"sync_stall_watchdog",
+		"queue_stall",
+		"parent_mismatch",
+		"prev_hash_mismatch",
+		"missing_block_recovery",
+		"no_progress",
+	}
+	for _, reason := range preemptReasons {
+		if !syncReasonPreemptsInFlight(reason) {
+			t.Fatalf("expected reason %q to preempt stale sync", reason)
+		}
+	}
+	if syncReasonPreemptsInFlight("routine_peer_sync") {
+		t.Fatalf("routine sync must not preempt an active in-flight sync")
+	}
+}
+
 func TestSyncCatchupModeCompatibilityMapping(t *testing.T) {
 	oldDirect := SyncDirectGossipMaxBlocks
 	oldFast := SyncFastBlockSyncMaxBlocks

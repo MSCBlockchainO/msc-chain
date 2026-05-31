@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -138,6 +139,17 @@ func newBlockRequestPhaseError(stage string, pid peer.ID, from, to uint64, after
 		Timeout: timeout,
 		Err:     err,
 	}
+}
+
+func isNetTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 func syncBlockRequestMaxBlocks(batchMax uint64) uint64 {
@@ -523,46 +535,26 @@ func (n *Node) requestBlocksFromPeerDirect(
 			peerLabel, from, to, wantSnapshot, snapshotHeight, timeout.Milliseconds())
 	}
 
-	type openResult struct {
-		stream network.Stream
-		err    error
-	}
 	openCtx, cancelOpen := context.WithTimeout(context.Background(), timeout)
 	defer cancelOpen()
 	openStarted := time.Now()
 	if traceRequest {
 		fmt.Printf("[SYNC-REQUEST-OPEN] peer=%s range=%d-%d\n", peerLabel, from, to)
 	}
-	openCh := make(chan openResult, 1)
-	go func() {
-		stream, err := n.openStream(openCtx, pid, BlockSyncProtocol)
-		select {
-		case openCh <- openResult{stream: stream, err: err}:
-		case <-openCtx.Done():
-			if stream != nil {
-				_ = stream.Reset()
-				_ = stream.Close()
-			}
-		}
-	}()
-
-	var s network.Stream
-	select {
-	case out := <-openCh:
-		if out.err != nil {
-			err := newBlockRequestPhaseError("open", pid, from, to, time.Since(openStarted), false, out.err)
-			fmt.Printf("[SYNC-REQUEST-OPEN-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, err)
-			return nil, nil, nil, err
-		}
-		s = out.stream
-		if traceRequest {
-			fmt.Printf("[SYNC-REQUEST-OPEN-OK] peer=%s range=%d-%d duration_ms=%d\n",
-				peerLabel, from, to, time.Since(openStarted).Milliseconds())
-		}
-	case <-openCtx.Done():
-		err := newBlockRequestPhaseError("open", pid, from, to, timeout, true, openCtx.Err())
+	s, err := n.openStream(openCtx, pid, BlockSyncProtocol)
+	if err != nil {
+		wrapped := newBlockRequestPhaseError("open", pid, from, to, time.Since(openStarted), errors.Is(openCtx.Err(), context.DeadlineExceeded), err)
+		fmt.Printf("[SYNC-REQUEST-OPEN-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, wrapped)
+		return nil, nil, nil, wrapped
+	}
+	if s == nil {
+		err := newBlockRequestPhaseError("open", pid, from, to, time.Since(openStarted), false, fmt.Errorf("nil stream"))
 		fmt.Printf("[SYNC-REQUEST-OPEN-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, err)
 		return nil, nil, nil, err
+	}
+	if traceRequest {
+		fmt.Printf("[SYNC-REQUEST-OPEN-OK] peer=%s range=%d-%d duration_ms=%d\n",
+			peerLabel, from, to, time.Since(openStarted).Milliseconds())
 	}
 	defer s.Close()
 
@@ -579,65 +571,35 @@ func (n *Node) requestBlocksFromPeerDirect(
 	if traceRequest {
 		fmt.Printf("[SYNC-REQUEST-ENCODE] peer=%s range=%d-%d\n", peerLabel, from, to)
 	}
-	encodeCh := make(chan error, 1)
-	go func() {
-		encodeCh <- enc.Encode(req)
-	}()
-	select {
-	case err := <-encodeCh:
-		if err != nil {
-			_ = s.Reset()
-			wrapped := newBlockRequestPhaseError("encode", pid, from, to, time.Since(encodeStarted), false, err)
-			fmt.Printf("[SYNC-REQUEST-ENCODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, wrapped)
-			return nil, nil, nil, wrapped
-		}
-		if traceRequest {
-			fmt.Printf("[SYNC-REQUEST-ENCODE-OK] peer=%s range=%d-%d duration_ms=%d\n",
-				peerLabel, from, to, time.Since(encodeStarted).Milliseconds())
-		}
-	case <-time.After(timeout):
+	if err := enc.Encode(req); err != nil {
 		_ = s.Reset()
-		err := newBlockRequestPhaseError("encode", pid, from, to, timeout, true, context.DeadlineExceeded)
-		fmt.Printf("[SYNC-REQUEST-ENCODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, err)
-		return nil, nil, nil, err
+		wrapped := newBlockRequestPhaseError("encode", pid, from, to, time.Since(encodeStarted), isNetTimeout(err), err)
+		fmt.Printf("[SYNC-REQUEST-ENCODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, wrapped)
+		return nil, nil, nil, wrapped
+	}
+	if traceRequest {
+		fmt.Printf("[SYNC-REQUEST-ENCODE-OK] peer=%s range=%d-%d duration_ms=%d\n",
+			peerLabel, from, to, time.Since(encodeStarted).Milliseconds())
 	}
 
 	_ = s.SetReadDeadline(time.Now().Add(timeout))
 	dec := json.NewDecoder(s)
-	type blockResponseResult struct {
-		resp BlockResponse
-		err  error
-	}
 	decodeStarted := time.Now()
 	if traceRequest {
 		fmt.Printf("[SYNC-REQUEST-DECODE] peer=%s range=%d-%d\n", peerLabel, from, to)
 	}
-	respCh := make(chan blockResponseResult, 1)
-	go func() {
-		var resp BlockResponse
-		err := dec.Decode(&resp)
-		respCh <- blockResponseResult{resp: resp, err: err}
-	}()
-
-	select {
-	case out := <-respCh:
-		if out.err != nil {
-			_ = s.Reset()
-			err := newBlockRequestPhaseError("decode", pid, from, to, time.Since(decodeStarted), false, out.err)
-			fmt.Printf("[SYNC-REQUEST-DECODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, err)
-			return nil, nil, nil, err
-		}
-		if traceRequest {
-			fmt.Printf("[SYNC-REQUEST-RESULT] peer=%s range=%d-%d count=%d snapshot=%t duration_ms=%d\n",
-				peerLabel, from, to, len(out.resp.Blocks), out.resp.Snapshot != nil, time.Since(decodeStarted).Milliseconds())
-		}
-		return out.resp.Blocks, out.resp.Snapshot, out.resp.ExecPool, nil
-	case <-time.After(timeout):
+	var resp BlockResponse
+	if err := dec.Decode(&resp); err != nil {
 		_ = s.Reset()
-		err := newBlockRequestPhaseError("decode", pid, from, to, timeout, true, context.DeadlineExceeded)
-		fmt.Printf("[SYNC-REQUEST-DECODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, err)
-		return nil, nil, nil, err
+		wrapped := newBlockRequestPhaseError("decode", pid, from, to, time.Since(decodeStarted), isNetTimeout(err), err)
+		fmt.Printf("[SYNC-REQUEST-DECODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, wrapped)
+		return nil, nil, nil, wrapped
 	}
+	if traceRequest {
+		fmt.Printf("[SYNC-REQUEST-RESULT] peer=%s range=%d-%d count=%d snapshot=%t duration_ms=%d\n",
+			peerLabel, from, to, len(resp.Blocks), resp.Snapshot != nil, time.Since(decodeStarted).Milliseconds())
+	}
+	return resp.Blocks, resp.Snapshot, resp.ExecPool, nil
 }
 
 func (n *Node) localBlocksForRange(from uint64, to uint64) ([]Block, bool) {

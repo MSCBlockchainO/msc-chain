@@ -11519,6 +11519,30 @@ func (n *Node) maybeSnapshotSyncToHeight(targetHeight uint64, reason string, vot
 	}
 }
 
+func syncReasonPreemptsInFlight(reason string) bool {
+	reason = strings.ToLower(strings.TrimSpace(reason))
+	if reason == "" {
+		return false
+	}
+	preemptTokens := []string{
+		"queue_stall",
+		"parent_mismatch",
+		"prev_hash_mismatch",
+		"queue_prevhash_mismatch",
+		"sync_stall",
+		"watchdog",
+		"no_progress",
+		"missing_block",
+		"block_range_unavailable",
+	}
+	for _, token := range preemptTokens {
+		if strings.Contains(reason, token) {
+			return true
+		}
+	}
+	return false
+}
+
 func (n *Node) syncBlockRangeToHeight(targetHeight uint64, stage string, action string, reason string, votes int, required int) {
 	if n == nil {
 		return
@@ -11541,10 +11565,7 @@ func (n *Node) syncBlockRangeToHeight(targetHeight uint64, stage string, action 
 	if n.Consensus != nil {
 		n.Consensus.mu.Lock()
 		if n.Consensus.syncInFlight {
-			if strings.Contains(reasonLower, "queue_stall") ||
-				strings.Contains(reasonLower, "parent_mismatch") ||
-				strings.Contains(reasonLower, "prev_hash_mismatch") ||
-				strings.Contains(reasonLower, "queue_prevhash_mismatch") {
+			if syncReasonPreemptsInFlight(reasonLower) {
 				n.Consensus.syncInFlight = false
 			} else {
 				n.Consensus.mu.Unlock()
@@ -11643,10 +11664,7 @@ func (n *Node) syncDeltaReplayToHeight(targetHeight uint64, reason string, votes
 	if n.Consensus != nil {
 		n.Consensus.mu.Lock()
 		if n.Consensus.syncInFlight {
-			if strings.Contains(reasonLower, "queue_stall") ||
-				strings.Contains(reasonLower, "parent_mismatch") ||
-				strings.Contains(reasonLower, "prev_hash_mismatch") ||
-				strings.Contains(reasonLower, "queue_prevhash_mismatch") {
+			if syncReasonPreemptsInFlight(reasonLower) {
 				n.Consensus.syncInFlight = false
 			} else {
 				n.Consensus.mu.Unlock()
@@ -12010,7 +12028,8 @@ func (n *Node) forceSnapshotSyncToHeight(targetHeight uint64, reason string) {
 		return
 	}
 	reasonLower := strings.ToLower(strings.TrimSpace(reason))
-	preemptInFlight := strings.Contains(reasonLower, "snapshot_quorum_apply_watchdog")
+	preemptInFlight := syncReasonPreemptsInFlight(reasonLower) ||
+		strings.Contains(reasonLower, "snapshot_quorum_apply_watchdog")
 	allowSameHeightRefresh := strings.Contains(reasonLower, "startup_execution_snapshot") ||
 		strings.Contains(reasonLower, "execution_snapshot_ledger_unavailable")
 	if transitionActive, transitionHeight := n.validatorSetTransitionActiveNow(); transitionActive {
