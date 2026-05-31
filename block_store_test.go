@@ -156,6 +156,26 @@ func TestBackfillBlockFilesFromLoadedBlocks(t *testing.T) {
 	}
 }
 
+func TestBackfillBlockFilesSkipsExistingArchive(t *testing.T) {
+	node, cleanup := newBlockStoreTestNode(t)
+	defer cleanup()
+
+	original := testBlockAtHeight(4)
+	original.BlockHash = "hash-original"
+	if err := node.persistBlockFile(original); err != nil {
+		t.Fatalf("persist original block file: %v", err)
+	}
+
+	replacement := testBlockAtHeight(4)
+	replacement.BlockHash = "hash-replacement"
+	node.backfillBlockFiles([]Block{replacement})
+
+	record := readBlockFileRecord(t, blockStoreFilePath(node.DataDir, node.ID, 4))
+	if record.BlockHash != "hash-original" {
+		t.Fatalf("backfill overwrote existing block archive: got %q", record.BlockHash)
+	}
+}
+
 func TestPruneBlockFilesAboveHeight(t *testing.T) {
 	node, cleanup := newBlockStoreTestNode(t)
 	defer cleanup()

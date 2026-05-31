@@ -44,6 +44,19 @@ func blockStoreProtoFilePath(dataDir, nodeID string, height uint64) string {
 	return filepath.Join(blockStoreDir(dataDir, nodeID), fmt.Sprintf("block_%06d.mpb", height))
 }
 
+func blockStoreFileExists(dataDir, nodeID string, height uint64) bool {
+	if height == 0 {
+		return false
+	}
+	if _, err := os.Stat(blockStoreProtoFilePath(dataDir, nodeID, height)); err == nil {
+		return true
+	}
+	if _, err := os.Stat(blockStoreFilePath(dataDir, nodeID, height)); err == nil {
+		return true
+	}
+	return false
+}
+
 func coldBlockStoreDir(dataDir, nodeID string) string {
 	return filepath.Join(nodeDataPath(dataDir, nodeID), "cold-storage", "blocks")
 }
@@ -262,14 +275,25 @@ func (n *Node) backfillBlockFiles(blocks []Block) {
 	if n == nil || len(blocks) == 0 {
 		return
 	}
+	written := 0
+	skipped := 0
 	for _, block := range blocks {
 		height := blockStorageHeight(block)
 		if height == 0 {
 			continue
 		}
+		if blockStoreFileExists(n.DataDir, n.ID, height) {
+			skipped++
+			continue
+		}
 		if err := n.persistBlockFile(block); err != nil {
 			log.Printf("store block file failed during backfill (height=%d): %v", height, err)
+			continue
 		}
+		written++
+	}
+	if written > 0 {
+		log.Printf("[BLOCK-FILE-BACKFILL] written=%d skipped_existing=%d", written, skipped)
 	}
 }
 

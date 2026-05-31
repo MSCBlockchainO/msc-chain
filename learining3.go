@@ -23661,7 +23661,10 @@ func StartNode(
 	if len(blocks) > 0 {
 
 		node.Blockchain.ReplaceChain(blocks)
-		node.backfillBlockFiles(blocks)
+		loadedBlocks := append([]Block(nil), blocks...)
+		node.SafeGo("startup_block_file_backfill", func() {
+			node.backfillBlockFiles(loadedBlocks)
+		})
 		if badHeight, rewound := node.auditAndRewindInvalidQuorumEvidence("startup"); badHeight > 0 {
 			if rewound {
 				startupChainTruncated = true
