@@ -33592,6 +33592,16 @@ func (s *Server) Start(addr string) {
 
 	mux.HandleFunc("/misbehavior", s.handleMisbehavior)
 
+	mux.HandleFunc("/light/headers", s.handleLightHeaders)
+
+	mux.HandleFunc("/light/checkpoint/latest", s.handleLightCheckpointLatest)
+
+	mux.HandleFunc("/proof/balance", s.handleLightBalanceProof)
+
+	mux.HandleFunc("/proof/tx", s.handleLightTxProof)
+
+	mux.HandleFunc("/proof/receipt", s.handleLightReceiptProof)
+
 	mux.HandleFunc("/healthz", s.handleHealthz)
 
 	mux.HandleFunc("/validators", s.handleValidators)
@@ -33638,6 +33648,11 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/v1/backup/export", s.handleV1BackupExport)
 	mux.HandleFunc("/v1/backup/import", s.handleV1BackupImport)
 	mux.HandleFunc("/v1/backup/recover", s.handleV1BackupRecover)
+	mux.HandleFunc("/v1/light/headers", s.handleLightHeaders)
+	mux.HandleFunc("/v1/light/checkpoint/latest", s.handleLightCheckpointLatest)
+	mux.HandleFunc("/v1/light/proof/balance", s.handleLightBalanceProof)
+	mux.HandleFunc("/v1/light/proof/tx", s.handleLightTxProof)
+	mux.HandleFunc("/v1/light/proof/receipt", s.handleLightReceiptProof)
 	mux.HandleFunc("/v1/governance/status", s.handleV1GovernanceStatus)
 	mux.HandleFunc("/v1/governance/proposals", s.handleV1GovernanceStatus)
 	mux.HandleFunc("/v1/governance/propose", s.handleV1GovernancePropose)
@@ -41863,6 +41878,11 @@ func authorized(r *http.Request) bool {
 
 		path := r.URL.Path
 		if strings.HasPrefix(path, "/v1/tx/") {
+			return true
+		}
+		if strings.HasPrefix(path, "/v1/light/") ||
+			strings.HasPrefix(path, "/light/") ||
+			strings.HasPrefix(path, "/proof/") {
 			return true
 		}
 
