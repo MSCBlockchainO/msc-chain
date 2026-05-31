@@ -304,7 +304,64 @@ MSC Chain uses libp2p networking for peer connectivity and message propagation. 
 
 The default local development ports use P2P ports beginning at `7001` and RPC ports beginning at `26657`.
 
-## 14. Sync, Snapshots, And Recovery
+## 14. Validator Geographic Diversity
+
+MSC Mainnet treats validator placement diversity as a high-priority launch gate. Peer subnet diversity protects P2P connectivity, but validator safety also needs diversity across countries, ASNs, cloud providers, and regions. If all validators run on AWS in one region, the validator set is exposed to correlated outage, routing, account, and provider-risk failures.
+
+Validator diversity rules track:
+
+- country buckets;
+- ASN/operator buckets;
+- cloud/provider buckets;
+- region buckets;
+- missing validator metadata;
+- maximum concentration percentage per country, ASN, and cloud.
+
+Default mainnet policy:
+
+| Rule | Target |
+| --- | ---: |
+| Minimum countries | `2` |
+| Minimum ASNs | `3` |
+| Minimum cloud/providers | `2` |
+| Maximum one-country concentration | `67%` |
+| Maximum one-ASN concentration | `50%` |
+| Maximum one-cloud concentration | `67%` |
+
+The rule is advisory by default through `diversity_mode = "warn"` so it cannot accidentally halt an existing validator set. Mainnet launch should not proceed until the diversity report is healthy. A future governance upgrade may switch the policy to `diversity_mode = "enforce"` after testnet rehearsal.
+
+Validator metadata is configured locally:
+
+```toml
+[validators]
+diversity_enabled = true
+diversity_mode = "warn"
+diversity_min_countries = 2
+diversity_min_asns = 3
+diversity_min_clouds = 2
+diversity_max_country_pct = 67
+diversity_max_asn_pct = 50
+diversity_max_cloud_pct = 67
+diversity_metadata = [
+  "A|US|AS14618|AWS|us-east-1",
+  "B|DE|AS24940|HETZNER|fsn1",
+  "C|SG|AS14061|DIGITALOCEAN|sgp1",
+  "D|US|AS8075|AZURE|eastus",
+]
+```
+
+The same metadata can be supplied through `MSC_VALIDATOR_DIVERSITY_MAP` using semicolon-separated entries. The public full-node API exposes:
+
+```text
+GET /v1/validators/diversity
+GET /validators/diversity
+```
+
+Prometheus metrics include `msc_validator_country_buckets`, `msc_validator_asn_buckets`, `msc_validator_cloud_buckets`, `msc_validator_region_buckets`, `msc_validator_diversity_missing_metadata`, `msc_validator_diversity_violations`, `msc_validator_diversity_healthy`, `msc_validator_diversity_max_country_pct`, `msc_validator_diversity_max_asn_pct`, and `msc_validator_diversity_max_cloud_pct`.
+
+If all validators run on AWS in the same region, the diversity report must become unhealthy and alerts should block mainnet launch.
+
+## 15. Sync, Snapshots, And Recovery
 
 MSC Chain is designed for nodes to catch up through a combination of block replay and trusted snapshots.
 
@@ -337,7 +394,7 @@ Storage is split into separate Pebble stores:
 
 Database writes use synced Pebble batches, and the storage layer can quarantine corrupted DB paths during recovery.
 
-## 15. Light Client Protocol
+## 16. Light Client Protocol
 
 MSC Chain should support trust-minimized wallets and mobile clients that do not need to trust a public RPC server for balances, transactions, or state claims. Public RPC remains useful for availability, but a wallet should be able to verify the data it receives.
 
@@ -347,7 +404,7 @@ The light client protocol has three parts:
 2. SPV and Merkle proof APIs.
 3. Stateless verification rules for wallets and mobile clients.
 
-### 15.1 Light Client Header Chain
+### 16.1 Light Client Header Chain
 
 A light client stores only compact block headers and finality artifacts, not the full state database. Each header must include:
 
@@ -376,7 +433,7 @@ epoch_anchor links to previous epoch anchor
 
 This lets a light client follow the canonical finalized chain without downloading every block body.
 
-### 15.2 SPV Proofs
+### 16.2 SPV Proofs
 
 MSC Chain should expose proof APIs for wallet-critical data:
 
@@ -413,7 +470,7 @@ validator commitment matches the FEC
 
 For transactions, an SPV proof proves inclusion in the transaction root. For receipts, it proves execution result inclusion. For balances and account state, it proves inclusion in the state root.
 
-### 15.3 Stateless Wallet Verification
+### 16.3 Stateless Wallet Verification
 
 The MSC wallet should support two modes:
 
@@ -435,7 +492,7 @@ Proof invalid
 
 This prevents a malicious public RPC gateway from lying to mobile wallets about balances, transaction inclusion, staking state, governance votes, or validator membership.
 
-### 15.4 Mobile Verification
+### 16.4 Mobile Verification
 
 Mobile wallets should persist:
 
@@ -465,7 +522,7 @@ The mobile wallet should be able to reject:
 - invalid epoch anchors;
 - long-range attack headers.
 
-### 15.5 Mainnet Requirement
+### 16.5 Mainnet Requirement
 
 Trustless mobile wallets require Merkle proofs and light-client headers before they can be called fully mainnet-ready. Until this protocol is implemented and tested, public wallets should clearly treat full-node RPC as an availability layer, not as a cryptographic proof source.
 
@@ -478,7 +535,7 @@ Mainnet recommended implementation order:
 5. Add corruption, stale proof, wrong-root, and wrong-validator-set tests.
 6. Add mobile restore test from only checkpoint plus headers plus proofs.
 
-## 16. RPC, Explorer, And Wallet
+## 17. RPC, Explorer, And Wallet
 
 MSC Chain exposes RPC endpoints for node status, block data, transaction submission, tokenomics, governance, explorer views, wallet interactions, DTL token data, and observability.
 
@@ -493,7 +550,7 @@ The repository includes:
 
 Production public access should terminate at a full-node gateway, not a validator RPC port. Validator RPC should remain private or bound to localhost. Public gateway deployments should use HTTPS, nginx rate limits, node RPC limits, and private metrics scraping.
 
-## 17. Security Baseline
+## 18. Security Baseline
 
 MSC Chain's security model combines consensus rules, node hardening, operator policy, and public gateway separation.
 
@@ -525,7 +582,7 @@ $env:MSC_DB_ENCRYPTION_KEY = "<base64-32-byte-key>"
 
 For production, public validator RPC exposure should be avoided.
 
-## 18. Governance
+## 19. Governance
 
 MSC Chain currently has four governance surfaces:
 
@@ -538,7 +595,7 @@ Treasury operations are disabled on mainnet unless explicitly enabled and author
 
 Protocol upgrades are versioned and activated by height. Rollbacks are rejected unless the proposal explicitly declares rollback approval and receives strict quorum. Emergency upgrades can use a shorter activation path, but still require strict quorum. Emergency pause proposals are bounded, observable through RPC and Prometheus, and intended for operator coordination during incident response.
 
-## 19. Testing And Mainnet Readiness
+## 20. Testing And Mainnet Readiness
 
 The repository includes extensive tests for:
 
@@ -577,7 +634,7 @@ Mainnet chaos tooling tests survival under:
 
 The Tier 1 survival pass condition is no finality stall beyond configured gap, reachable quorum above minimum, bounded finalized lag, bounded height lag, and no finalized block hash divergence across reachable nodes.
 
-## 20. Limitations And Risk Statement
+## 21. Limitations And Risk Statement
 
 MSC Chain is an active implementation. The whitepaper describes the repository's current protocol direction and mainnet configuration, not a completed third-party security audit.
 
@@ -589,10 +646,10 @@ Known risks and limitations:
 - public gateway security depends on correct deployment and DNS/TLS setup;
 - validator key loss or poor backup hygiene can affect liveness;
 - any governance threshold can be compromised if enough signing keys are compromised;
-- trustless mobile wallet verification requires the light client proof APIs and verifier library described in Section 15;
+- trustless mobile wallet verification requires the light client proof APIs and verifier library described in Section 16;
 - production readiness should include independent audit, long-duration distributed chaos runs, and public monitoring.
 
-## 21. Roadmap
+## 22. Roadmap
 
 Near-term roadmap:
 
@@ -615,7 +672,7 @@ Medium-term roadmap:
 - public token registry and metadata standards;
 - richer DeFi/GameFi primitives under deterministic execution limits.
 
-## 22. Operator Terminal Command Reference
+## 23. Operator Terminal Command Reference
 
 This section is the production command reference for operators. Do not commit validator passwords, wallet passwords, private keys, SSH keys, or mnemonic phrases. Use environment variables, local secret files, or an interactive terminal.
 
@@ -688,6 +745,7 @@ Node status commands:
 ```powershell
 Invoke-RestMethod https://mscblockexplorer.in/status
 Invoke-RestMethod https://mscblockexplorer.in/consensus/mode
+Invoke-RestMethod https://mscblockexplorer.in/v1/validators/diversity
 Invoke-RestMethod https://mscblockexplorer.in/v1/peers
 Invoke-WebRequest -UseBasicParsing https://mscblockexplorer.in/metrics
 ```

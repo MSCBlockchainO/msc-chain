@@ -124,6 +124,22 @@ allow_env_password_in_production = true
 core_env_password_allowed = true
 core_password_file = "" 
 password_mode = "file_or_prompt"
+diversity_enabled = true
+diversity_mode = "warn"
+diversity_min_countries = 2
+diversity_min_asns = 3
+diversity_min_clouds = 2
+diversity_max_country_pct = 67
+diversity_max_asn_pct = 50
+diversity_max_cloud_pct = 67
+diversity_metadata = [
+  "A|US|AS14618|AWS|us-east-1",
+  "B|US|AS14618|AWS|us-east-1",
+  "C|US|AS14618|AWS|us-east-1",
+  "D|US|AS14618|AWS|us-east-1",
+  "F|US|AS14618|AWS|us-east-1",
+  "G|US|AS14618|AWS|us-east-1",
+]
 
 [evm]
 enabled = false

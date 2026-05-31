@@ -27132,6 +27132,24 @@ type ValidatorEngineConfig struct {
 	CorePasswordFile string `toml:"core_password_file"`
 
 	PasswordMode string `toml:"password_mode"`
+
+	DiversityEnabled bool `toml:"diversity_enabled"`
+
+	DiversityMode string `toml:"diversity_mode"`
+
+	DiversityMinCountries int `toml:"diversity_min_countries"`
+
+	DiversityMinASNs int `toml:"diversity_min_asns"`
+
+	DiversityMinClouds int `toml:"diversity_min_clouds"`
+
+	DiversityMaxCountryPct int `toml:"diversity_max_country_pct"`
+
+	DiversityMaxASNPct int `toml:"diversity_max_asn_pct"`
+
+	DiversityMaxCloudPct int `toml:"diversity_max_cloud_pct"`
+
+	DiversityMetadata StringList `toml:"diversity_metadata"`
 }
 
 type PromotionConfig struct {
@@ -29169,6 +29187,54 @@ func applyValidatorEngineConfig(vc ValidatorEngineConfig) bool {
 		}
 	}
 
+	if vc.DiversityEnabled {
+		ValidatorDiversityEnabled = true
+		changed = true
+	}
+
+	if strings.TrimSpace(vc.DiversityMode) != "" {
+		nextMode := normalizeValidatorDiversityMode(vc.DiversityMode)
+		if nextMode != normalizeValidatorDiversityMode(ValidatorDiversityMode) {
+			ValidatorDiversityMode = nextMode
+			changed = true
+		}
+	}
+
+	if vc.DiversityMinCountries > 0 && vc.DiversityMinCountries != ValidatorDiversityMinCountries {
+		ValidatorDiversityMinCountries = vc.DiversityMinCountries
+		changed = true
+	}
+
+	if vc.DiversityMinASNs > 0 && vc.DiversityMinASNs != ValidatorDiversityMinASNs {
+		ValidatorDiversityMinASNs = vc.DiversityMinASNs
+		changed = true
+	}
+
+	if vc.DiversityMinClouds > 0 && vc.DiversityMinClouds != ValidatorDiversityMinClouds {
+		ValidatorDiversityMinClouds = vc.DiversityMinClouds
+		changed = true
+	}
+
+	if vc.DiversityMaxCountryPct > 0 && vc.DiversityMaxCountryPct != ValidatorDiversityMaxCountryPct {
+		ValidatorDiversityMaxCountryPct = vc.DiversityMaxCountryPct
+		changed = true
+	}
+
+	if vc.DiversityMaxASNPct > 0 && vc.DiversityMaxASNPct != ValidatorDiversityMaxASNPct {
+		ValidatorDiversityMaxASNPct = vc.DiversityMaxASNPct
+		changed = true
+	}
+
+	if vc.DiversityMaxCloudPct > 0 && vc.DiversityMaxCloudPct != ValidatorDiversityMaxCloudPct {
+		ValidatorDiversityMaxCloudPct = vc.DiversityMaxCloudPct
+		changed = true
+	}
+
+	if len(vc.DiversityMetadata) > 0 {
+		SetValidatorDiversityMetadata(vc.DiversityMetadata)
+		changed = true
+	}
+
 	return changed
 
 }
@@ -30982,6 +31048,78 @@ func loadConfigOverrides(path string) error {
 		ValidatorPasswordMode = normalizeValidatorPasswordMode(cfg.Validators.PasswordMode)
 
 		fmt.Printf("VALIDATOR config loaded: password_mode=%s (explicit)\n", ValidatorPasswordMode)
+
+	}
+
+	if meta.IsDefined("validators", "diversity_enabled") {
+
+		ValidatorDiversityEnabled = cfg.Validators.DiversityEnabled
+
+		fmt.Printf("VALIDATOR diversity config loaded: enabled=%t (explicit)\n", ValidatorDiversityEnabled)
+
+	}
+
+	if meta.IsDefined("validators", "diversity_mode") {
+
+		ValidatorDiversityMode = normalizeValidatorDiversityMode(cfg.Validators.DiversityMode)
+
+		fmt.Printf("VALIDATOR diversity config loaded: mode=%s (explicit)\n", ValidatorDiversityMode)
+
+	}
+
+	if meta.IsDefined("validators", "diversity_min_countries") && cfg.Validators.DiversityMinCountries > 0 {
+
+		ValidatorDiversityMinCountries = cfg.Validators.DiversityMinCountries
+
+		fmt.Printf("VALIDATOR diversity config loaded: min_countries=%d (explicit)\n", ValidatorDiversityMinCountries)
+
+	}
+
+	if meta.IsDefined("validators", "diversity_min_asns") && cfg.Validators.DiversityMinASNs > 0 {
+
+		ValidatorDiversityMinASNs = cfg.Validators.DiversityMinASNs
+
+		fmt.Printf("VALIDATOR diversity config loaded: min_asns=%d (explicit)\n", ValidatorDiversityMinASNs)
+
+	}
+
+	if meta.IsDefined("validators", "diversity_min_clouds") && cfg.Validators.DiversityMinClouds > 0 {
+
+		ValidatorDiversityMinClouds = cfg.Validators.DiversityMinClouds
+
+		fmt.Printf("VALIDATOR diversity config loaded: min_clouds=%d (explicit)\n", ValidatorDiversityMinClouds)
+
+	}
+
+	if meta.IsDefined("validators", "diversity_max_country_pct") && cfg.Validators.DiversityMaxCountryPct > 0 {
+
+		ValidatorDiversityMaxCountryPct = cfg.Validators.DiversityMaxCountryPct
+
+		fmt.Printf("VALIDATOR diversity config loaded: max_country_pct=%d (explicit)\n", ValidatorDiversityMaxCountryPct)
+
+	}
+
+	if meta.IsDefined("validators", "diversity_max_asn_pct") && cfg.Validators.DiversityMaxASNPct > 0 {
+
+		ValidatorDiversityMaxASNPct = cfg.Validators.DiversityMaxASNPct
+
+		fmt.Printf("VALIDATOR diversity config loaded: max_asn_pct=%d (explicit)\n", ValidatorDiversityMaxASNPct)
+
+	}
+
+	if meta.IsDefined("validators", "diversity_max_cloud_pct") && cfg.Validators.DiversityMaxCloudPct > 0 {
+
+		ValidatorDiversityMaxCloudPct = cfg.Validators.DiversityMaxCloudPct
+
+		fmt.Printf("VALIDATOR diversity config loaded: max_cloud_pct=%d (explicit)\n", ValidatorDiversityMaxCloudPct)
+
+	}
+
+	if meta.IsDefined("validators", "diversity_metadata") {
+
+		SetValidatorDiversityMetadata(cfg.Validators.DiversityMetadata)
+
+		fmt.Printf("VALIDATOR diversity config loaded: metadata_entries=%d (explicit)\n", len(cfg.Validators.DiversityMetadata))
 
 	}
 
@@ -33635,6 +33773,8 @@ func (s *Server) Start(addr string) {
 
 	mux.HandleFunc("/validators/pending", s.handleValidatorsPending)
 
+	mux.HandleFunc("/validators/diversity", s.handleValidatorsDiversity)
+
 	mux.HandleFunc("/tx/status", s.handleTxStatus)
 
 	mux.HandleFunc("/txs", s.handleTxHistory)
@@ -33696,6 +33836,7 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/v1/peers", s.handleV1Peers)
 	mux.HandleFunc("/v1/validators", s.handleV1Validators)
 	mux.HandleFunc("/v1/validators/pending", s.handleV1ValidatorsPending)
+	mux.HandleFunc("/v1/validators/diversity", s.handleValidatorsDiversity)
 	mux.HandleFunc("/v1/misbehavior", s.handleV1Misbehavior)
 	mux.HandleFunc("/v1/tx/", s.handleV1TxByID)
 	mux.HandleFunc("/v1/tx/status", s.handleV1TxStatus)
@@ -36539,7 +36680,9 @@ func (s *Server) handleMetrics(
 	statePruneMarker, statePruneMarkerOK := s.Node.loadStatePruneMarker()
 	finalityArtifacts := s.Node.finalityArtifactObservability()
 	governanceMetrics := s.Node.governanceMetricsSnapshot()
-	nextSet := len(s.Node.GetConsensusValidators(int(runtime.Height + 1)))
+	nextValidators := canonicalValidatorIDs(s.Node.GetConsensusValidators(int(runtime.Height + 1)))
+	nextSet := len(nextValidators)
+	validatorDiversityReport := EvaluateValidatorGeographicDiversity(nextValidators)
 	currentSupply := currentCoinSupply(&s.Node.Ledger, CoinSymbol)
 	registrySnap := s.Node.validatorRegistrySnapshotForHeight(runtime.Height + 1)
 	pendingRemovalSnap := s.Node.pendingValidatorRemovalsSnapshot()
@@ -36953,6 +37096,16 @@ func (s *Server) handleMetrics(
 	appendPromGauge(&out, "msc_peer_outbound_asn_buckets", "Distinct outbound configured peer ASN/operator-zone buckets currently connected.", baseLabels, float64(peerDiversity.OutboundASNBuckets))
 	appendPromGauge(&out, "msc_peer_diversity_rejections_total", "Peer connections/dials rejected by subnet or ASN diversity policy.", baseLabels, float64(peerDiversity.RejectTotal))
 	appendPromGauge(&out, "msc_peer_outbound_diversity_rejections_total", "Outbound dials rejected by subnet or ASN diversity policy.", baseLabels, float64(peerDiversity.OutboundRejectTotal))
+	appendPromGauge(&out, "msc_validator_country_buckets", "Distinct validator country buckets in the consensus set.", baseLabels, float64(validatorDiversityReport.CountryBuckets))
+	appendPromGauge(&out, "msc_validator_asn_buckets", "Distinct validator ASN/operator buckets in the consensus set.", baseLabels, float64(validatorDiversityReport.ASNBuckets))
+	appendPromGauge(&out, "msc_validator_cloud_buckets", "Distinct validator cloud/provider buckets in the consensus set.", baseLabels, float64(validatorDiversityReport.CloudBuckets))
+	appendPromGauge(&out, "msc_validator_region_buckets", "Distinct validator region buckets in the consensus set.", baseLabels, float64(validatorDiversityReport.RegionBuckets))
+	appendPromGauge(&out, "msc_validator_diversity_missing_metadata", "Validators missing country, ASN, or cloud metadata.", baseLabels, float64(validatorDiversityReport.MetadataMissing))
+	appendPromGauge(&out, "msc_validator_diversity_violations", "Validator geographic-diversity policy violations currently observed.", promLabels(baseLabels, map[string]string{"mode": validatorDiversityReport.Mode, "reason": validatorDiversityReport.Reason}), float64(len(validatorDiversityReport.Violations)))
+	appendPromGauge(&out, "msc_validator_diversity_healthy", "Validator geographic-diversity health signal (1/0).", baseLabels, boolToPromFloat(validatorDiversityReport.Healthy))
+	appendPromGauge(&out, "msc_validator_diversity_max_country_pct", "Largest validator country concentration percentage.", baseLabels, float64(validatorDiversityReport.MaxCountryPct))
+	appendPromGauge(&out, "msc_validator_diversity_max_asn_pct", "Largest validator ASN concentration percentage.", baseLabels, float64(validatorDiversityReport.MaxASNPct))
+	appendPromGauge(&out, "msc_validator_diversity_max_cloud_pct", "Largest validator cloud/provider concentration percentage.", baseLabels, float64(validatorDiversityReport.MaxCloudPct))
 	appendPromGauge(&out, "msc_peer_resource_drops_total", "Peer messages rejected by memory, bandwidth, mempool, or block request quotas.", baseLabels, float64(obs.PeerResourceDropTotal))
 	appendPromGauge(&out, "msc_peer_connection_flood_total", "Peer connection attempts rejected by connection-flood protection.", baseLabels, float64(obs.PeerConnectionFloodTotal))
 	appendPromGauge(&out, "msc_peer_count_drop", "Drop from highest observed peer count for partition detection.", baseLabels, float64(peerCountDrop))
@@ -41911,7 +42064,7 @@ func authorized(r *http.Request) bool {
 
 		switch path {
 
-		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/consensus/mode", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/consensus/mode", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
+		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/validators/diversity", "/consensus/mode", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/consensus/mode", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/validators/diversity", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
 
 			return true
 
