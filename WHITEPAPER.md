@@ -141,6 +141,7 @@ Validator identity is rooted in the node's validator secret key. MSC Chain treat
 The operator policy is:
 
 - `validator.sec` is the identity root;
+- HSM/external-signer mode can replace `validator.sec` for validator consensus signing;
 - fingerprint mismatch fails startup;
 - backup restore is preferred over chain reset;
 - key backup is required;
@@ -154,6 +155,21 @@ Core validator onboarding uses a signed registry and a two-phase flow:
 2. Promote the validator to `active` after signed approval and effective-height buffer.
 
 This avoids chain reset, identity drift, and accidental proposer inclusion before the node is ready.
+
+### Hardware Security Module Support
+
+MSC supports HSM-backed validator signing through an external signer interface. In this mode the node loads only the validator consensus public key and sends canonical Ed25519 signing payloads to an operator-controlled signer command. The signer command can be backed by an HSM, YubiHSM, Ledger Enterprise, PKCS#11 bridge, or cloud/KMS adapter, but the MSC node never imports the validator private key into process memory.
+
+The HSM path is fail-closed:
+
+- `validators.hsm_enabled=true` disables silent software-key fallback;
+- `validators.hsm_public_key` pins the expected validator consensus public key;
+- `validators.hsm_external_signer_command` must return a valid 64-byte Ed25519 signature;
+- every returned signature is verified against the pinned public key before it is used;
+- fingerprint locks and `validators.required_key_fingerprint` still apply;
+- `/status` and `/metrics` expose HSM readiness, provider, key ID, signer configuration, and failure reason.
+
+This allows large validators to run MSC consensus keys behind dedicated signing hardware while still preserving deterministic consensus signing and operator observability.
 
 ## 8. Slashing And Liveness
 
@@ -580,6 +596,19 @@ $env:MSC_RPC_TOKEN = "replace-with-strong-random-token"
 $env:MSC_DB_ENCRYPTION_KEY = "<base64-32-byte-key>"
 ```
 
+For large validators, use HSM mode instead of a software `validator.sec` where possible. Example:
+
+```toml
+[validators]
+hsm_enabled = true
+hsm_provider = "yubihsm"
+hsm_key_id = "slot-1"
+hsm_public_key = "<32-byte-ed25519-public-key-hex>"
+hsm_external_signer_command = "/opt/msc/bin/yubihsm-msc-signer --key slot-1"
+hsm_timeout_ms = 3000
+hsm_require_user_presence = true
+```
+
 For production, public validator RPC exposure should be avoided.
 
 ## 19. Governance
@@ -645,6 +674,7 @@ Known risks and limitations:
 - DTL Logic Pack is proposed and should be activated only after testnet validation;
 - public gateway security depends on correct deployment and DNS/TLS setup;
 - validator key loss or poor backup hygiene can affect liveness;
+- HSM adapters must be rehearsed per provider; a signer timeout or unavailable HSM makes that validator unable to vote until recovered;
 - any governance threshold can be compromised if enough signing keys are compromised;
 - trustless mobile wallet verification requires the light client proof APIs and verifier library described in Section 16;
 - production readiness should include independent audit, long-duration distributed chaos runs, and public monitoring.
@@ -721,6 +751,47 @@ Validator key commands:
 .\msc-node.exe validator-pubkey --id F --datadir data/F
 .\msc-node.exe validator create --wallet .\.msc\secure_wallet.json --validator F --validator-pubkey <32-byte-ed25519-pubkey-hex> --amount 100 --rpc https://mscblockexplorer.in
 ```
+
+HSM-backed validator startup:
+
+```powershell
+$env:MSC_ALLOW_VALIDATOR_KEY_CREATE = "0"
+go run . --mode=full --role=auto --id=F --port=7005 --datadir=data/F --rpcaddr 127.0.0.1:26665
+```
+
+Use `config.toml` to pin the HSM signer:
+
+```toml
+[validators]
+hsm_enabled = true
+hsm_provider = "ledger_enterprise"
+hsm_key_id = "msc-validator-F"
+hsm_public_key = "<32-byte-ed25519-public-key-hex>"
+hsm_external_signer_command = "ledger-msc-signer --key msc-validator-F"
+hsm_timeout_ms = 3000
+hsm_require_user_presence = false
+```
+
+The external signer receives JSON on stdin:
+
+```json
+{
+  "domain": "msc-validator-ed25519-v1",
+  "validator_id": "F",
+  "provider": "ledger_enterprise",
+  "key_id": "msc-validator-F",
+  "public_key_hex": "<pubkey>",
+  "payload_hex": "<canonical-signing-payload>"
+}
+```
+
+It must return either raw signature hex or JSON:
+
+```json
+{"signature_hex":"<64-byte-ed25519-signature-hex>"}
+```
+
+The node verifies the returned signature before using it. A bad signature, timeout, missing command, wrong public key, or fingerprint mismatch makes the validator signer unavailable.
 
 Transaction and staking commands:
 

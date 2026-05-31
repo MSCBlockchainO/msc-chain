@@ -2187,8 +2187,7 @@ func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 		sigBytes = execResultSignBytesV2(heightHint, roundHint, blockHashHint, execHash, txMerkle)
 	}
 	signature := ""
-	if len(n.ValidatorKey.PrivateKey) == ed25519.PrivateKeySize {
-		sig := ed25519.Sign(n.ValidatorKey.PrivateKey, sigBytes)
+	if sig, ok := n.signValidatorPayload(sigBytes); ok {
 		signature = hex.EncodeToString(sig)
 	}
 
@@ -7981,12 +7980,13 @@ func (n *Node) broadcastValidatorInfoViaBlocks() {
 		ExecEpoch:       execEpoch,
 		IsValidator:     true,
 	}
-	if n.ValidatorKey.PrivateKey != nil && pubHex != "" {
-		sig := ed25519.Sign(
-			n.ValidatorKey.PrivateKey,
+	if pubHex != "" {
+		sig, ok := n.signValidatorPayload(
 			validatorAnnounceSignBytesV2(n.ID, pubHex, n.SelfAddr, reported, finalized, execEpoch, true),
 		)
-		announcement.Signature = hex.EncodeToString(sig)
+		if ok {
+			announcement.Signature = hex.EncodeToString(sig)
+		}
 	}
 	// =====================================================
 	// SERIALIZE PAYLOAD

@@ -6156,7 +6156,7 @@ func (n *Node) attachSnapshotCheckpointProof(snapshot *StateSnapshot) {
 	if n == nil || snapshot == nil {
 		return
 	}
-	if len(n.ValidatorKey.PrivateKey) != ed25519.PrivateKeySize {
+	if !isValidatorSigningKeyUsable(n.ValidatorKey) {
 		return
 	}
 	signer := normalizeValidatorID(n.ID)
@@ -6172,7 +6172,10 @@ func (n *Node) attachSnapshotCheckpointProof(snapshot *StateSnapshot) {
 	if snapshotCheckpointV1EnabledAt(snapshot.Height) {
 		snapshot.CheckpointDomain = syncSnapshotCheckpointDomain()
 	}
-	sig := ed25519.Sign(n.ValidatorKey.PrivateKey, snapshotCheckpointSignBytes(snapshot))
+	sig, ok := n.signValidatorPayload(snapshotCheckpointSignBytes(snapshot))
+	if !ok {
+		return
+	}
 	if len(sig) == 0 {
 		return
 	}
@@ -16981,8 +16984,10 @@ func (n *Node) BuildCensorshipEvidence(
 
 		Timestamp: time.Now().Unix(),
 	}
-	if n != nil && len(n.ValidatorKey.PrivateKey) == ed25519.PrivateKeySize && ev.Observer != "" {
-		ev.ObserverSig = ed25519.Sign(n.ValidatorKey.PrivateKey, censorshipEvidenceSignBytes(ev))
+	if n != nil && ev.Observer != "" {
+		if sig, ok := n.signValidatorPayload(censorshipEvidenceSignBytes(ev)); ok {
+			ev.ObserverSig = sig
+		}
 	}
 	return ev
 
@@ -24974,12 +24979,9 @@ func (n *Node) broadcastValidatorInfoInternal(force bool) {
 		IsValidator: activeForHeartbeat,
 	}
 
-	if len(n.ValidatorKey.PrivateKey) == ed25519.PrivateKeySize {
+	if isValidatorSigningKeyUsable(n.ValidatorKey) {
 
-		sig := ed25519.Sign(
-
-			n.ValidatorKey.PrivateKey,
-
+		sig, ok := n.signValidatorPayload(
 			validatorAnnounceSignBytesV4(
 				ann.NodeID,
 				ann.PubKey,
@@ -24995,8 +24997,7 @@ func (n *Node) broadcastValidatorInfoInternal(force bool) {
 			),
 		)
 		if ann.ConsensusReadySet {
-			sig = ed25519.Sign(
-				n.ValidatorKey.PrivateKey,
+			sig, ok = n.signValidatorPayload(
 				validatorAnnounceSignBytesV5(
 					ann.NodeID,
 					ann.PubKey,
@@ -25015,7 +25016,9 @@ func (n *Node) broadcastValidatorInfoInternal(force bool) {
 			)
 		}
 
-		ann.Signature = hex.EncodeToString(sig)
+		if ok {
+			ann.Signature = hex.EncodeToString(sig)
+		}
 
 	}
 
@@ -27133,6 +27136,20 @@ type ValidatorEngineConfig struct {
 
 	PasswordMode string `toml:"password_mode"`
 
+	HSMEnabled bool `toml:"hsm_enabled"`
+
+	HSMProvider string `toml:"hsm_provider"`
+
+	HSMKeyID string `toml:"hsm_key_id"`
+
+	HSMPublicKey string `toml:"hsm_public_key"`
+
+	HSMExternalSignerCommand string `toml:"hsm_external_signer_command"`
+
+	HSMTimeoutMS int `toml:"hsm_timeout_ms"`
+
+	HSMRequireUserPresence bool `toml:"hsm_require_user_presence"`
+
 	DiversityEnabled bool `toml:"diversity_enabled"`
 
 	DiversityMode string `toml:"diversity_mode"`
@@ -29187,6 +29204,44 @@ func applyValidatorEngineConfig(vc ValidatorEngineConfig) bool {
 		}
 	}
 
+	if vc.HSMEnabled {
+		ValidatorHSMEnabled = true
+		changed = true
+	}
+
+	if strings.TrimSpace(vc.HSMProvider) != "" {
+		nextProvider := normalizeValidatorHSMProvider(vc.HSMProvider)
+		if nextProvider != normalizeValidatorHSMProvider(ValidatorHSMProvider) {
+			ValidatorHSMProvider = nextProvider
+			changed = true
+		}
+	}
+
+	if strings.TrimSpace(vc.HSMKeyID) != "" && strings.TrimSpace(vc.HSMKeyID) != ValidatorHSMKeyID {
+		ValidatorHSMKeyID = strings.TrimSpace(vc.HSMKeyID)
+		changed = true
+	}
+
+	if strings.TrimSpace(vc.HSMPublicKey) != "" && strings.TrimSpace(vc.HSMPublicKey) != ValidatorHSMPublicKeyHex {
+		ValidatorHSMPublicKeyHex = strings.TrimSpace(vc.HSMPublicKey)
+		changed = true
+	}
+
+	if strings.TrimSpace(vc.HSMExternalSignerCommand) != "" && strings.TrimSpace(vc.HSMExternalSignerCommand) != ValidatorHSMExternalSignerCommand {
+		ValidatorHSMExternalSignerCommand = strings.TrimSpace(vc.HSMExternalSignerCommand)
+		changed = true
+	}
+
+	if vc.HSMTimeoutMS > 0 && vc.HSMTimeoutMS != ValidatorHSMTimeoutMS {
+		ValidatorHSMTimeoutMS = vc.HSMTimeoutMS
+		changed = true
+	}
+
+	if vc.HSMRequireUserPresence != ValidatorHSMRequireUserPresence {
+		ValidatorHSMRequireUserPresence = vc.HSMRequireUserPresence
+		changed = true
+	}
+
 	if vc.DiversityEnabled {
 		ValidatorDiversityEnabled = true
 		changed = true
@@ -31048,6 +31103,62 @@ func loadConfigOverrides(path string) error {
 		ValidatorPasswordMode = normalizeValidatorPasswordMode(cfg.Validators.PasswordMode)
 
 		fmt.Printf("VALIDATOR config loaded: password_mode=%s (explicit)\n", ValidatorPasswordMode)
+
+	}
+
+	if meta.IsDefined("validators", "hsm_enabled") {
+
+		ValidatorHSMEnabled = cfg.Validators.HSMEnabled
+
+		fmt.Printf("VALIDATOR HSM config loaded: enabled=%t (explicit)\n", ValidatorHSMEnabled)
+
+	}
+
+	if meta.IsDefined("validators", "hsm_provider") {
+
+		ValidatorHSMProvider = normalizeValidatorHSMProvider(cfg.Validators.HSMProvider)
+
+		fmt.Printf("VALIDATOR HSM config loaded: provider=%s (explicit)\n", ValidatorHSMProvider)
+
+	}
+
+	if meta.IsDefined("validators", "hsm_key_id") {
+
+		ValidatorHSMKeyID = strings.TrimSpace(cfg.Validators.HSMKeyID)
+
+		fmt.Printf("VALIDATOR HSM config loaded: key_id=%s (explicit)\n", ValidatorHSMKeyID)
+
+	}
+
+	if meta.IsDefined("validators", "hsm_public_key") {
+
+		ValidatorHSMPublicKeyHex = strings.TrimSpace(cfg.Validators.HSMPublicKey)
+
+		fmt.Printf("VALIDATOR HSM config loaded: public_key_configured=%t (explicit)\n", ValidatorHSMPublicKeyHex != "")
+
+	}
+
+	if meta.IsDefined("validators", "hsm_external_signer_command") {
+
+		ValidatorHSMExternalSignerCommand = strings.TrimSpace(cfg.Validators.HSMExternalSignerCommand)
+
+		fmt.Printf("VALIDATOR HSM config loaded: external_signer_configured=%t (explicit)\n", ValidatorHSMExternalSignerCommand != "")
+
+	}
+
+	if meta.IsDefined("validators", "hsm_timeout_ms") && cfg.Validators.HSMTimeoutMS > 0 {
+
+		ValidatorHSMTimeoutMS = cfg.Validators.HSMTimeoutMS
+
+		fmt.Printf("VALIDATOR HSM config loaded: timeout_ms=%d (explicit)\n", ValidatorHSMTimeoutMS)
+
+	}
+
+	if meta.IsDefined("validators", "hsm_require_user_presence") {
+
+		ValidatorHSMRequireUserPresence = cfg.Validators.HSMRequireUserPresence
+
+		fmt.Printf("VALIDATOR HSM config loaded: require_user_presence=%t (explicit)\n", ValidatorHSMRequireUserPresence)
 
 	}
 
@@ -35269,6 +35380,7 @@ func (s *Server) handleStatus(
 	keyHealth := CollectValidatorKeyHealth(s.Node.ID, s.Node.DataDir, s.Node.ValidatorKey)
 	validatorKeyLoaded := keyHealth.Loaded
 	validatorKeyFingerprint := keyHealth.Fingerprint
+	hsmStatus := validatorHSMStatus(s.Node.ID, s.Node.ValidatorKey)
 	validatorPasswordMode, validatorSecretSource := validatorSecretRuntime(s.Node.ID)
 	if strings.TrimSpace(validatorPasswordMode) == "" {
 		validatorPasswordMode = configuredValidatorPasswordMode()
@@ -35609,6 +35721,15 @@ func (s *Server) handleStatus(
 		"validator_key_backup_age_seconds":             keyHealth.BackupAgeSeconds,
 		"validator_key_source":                         keyHealth.Source,
 		"validator_key_mode":                           keyHealth.Mode,
+		"validator_hsm":                                hsmStatus,
+		"validator_hsm_enabled":                        hsmStatus.Enabled,
+		"validator_hsm_ready":                          hsmStatus.Ready,
+		"validator_hsm_provider":                       hsmStatus.Provider,
+		"validator_hsm_key_id":                         hsmStatus.KeyID,
+		"validator_hsm_fingerprint":                    hsmStatus.Fingerprint,
+		"validator_hsm_external_signer_configured":     hsmStatus.ExternalSignerConfigured,
+		"validator_hsm_require_user_presence":          hsmStatus.RequireUserPresence,
+		"validator_hsm_reason":                         hsmStatus.Reason,
 		"validator_password_mode":                      validatorPasswordMode,
 		"validator_secret_source":                      validatorSecretSource,
 		"exec_current_round":                           execCurrentRound,
@@ -36887,6 +37008,7 @@ func (s *Server) handleMetrics(
 	} else {
 		txConfirmedEstimate = 0
 	}
+	hsmStatus := validatorHSMStatus(s.Node.ID, s.Node.ValidatorKey)
 
 	baseLabels := map[string]string{
 		"node_id":  strings.TrimSpace(s.Node.ID),
@@ -37037,6 +37159,10 @@ func (s *Server) handleMetrics(
 	appendPromGauge(&out, "msc_security_weak_subjectivity_depth", "Security: weak-subjectivity protected depth in blocks.", baseLabels, float64(WeakSubjectivityDepth))
 	appendPromGauge(&out, "msc_security_max_future_block_gap", "Security: max accepted future block gap before drop.", baseLabels, float64(MaxFutureBlockGap))
 	appendPromGauge(&out, "msc_security_deterministic_tx_order_enforced", "Security: deterministic tx-order enforcement enabled (1/0).", baseLabels, boolToPromFloat(EnforceDeterministicTxOrder))
+	appendPromGauge(&out, "msc_validator_hsm_enabled", "Validator HSM/external signer mode enabled (1/0).", promLabels(baseLabels, map[string]string{"provider": hsmStatus.Provider, "key_id": hsmStatus.KeyID}), boolToPromFloat(hsmStatus.Enabled))
+	appendPromGauge(&out, "msc_validator_hsm_ready", "Validator HSM/external signer readiness (1/0).", promLabels(baseLabels, map[string]string{"provider": hsmStatus.Provider, "reason": hsmStatus.Reason}), boolToPromFloat(hsmStatus.Ready))
+	appendPromGauge(&out, "msc_validator_hsm_external_signer_configured", "Validator HSM external signer command configured (1/0).", promLabels(baseLabels, map[string]string{"provider": hsmStatus.Provider}), boolToPromFloat(hsmStatus.ExternalSignerConfigured))
+	appendPromGauge(&out, "msc_validator_hsm_timeout_ms", "Validator HSM external signer timeout in milliseconds.", promLabels(baseLabels, map[string]string{"provider": hsmStatus.Provider}), float64(hsmStatus.TimeoutMS))
 
 	appendPromGauge(&out, "msc_storage_size_bytes", "Approximate on-disk node data size in bytes.", baseLabels, float64(storageRootSizeBytes))
 	appendPromGauge(&out, "msc_disk_usage_percent", "Filesystem disk usage percent for the node data volume.", baseLabels, storageDiskUsagePercent)

@@ -830,7 +830,7 @@ func fallbackValidatorKey(nodeID, reason string) ValidatorKey {
 }
 
 func isValidatorKeyUsable(v ValidatorKey) bool {
-	return len(v.PublicKey) == ed25519.PublicKeySize && len(v.PrivateKey) == ed25519.PrivateKeySize
+	return isValidatorSigningKeyUsable(v)
 }
 
 func envBool(name string) bool {
@@ -1279,6 +1279,10 @@ func CollectValidatorKeyHealth(nodeID, nodePath string, key ValidatorKey) Valida
 		}
 	}
 	backupPresent, backupAge, _ := validateValidatorBackup(nodePath, out.Fingerprint)
+	if ValidatorHSMEnabled && out.Loaded {
+		backupPresent = true
+		backupAge = 0
+	}
 	out.BackupPresent = backupPresent
 	out.BackupAgeSeconds = backupAge
 	return out
@@ -1455,6 +1459,9 @@ func GenerateValidatorKeyOffline(nodeID, nodePath string) (string, error) {
 func loadOrCreateValidatorKeyInternal(nodeID, path string, allowRestore bool, preferredSource string) ValidatorKey {
 	if err := ensurePrivateDirectory(path); err != nil {
 		return fallbackValidatorKey(nodeID, err.Error())
+	}
+	if key, handled := LoadValidatorHSMKey(nodeID, path); handled {
+		return key
 	}
 
 	keyPath := filepath.Join(path, "validator.sec")

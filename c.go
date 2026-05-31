@@ -34,7 +34,7 @@ func (n *Node) SignBlock(block *Block) {
 	n.applyBlockQuorumPolicyMetadata(block)
 	hash := HashBlock(*block)
 	block.BlockHash = hash
-	if n == nil || len(n.ValidatorKey.PrivateKey) != ed25519.PrivateKeySize {
+	if n == nil || !isValidatorSigningKeyUsable(n.ValidatorKey) {
 		return
 	}
 	signerID := normalizeValidatorID(n.ValidatorKey.ID)
@@ -52,7 +52,10 @@ func (n *Node) SignBlock(block *Block) {
 		ValidatorPubKeys[signerID] = append(ed25519.PublicKey(nil), n.ValidatorKey.PublicKey...)
 		validatorPubKeysMu.Unlock()
 	}
-	sig := ed25519.Sign(n.ValidatorKey.PrivateKey, []byte(hash))
+	sig, ok := n.signValidatorPayload([]byte(hash))
+	if !ok {
+		return
+	}
 	block.Signature = append([]byte(nil), sig...)
 }
 
