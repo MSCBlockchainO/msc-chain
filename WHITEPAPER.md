@@ -337,7 +337,148 @@ Storage is split into separate Pebble stores:
 
 Database writes use synced Pebble batches, and the storage layer can quarantine corrupted DB paths during recovery.
 
-## 15. RPC, Explorer, And Wallet
+## 15. Light Client Protocol
+
+MSC Chain should support trust-minimized wallets and mobile clients that do not need to trust a public RPC server for balances, transactions, or state claims. Public RPC remains useful for availability, but a wallet should be able to verify the data it receives.
+
+The light client protocol has three parts:
+
+1. Light client header chain.
+2. SPV and Merkle proof APIs.
+3. Stateless verification rules for wallets and mobile clients.
+
+### 15.1 Light Client Header Chain
+
+A light client stores only compact block headers and finality artifacts, not the full state database. Each header must include:
+
+- height;
+- block hash;
+- parent hash;
+- state root;
+- transaction root;
+- receipt root;
+- validator set hash;
+- next validator set hash;
+- finality root;
+- epoch anchor hash;
+- finalized epoch certificate hash;
+- proposer identity;
+- quorum signature evidence hash.
+
+The mobile or browser wallet verifies:
+
+```text
+parent_hash(header N) == hash(header N-1)
+header.finality_root matches finalized certificate
+validator_set_hash matches finalized validator commitment
+epoch_anchor links to previous epoch anchor
+```
+
+This lets a light client follow the canonical finalized chain without downloading every block body.
+
+### 15.2 SPV Proofs
+
+MSC Chain should expose proof APIs for wallet-critical data:
+
+```text
+GET /proof/account?address=MSC...
+GET /proof/balance?address=MSC...&coin=MSC
+GET /proof/tx?id=...
+GET /proof/receipt?id=...
+GET /proof/validator?id=A
+GET /light/headers?from=...&limit=...
+GET /light/checkpoint/latest
+```
+
+Each proof response should include:
+
+- target key and value;
+- proof height;
+- state root or transaction root;
+- Merkle branch;
+- block header;
+- finalized epoch certificate;
+- validator set commitment;
+- epoch anchor hash.
+
+The verifier accepts the proof only if:
+
+```text
+MerkleBranch(value) -> expected_root
+expected_root == header.state_root OR tx_root OR receipt_root
+header is connected to trusted finalized checkpoint
+FEC has strict quorum signatures
+validator commitment matches the FEC
+```
+
+For transactions, an SPV proof proves inclusion in the transaction root. For receipts, it proves execution result inclusion. For balances and account state, it proves inclusion in the state root.
+
+### 15.3 Stateless Wallet Verification
+
+The MSC wallet should support two modes:
+
+| Mode | Behavior |
+| --- | --- |
+| RPC mode | Trusts full-node RPC response for fast UX |
+| Light mode | Verifies headers, finality certificate, and Merkle proof before displaying confirmed state |
+
+In light mode, the wallet must not show a balance, transaction, staking status, or validator status as verified unless the corresponding proof validates against a trusted finalized checkpoint.
+
+Recommended wallet labels:
+
+```text
+Verified by light client
+RPC-only response
+Proof missing
+Proof invalid
+```
+
+This prevents a malicious public RPC gateway from lying to mobile wallets about balances, transaction inclusion, staking state, governance votes, or validator membership.
+
+### 15.4 Mobile Verification
+
+Mobile wallets should persist:
+
+- latest trusted finalized checkpoint;
+- last N light headers;
+- last N epoch anchors;
+- validator set commitments;
+- finality certificate chain;
+- proof verification cache.
+
+Bootstrap flow:
+
+1. Download latest finalized checkpoint.
+2. Verify the finalized epoch certificate.
+3. Verify validator set commitment.
+4. Download compact headers from checkpoint to current height.
+5. Verify header chain and epoch anchors.
+6. Request balance, transaction, and staking proofs.
+7. Display verified data only after proof validation.
+
+The mobile wallet should be able to reject:
+
+- fake balances;
+- fake transaction confirmations;
+- stale finalized checkpoints;
+- rewritten validator sets;
+- invalid epoch anchors;
+- long-range attack headers.
+
+### 15.5 Mainnet Requirement
+
+Trustless mobile wallets require Merkle proofs and light-client headers before they can be called fully mainnet-ready. Until this protocol is implemented and tested, public wallets should clearly treat full-node RPC as an availability layer, not as a cryptographic proof source.
+
+Mainnet recommended implementation order:
+
+1. Add canonical account, balance, transaction, receipt, and validator Merkle proof generation.
+2. Add `/light/headers` and `/light/checkpoint/latest` APIs.
+3. Add browser/mobile proof verifier library.
+4. Add wallet UI proof status.
+5. Add corruption, stale proof, wrong-root, and wrong-validator-set tests.
+6. Add mobile restore test from only checkpoint plus headers plus proofs.
+
+## 16. RPC, Explorer, And Wallet
 
 MSC Chain exposes RPC endpoints for node status, block data, transaction submission, tokenomics, governance, explorer views, wallet interactions, DTL token data, and observability.
 
@@ -352,7 +493,7 @@ The repository includes:
 
 Production public access should terminate at a full-node gateway, not a validator RPC port. Validator RPC should remain private or bound to localhost. Public gateway deployments should use HTTPS, nginx rate limits, node RPC limits, and private metrics scraping.
 
-## 16. Security Baseline
+## 17. Security Baseline
 
 MSC Chain's security model combines consensus rules, node hardening, operator policy, and public gateway separation.
 
@@ -384,7 +525,7 @@ $env:MSC_DB_ENCRYPTION_KEY = "<base64-32-byte-key>"
 
 For production, public validator RPC exposure should be avoided.
 
-## 17. Governance
+## 18. Governance
 
 MSC Chain currently has four governance surfaces:
 
@@ -397,7 +538,7 @@ Treasury operations are disabled on mainnet unless explicitly enabled and author
 
 Protocol upgrades are versioned and activated by height. Rollbacks are rejected unless the proposal explicitly declares rollback approval and receives strict quorum. Emergency upgrades can use a shorter activation path, but still require strict quorum. Emergency pause proposals are bounded, observable through RPC and Prometheus, and intended for operator coordination during incident response.
 
-## 18. Testing And Mainnet Readiness
+## 19. Testing And Mainnet Readiness
 
 The repository includes extensive tests for:
 
@@ -436,7 +577,7 @@ Mainnet chaos tooling tests survival under:
 
 The Tier 1 survival pass condition is no finality stall beyond configured gap, reachable quorum above minimum, bounded finalized lag, bounded height lag, and no finalized block hash divergence across reachable nodes.
 
-## 19. Limitations And Risk Statement
+## 20. Limitations And Risk Statement
 
 MSC Chain is an active implementation. The whitepaper describes the repository's current protocol direction and mainnet configuration, not a completed third-party security audit.
 
@@ -448,9 +589,10 @@ Known risks and limitations:
 - public gateway security depends on correct deployment and DNS/TLS setup;
 - validator key loss or poor backup hygiene can affect liveness;
 - any governance threshold can be compromised if enough signing keys are compromised;
+- trustless mobile wallet verification requires the light client proof APIs and verifier library described in Section 15;
 - production readiness should include independent audit, long-duration distributed chaos runs, and public monitoring.
 
-## 20. Roadmap
+## 21. Roadmap
 
 Near-term roadmap:
 
@@ -459,6 +601,7 @@ Near-term roadmap:
 - run long-duration 10-node and 50-node chaos survival tests;
 - publish reproducible genesis and operator verification steps;
 - expand monitoring dashboards and alert thresholds;
+- implement Merkle proof APIs and light-client header verification;
 - harden wallet and explorer production deployment;
 - complete DTL Logic Pack testnet activation path;
 - prepare independent security review.
@@ -472,7 +615,7 @@ Medium-term roadmap:
 - public token registry and metadata standards;
 - richer DeFi/GameFi primitives under deterministic execution limits.
 
-## 21. Operator Terminal Command Reference
+## 22. Operator Terminal Command Reference
 
 This section is the production command reference for operators. Do not commit validator passwords, wallet passwords, private keys, SSH keys, or mnemonic phrases. Use environment variables, local secret files, or an interactive terminal.
 
