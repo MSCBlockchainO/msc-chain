@@ -2697,13 +2697,14 @@ func (n *Node) handleConsensusEnvelopeFromPeer(data []byte, peerID string) bool 
 }
 
 func (n *Node) listenConsensus(ctx context.Context) {
-	if n.ConsensusSub == nil {
+	sub := n.ConsensusSub
+	if sub == nil {
 		log.Println("ConsensusSub is nil")
 		return
 	}
 
 	for {
-		msg, err := n.ConsensusSub.Next(ctx)
+		msg, err := sub.Next(ctx)
 		if err != nil {
 			log.Println("consensus listener stopped:", err)
 			return
@@ -2716,13 +2717,14 @@ func (n *Node) listenConsensus(ctx context.Context) {
 }
 
 func (n *Node) listenValidators(ctx context.Context) {
-	if n.ValidatorSub == nil {
+	sub := n.ValidatorSub
+	if sub == nil {
 		log.Println("ValidatorSub is nil")
 		return
 	}
 
 	for {
-		msg, err := n.ValidatorSub.Next(ctx)
+		msg, err := sub.Next(ctx)
 		if err != nil {
 			log.Println("validator listener stopped:", err)
 			return
