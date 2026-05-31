@@ -24,11 +24,21 @@ GOMAXPROCS="${GOMAXPROCS:-}"
 GOMEMLIMIT="${GOMEMLIMIT:-}"
 HEALTHCHECK_SECONDS="${HEALTHCHECK_SECONDS:-0}"
 HEALTHCHECK_TIMEOUT_SECONDS="${HEALTHCHECK_TIMEOUT_SECONDS:-8}"
-FULLNODE_ACTIVITY_GRACE_SECONDS="${FULLNODE_ACTIVITY_GRACE_SECONDS:-180}"
+FULLNODE_ACTIVITY_GRACE_SECONDS="${FULLNODE_ACTIVITY_GRACE_SECONDS:-300}"
 STARTUP_HEALTH_GRACE_SECONDS="${STARTUP_HEALTH_GRACE_SECONDS:-300}"
-UNHEALTHY_RESTART_SECONDS="${UNHEALTHY_RESTART_SECONDS:-120}"
+UNHEALTHY_RESTART_SECONDS="${UNHEALTHY_RESTART_SECONDS:-300}"
 START_BACKOFF_SECONDS="${START_BACKOFF_SECONDS:-3}"
 MAX_RESTART_BACKOFF_SECONDS="${MAX_RESTART_BACKOFF_SECONDS:-60}"
+
+if [[ -z "$GOMEMLIMIT" && -r /proc/meminfo ]]; then
+  mem_kib="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || printf '0')"
+  if [[ "$mem_kib" =~ ^[0-9]+$ ]] && (( mem_kib >= 2097152 )); then
+    # Leave headroom for Pebble, libp2p, nginx, and the OS while avoiding
+    # tiny legacy limits that make validators slow down under pressure.
+    mem_mib=$((mem_kib / 1024))
+    GOMEMLIMIT="$((mem_mib * 70 / 100))MiB"
+  fi
+fi
 
 mkdir -p "$DATA_DIR" "$LOG_ROOT"
 NODE_LOG="$LOG_ROOT/${NODE_ID}.node.log"
