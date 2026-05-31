@@ -29,66 +29,167 @@
       }
     })();
   </script>
-  <title>MSC Wallet — MetaMask Style</title>
+  <title>MSC Wallet 3.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="msc_wallet.css?v=20260525b" />
+  <link rel="stylesheet" href="msc_wallet.css?v=20260531a" />
 </head>
 <body>
   <div class="noise"></div>
-  <div class="glow g1"></div>
-  <div class="glow g2"></div>
 
-  <header class="top">
-    <div class="brand">
-      <div class="logo">MSC</div>
-      <div>
-        <div class="title">Wallet</div>
-        <div class="subtitle">MetaMask-style vault for MSC Chain</div>
+  <div class="wallet-app">
+    <aside class="wallet-sidebar" aria-label="MSC Wallet navigation">
+      <div class="sidebar-brand">
+        <div class="logo">MSC</div>
+        <div>
+          <div class="title">MSC Wallet</div>
+          <div class="subtitle">Mainnet vault</div>
+        </div>
       </div>
-    </div>
+      <nav class="side-nav">
+        <button class="nav-item active" type="button" data-wallet-target="walletDashboard">Dashboard</button>
+        <button class="nav-item" type="button" data-wallet-target="walletAccount">Wallet</button>
+        <button class="nav-item" type="button" data-wallet-target="sendForm">Send</button>
+        <button class="nav-item" type="button" data-wallet-target="faucetForm">Receive</button>
+        <button class="nav-item" type="button" data-wallet-target="stakeForm">Staking</button>
+        <button class="nav-item" type="button" data-wallet-target="dexQuoteForm">DEX Swap</button>
+        <button class="nav-item" type="button" data-wallet-target="nft721List">NFTs</button>
+        <button class="nav-item" type="button" data-wallet-target="txList">History</button>
+        <button class="nav-item" type="button" data-wallet-target="validatorDashboard">Validators</button>
+        <button class="nav-item" type="button" data-wallet-target="governanceDashboard">Governance</button>
+        <button class="nav-item" type="button" data-wallet-target="netControls">Settings</button>
+      </nav>
+    </aside>
 
-    <div id="netControls" class="net">
-      <div class="field small">
-        <label for="rpcUrl">RPCs</label>
-        <input id="rpcUrl" type="text" placeholder="https://127.0.0.1:26657, https://127.0.0.1:26658" />
-      </div>
-      <div class="field small">
-        <label for="chainId">Chain ID</label>
-        <input id="chainId" type="text" placeholder="91938" />
-      </div>
-      <div id="apiTokenField" class="field small optional-admin">
-        <label for="apiToken">API Token</label>
-        <input id="apiToken" type="password" placeholder="Bearer" />
-      </div>
-      <div class="field small">
-        <label for="autoSync">Auto Sync</label>
-        <select id="autoSync">
-          <option value="on">On (Live)</option>
-          <option value="off">Off</option>
-        </select>
-      </div>
-      <div class="field small">
-        <label for="autoSyncMs">Sync (ms)</label>
-        <input id="autoSyncMs" type="number" min="250" step="50" value="1000" />
-      </div>
-      <div class="field small">
-        <label for="broadcastMode">Broadcast</label>
-        <select id="broadcastMode">
-          <option value="auto">Auto (fallback)</option>
-          <option value="fanout">Fanout (all)</option>
-          <option value="primary">Primary only</option>
-        </select>
-      </div>
-      <button id="saveConnection" class="primary">Connect</button>
-      <button id="toggleAdminSettings" type="button" class="ghost">Admin</button>
-      <div id="connectionStatus" class="pill" data-tone="info">Disconnected</div>
-    </div>
-  </header>
+    <div class="wallet-main">
+      <header class="top wallet-topbar">
+        <div class="topline">
+          <div class="brand">
+            <div class="logo small-logo">MSC</div>
+            <div>
+              <div class="title">Wallet 3.0</div>
+              <div class="subtitle">Mainnet asset control center</div>
+            </div>
+          </div>
+          <form id="walletSearchForm" class="wallet-search">
+            <input id="walletGlobalSearch" type="search" placeholder="Tx / Address / Block" />
+            <button class="primary small" type="submit">Search</button>
+          </form>
+          <div class="top-status">
+            <div class="top-chip">
+              <span>Network</span>
+              <strong id="wallet3Network">MAINNET</strong>
+            </div>
+            <div class="top-chip">
+              <span>Height</span>
+              <strong id="wallet3Height">—</strong>
+            </div>
+            <div class="top-chip wallet-chip">
+              <span>Wallet</span>
+              <strong id="wallet3WalletChip">Not connected</strong>
+            </div>
+            <button class="ghost icon-btn" type="button" aria-label="Notifications">!</button>
+            <button class="ghost icon-btn" type="button" aria-label="Profile">ID</button>
+          </div>
+        </div>
 
-  <main class="shell">
-    <section class="panel account">
+        <div id="netControls" class="net">
+          <div class="field small">
+            <label for="rpcUrl">RPCs</label>
+            <input id="rpcUrl" type="text" placeholder="https://127.0.0.1:26657, https://127.0.0.1:26658" />
+          </div>
+          <div class="field small">
+            <label for="chainId">Chain ID</label>
+            <input id="chainId" type="text" placeholder="91938" />
+          </div>
+          <div id="apiTokenField" class="field small optional-admin">
+            <label for="apiToken">API Token</label>
+            <input id="apiToken" type="password" placeholder="Bearer" />
+          </div>
+          <div class="field small">
+            <label for="autoSync">Auto Sync</label>
+            <select id="autoSync">
+              <option value="on">On (Live)</option>
+              <option value="off">Off</option>
+            </select>
+          </div>
+          <div class="field small">
+            <label for="autoSyncMs">Sync (ms)</label>
+            <input id="autoSyncMs" type="number" min="250" step="50" value="1000" />
+          </div>
+          <div class="field small">
+            <label for="broadcastMode">Broadcast</label>
+            <select id="broadcastMode">
+              <option value="auto">Auto (fallback)</option>
+              <option value="fanout">Fanout (all)</option>
+              <option value="primary">Primary only</option>
+            </select>
+          </div>
+          <button id="saveConnection" class="primary">Connect</button>
+          <button id="toggleAdminSettings" type="button" class="ghost">Admin</button>
+          <div id="connectionStatus" class="pill" data-tone="info">Disconnected</div>
+        </div>
+      </header>
+
+      <main class="shell">
+    <section id="walletDashboard" class="panel wallet-dashboard">
+      <div class="panel-head">
+        <h2>Dashboard</h2>
+        <div id="wallet3DashboardStatus" class="pill" data-tone="info">Live</div>
+      </div>
+      <div class="dashboard-grid">
+        <div class="summary-card">
+          <div class="label">Total Balance</div>
+          <div id="wallet3TotalBalance" class="summary-value">— MSC</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">USD Value</div>
+          <div id="wallet3UsdValue" class="summary-value">$—</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Staked</div>
+          <div id="wallet3Staked" class="summary-value">— MSC</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Rewards</div>
+          <div id="wallet3Rewards" class="summary-value">— MSC</div>
+        </div>
+      </div>
+      <div class="wallet-hero-grid">
+        <div class="wallet-card-pro">
+          <div class="label">MSC Wallet</div>
+          <div id="wallet3WalletAddress" class="wallet-address-large mono">No wallet connected</div>
+          <div id="wallet3WalletBalance" class="wallet-card-balance">Balance: — MSC</div>
+          <div class="row compact-actions">
+            <button class="primary" type="button" data-wallet-target="sendForm">Send</button>
+            <button class="ghost" type="button" data-wallet-target="faucetForm">Receive</button>
+            <button class="ghost" type="button" data-wallet-target="walletAccount">Copy</button>
+            <button class="ghost" type="button" data-wallet-target="showWalletQr">QR</button>
+          </div>
+        </div>
+        <div class="dashboard-feed">
+          <div class="mini-panel">
+            <div class="label">Latest Transactions</div>
+            <div id="wallet3LatestTx" class="mono">Waiting for wallet sync</div>
+          </div>
+          <div class="mini-panel">
+            <div class="label">Latest Blocks</div>
+            <div id="wallet3LatestBlocks" class="mono">—</div>
+          </div>
+          <div class="mini-panel">
+            <div class="label">Validator Health</div>
+            <div id="wallet3ValidatorHealth" class="mono">—</div>
+          </div>
+          <div class="mini-panel">
+            <div class="label">Network Status</div>
+            <div id="wallet3NetworkStatus" class="mono">—</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="walletAccount" class="panel account">
       <div class="panel-head">
         <h2>Account</h2>
         <div id="walletState" class="pill" data-tone="info">Locked</div>
@@ -228,7 +329,7 @@
       </div>
     </section>
 
-    <section class="panel actions">
+    <section id="walletActions" class="panel actions">
       <div class="panel-head">
         <h2>Assets</h2>
         <div id="balanceStatus" class="pill" data-tone="info">Idle</div>
@@ -463,7 +564,7 @@
 
       <div class="divider"></div>
 
-      <div class="tokenomics-card">
+      <div id="governanceDashboard" class="tokenomics-card">
         <div class="tokenomics-head">
           <div class="label">Tokenomics</div>
           <div id="tokenomicsSupply" class="mono">—</div>
@@ -485,7 +586,7 @@
         <h2>Validator Set</h2>
         <div id="validatorStatus" class="pill" data-tone="info">Idle</div>
       </div>
-      <div class="validator-card">
+      <div id="validatorDashboard" class="validator-card">
         <div class="validator-metrics">
           <div class="metric">
             <div class="label">RPC</div>
@@ -639,6 +740,20 @@
           <span>Estimated Fee</span>
           <span id="sendFee" class="mono">1</span>
         </div>
+        <div class="tx-preview">
+          <div>
+            <span>You Send</span>
+            <strong id="sendPreviewAmount">10 MSC</strong>
+          </div>
+          <div>
+            <span>Fee</span>
+            <strong id="sendPreviewFee">1 MSC</strong>
+          </div>
+          <div>
+            <span>Total</span>
+            <strong id="sendPreviewTotal">11 MSC</strong>
+          </div>
+        </div>
         <div class="row">
           <button class="primary" type="submit">Send</button>
           <button id="showPayQr" class="ghost" type="button">Show Payment QR</button>
@@ -758,7 +873,7 @@
       </form>
     </section>
 
-    <section class="panel activity">
+    <section id="walletHistory" class="panel activity">
       <div class="panel-head">
         <h2>History</h2>
         <div id="txStatus" class="pill" data-tone="info">Idle</div>
@@ -782,7 +897,9 @@
         </div>
       </div>
     </section>
-  </main>
+      </main>
+    </div>
+  </div>
 
   <div id="bridgeApprovalOverlay" class="bridge-overlay hidden" aria-hidden="true">
     <div class="bridge-modal" role="dialog" aria-modal="true" aria-labelledby="bridgeApprovalTitle">
@@ -897,6 +1014,6 @@
   <script src="vendor/bip39-lite.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="vendor/qrcode.js"></script>
-  <script src="msc_wallet.js?v=20260529a"></script>
+  <script src="msc_wallet.js?v=20260531a"></script>
 </body>
 </html>

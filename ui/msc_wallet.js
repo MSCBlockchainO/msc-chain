@@ -215,6 +215,8 @@ const state = {
   bridgeApprovalQueue: [],
   bridgeApprovalActive: null,
   bridgeApprovalTimer: null,
+  walletBalance: null,
+  walletBalanceCoin: "MSC",
 };
 
 let mscInjectedProvider = null;
@@ -616,6 +618,20 @@ const networkOnboardingState = el("networkOnboardingState");
 const networkActivationModel = el("networkActivationModel");
 const networkBarrierRetryMode = el("networkBarrierRetryMode");
 const networkActivationWindow = el("networkActivationWindow");
+const wallet3Network = el("wallet3Network");
+const wallet3Height = el("wallet3Height");
+const wallet3WalletChip = el("wallet3WalletChip");
+const wallet3TotalBalance = el("wallet3TotalBalance");
+const wallet3UsdValue = el("wallet3UsdValue");
+const wallet3Staked = el("wallet3Staked");
+const wallet3Rewards = el("wallet3Rewards");
+const wallet3WalletAddress = el("wallet3WalletAddress");
+const wallet3WalletBalance = el("wallet3WalletBalance");
+const wallet3LatestTx = el("wallet3LatestTx");
+const wallet3LatestBlocks = el("wallet3LatestBlocks");
+const wallet3ValidatorHealth = el("wallet3ValidatorHealth");
+const wallet3NetworkStatus = el("wallet3NetworkStatus");
+const wallet3DashboardStatus = el("wallet3DashboardStatus");
 const txList = el("txList");
 const refreshTokensBtn = el("refreshTokens");
 const refreshNFTsBtn = el("refreshNFTs");
@@ -1673,6 +1689,100 @@ const setMetricText = (node, text) => {
   if (node) node.textContent = text;
 };
 
+const formatMSCDisplay = (value, coin = "MSC") => {
+  if (value === undefined || value === null || value === "") return `— ${coin}`;
+  return `${formatNumber(value)} ${coin}`;
+};
+
+const updateWallet3Chrome = () => {
+  const wallet = state.wallet;
+  const best = state.network?.best || {};
+  const height = best.height || best.finalized_height || state.network?.finalizedHeight || "";
+  const balanceCoin = state.walletBalanceCoin || "MSC";
+  const balanceText = formatMSCDisplay(state.walletBalance, balanceCoin);
+  const stake = state.walletStatus?.stake;
+  const rewards =
+    state.walletStatus?.rewards ??
+    state.walletStatus?.pending_rewards ??
+    state.walletStatus?.claimable_rewards ??
+    state.walletStatus?.reward_balance;
+
+  setMetricText(wallet3Network, "MAINNET");
+  setMetricText(wallet3Height, height ? formatNumber(height) : "—");
+  setMetricText(wallet3WalletChip, wallet ? shortAddress(wallet.address) : "Not connected");
+  setMetricText(wallet3TotalBalance, balanceText);
+  setMetricText(wallet3WalletBalance, `Balance: ${balanceText}`);
+  setMetricText(wallet3WalletAddress, wallet ? wallet.address : "No wallet connected");
+  setMetricText(wallet3Staked, formatMSCDisplay(stake, "MSC"));
+  setMetricText(wallet3Rewards, formatMSCDisplay(rewards, "MSC"));
+
+  const usdPrice = Number(localStorage.getItem("msc_usd_price") || "0");
+  const balanceNum = Number(state.walletBalance);
+  if (wallet3UsdValue) {
+    wallet3UsdValue.textContent =
+      usdPrice > 0 && Number.isFinite(balanceNum)
+        ? `$${(balanceNum * usdPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+        : "$—";
+  }
+
+  const txText = txList?.querySelector(".log-item")?.textContent || (wallet ? "No transactions yet" : "Waiting for wallet sync");
+  setMetricText(wallet3LatestTx, txText);
+  setMetricText(
+    wallet3LatestBlocks,
+    height ? `height ${formatNumber(height)} | finalized ${formatNumber(best.finalized_height || height)}` : "—",
+  );
+  setMetricText(wallet3ValidatorHealth, networkConsensus?.textContent || "—");
+  setMetricText(wallet3NetworkStatus, networkHealth?.textContent || "—");
+  if (wallet3DashboardStatus) {
+    const connected = statusEls.connection?.dataset.tone === "success";
+    setStatus(wallet3DashboardStatus, connected ? "Live" : "Syncing", connected ? "success" : "info");
+  }
+};
+
+const setWallet3ActiveTarget = (targetId) => {
+  document.querySelectorAll("[data-wallet-target]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.walletTarget === targetId);
+  });
+};
+
+const navigateWallet3 = (targetId) => {
+  if (!targetId) return;
+  const target = el(targetId);
+  if (!target) return;
+  if (targetId === "showWalletQr" && typeof target.click === "function") {
+    target.click();
+    return;
+  }
+  setWallet3ActiveTarget(targetId);
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  const focusable = target.matches("input, textarea, select, button")
+    ? target
+    : target.querySelector("input, textarea, select, button");
+  if (focusable && typeof focusable.focus === "function") {
+    window.setTimeout(() => focusable.focus({ preventScroll: true }), 250);
+  }
+};
+
+const initWallet3Navigation = () => {
+  document.querySelectorAll("[data-wallet-target]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      navigateWallet3(button.dataset.walletTarget || "");
+    });
+  });
+
+  const searchForm = el("walletSearchForm");
+  const searchInput = el("walletGlobalSearch");
+  if (searchForm && searchInput) {
+    searchForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const query = String(searchInput.value || "").trim();
+      if (!query) return;
+      window.location.href = `explorer.html?q=${encodeURIComponent(query)}`;
+    });
+  }
+};
+
 const resetNetworkDiagnostics = (chainValue = "—") => {
   setMetricText(networkRpc, "—");
   setMetricText(networkFinalized, "—");
@@ -1696,6 +1806,7 @@ const resetNetworkDiagnostics = (chainValue = "—") => {
   if (validatorHint) {
     validatorHint.textContent = "Activation diagnostics unavailable.";
   }
+  updateWallet3Chrome();
 };
 
 const updateValidatorHintFromStatus = (status) => {
@@ -1874,6 +1985,7 @@ const renderNetworkDiagnostics = (status, chainValue = MSC_ONLY_CHAIN_ID) => {
       : `scheduled=${scheduledHeight === null ? "—" : scheduledHeight} effective=${effectiveHeight === null ? "—" : effectiveHeight}`,
   );
   updateValidatorHintFromStatus(status);
+  updateWallet3Chrome();
 };
 
 const fetchNetworkStatus = async () => {
@@ -4189,6 +4301,7 @@ const applyWalletStatusUI = () => {
   if (unstakeBtn) unstakeBtn.disabled = stake <= 0;
 
   updateStakeValidatorStatus();
+  updateWallet3Chrome();
 };
 
 const loadWalletStatus = async ({ force = false } = {}) => {
@@ -4203,6 +4316,7 @@ const loadWalletStatus = async ({ force = false } = {}) => {
     state.walletStatusError = "";
     state.lastWalletStatusSyncAt = Date.now();
     applyWalletStatusUI();
+    updateWallet3Chrome();
     return;
   }
   return runWithInFlight("loadWalletStatus", async () => {
@@ -4214,12 +4328,14 @@ const loadWalletStatus = async ({ force = false } = {}) => {
       state.walletStatusError = "";
       state.lastWalletStatusSyncAt = Date.now();
       applyWalletStatusUI();
+      updateWallet3Chrome();
     } catch (err) {
       applyRateLimitCooldown(err);
       const message = await formatError(err);
       state.walletStatus = null;
       state.walletStatusError = message;
       applyWalletStatusUI();
+      updateWallet3Chrome();
     }
   });
 };
@@ -4386,11 +4502,13 @@ const loadTxHistory = async ({ force = false } = {}) => {
       }
       state.lastTxHistorySyncAt = Date.now();
       setStatus(statusEls.tx, "Updated", "success");
+      updateWallet3Chrome();
     } catch (err) {
       applyRateLimitCooldown(err);
       txList.innerHTML = "<div class=\"log-item\">Failed to load transactions</div>";
       const message = await formatError(err);
       setStatus(statusEls.tx, message, "error");
+      updateWallet3Chrome();
     }
   });
 };
@@ -4453,6 +4571,7 @@ const updateWalletUI = () => {
       });
   }
 
+  updateWallet3Chrome();
   syncInjectedProviderState({ emitAccounts: true, emitChain: false });
 };
 
@@ -4865,12 +4984,17 @@ const updateFeeLabels = () => {
   const stakeAmount = parseInt(el("stakeAmount").value, 10) || 0;
   const unstakeAmountEl = el("unstakeAmount");
   const unstakeAmount = unstakeAmountEl ? parseInt(unstakeAmountEl.value, 10) || 0 : 0;
-  el("sendFee").textContent = computeTxFee(sendAmount);
+  const sendFee = computeTxFee(sendAmount);
+  const sendCoin = normalizeCoinSymbolInput(el("sendCoin")?.value || "") || "MSC";
+  el("sendFee").textContent = sendFee;
   el("stakeFee").textContent = computeTxFee(stakeAmount);
   const unstakeFeeEl = el("unstakeFee");
   if (unstakeFeeEl) {
     unstakeFeeEl.textContent = computeTxFee(unstakeAmount);
   }
+  setMetricText(el("sendPreviewAmount"), `${formatNumber(sendAmount)} ${sendCoin}`);
+  setMetricText(el("sendPreviewFee"), `${formatNumber(sendFee)} ${sendCoin}`);
+  setMetricText(el("sendPreviewTotal"), `${formatNumber(sendAmount + sendFee)} ${sendCoin}`);
 };
 
 const refreshBalance = async ({ quick = false, force = false } = {}) => {
@@ -4905,8 +5029,11 @@ const refreshBalance = async ({ quick = false, force = false } = {}) => {
 	          `/balance?address=${encodeURIComponent(address)}&coin=${encodeURIComponent(coin)}&state=finalized`,
 	        );
 	        state.lastQuickBalanceSyncAt = Date.now();
+	        state.walletBalance = bal.balance;
+	        state.walletBalanceCoin = bal.coin || coin;
 	        el("balanceResult").innerHTML = `<div class="log-item">Finalized: ${bal.balance} ${bal.coin || coin}</div>`;
 	        setStatus(statusEl, "Balance updated", "success");
+	        updateWallet3Chrome();
 	        return;
 	      }
 
@@ -4967,7 +5094,10 @@ const refreshBalance = async ({ quick = false, force = false } = {}) => {
 
       state.lastFullBalanceSyncAt = Date.now();
       state.lastQuickBalanceSyncAt = state.lastFullBalanceSyncAt;
+      state.walletBalance = consensus;
+      state.walletBalanceCoin = coin;
       el("balanceResult").innerHTML = `<div class="log-item">${consensusLine}</div>${rows.join("")}`;
+      updateWallet3Chrome();
       setStatus(
         statusEl,
         successCount ? "Balance updated" : "Balance failed",
@@ -6146,6 +6276,7 @@ const init = () => {
   updateWalletUI();
   setActiveNFTTab(state.nftTab);
   updateFeeLabels();
+  initWallet3Navigation();
   if (state.wallet) {
     refreshBalance({ force: true });
   }
@@ -6335,6 +6466,7 @@ const init = () => {
   refreshTxsBtn.addEventListener("click", () => loadTxHistory({ force: true }));
 
   el("sendAmount").addEventListener("input", updateFeeLabels);
+  el("sendCoin").addEventListener("input", updateFeeLabels);
   el("stakeAmount").addEventListener("input", updateFeeLabels);
   el("unstakeAmount").addEventListener("input", updateFeeLabels);
   el("balanceCoin").addEventListener("change", () => refreshBalance({ force: true }));

@@ -29,7 +29,7 @@ func TestWalletPublicGatewayIgnoresUnsafeSavedRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read wallet html: %v", err)
 	}
-	if !strings.Contains(string(html), "msc_wallet.js?v=20260527a") {
+	if !strings.Contains(string(html), "msc_wallet.js?v=20260531a") {
 		t.Fatalf("wallet js cache buster was not updated")
 	}
 }
