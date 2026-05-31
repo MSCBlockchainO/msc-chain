@@ -3178,6 +3178,21 @@ func (n *Node) handleExecutionMismatchPolicy(signer string, epoch uint64, expect
 
 func (n *Node) handleExecutionEquivocationPolicy(signer string, epoch uint64, execHash string) {
 	n.resetExecutionMismatchStrike(signer)
+	if n.isCorePendingAtHeight(signer, epoch) {
+		if DebugConsensus {
+			fmt.Printf("[PENALTY-GATE] height=%d enforce=false reason=core_pending policy=exec_equivocation signer=%s\n",
+				epoch, ShortID(signer))
+		}
+		return
+	}
+	if enforce, reason := n.canEnforceConsensusPenalty(epoch); !enforce {
+		if DebugConsensus {
+			fmt.Printf("[PENALTY-GATE] height=%d enforce=false reason=%s policy=exec_equivocation signer=%s\n",
+				epoch, reason, ShortID(signer))
+		}
+		n.maybeSyncToBestObservedHeight("exec_equivocation_no_penalty")
+		return
+	}
 	n.RecordMisbehavior(signer, "exec_equivocation_signed", int(epoch), execHash)
 	n.disconnectValidatorPeers(signer, "exec_equivocation")
 	n.SlashValidator(signer)
@@ -3393,10 +3408,13 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 	if previousScope == "" || previousChoice == "" || previousScope == incomingScope {
 		return false
 	}
-	if incomingRound <= previousRound || incomingRound-previousRound < localExecVoteStaleRoundReleaseGap {
+	if incomingRound <= previousRound {
 		return false
 	}
 	if frozen := strings.TrimSpace(ExecPool.frozen[epoch][previousScope]); frozen != "" {
+		return false
+	}
+	if execPoolScopeHasQuorumLocked(epoch, previousScope) {
 		return false
 	}
 	if byHash, ok := ExecPool.pool[epoch]; ok {
@@ -3443,6 +3461,29 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 		}
 	}
 	return true
+}
+
+func execPoolScopeHasQuorumLocked(epoch uint64, scope string) bool {
+	if epoch == 0 || strings.TrimSpace(scope) == "" {
+		return false
+	}
+	required := strictExecSupermajority(len(GenesisValidatorPubKeys))
+	if required <= 0 {
+		return false
+	}
+	maxCount := 0
+	if byHash, ok := ExecPool.pool[epoch]; ok {
+		prefix := scope + "|"
+		for key, results := range byHash {
+			if !strings.HasPrefix(key, prefix) {
+				continue
+			}
+			if len(results) > maxCount {
+				maxCount = len(results)
+			}
+		}
+	}
+	return maxCount >= required
 }
 
 func freezeExecPool(epoch uint64, proposalKey string, execHash string) {

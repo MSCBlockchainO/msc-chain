@@ -295,7 +295,7 @@ func TestRecordExecResultGlobalRejectsSignerSameRoundEquivocationAcrossProposals
 	}
 }
 
-func TestRecordExecResultGlobalRejectsSignerCrossRoundEquivocationAcrossProposals(t *testing.T) {
+func TestRecordExecResultGlobalAllowsHigherRoundAfterNonQuorumChoice(t *testing.T) {
 	resetExecPoolForTest(t)
 
 	epoch := uint64(89)
@@ -316,11 +316,57 @@ func TestRecordExecResultGlobalRejectsSignerCrossRoundEquivocationAcrossProposal
 		BlockHash:  "block-b",
 		Signer:     "A",
 		ResultHash: "root-b",
+	}); !ok || equivocation || count != 1 {
+		t.Fatalf("expected higher-round non-quorum choice release, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}
+	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 0 {
+		t.Fatalf("non-quorum lower-round proposal should lose released vote, got %d", got)
+	}
+	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 1 {
+		t.Fatalf("higher-round proposal should gain released vote, got %d", got)
+	}
+}
+
+func TestRecordExecResultGlobalKeepsQuorumChoiceLockedAcrossRounds(t *testing.T) {
+	resetExecPoolForTest(t)
+
+	oldGenesisValidatorPubKeys := GenesisValidatorPubKeys
+	GenesisValidatorPubKeys = map[string]ed25519.PublicKey{
+		"A": make(ed25519.PublicKey, ed25519.PublicKeySize),
+		"B": make(ed25519.PublicKey, ed25519.PublicKeySize),
+		"C": make(ed25519.PublicKey, ed25519.PublicKeySize),
+		"D": make(ed25519.PublicKey, ed25519.PublicKeySize),
+	}
+	t.Cleanup(func() { GenesisValidatorPubKeys = oldGenesisValidatorPubKeys })
+
+	epoch := uint64(89)
+	first := proposalVoteKey(epoch, 1, "block-a", "", "root-a")
+	higher := proposalVoteKey(epoch, 4, "block-b", "", "root-b")
+	for _, signer := range []string{"A", "B", "C"} {
+		if count, ok, equivocation := recordExecResultGlobal(epoch, first, "root-a", "", ExecutionResult{
+			Height:     epoch,
+			Round:      1,
+			BlockHash:  "block-a",
+			Signer:     signer,
+			ResultHash: "root-a",
+		}); !ok || equivocation || count <= 0 {
+			t.Fatalf("expected quorum seed vote for %s, got count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
+		}
+	}
+	if count, ok, equivocation := recordExecResultGlobal(epoch, higher, "root-b", "", ExecutionResult{
+		Height:     epoch,
+		Round:      4,
+		BlockHash:  "block-b",
+		Signer:     "A",
+		ResultHash: "root-b",
 	}); ok || !equivocation || count != 0 {
-		t.Fatalf("expected higher-round conflicting vote to be equivocation, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
+		t.Fatalf("expected quorum lower-round choice to reject conflict as equivocation, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}
+	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 3 {
+		t.Fatalf("quorum proposal should retain votes, got %d", got)
 	}
 	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 0 {
-		t.Fatalf("conflicting higher-round proposal should not gain a vote, got %d", got)
+		t.Fatalf("higher-round conflict should not gain vote, got %d", got)
 	}
 }
 

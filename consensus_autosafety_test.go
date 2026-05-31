@@ -62,6 +62,26 @@ func TestCanEnforceConsensusPenaltyConvergedOnly(t *testing.T) {
 	}
 }
 
+func TestExecutionEquivocationPenaltyGatedDuringRecomputePause(t *testing.T) {
+	oldMode := ConsensusPenaltyEnforceMode
+	ConsensusPenaltyEnforceMode = "converged_only"
+	t.Cleanup(func() {
+		ConsensusPenaltyEnforceMode = oldMode
+	})
+
+	n := newConsensusAutoSafetyNode([]string{"A", "B", "C", "D"})
+	n.MisbehaviorLog = make(map[string][]SlashEvidence)
+	n.recomputePauseMu.Lock()
+	n.recomputePauseUntil = time.Now().Add(2 * time.Second)
+	n.recomputePauseMu.Unlock()
+
+	n.handleExecutionEquivocationPolicy("B", 1, "exec-hash")
+
+	if got := len(n.MisbehaviorLog["B"]); got != 0 {
+		t.Fatalf("equivocation evidence should be gated during recompute pause, got %d", got)
+	}
+}
+
 func TestVerifyBlockRoundAwareProposerValidation(t *testing.T) {
 	oldResultMode := ResultGossipOnly
 	ResultGossipOnly = true
