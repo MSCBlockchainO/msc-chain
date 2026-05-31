@@ -11095,7 +11095,7 @@ func (n *Node) maybeSyncToBestObservedHeightNow(reason string) {
 		return
 	}
 	peerCount := len(n.Host.Network().Peers())
-	if peerCount < syncMinPeers() {
+	if peerCount == 0 {
 		return
 	}
 	quorumHeight, votes, required, ok := n.majorityHeartbeatHeight()
@@ -11368,7 +11368,10 @@ func (n *Node) maybeSnapshotSyncToHeight(targetHeight uint64, reason string, vot
 	reasonLower := strings.ToLower(strings.TrimSpace(reason))
 	if !n.snapshotSessionActive() {
 		peerCount := len(n.Host.Network().Peers())
-		if peerCount < syncMinPeers() {
+		if peerCount == 0 {
+			return
+		}
+		if peerCount < syncMinPeers() && syncStageUsesSnapshotTransfer(syncCatchupStage(localHeight, targetHeight)) {
 			return
 		}
 	}
