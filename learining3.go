@@ -11839,8 +11839,24 @@ func (n *Node) startSyncStallWatchdog(ctx context.Context) {
 					}
 				}
 			}
+			if quorumHeight, _, _, ok := n.majorityHeartbeatHeight(); ok && quorumHeight > target {
+				target = quorumHeight
+			}
+			if observedHeight, observedVotes := n.bestObservedSyncHeight(); observedVotes > 0 && observedHeight > target {
+				target = observedHeight
+			}
+			if n.Consensus != nil && target > 0 {
+				n.Consensus.mu.Lock()
+				if target > n.Consensus.SyncTarget {
+					n.Consensus.SyncTarget = target
+				}
+				n.Consensus.mu.Unlock()
+			}
 			lag := syncLagBlocks(local, target)
 			if !syncing || target == 0 || lag == 0 {
+				if syncing && target > 0 && lag == 0 {
+					n.maybeExitSyncMode("sync_watchdog_target_reached")
+				}
 				n.syncMu.Lock()
 				n.syncStallSeconds = 0
 				n.syncLastObservedHeight = local
@@ -23783,7 +23799,14 @@ func StartNode(
 	node.replayValidatorFreezeJournal()
 	node.syncFrozenValidatorSetHashesFromChain()
 	node.snapshotEpochValidators(node.currentEpoch())
-	node.applyStartupConsensusRecovery()
+	startupConsensusRecovery := func() {
+		node.applyStartupConsensusRecovery()
+	}
+	if node.Role == "validator" {
+		startupConsensusRecovery()
+	} else {
+		node.SafeGo("startup_consensus_recovery", startupConsensusRecovery)
+	}
 	if chainHeight := uint64(node.Blockchain.Height()); node.recoverDueValidatorTransitionsAtStartup(chainHeight) {
 		log.Printf("[STARTUP-RECOVERY] applied due validator transition height=%d", chainHeight)
 	}

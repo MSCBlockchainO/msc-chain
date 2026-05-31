@@ -90,6 +90,7 @@ const (
 	consensusPublishTimeout         = 500 * time.Millisecond
 )
 
+var blockRequestServeSem = make(chan struct{}, 64)
 var syncPeerRequestTimeoutOverride time.Duration
 
 type blockRequestPhaseError struct {
@@ -10295,7 +10296,18 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 			n.recordPeerRateLimitDrop(peerAddr, "block_request_range")
 			req.To = req.From + maxBlocks
 		}
-		go n.sendBlocksToPeer(peerAddr, int(req.From), int(req.To))
+		select {
+		case blockRequestServeSem <- struct{}{}:
+			go func(from, to uint64) {
+				defer func() { <-blockRequestServeSem }()
+				n.sendBlocksToPeer(peerAddr, int(from), int(to))
+			}(req.From, req.To)
+		default:
+			n.recordPeerRateLimitDrop(peerAddr, "block_request_concurrency")
+			if DebugNet || DebugSync {
+				fmt.Printf("[RATE-LIMIT] block request concurrency full peer=%s range=%d-%d\n", peerAddr, req.From, req.To)
+			}
+		}
 	case MsgBlocksBatch:
 		var resp BlockResponse
 		if err := json.Unmarshal(msg.Data, &resp); err != nil {
