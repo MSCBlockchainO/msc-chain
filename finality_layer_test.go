@@ -230,6 +230,35 @@ func TestFinalityArtifactsPersistSeparateMainnetAnchors(t *testing.T) {
 	}
 }
 
+func TestFullNodeSyncThrottlesFinalityArtifactFiles(t *testing.T) {
+	validators := canonicalValidatorIDs([]string{"A", "B", "C", "D"})
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	node.Role = "full"
+	node.Consensus = &ConsensusState{Syncing: true, Paused: true, SyncTarget: 100}
+
+	block := finalityLayerTestBlock(t, node, validators)
+	block.ID = 7
+	block.BlockTime = LogicalTimeForEpochTick(block.ID, TickFinalize)
+	block.Timestamp = int64(SystemTimeUnits(block.BlockTime))
+	clearFinalityCommitments(&block)
+	node.attachFinalityCommitments(&block)
+	block.BlockHash = HashBlock(block)
+	node.attachFinalityCertificate(&block)
+
+	if finalityArtifactCheckpointBoundary(block.ID) {
+		t.Fatalf("test block unexpectedly lands on finality artifact boundary: %d", block.ID)
+	}
+	if err := node.persistFinalityCheckpoint(block); err != nil {
+		t.Fatalf("persist finality checkpoint: %v", err)
+	}
+	if _, ok, err := node.loadPersistedFinalityCheckpoint(block.ID); err != nil || !ok {
+		t.Fatalf("db finality checkpoint missing ok=%t err=%v", ok, err)
+	}
+	if count := node.finalityArtifactFileCount(block.ID); count != 0 {
+		t.Fatalf("syncing full node wrote %d finality artifact files, want 0", count)
+	}
+}
+
 func TestFinalityArtifactsRejectDiskOnlyAnchorRewrite(t *testing.T) {
 	validators := canonicalValidatorIDs([]string{"A", "B", "C", "D"})
 	node := newTestNodeForResultGossip(t, t.TempDir(), validators)

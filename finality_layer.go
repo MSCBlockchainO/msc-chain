@@ -635,6 +635,17 @@ func finalityArtifactFilePath(dataDir, nodeID, dir string, height uint64) string
 	return filepath.Join(nodeDataPath(dataDir, nodeID), dir, fmt.Sprintf("epoch_%020d.json", height))
 }
 
+func finalityArtifactCheckpointBoundary(height uint64) bool {
+	if height <= 1 {
+		return true
+	}
+	interval := syncCheckpointIntervalBlocks()
+	if interval == 0 {
+		return true
+	}
+	return height%interval == 0
+}
+
 func writeFinalityArtifactJSON(path string, value any) error {
 	if strings.TrimSpace(path) == "" {
 		return errors.New("finality_artifact_path_empty")
@@ -662,6 +673,41 @@ func loadFinalityArtifactJSON(path string, out any) (bool, error) {
 		return true, err
 	}
 	return true, nil
+}
+
+func (n *Node) finalityArtifactFileCount(height uint64) int {
+	if n == nil || height == 0 {
+		return 0
+	}
+	count := 0
+	for _, path := range finalityArtifactPaths(n.DataDir, n.ID, height) {
+		if _, err := os.Stat(path); err == nil {
+			count++
+		}
+	}
+	return count
+}
+
+func (n *Node) shouldPersistFinalityArtifactFiles(height uint64) bool {
+	if n == nil || height == 0 {
+		return true
+	}
+	if finalityArtifactCheckpointBoundary(height) {
+		return true
+	}
+	switch normalizeNodeRole(n.Role) {
+	case "full", "light":
+		syncing := false
+		if n.Consensus != nil {
+			n.Consensus.mu.Lock()
+			syncing = n.Consensus.Syncing || n.Consensus.Paused || n.Consensus.syncInFlight
+			n.Consensus.mu.Unlock()
+		}
+		if syncing {
+			return n.finalityArtifactFileCount(height) > 0
+		}
+	}
+	return true
 }
 
 func verifyEpochAnchorArtifactMatchesBlock(record EpochAnchorRecord, block Block) error {
@@ -840,6 +886,9 @@ func (n *Node) persistFinalityArtifacts(block Block) error {
 	}
 	if err := n.verifyFinalityArtifactsForRepair(block); err != nil {
 		return err
+	}
+	if !n.shouldPersistFinalityArtifactFiles(block.ID) {
+		return nil
 	}
 	artifacts := []struct {
 		dir   string
