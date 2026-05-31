@@ -23796,19 +23796,19 @@ func StartNode(
 
 	node.logicalMu.Unlock()
 
-	node.replayValidatorFreezeJournal()
-	node.syncFrozenValidatorSetHashesFromChain()
-	node.snapshotEpochValidators(node.currentEpoch())
 	startupConsensusRecovery := func() {
+		node.replayValidatorFreezeJournal()
+		node.syncFrozenValidatorSetHashesFromChain()
+		node.snapshotEpochValidators(node.currentEpoch())
 		node.applyStartupConsensusRecovery()
+		if chainHeight := uint64(node.Blockchain.Height()); node.recoverDueValidatorTransitionsAtStartup(chainHeight) {
+			log.Printf("[STARTUP-RECOVERY] applied due validator transition height=%d", chainHeight)
+		}
 	}
 	if node.Role == "validator" {
 		startupConsensusRecovery()
 	} else {
 		node.SafeGo("startup_consensus_recovery", startupConsensusRecovery)
-	}
-	if chainHeight := uint64(node.Blockchain.Height()); node.recoverDueValidatorTransitionsAtStartup(chainHeight) {
-		log.Printf("[STARTUP-RECOVERY] applied due validator transition height=%d", chainHeight)
 	}
 	if err := node.initializeCoreRegistry(); err != nil {
 		log.Printf("[FATAL] core registry initialization failed for %s: %v", node.ID, err)
