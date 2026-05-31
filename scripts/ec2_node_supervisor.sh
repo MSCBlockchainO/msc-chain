@@ -23,6 +23,8 @@ OOM_SCORE_ADJ="${OOM_SCORE_ADJ:--500}"
 GOMAXPROCS="${GOMAXPROCS:-}"
 GOMEMLIMIT="${GOMEMLIMIT:-}"
 HEALTHCHECK_SECONDS="${HEALTHCHECK_SECONDS:-0}"
+HEALTHCHECK_TIMEOUT_SECONDS="${HEALTHCHECK_TIMEOUT_SECONDS:-8}"
+FULLNODE_ACTIVITY_GRACE_SECONDS="${FULLNODE_ACTIVITY_GRACE_SECONDS:-180}"
 STARTUP_HEALTH_GRACE_SECONDS="${STARTUP_HEALTH_GRACE_SECONDS:-300}"
 UNHEALTHY_RESTART_SECONDS="${UNHEALTHY_RESTART_SECONDS:-120}"
 START_BACKOFF_SECONDS="${START_BACKOFF_SECONDS:-3}"
@@ -134,7 +136,25 @@ node_healthy() {
       addr="127.0.0.1${addr}"
     fi
   fi
-  curl -fsS --max-time 3 "http://${addr}/status" >/dev/null 2>&1
+  if curl -fsS --max-time "$HEALTHCHECK_TIMEOUT_SECONDS" "http://${addr}/status" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  # Full/light nodes can temporarily stall RPC while catching up or serving public
+  # requests. Do not churn them if the process is alive and logs are still moving.
+  if [[ "$ROLE" == "full" || "$ROLE" == "light" ]]; then
+    if [[ -n "${NODE_PID:-}" ]] && kill -0 "$NODE_PID" >/dev/null 2>&1 && [[ -f "$NODE_LOG" ]]; then
+      local now
+      local mtime
+      now="$(date +%s)"
+      mtime="$(stat -c %Y "$NODE_LOG" 2>/dev/null || printf '0')"
+      if (( now - mtime <= FULLNODE_ACTIVITY_GRACE_SECONDS )); then
+        return 0
+      fi
+    fi
+  fi
+
+  return 1
 }
 
 echo "$$" > "$SUPERVISOR_PID_FILE"
