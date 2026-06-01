@@ -311,7 +311,7 @@ open_browser = true
 timeout_seconds = 600
 challenge_ttl_seconds = 180
 token_ttl_seconds = 86400
- core_validators = ["A","B","C","D"]
+core_validators = ["A","B","C","D"]
 
 [core]
 registry_path = "core_validators.json"
