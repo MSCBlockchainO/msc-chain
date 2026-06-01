@@ -3,9 +3,92 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"runtime/debug"
+	"strconv"
+	"strings"
 	"time"
 )
+
+const runtimeGuardMiB int64 = 1024 * 1024
+
+func runtimeAutoMemoryLimitMiB(totalMiB int64, role string) int64 {
+	if totalMiB < 2048 {
+		return 0
+	}
+	role = strings.ToLower(strings.TrimSpace(role))
+	var limit int64
+	if role == "full" || role == "light" {
+		limit = totalMiB * 40 / 100
+		if limit > 3072 {
+			limit = 3072
+		}
+	} else {
+		limit = totalMiB * 45 / 100
+		if limit > 3584 {
+			limit = 3584
+		}
+	}
+	if limit < 1536 {
+		limit = 1536
+	}
+	return limit
+}
+
+func hostMemoryTotalMiB() int64 {
+	raw, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if !strings.HasPrefix(line, "MemTotal:") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			return 0
+		}
+		kib, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil || kib <= 0 {
+			return 0
+		}
+		return kib / 1024
+	}
+	return 0
+}
+
+func configureRuntimeMemoryGuard(role string) {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("MSC_DISABLE_RUNTIME_MEMORY_GUARD")), "1") {
+		return
+	}
+	limitMiB := int64(0)
+	source := "auto"
+	if raw := strings.TrimSpace(os.Getenv("MSC_RUNTIME_MEMORY_LIMIT_MIB")); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err == nil && parsed > 0 {
+			limitMiB = parsed
+			source = "env"
+		}
+	}
+	if limitMiB == 0 {
+		limitMiB = runtimeAutoMemoryLimitMiB(hostMemoryTotalMiB(), role)
+	}
+	if limitMiB <= 0 {
+		return
+	}
+	desired := limitMiB * runtimeGuardMiB
+	current := debug.SetMemoryLimit(-1)
+	if current <= 0 || current > desired || strings.TrimSpace(os.Getenv("GOMEMLIMIT")) == "" {
+		debug.SetMemoryLimit(desired)
+		log.Printf("[RUNTIME-GUARD] memory_limit=%dMiB role=%s source=%s", limitMiB, role, source)
+	} else {
+		log.Printf("[RUNTIME-GUARD] memory_limit_existing=%dMiB role=%s", current/runtimeGuardMiB, role)
+	}
+	if strings.TrimSpace(os.Getenv("GOGC")) == "" {
+		debug.SetGCPercent(75)
+		log.Printf("[RUNTIME-GUARD] gc_percent=75")
+	}
+}
 
 // SafeGo runs fn in a goroutine and recovers panics so the process stays alive.
 func SafeGo(name string, fn func()) {

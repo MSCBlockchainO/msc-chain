@@ -32458,6 +32458,7 @@ func main() {
 			*role = "auto"
 		}
 	}
+	configureRuntimeMemoryGuard(*role)
 	*role = normalizeRequestedNodeRole(*role)
 
 	cfgPath, cfgPathErr := resolveConfigPath(*configPath, *nodeID, configExplicit)
