@@ -792,6 +792,12 @@ Validator key commands:
 
 MPC validator key ceremony commands:
 
+Use MPC when the validator private key must not live as one complete hot file on disk. The validator still has one consensus public key, but signing is performed by threshold shares.
+
+### New MPC Validator Key
+
+Use this only for a new validator whose consensus public key is not already registered on-chain:
+
 ```powershell
 $env:MSC_MPC_SHARE_PASSWORD = "<strong-share-password>"
 .\msc-node.exe validator mpc-keygen --validator F --threshold 2 --participants 3 --outdir data/F/mpc
@@ -799,15 +805,7 @@ $env:MSC_MPC_SHARE_PASSWORD = "<strong-share-password>"
 .\msc-node.exe validator create-mpc --wallet .\.msc\secure_wallet.json --validator F --mpc-pub data/F/mpc/validator.pub --amount 100 --rpc https://mscblockexplorer.in
 ```
 
-For an existing validator whose public key is already registered on-chain, migrate the existing `validator.sec` into MPC shares instead of generating a new validator public key:
-
-```powershell
-$env:MSC_VALIDATOR_PASSWORD = "<existing-validator-key-password>"
-$env:MSC_MPC_SHARE_PASSWORD = "<strong-share-password>"
-.\msc-node.exe validator mpc-import-key --id A --datadir runtime-data/distributed/A --threshold 2 --participants 3 --outdir runtime-data/distributed/A/mpc
-```
-
-The built-in `mpc-keygen` creates:
+This creates a fresh validator public key and three encrypted MPC shares:
 
 ```text
 data/F/mpc/validator.pub
@@ -816,23 +814,47 @@ data/F/mpc/share2.sec
 data/F/mpc/share3.sec
 ```
 
-It does not write `validator.sec`. The full validator private key is not stored on disk by the MSC node. The encrypted share files are enough to test the MPC external-signer path:
+The threshold `2/3` means any two shares can sign, but one share alone cannot.
+
+### Existing Registered Validator MPC Migration
+
+Use this for existing validators such as `A`, `B`, `C`, and `D`, whose public keys are already registered in genesis or on-chain validator state. Do not run `mpc-keygen` for these validators, because that creates a different validator public key and causes a registry mismatch.
 
 ```powershell
+$env:MSC_VALIDATOR_PASSWORD = "<existing-validator-key-password>"
+$env:MSC_MPC_SHARE_PASSWORD = "<strong-share-password>"
+.\msc-node.exe validator mpc-import-key --id A --datadir runtime-data/distributed/A --threshold 2 --participants 3 --outdir runtime-data/distributed/A/mpc
+```
+
+`mpc-import-key` decrypts the existing `validator.sec`, splits the same Ed25519 validator seed into encrypted MPC shares, and preserves the exact same consensus public key.
+
+Verify the migrated public key:
+
+```powershell
+.\msc-node.exe validator-pubkey --id A --datadir runtime-data/distributed/A
+.\msc-node.exe validator mpc-pubkey --pub runtime-data/distributed/A/mpc/validator.pub
+```
+
+Both commands must return the same public key.
+
+### MPC Signing Smoke Test
+
+The built-in share files are enough to test the external-signer path:
+
+```powershell
+$env:MSC_MPC_SHARE_PASSWORD = "<strong-share-password>"
 .\msc-node.exe validator mpc-sign --shares data/F/mpc/share1.sec,data/F/mpc/share2.sec
 ```
 
-For production large validators, replace the built-in share-file signer with an audited MPC/DKG signer cluster. The chain-facing contract stays the same: provide one validator public key, and return a valid Ed25519 threshold signature for MSC's canonical signing payload.
+For non-interactive servers, use a password file:
 
-EC2 node-local MPC enablement helper:
-
-```bash
-cd ~/msc-chain
-scripts/enable_mpc_signing.sh A 2 3
-MSC_ALLOW_CONFIG_OVERRIDE=1 ./msc-node --mode=full --role=validator --id=A --port=7001 --datadir=runtime-data/distributed/A --rpcaddr 127.0.0.1:26657 --config runtime-data/distributed/A/config.mpc.toml
+```powershell
+.\msc-node.exe validator mpc-sign --shares runtime-data/distributed/A/mpc/share1.sec,runtime-data/distributed/A/mpc/share2.sec --password-file runtime-data/distributed/A/mpc/share.pass
 ```
 
-The helper writes node-local files only:
+### EC2 MPC Enablement Helper
+
+On EC2, the helper creates node-local MPC files and a node-local config:
 
 ```text
 runtime-data/distributed/A/mpc/validator.pub
@@ -843,7 +865,33 @@ runtime-data/distributed/A/mpc/share.pass
 runtime-data/distributed/A/config.mpc.toml
 ```
 
-Do not commit `share*.sec` or `share.pass`. Each validator must generate its own MPC public key and shares. Never reuse one node's MPC config on another validator.
+```bash
+cd ~/msc-chain
+
+# Existing validator migration requires the current validator key password.
+export MSC_VALIDATOR_PASSWORD="<existing-validator-key-password>"
+scripts/enable_mpc_signing.sh A 2 3
+
+# Manual startup example. The supervisor sets MSC_ALLOW_CONFIG_OVERRIDE automatically.
+MSC_ALLOW_CONFIG_OVERRIDE=1 ./msc-node --mode=full --role=validator --id=A --port=7001 --datadir=runtime-data/distributed/A --rpcaddr 127.0.0.1:26657 --config runtime-data/distributed/A/config.mpc.toml
+```
+
+The running node should report MPC signer mode:
+
+```bash
+curl -s http://127.0.0.1:26657/status | jq '.validator_signer_mode, .validator_signer_ready'
+```
+
+Expected:
+
+```text
+"mpc"
+true
+```
+
+Do not commit `share*.sec`, `share.pass`, or node-local `config.mpc.toml`. Each validator must generate or migrate its own MPC public key and shares. Never reuse one node's MPC config on another validator.
+
+For production large validators, replace the built-in share-file signer with an audited MPC/DKG signer cluster. The chain-facing contract stays the same: provide one validator public key, and return a valid Ed25519 threshold signature for MSC's canonical signing payload.
 
 HSM-backed validator startup:
 
