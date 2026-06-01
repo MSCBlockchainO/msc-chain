@@ -716,7 +716,70 @@ Mainnet recommended implementation order:
 5. Add corruption, stale proof, wrong-root, and wrong-validator-set tests.
 6. Add mobile restore test from only checkpoint plus headers plus proofs.
 
-## 17. RPC, Explorer, And Wallet
+## 17. Cross Chain Bridge Framework
+
+MSC Chain includes a disabled-by-default cross-chain bridge framework for future IBC-style interoperability, external asset verification, and trust-minimized bridge proof handling. The framework is intentionally verification-first: it exposes bridge status and proof verification APIs, but it does not mint, unlock, or release external assets unless a separately audited governance activation enables an execution path.
+
+The bridge framework has three layers:
+
+1. External chain registry: explicit chain ID, name, chain type, trust model, confirmation floor, and optional light-client endpoint.
+2. External asset registry: explicit denom, origin chain, origin asset, local denom, decimals, and escrow policy.
+3. Bridge proof verifier: validates registered chain, registered asset, replay key, confirmation count, light-client/Merkle proof requirements, and oracle quorum syntax where configured.
+
+Bridge configuration is in `config.toml`:
+
+```toml
+[bridge]
+enabled = false
+mode = "verification_only"
+ibc_style_enabled = false
+light_client_required = true
+required_confirmations = 64
+oracle_quorum = 3
+chains = []
+assets = []
+```
+
+Supported trust models:
+
+| Trust model | Intended use |
+| --- | --- |
+| `light_client` | Preferred path using header chain plus Merkle/SPV proof |
+| `oracle_quorum` | Transitional path requiring threshold bridge attestations |
+| `hybrid` | Requires both light-client evidence and oracle quorum policy |
+
+The mainnet safety rule is simple:
+
+```text
+No external asset mint or unlock without explicit chain registry,
+asset registry, replay protection, confirmation floor, and verified proof.
+```
+
+Bridge proof APIs:
+
+```text
+GET  /bridge/status
+POST /bridge/verify
+GET  /v1/bridge/status
+POST /v1/bridge/verify
+```
+
+The verifier returns `accepted=false` for disabled bridge mode, unregistered source chains, unregistered assets, insufficient confirmations, missing replay protection, and missing light-client proof when `light_client_required=true`.
+
+Prometheus bridge metrics:
+
+```text
+msc_bridge_enabled
+msc_bridge_ibc_style_enabled
+msc_bridge_light_client_required
+msc_bridge_registered_chains
+msc_bridge_registered_assets
+msc_bridge_oracle_quorum
+```
+
+Future IBC-style work should add client, connection, channel, packet, acknowledgement, timeout, and relayer state machines. External asset execution should remain disabled on mainnet until an independent bridge audit, replay tests, fork tests, oracle compromise tests, and governance launch vote are complete.
+
+## 18. RPC, Explorer, And Wallet
 
 MSC Chain exposes RPC endpoints for node status, block data, transaction submission, tokenomics, governance, explorer views, wallet interactions, DTL token data, and observability.
 
@@ -731,7 +794,7 @@ The repository includes:
 
 Production public access should terminate at a full-node gateway, not a validator RPC port. Validator RPC should remain private or bound to localhost. Public gateway deployments should use HTTPS, nginx rate limits, node RPC limits, and private metrics scraping.
 
-## 18. Security Baseline
+## 19. Security Baseline
 
 MSC Chain's security model combines consensus rules, node hardening, operator policy, and public gateway separation.
 
@@ -776,7 +839,7 @@ hsm_require_user_presence = true
 
 For production, public validator RPC exposure should be avoided.
 
-## 19. Governance
+## 20. Governance
 
 MSC Chain currently has four governance surfaces:
 
@@ -789,7 +852,7 @@ Treasury operations are disabled on mainnet unless explicitly enabled and author
 
 Protocol upgrades are versioned and activated by height. Rollbacks are rejected unless the proposal explicitly declares rollback approval and receives strict quorum. Emergency upgrades can use a shorter activation path, but still require strict quorum. Emergency pause proposals are bounded, observable through RPC and Prometheus, and intended for operator coordination during incident response.
 
-## 20. Testing And Mainnet Readiness
+## 21. Testing And Mainnet Readiness
 
 The repository includes extensive tests for:
 
@@ -828,7 +891,7 @@ Mainnet chaos tooling tests survival under:
 
 The Tier 1 survival pass condition is no finality stall beyond configured gap, reachable quorum above minimum, bounded finalized lag, bounded height lag, and no finalized block hash divergence across reachable nodes.
 
-## 21. Limitations And Risk Statement
+## 22. Limitations And Risk Statement
 
 MSC Chain is an active implementation. The whitepaper describes the repository's current protocol direction and mainnet configuration, not a completed third-party security audit.
 
@@ -845,7 +908,7 @@ Known risks and limitations:
 - trustless mobile wallet verification requires the light client proof APIs and verifier library described in Section 16;
 - production readiness should include independent audit, long-duration distributed chaos runs, and public monitoring.
 
-## 22. Roadmap
+## 23. Roadmap
 
 Near-term roadmap:
 
@@ -868,7 +931,7 @@ Medium-term roadmap:
 - public token registry and metadata standards;
 - richer DeFi/GameFi primitives under deterministic execution limits.
 
-## 23. Operator Terminal Command Reference
+## 24. Operator Terminal Command Reference
 
 This section is the production command reference for operators. Do not commit validator passwords, wallet passwords, private keys, SSH keys, or mnemonic phrases. Use environment variables, local secret files, or an interactive terminal.
 
@@ -1132,9 +1195,32 @@ Invoke-RestMethod https://mscblockexplorer.in/status
 Invoke-RestMethod https://mscblockexplorer.in/consensus/mode
 Invoke-RestMethod https://mscblockexplorer.in/formal/verification
 Invoke-RestMethod https://mscblockexplorer.in/storage/policy
+Invoke-RestMethod https://mscblockexplorer.in/bridge/status
 Invoke-RestMethod https://mscblockexplorer.in/v1/validators/diversity
 Invoke-RestMethod https://mscblockexplorer.in/v1/peers
 Invoke-WebRequest -UseBasicParsing https://mscblockexplorer.in/metrics
+```
+
+Bridge proof dry-run example, verification only:
+
+```powershell
+$proof = @{
+  version = "msc-bridge-v1"
+  source_chain_id = "external-1"
+  event_id = "deposit-42"
+  asset_denom = "wEXT"
+  origin_asset = "EXT"
+  recipient = "MSC01..."
+  amount = "100"
+  source_height = 1000
+  confirmed_height = 1064
+  oracle_signatures = @(
+    @{ signer = "oracle-a"; signature = "sig-a" },
+    @{ signer = "oracle-b"; signature = "sig-b" },
+    @{ signer = "oracle-c"; signature = "sig-c" }
+  )
+} | ConvertTo-Json -Depth 8
+Invoke-RestMethod https://mscblockexplorer.in/bridge/verify -Method POST -Body $proof -ContentType "application/json"
 ```
 
 Validator RPC should stay private or bound to localhost. Public traffic should use the full-node gateway only:

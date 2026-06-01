@@ -27541,6 +27541,8 @@ type ConfigFile struct {
 
 	DTL DTLConfig `toml:"dtl"`
 
+	Bridge BridgeConfig `toml:"bridge"`
+
 	Tokenomics TokenomicsConfig `toml:"tokenomics"`
 
 	Fees FeeConfig `toml:"fees"`
@@ -32039,6 +32041,19 @@ func loadConfigOverrides(path string) error {
 	}
 	fmt.Printf("[DTL-CONTRACT-RUNTIME] removed=true\n")
 
+	if applyBridgeConfig(cfg.Bridge) {
+		fmt.Printf("BRIDGE config loaded: enabled=%t mode=%s ibc_style=%t light_client_required=%t required_confirmations=%d oracle_quorum=%d chains=%d assets=%d\n",
+			BridgeEnabled,
+			normalizeBridgeMode(BridgeMode),
+			BridgeIBCStyleEnabled,
+			BridgeLightClientRequired,
+			BridgeRequiredConfirmations,
+			BridgeOracleQuorum,
+			len(BridgeChains),
+			len(BridgeAssets),
+		)
+	}
+
 	if meta.IsDefined("tokenomics", "allow_treasury_ops") {
 
 		AllowTreasuryOps = cfg.Tokenomics.AllowTreasuryOps
@@ -34015,6 +34030,8 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/consensus/mode", s.handleConsensusMode)
 	mux.HandleFunc("/formal/verification", s.handleFormalVerification)
 	mux.HandleFunc("/storage/policy", s.handleStoragePolicy)
+	mux.HandleFunc("/bridge/status", s.handleBridgeStatus)
+	mux.HandleFunc("/bridge/verify", s.handleBridgeVerify)
 
 	mux.HandleFunc("/snapshot/latest", s.handleSnapshotLatest)
 
@@ -34097,6 +34114,8 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/v1/consensus/mode", s.handleV1ConsensusMode)
 	mux.HandleFunc("/v1/formal/verification", s.handleV1FormalVerification)
 	mux.HandleFunc("/v1/storage/policy", s.handleV1StoragePolicy)
+	mux.HandleFunc("/v1/bridge/status", s.handleV1BridgeStatus)
+	mux.HandleFunc("/v1/bridge/verify", s.handleV1BridgeVerify)
 	mux.HandleFunc("/v1/snapshot/latest", s.handleV1SnapshotLatest)
 	mux.HandleFunc("/v1/snapshot/create", s.handleV1SnapshotCreate)
 	mux.HandleFunc("/v1/snapshot/export", s.handleV1SnapshotExport)
@@ -37288,6 +37307,12 @@ func (s *Server) handleMetrics(
 	appendPromGauge(&out, "msc_formal_invariants_checked", "Runtime invariants checked by the formal-verification audit surface.", promLabels(baseLabels, map[string]string{"version": formalReport.Version}), float64(formalReport.InvariantsChecked))
 	appendPromGauge(&out, "msc_formal_invariants_failed", "Runtime invariants currently failing in the formal-verification audit surface.", promLabels(baseLabels, map[string]string{"version": formalReport.Version}), float64(formalReport.InvariantsFailed))
 	appendPromGauge(&out, "msc_formal_external_model_checked", "External formal model proof status (1 when independently model-checked).", promLabels(baseLabels, map[string]string{"version": formalReport.Version, "status": formalReport.ExternalProofStatus}), boolToPromFloat(formalReport.ExternalModelChecked))
+	appendPromGauge(&out, "msc_bridge_enabled", "Cross-chain bridge framework enabled state (1/0).", promLabels(baseLabels, map[string]string{"version": BridgeProtocolVersion, "mode": normalizeBridgeMode(BridgeMode)}), boolToPromFloat(BridgeEnabled))
+	appendPromGauge(&out, "msc_bridge_ibc_style_enabled", "IBC-style bridge protocol framework enabled state (1/0).", promLabels(baseLabels, map[string]string{"version": BridgeProtocolVersion}), boolToPromFloat(BridgeIBCStyleEnabled))
+	appendPromGauge(&out, "msc_bridge_light_client_required", "Bridge proof verification requires light-client/SPV proof (1/0).", promLabels(baseLabels, map[string]string{"version": BridgeProtocolVersion}), boolToPromFloat(BridgeLightClientRequired))
+	appendPromGauge(&out, "msc_bridge_registered_chains", "Registered external chains in the bridge verification registry.", promLabels(baseLabels, map[string]string{"version": BridgeProtocolVersion}), float64(len(BridgeChains)))
+	appendPromGauge(&out, "msc_bridge_registered_assets", "Registered external asset mappings in the bridge verification registry.", promLabels(baseLabels, map[string]string{"version": BridgeProtocolVersion}), float64(len(BridgeAssets)))
+	appendPromGauge(&out, "msc_bridge_oracle_quorum", "Bridge oracle quorum required when oracle or hybrid verification is configured.", promLabels(baseLabels, map[string]string{"version": BridgeProtocolVersion}), float64(BridgeOracleQuorum))
 	appendPromGauge(&out, "msc_consensus_block_production_status", "Current block production status; active status has value 1.", promLabels(baseLabels, map[string]string{"status": runtime.BlockProductionStatus, "reason": runtime.BlockProductionReason}), 1)
 	appendPromGauge(&out, "msc_consensus_tx_lane_status", "Current transaction lane status; active status has value 1.", promLabels(baseLabels, map[string]string{"status": runtime.TxLaneStatus, "reason": runtime.TxLaneReason}), 1)
 	appendPromGauge(&out, "msc_quorum_required", "Strict quorum required for consensus readiness/finality.", baseLabels, float64(quorumRequired))
@@ -42449,7 +42474,7 @@ func authorized(r *http.Request) bool {
 
 		switch path {
 
-		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/validators/diversity", "/consensus/mode", "/formal/verification", "/storage/policy", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/consensus/mode", "/v1/formal/verification", "/v1/storage/policy", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/validators/diversity", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
+		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/validators/diversity", "/consensus/mode", "/formal/verification", "/storage/policy", "/bridge/status", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/consensus/mode", "/v1/formal/verification", "/v1/storage/policy", "/v1/bridge/status", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/validators/diversity", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
 
 			return true
 

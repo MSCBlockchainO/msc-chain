@@ -211,6 +211,21 @@ farm_min_stake_blocks = 50
 farm_lp_points_per_block = 1
 farm_max_multiplier_bps = 30000
 gamefi_max_reward_per_account_per_season = 1000000
+
+[bridge]
+# Cross-chain bridge framework is verification-only and disabled by default.
+# Enable on testnet first; do not enable guarded mint/unlock without governance activation and audit.
+enabled = false
+mode = "verification_only"
+ibc_style_enabled = false
+light_client_required = true
+required_confirmations = 64
+oracle_quorum = 3
+# Format: "chain_id|name|chain_type|trust_model|min_confirmations|light_client_endpoint"
+chains = []
+# Format: "denom|origin_chain|origin_asset|local_denom|decimals|escrow_policy"
+assets = []
+
 [tokenomics]
 allow_treasury_ops = false
 random_user_reward_enabled = true
