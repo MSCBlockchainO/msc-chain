@@ -7,6 +7,7 @@ param(
     [string]$IdeUser = "mscadmin",
     [string]$IdePassword = $env:MSC_IDE_PASSWORD,
     [string]$RpcTarget = "127.0.0.1:26665",
+    [string[]]$RpcTargets = @(),
     [string]$UiSource = (Join-Path (Split-Path -Parent $PSScriptRoot) "ui"),
     [switch]$AllowHttpOnlyUntilDNS
 )
@@ -44,6 +45,12 @@ if (-not $AllowHttpOnlyUntilDNS -and ($domainIPs -notcontains $GatewayHost)) {
 }
 
 $enableHttps = -not $AllowHttpOnlyUntilDNS
+$resolvedRpcTargets = @($RpcTargets | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+if ($resolvedRpcTargets.Count -eq 0) {
+    $resolvedRpcTargets = @($RpcTarget)
+}
+$resolvedRpcTargets = @($resolvedRpcTargets | ForEach-Object { $_.Trim() } | Select-Object -Unique)
+$rpcTargetsCsv = $resolvedRpcTargets -join ","
 
 $remote = @'
 set -euo pipefail
@@ -67,6 +74,8 @@ sudo cp -a "$HOME/msc-ui-upload/." /var/www/msc-ui/
 sudo chown -R www-data:www-data /var/www/msc-ui 2>/dev/null || sudo chown -R nginx:nginx /var/www/msc-ui
 sudo find /var/www/msc-ui -type f -exec chmod 0644 {} \;
 sudo find /var/www/msc-ui -type d -exec chmod 0755 {} \;
+sudo mkdir -p /var/www/msc-ui/gateway
+sudo chown www-data:www-data /var/www/msc-ui/gateway 2>/dev/null || sudo chown nginx:nginx /var/www/msc-ui/gateway
 
 if [ -n "${IDE_PASSWORD:-}" ]; then
   sudo htpasswd -bc /etc/nginx/msc_ide.htpasswd "$IDE_USER" "$IDE_PASSWORD" >/dev/null
@@ -75,6 +84,21 @@ elif [ ! -f /etc/nginx/msc_ide.htpasswd ]; then
   sudo htpasswd -bc /etc/nginx/msc_ide.htpasswd "$IDE_USER" "$tmp_pass" >/dev/null
   echo "DTL IDE locked with a generated server-local password because MSC_IDE_PASSWORD was not provided."
 fi
+
+IFS=',' read -r -a MSC_RPC_TARGETS <<< "${RPC_TARGETS:-${RPC_TARGET:-127.0.0.1:26665}}"
+if [ "${#MSC_RPC_TARGETS[@]}" -eq 0 ]; then
+  MSC_RPC_TARGETS=("127.0.0.1:26665")
+fi
+upstream_body="upstream msc_rpc_backend {\n    least_conn;\n    keepalive 32;\n"
+for target in "${MSC_RPC_TARGETS[@]}"; do
+  clean="$(echo "$target" | xargs)"
+  [ -z "$clean" ] && continue
+  clean="${clean#http://}"
+  clean="${clean#https://}"
+  upstream_body="${upstream_body}    server ${clean} max_fails=2 fail_timeout=10s;\n"
+done
+upstream_body="${upstream_body}}\n"
+printf "%b" "$upstream_body" | sudo tee /etc/nginx/conf.d/msc_rpc_upstream.conf >/dev/null
 
 sudo tee /etc/nginx/conf.d/msc_public_gateway_limits.conf >/dev/null <<'NGINX'
 limit_req_zone $binary_remote_addr zone=msc_static:10m rate=600r/m;
@@ -155,7 +179,7 @@ server {
     # RPC ports must remain private or loopback-only.
     location ~ ^/(rpc|jsonrpc|v1/rpc)$ {
         limit_req zone=msc_rpc burst=30 nodelay;
-        proxy_pass http://__RPC_TARGET__;
+        proxy_pass http://msc_rpc_backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -165,7 +189,7 @@ server {
 
     location ~ ^/(sendTx|submitTx|faucet|stake|unstake|pool/transfer|auth/challenge|auth/verify|wallet/create|wallet/recover|v1/tx|v1/sendTx|v1/submitTx) {
         limit_req zone=msc_write burst=10 nodelay;
-        proxy_pass http://__RPC_TARGET__;
+        proxy_pass http://msc_rpc_backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -175,12 +199,45 @@ server {
 
     location ~ ^/(status|healthz|misbehavior|validators|validatorset/hash|validatorset/audit|validators/pending|validators/diversity|consensus/mode|formal/verification|storage/policy|bridge/status|bridge/verify|light/headers|light/checkpoint/latest|proof/balance|proof/tx|proof/receipt|tx/status|txs|explorer/blocks|explorer/block|explorer/tx|explorer/peers|balance|nonce|nonce/pending|wallet/status|coins|tokenomics|governance/status|governance/proposals|upgrade/status|dtl/quote|dtl/route_quote|dtl/farm_info|dtl/season_info|dtl/leaderboard|dtl/nft721/owner|dtl/nft1155/owner|v1/) {
         limit_req zone=msc_read burst=40 nodelay;
-        proxy_pass http://__RPC_TARGET__;
+        proxy_pass http://msc_rpc_backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /wallet/events {
+        limit_req zone=msc_read burst=40 nodelay;
+        proxy_pass http://msc_rpc_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location = /v1/wallet/events {
+        limit_req zone=msc_read burst=40 nodelay;
+        proxy_pass http://msc_rpc_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location = /gateway/lb-status.json {
+        limit_req zone=msc_static burst=60 nodelay;
+        try_files /gateway/lb-status.json =404;
     }
 
     location = /metrics {
@@ -201,9 +258,102 @@ server {
 }
 NGINX
 
-sudo sed -i "s#__RPC_TARGET__#$RPC_TARGET#g; s#__DOMAIN__#$DOMAIN#g; s#__PUBLIC_HOST__#$PUBLIC_HOST#g" /etc/nginx/sites-available/msc-ui
+sudo sed -i "s#__DOMAIN__#$DOMAIN#g; s#__PUBLIC_HOST__#$PUBLIC_HOST#g" /etc/nginx/sites-available/msc-ui
 sudo ln -sf /etc/nginx/sites-available/msc-ui /etc/nginx/sites-enabled/msc-ui
 sudo rm -f /etc/nginx/sites-enabled/default
+
+sudo tee /usr/local/bin/msc-lb-health.sh >/dev/null <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+out="/var/www/msc-ui/gateway/lb-status.json"
+targets="${RPC_TARGETS:-${RPC_TARGET:-127.0.0.1:26665}}"
+mkdir -p "$(dirname "$out")"
+while true; do
+  tmp="$(mktemp)"
+  if python3 - "$targets" "$tmp" <<'PY'
+import json
+import sys
+import time
+import urllib.error
+import urllib.request
+
+targets = [item.strip() for item in sys.argv[1].split(",") if item.strip()]
+out = sys.argv[2]
+backends = []
+healthy_count = 0
+for target in targets:
+    base = target if target.startswith(("http://", "https://")) else "http://" + target
+    base = base.rstrip("/")
+    started = time.perf_counter()
+    status_code = 0
+    healthy = False
+    error = ""
+    try:
+        req = urllib.request.Request(base + "/status", headers={"User-Agent": "msc-lb-health/1"})
+        with urllib.request.urlopen(req, timeout=3) as res:
+            status_code = int(res.status)
+            healthy = status_code == 200
+            res.read(2048)
+    except urllib.error.HTTPError as exc:
+        status_code = int(exc.code)
+        error = str(exc)
+    except Exception as exc:
+        error = str(exc)
+    latency_ms = int((time.perf_counter() - started) * 1000)
+    if healthy:
+        healthy_count += 1
+    backends.append({
+        "target": target,
+        "healthy": healthy,
+        "latency_ms": latency_ms,
+        "status_code": status_code,
+        "last_checked": int(time.time()),
+        "error": error,
+    })
+payload = {
+    "status": "healthy" if healthy_count == len(backends) and backends else ("degraded" if healthy_count else "down"),
+    "healthy": healthy_count,
+    "total": len(backends),
+    "failover_count": 0,
+    "last_switch": "",
+    "backends": backends,
+    "ts": int(time.time()),
+}
+with open(out, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, separators=(",", ":"))
+PY
+  then
+    sudo mv "$tmp" "$out"
+    sudo chmod 0644 "$out"
+    sudo chown www-data:www-data "$out" 2>/dev/null || sudo chown nginx:nginx "$out" 2>/dev/null || true
+  else
+    rm -f "$tmp"
+  fi
+  sleep 5
+done
+SH
+sudo chmod +x /usr/local/bin/msc-lb-health.sh
+
+sudo tee /etc/systemd/system/msc-lb-health.service >/dev/null <<SERVICE
+[Unit]
+Description=MSC gateway load balancer health writer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=RPC_TARGETS=$RPC_TARGETS
+Environment=RPC_TARGET=$RPC_TARGET
+ExecStart=/usr/local/bin/msc-lb-health.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+sudo systemctl daemon-reload
+sudo systemctl enable --now msc-lb-health.service
+sleep 1
 sudo nginx -t
 sudo systemctl enable --now nginx
 sudo systemctl reload nginx
@@ -225,6 +375,7 @@ if [ "$ENABLE_HTTPS" = "1" ]; then
   curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/msc_wallet.html" >/dev/null
   curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/dashboard.html" >/dev/null
   curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/wallet.html" >/dev/null
+  curl --resolve "$DOMAIN:443:127.0.0.1" -fsS "https://$DOMAIN/gateway/lb-status.json" >/dev/null
   status_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/status")
   metrics_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/metrics")
   rpc_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/rpc")
@@ -233,6 +384,7 @@ else
   curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/msc_wallet.html >/dev/null
   curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/dashboard.html >/dev/null
   curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/wallet.html >/dev/null
+  curl -fsS -H "Host: $DOMAIN" http://127.0.0.1/gateway/lb-status.json >/dev/null
   status_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/status)
   metrics_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/metrics)
   rpc_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/rpc)
@@ -250,6 +402,7 @@ $envPrefix = @(
     "DOMAIN=$(Quote-Sh $Domain)",
     "PUBLIC_HOST=$(Quote-Sh $GatewayHost)",
     "RPC_TARGET=$(Quote-Sh $RpcTarget)",
+    "RPC_TARGETS=$(Quote-Sh $rpcTargetsCsv)",
     "ENABLE_HTTPS=$(Quote-Sh ($(if ($enableHttps) { "1" } else { "0" })))",
     "LETSENCRYPT_EMAIL=$(Quote-Sh $LetsEncryptEmail)",
     "IDE_USER=$(Quote-Sh $IdeUser)",
@@ -258,7 +411,7 @@ $envPrefix = @(
 
 Write-Host "Deploying MSC public gateway on $target..."
 Write-Host "Domain: $Domain"
-Write-Host "RPC target: $RpcTarget"
+Write-Host "RPC targets: $($resolvedRpcTargets -join ', ')"
 if (-not $enableHttps) {
     Write-Warning "HTTP-only pre-DNS mode enabled. HTTPS is not complete until $Domain A record points to $GatewayHost."
 }
@@ -294,6 +447,8 @@ if ($enableHttps) {
 Write-Host ""
 Write-Host "Security rules:"
 Write-Host "  - Validator RPC stays private."
-Write-Host "  - Public RPC is proxied only through the full node target $RpcTarget."
+Write-Host "  - Public RPC is proxied only through full node targets: $($resolvedRpcTargets -join ', ')."
+Write-Host "  - /gateway/lb-status.json exposes backend health for the wallet RPC manager."
+Write-Host "  - /wallet/events is proxied with websocket Upgrade headers."
 Write-Host "  - /metrics is not public through nginx."
 Write-Host "  - DTL IDE is protected by basic auth."

@@ -9,6 +9,20 @@ const LEGACY_RPC_KEY = "msc_rpc";
 const DEFAULT_PUBLIC_RPCS = ["https://mscblockexplorer.in"];
 const HEALTH_CHECK_MIN_MS = 15000;
 const REQUEST_TIMEOUT_MS = 7000;
+const WALLET_CACHE_KEY = "msc_wallet_data_cache_v1";
+const CACHE_TTL = {
+  status: 8000,
+  cmd: 8000,
+  balance: 30000,
+  walletStatus: 30000,
+  txs: 30000,
+  validators: 60000,
+  governance: 60000,
+  bridge: 60000,
+  lb: 10000,
+};
+const POLL_FALLBACK_MIN_MS = 15000;
+const POLL_FALLBACK_MAX_MS = 60000;
 
 const $ = (id) => document.getElementById(id);
 const page = document.body.dataset.page || "dashboard";
@@ -21,6 +35,17 @@ const state = {
   cmd: null,
   rpcManager: null,
   balanceVerification: null,
+  dataCache: null,
+  schedulerTimer: null,
+  refreshRunning: false,
+  pollDelayMs: POLL_FALLBACK_MIN_MS,
+  realtime: {
+    socket: null,
+    connected: false,
+    fallback: true,
+    lastEventAt: 0,
+    reconnectAttempts: 0,
+  },
 };
 
 function normalizeRPC(raw) {
@@ -241,6 +266,46 @@ function stripHTML(value) {
   return String(value || "").replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+class WalletDataCache {
+  constructor(storageKey) {
+    this.storageKey = storageKey;
+    this.items = {};
+    try {
+      this.items = JSON.parse(localStorage.getItem(storageKey) || "{}") || {};
+    } catch (_) {
+      this.items = {};
+    }
+  }
+
+  get(key, ttlMs = 0) {
+    const item = this.items[key];
+    if (!item) return null;
+    const age = Date.now() - Number(item.ts || 0);
+    return {
+      data: item.data,
+      ts: item.ts,
+      age,
+      fresh: ttlMs <= 0 || age <= ttlMs,
+    };
+  }
+
+  set(key, data) {
+    this.items[key] = { data, ts: Date.now() };
+    this.persist();
+  }
+
+  persist() {
+    try {
+      const entries = Object.entries(this.items)
+        .sort((a, b) => Number(b[1]?.ts || 0) - Number(a[1]?.ts || 0))
+        .slice(0, 80);
+      localStorage.setItem(this.storageKey, JSON.stringify(Object.fromEntries(entries)));
+    } catch (_) {
+      // Cache is an optimization; quota failures must not break wallet usage.
+    }
+  }
+}
+
 function stableStringify(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
@@ -311,6 +376,7 @@ class WalletRPCManager {
     this.endpoints = loadRPCEndpoints();
     this.active = this.endpoints[0] || DEFAULT_PUBLIC_RPCS[0];
     this.health = new Map();
+    this.inflight = new Map();
     this.lastHealthAt = 0;
     this.suspicious = new Set();
   }
@@ -324,6 +390,24 @@ class WalletRPCManager {
     localStorage.setItem(RPC_ENDPOINTS_KEY, JSON.stringify(this.endpoints));
     localStorage.setItem(LEGACY_RPC_KEY, this.active);
     this.lastHealthAt = 0;
+  }
+
+  inflightKey(rpc, path, options = {}) {
+    return stableStringify({
+      rpc,
+      path,
+      method: options.method || "GET",
+      body: options.body || null,
+    });
+  }
+
+  async fetchDedup(rpc, path, options = {}) {
+    const method = String(options.method || "GET").toUpperCase();
+    const key = this.inflightKey(rpc, path, options);
+    if (method === "GET" && this.inflight.has(key)) return this.inflight.get(key);
+    const pending = fetchRPC(rpc, path, options).finally(() => this.inflight.delete(key));
+    if (method === "GET") this.inflight.set(key, pending);
+    return pending;
   }
 
   recordError(rpc, err) {
@@ -344,8 +428,8 @@ class WalletRPCManager {
     const started = performance.now();
     try {
       const [status, cmdResult] = await Promise.allSettled([
-        fetchRPC(rpc, "/status", { timeoutMs: 5000 }),
-        fetchRPC(rpc, "/consensus/mode", { timeoutMs: 5000 }),
+        this.fetchDedup(rpc, "/status", { timeoutMs: 5000 }),
+        this.fetchDedup(rpc, "/consensus/mode", { timeoutMs: 5000 }),
       ]);
       if (status.status !== "fulfilled") throw status.reason;
       const data = status.value || {};
@@ -444,7 +528,7 @@ class WalletRPCManager {
     let lastErr;
     for (const rpc of ordered) {
       try {
-        const data = await fetchRPC(rpc, path, options);
+        const data = await this.fetchDedup(rpc, path, options);
         this.active = rpc;
         state.rpc = rpc;
         localStorage.setItem(LEGACY_RPC_KEY, rpc);
@@ -463,7 +547,7 @@ class WalletRPCManager {
     await this.refreshHealth(false);
     const targets = this.bestEndpoints(3);
     const usableTargets = targets.length ? targets : this.endpoints.slice(0, 3);
-    const settled = await Promise.allSettled(usableTargets.map(async (rpc) => ({ rpc, data: await fetchRPC(rpc, path) })));
+    const settled = await Promise.allSettled(usableTargets.map(async (rpc) => ({ rpc, data: await this.fetchDedup(rpc, path) })));
     const successes = settled.filter((item) => item.status === "fulfilled").map((item) => item.value);
     if (!successes.length) {
       const err = settled.find((item) => item.status === "rejected")?.reason || new Error("All RPC endpoints unavailable");
@@ -530,6 +614,92 @@ async function quorumApi(path) {
   return state.rpcManager.quorumRead(path);
 }
 
+function cacheKey(name, suffix = "") {
+  return suffix ? `${name}:${suffix}` : name;
+}
+
+async function cachedAPI(key, path, { ttl = 0, force = false, cacheOnly = false, quorum = false } = {}) {
+  const cached = state.dataCache?.get(key, ttl);
+  if (cached && (cacheOnly || (!force && cached.fresh))) {
+    const payload = cached.data;
+    if (payload && typeof payload === "object" && Object.prototype.hasOwnProperty.call(payload, "data")) {
+      return {
+        data: payload.data,
+        verification: payload.verification || null,
+        ts: cached.ts,
+        age: cached.age,
+        fresh: cached.fresh,
+        fromCache: true,
+      };
+    }
+    return { data: payload, verification: null, ts: cached.ts, age: cached.age, fresh: cached.fresh, fromCache: true };
+  }
+  if (cacheOnly) return null;
+  const result = quorum ? await quorumApi(path) : { data: await api(path), verification: null };
+  state.dataCache?.set(key, result);
+  return { data: result.data, verification: result.verification, fromCache: false, fresh: true, age: 0 };
+}
+
+function walletEventURL(rpc) {
+  try {
+    const url = new URL(rpc);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = "/wallet/events";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch (_) {
+    return "";
+  }
+}
+
+function setRealtimeStatus(text, tone = "") {
+  setStatus("topRealtime", text, tone);
+  setStatus("settingsRealtimeStatus", text, tone);
+}
+
+async function refreshLoadBalancerStatus(options = {}) {
+  let result = state.dataCache?.get("lb-status", CACHE_TTL.lb);
+  if (result && (options.cacheOnly || (!options.force && result.fresh))) {
+    result = { data: result.data?.data || result.data, fromCache: true };
+  } else if (options.cacheOnly) {
+    result = null;
+  } else {
+    const origins = uniqueRPCs([window.location.origin, state.rpcManager?.active, ...defaultRPCEndpoints()]);
+    for (const rpc of origins) {
+      try {
+        const data = await state.rpcManager.fetchDedup(rpc, "/gateway/lb-status.json", { timeoutMs: 4000 });
+        state.dataCache?.set("lb-status", { data, verification: null });
+        result = { data, fromCache: false };
+        break;
+      } catch (_) {
+        // Not every RPC endpoint is a public gateway; try the next candidate.
+      }
+    }
+  }
+  const data = result?.data;
+  if (!data) {
+    setText("settingsLbStatus", "unavailable");
+    return;
+  }
+  const backends = data.backends || data.upstreams || [];
+  const healthy = backends.filter((item) => item.healthy || item.status_code === 200).length;
+  setText("settingsLbStatus", data.status || (healthy > 0 ? "healthy" : "degraded"));
+  setText("settingsLbBackends", `${healthy}/${backends.length || 0}`);
+  const box = $("settingsLbHealth");
+  if (box) {
+    box.innerHTML = backends.map((item) => `
+      <div class="health-row ${item.healthy || item.status_code === 200 ? "success" : "error"}">
+        <span class="mono">${item.target || item.url || "-"}</span>
+        <span>${item.healthy || item.status_code === 200 ? "healthy" : "down"}</span>
+        <span>${item.latency_ms ?? "-"}ms</span>
+        <span>${item.status_code ?? "-"}</span>
+        <span>${item.last_checked || "-"}</span>
+        <span>${item.error || "-"}</span>
+      </div>`).join("") || `<div class="list-item">No backend status yet</div>`;
+  }
+}
+
 function refreshRPCSettingsUI() {
   if (!state.rpcManager) return;
   state.rpc = state.rpcManager.active;
@@ -559,41 +729,69 @@ function refreshRPCSettingsUI() {
   }
 }
 
-async function refreshNetwork() {
-  await state.rpcManager.refreshHealth(false);
+function renderNetworkStatus(status) {
+  if (!status) return;
+  state.status = status;
+  const best = status.best || status;
+  const height = best.height || status.height || status.chain_height || best.finalized_height || "-";
+  const finalized = best.finalized_height || status.finalized_height || status.finalized || "-";
+  setText("topHeight", formatNumber(height));
+  setText("networkStatus", status.health || status.network_health || "connected");
+  setText("blockHeight", formatNumber(height));
+  setText("finalizedHeight", formatNumber(finalized));
+  setText("latestBlocks", `height ${formatNumber(height)} | finalized ${formatNumber(finalized)}`);
+  setText("txBlockHeight", formatNumber(height));
+  setStatus("networkPill", "Mainnet", "success");
+}
+
+function renderCMD(cmd) {
+  if (!cmd) return;
+  state.cmd = cmd;
+  const mode = cmd.mode || "UNKNOWN";
+  setText("topCmd", mode);
+  setText("cmdStatus", mode);
+  setText("validatorStatus", `${cmd.active_validators ?? "-"} / ${cmd.total_validators ?? "-"} active`);
+  setText("validatorCMD", mode);
+}
+
+async function refreshNetwork(options = {}) {
+  if (!options.cacheOnly) await state.rpcManager.refreshHealth(!!options.force);
   refreshRPCSettingsUI();
   try {
-    const status = await api("/status");
-    state.status = status;
-    const best = status.best || status;
-    const height = best.height || status.height || status.chain_height || best.finalized_height || "-";
-    const finalized = best.finalized_height || status.finalized_height || status.finalized || "-";
-    setText("topHeight", formatNumber(height));
-    setText("networkStatus", status.health || status.network_health || "connected");
-    setText("blockHeight", formatNumber(height));
-    setText("finalizedHeight", formatNumber(finalized));
-    setText("latestBlocks", `height ${formatNumber(height)} | finalized ${formatNumber(finalized)}`);
-    setText("txBlockHeight", formatNumber(height));
-    setStatus("networkPill", "Mainnet", "success");
+    const status = await cachedAPI("status", "/status", { ttl: CACHE_TTL.status, force: !!options.force, cacheOnly: !!options.cacheOnly });
+    renderNetworkStatus(status?.data);
   } catch (err) {
     setStatus("networkPill", "RPC error", "error");
     setText("networkStatus", err.message || "unavailable");
   }
 
   try {
-    const cmd = await api("/consensus/mode");
-    state.cmd = cmd;
-    const mode = cmd.mode || "UNKNOWN";
-    setText("topCmd", mode);
-    setText("cmdStatus", mode);
-    setText("validatorStatus", `${cmd.active_validators ?? "-"} / ${cmd.total_validators ?? "-"} active`);
-    setText("validatorCMD", mode);
+    const cmd = await cachedAPI("cmd", "/consensus/mode", { ttl: CACHE_TTL.cmd, force: !!options.force, cacheOnly: !!options.cacheOnly });
+    renderCMD(cmd?.data);
   } catch (_) {
     setText("topCmd", "-");
   }
+  await refreshLoadBalancerStatus(options);
 }
 
-async function refreshBalance() {
+function renderBalanceData(bal, verification) {
+  if (!bal) return;
+  state.balanceVerification = verification || state.balanceVerification;
+  if (verification) renderVerification(verification);
+  const amount = bal.balance ?? bal.Balance ?? "-";
+  setText("totalBalance", `${formatNumber(amount)} MSC`);
+  setText("walletBalance", `${formatNumber(amount)} MSC`);
+  setText("assetMSC", `${formatNumber(amount)} MSC`);
+}
+
+function renderWalletStatus(ws) {
+  if (!ws) return;
+  setText("stakedBalance", `${formatNumber(ws.stake || 0)} MSC`);
+  setText("rewardBalance", `${formatNumber(ws.rewards || 0)} MSC`);
+  setText("delegations", ws.validator_id ? `${ws.validator_id}: ${formatNumber(ws.stake || 0)} MSC` : "No active delegation");
+}
+
+async function refreshBalance(options = {}) {
   if (!state.wallet?.address) return;
   setText("topWallet", shortAddress(state.wallet.address));
   setText("walletAddress", state.wallet.address);
@@ -601,108 +799,134 @@ async function refreshBalance() {
   setText("receiveAddress", state.wallet.address);
   setValue("sendFrom", state.wallet.address);
   try {
-    const balResult = await quorumApi(`/balance?address=${encodeURIComponent(state.wallet.address)}&coin=MSC&state=finalized`);
-    const bal = balResult.data;
-    state.balanceVerification = balResult.verification;
-    renderVerification(balResult.verification);
-    const amount = bal.balance ?? bal.Balance ?? "-";
-    setText("totalBalance", `${formatNumber(amount)} MSC`);
-    setText("walletBalance", `${formatNumber(amount)} MSC`);
-    setText("assetMSC", `${formatNumber(amount)} MSC`);
+    const balResult = await cachedAPI(
+      cacheKey("balance", state.wallet.address),
+      `/balance?address=${encodeURIComponent(state.wallet.address)}&coin=MSC&state=finalized`,
+      { ttl: CACHE_TTL.balance, force: !!options.force, cacheOnly: !!options.cacheOnly, quorum: true },
+    );
+    renderBalanceData(balResult?.data, balResult?.verification);
   } catch (err) {
     setText("walletBalance", "balance unavailable");
     renderVerification({ mode: "mismatch", checked: 0, matches: 0 });
   }
   try {
-    const wsResult = await quorumApi(`/wallet/status?address=${encodeURIComponent(state.wallet.address)}`);
-    const ws = wsResult.data;
-    setText("stakedBalance", `${formatNumber(ws.stake || 0)} MSC`);
-    setText("rewardBalance", `${formatNumber(ws.rewards || 0)} MSC`);
-    setText("delegations", ws.validator_id ? `${ws.validator_id}: ${formatNumber(ws.stake || 0)} MSC` : "No active delegation");
+    const wsResult = await cachedAPI(
+      cacheKey("wallet-status", state.wallet.address),
+      `/wallet/status?address=${encodeURIComponent(state.wallet.address)}`,
+      { ttl: CACHE_TTL.walletStatus, force: !!options.force, cacheOnly: !!options.cacheOnly, quorum: true },
+    );
+    renderWalletStatus(wsResult?.data);
   } catch (_) {
     setText("delegations", "No staking status yet");
   }
 }
 
-async function refreshTransactions() {
+function renderTransactionsData(data) {
+  const list = $("transactionsList") || $("latestTx");
+  if (!list) return;
+  const txs = data?.txs || data?.transactions || data?.items || [];
+  list.innerHTML = "";
+  if (!txs.length) {
+    list.innerHTML = `<div class="list-item">No transactions yet</div>`;
+    setText("latestTx", "No transactions yet");
+    return;
+  }
+  txs.slice(0, 10).forEach((tx) => {
+    const item = document.createElement("div");
+    item.className = "list-item";
+    item.innerHTML = `<strong>${tx.id || tx.tx_id || "tx"}</strong><span class="mono">${tx.from || "-"} -> ${tx.to || "-"}</span><span>${formatNumber(tx.amount || 0)} ${tx.coin || "MSC"} | fee ${tx.fee || "-"}</span>`;
+    list.appendChild(item);
+  });
+  setText("latestTx", `${txs.length} transaction(s) loaded`);
+}
+
+async function refreshTransactions(options = {}) {
   if (!state.wallet?.address) return;
   const list = $("transactionsList") || $("latestTx");
   if (!list) return;
   try {
-    const data = await api(`/txs?address=${encodeURIComponent(state.wallet.address)}`);
-    const txs = data.txs || data.transactions || data.items || [];
-    list.innerHTML = "";
-    if (!txs.length) {
-      list.innerHTML = `<div class="list-item">No transactions yet</div>`;
-      setText("latestTx", "No transactions yet");
-      return;
-    }
-    txs.slice(0, 10).forEach((tx) => {
-      const item = document.createElement("div");
-      item.className = "list-item";
-      item.innerHTML = `<strong>${tx.id || tx.tx_id || "tx"}</strong><span class="mono">${tx.from || "-"} -> ${tx.to || "-"}</span><span>${formatNumber(tx.amount || 0)} ${tx.coin || "MSC"} | fee ${tx.fee || "-"}</span>`;
-      list.appendChild(item);
-    });
-    setText("latestTx", `${txs.length} transaction(s) loaded`);
+    const result = await cachedAPI(
+      cacheKey("txs", state.wallet.address),
+      `/txs?address=${encodeURIComponent(state.wallet.address)}`,
+      { ttl: CACHE_TTL.txs, force: !!options.force, cacheOnly: !!options.cacheOnly },
+    );
+    renderTransactionsData(result?.data);
   } catch (err) {
     list.innerHTML = `<div class="list-item">${err.message || "Transaction sync failed"}</div>`;
   }
 }
 
-async function refreshValidators() {
+function renderValidatorsData(data) {
+  const list = $("validatorList");
+  if (!list) return;
+  const vals = data?.validators || data?.active || data?.items || [];
+  list.innerHTML = "";
+  if (!vals.length) {
+    list.innerHTML = `<div class="list-item">Validator list unavailable</div>`;
+    return;
+  }
+  vals.forEach((v) => {
+    const id = v.id || v.validator || v.name || "-";
+    const item = document.createElement("div");
+    item.className = "list-item";
+    item.innerHTML = `<strong>${id}</strong><span>Status: ${v.status || (v.active ? "active" : "unknown")}</span><span>Uptime: ${v.uptime ?? "-"} | Voting power: ${v.voting_power ?? v.power ?? "-"}</span>`;
+    list.appendChild(item);
+  });
+}
+
+async function refreshValidators(options = {}) {
   const list = $("validatorList");
   if (!list) return;
   try {
-    const data = await api("/v1/validators");
-    const vals = data.validators || data.active || data.items || [];
-    list.innerHTML = "";
-    if (!vals.length) {
-      list.innerHTML = `<div class="list-item">Validator list unavailable</div>`;
-      return;
-    }
-    vals.forEach((v) => {
-      const id = v.id || v.validator || v.name || "-";
-      const item = document.createElement("div");
-      item.className = "list-item";
-      item.innerHTML = `<strong>${id}</strong><span>Status: ${v.status || (v.active ? "active" : "unknown")}</span><span>Uptime: ${v.uptime ?? "-"} | Voting power: ${v.voting_power ?? v.power ?? "-"}</span>`;
-      list.appendChild(item);
-    });
+    const result = await cachedAPI("validators", "/v1/validators", { ttl: CACHE_TTL.validators, force: !!options.force, cacheOnly: !!options.cacheOnly });
+    renderValidatorsData(result?.data);
   } catch (err) {
     list.innerHTML = `<div class="list-item">${err.message || "Validator sync failed"}</div>`;
   }
 }
 
-async function refreshGovernance() {
+function renderGovernanceData(data) {
+  const list = $("proposalList");
+  if (!list) return;
+  const proposals = data?.proposals || data?.active_proposals || [];
+  list.innerHTML = "";
+  if (!proposals.length) {
+    list.innerHTML = `<div class="list-item">No active proposals</div>`;
+    return;
+  }
+  proposals.forEach((p) => {
+    const item = document.createElement("div");
+    item.className = "list-item";
+    item.innerHTML = `<strong>Proposal ${p.id ?? "-"}</strong><span>${p.title || p.kind || "Protocol proposal"}</span><span>YES ${p.yes ?? 0}% | NO ${p.no ?? 0}% | ABSTAIN ${p.abstain ?? 0}%</span>`;
+    list.appendChild(item);
+  });
+}
+
+async function refreshGovernance(options = {}) {
   const list = $("proposalList");
   if (!list) return;
   try {
-    const data = await api("/governance/status");
-    const proposals = data.proposals || data.active_proposals || [];
-    list.innerHTML = "";
-    if (!proposals.length) {
-      list.innerHTML = `<div class="list-item">No active proposals</div>`;
-      return;
-    }
-    proposals.forEach((p) => {
-      const item = document.createElement("div");
-      item.className = "list-item";
-      item.innerHTML = `<strong>Proposal ${p.id ?? "-"}</strong><span>${p.title || p.kind || "Protocol proposal"}</span><span>YES ${p.yes ?? 0}% | NO ${p.no ?? 0}% | ABSTAIN ${p.abstain ?? 0}%</span>`;
-      list.appendChild(item);
-    });
+    const result = await cachedAPI("governance", "/governance/status", { ttl: CACHE_TTL.governance, force: !!options.force, cacheOnly: !!options.cacheOnly });
+    renderGovernanceData(result?.data);
   } catch (err) {
     list.innerHTML = `<div class="list-item">${err.message || "Governance unavailable"}</div>`;
   }
 }
 
-async function refreshBridge() {
+function renderBridgeData(data) {
+  if (!$("bridgeStatus")) return;
+  setStatus("bridgeStatus", data?.enabled ? "Enabled" : "Verification Only", data?.enabled ? "success" : "");
+  setText("bridgeMode", data?.mode || "disabled");
+  setText("bridgeChains", formatNumber(data?.registered_chains || 0));
+  setText("bridgeAssets", formatNumber(data?.registered_assets || 0));
+  setText("bridgeFuture", data?.light_client_required === false ? "Asset transfer allowed" : "Light-client verified transfer pending");
+}
+
+async function refreshBridge(options = {}) {
   if (!$("bridgeStatus")) return;
   try {
-    const data = await api("/bridge/status");
-    setStatus("bridgeStatus", data.enabled ? "Enabled" : "Verification Only", data.enabled ? "success" : "");
-    setText("bridgeMode", data.mode || "disabled");
-    setText("bridgeChains", formatNumber(data.registered_chains || 0));
-    setText("bridgeAssets", formatNumber(data.registered_assets || 0));
-    setText("bridgeFuture", data.light_client_required === false ? "Asset transfer allowed" : "Light-client verified transfer pending");
+    const result = await cachedAPI("bridge", "/bridge/status", { ttl: CACHE_TTL.bridge, force: !!options.force, cacheOnly: !!options.cacheOnly });
+    renderBridgeData(result?.data);
   } catch (err) {
     setStatus("bridgeStatus", "Unavailable", "error");
     setText("bridgeFuture", err.message || "Bridge status failed");
@@ -799,8 +1023,8 @@ async function handleSend(event) {
     };
     await submitSignedTx(tx);
     setStatus("sendStatus", "Transaction submitted", "success");
-    refreshBalance();
-    refreshTransactions();
+    refreshBalance({ force: true });
+    refreshTransactions({ force: true });
   } catch (err) {
     setStatus("sendStatus", err.message || "Send failed", "error");
   }
@@ -825,7 +1049,8 @@ async function handleStake(event) {
     };
     await submitSignedTx(tx);
     setStatus("stakeStatus", "Stake submitted", "success");
-    refreshBalance();
+    refreshBalance({ force: true });
+    refreshValidators({ force: true });
   } catch (err) {
     setStatus("stakeStatus", err.message || "Stake failed", "error");
   }
@@ -848,7 +1073,8 @@ async function handleUnstake(event) {
     };
     await submitSignedTx(tx);
     setStatus("unstakeStatus", "Unstake submitted", "success");
-    refreshBalance();
+    refreshBalance({ force: true });
+    refreshValidators({ force: true });
   } catch (err) {
     setStatus("unstakeStatus", err.message || "Unstake failed", "error");
   }
@@ -990,6 +1216,7 @@ function installShell() {
         <div class="status-row">
           <span id="networkPill" class="pill">Mainnet</span>
           <span class="pill">RPC <strong id="topRpc">-</strong></span>
+          <span class="pill">Realtime <strong id="topRealtime">Polling</strong></span>
           <span class="pill">Height <strong id="topHeight">-</strong></span>
           <span class="pill">CMD <strong id="topCmd">-</strong></span>
           <span class="pill">Wallet <strong id="topWallet">No wallet</strong></span>
@@ -1020,7 +1247,8 @@ function bindEvents() {
     state.rpc = state.rpcManager.active;
     document.body.dataset.theme = $("settingsTheme").value;
     localStorage.setItem("msc_wallet_theme", $("settingsTheme").value);
-    refreshAll();
+    refreshAll({ force: true });
+    connectRealtime(true);
   });
   $("createWalletForm")?.addEventListener("submit", createWallet);
   $("unlockForm")?.addEventListener("submit", unlockWallet);
@@ -1046,15 +1274,122 @@ function bindEvents() {
   });
 }
 
-async function refreshAll() {
+function renderRealtimeEvent(event) {
+  if (!event || typeof event !== "object") return;
+  if (event.height) {
+    setText("topHeight", formatNumber(event.height));
+    setText("blockHeight", formatNumber(event.height));
+    setText("latestBlocks", `height ${formatNumber(event.height)} | finalized ${formatNumber(event.finalized_height || "-")}`);
+    setText("txBlockHeight", formatNumber(event.height));
+  }
+  if (event.finalized_height) setText("finalizedHeight", formatNumber(event.finalized_height));
+  if (event.mode) {
+    setText("topCmd", event.mode);
+    setText("cmdStatus", event.mode);
+    setText("validatorCMD", event.mode);
+  }
+  if (event.network_health) setText("networkStatus", event.network_health);
+}
+
+function handleRealtimeEvent(event) {
+  state.realtime.lastEventAt = Date.now();
+  renderRealtimeEvent(event);
+  if (event.type === "hello") {
+    refreshNetwork({ cacheOnly: false }).catch(() => {});
+    return;
+  }
+  if (event.type === "new_block" || event.type === "finality_update" || event.type === "consensus_mode") {
+    refreshNetwork({ cacheOnly: false }).catch(() => {});
+    if (state.wallet?.address) {
+      refreshBalance({ cacheOnly: false }).catch(() => {});
+      refreshTransactions({ cacheOnly: false }).catch(() => {});
+    }
+  }
+  if (event.type === "validator_update") refreshValidators({ force: true }).catch(() => {});
+  if (event.type === "tx_update" && (!event.address || event.address === state.wallet?.address)) {
+    refreshBalance({ force: true }).catch(() => {});
+    refreshTransactions({ force: true }).catch(() => {});
+  }
+}
+
+function connectRealtime(force = false) {
+  if (!window.WebSocket) {
+    state.realtime.connected = false;
+    state.realtime.fallback = true;
+    setRealtimeStatus("Fallback polling", "");
+    return;
+  }
+  if (!force && state.realtime.socket && [window.WebSocket.CONNECTING, window.WebSocket.OPEN].includes(state.realtime.socket.readyState)) return;
+  try {
+    state.realtime.socket?.close();
+  } catch (_) {
+    // Best-effort cleanup before dialing the currently selected RPC.
+  }
+  const url = walletEventURL(state.rpcManager?.active || state.rpc);
+  if (!url) {
+    setRealtimeStatus("Fallback polling", "");
+    return;
+  }
+  const ws = new WebSocket(url);
+  state.realtime.socket = ws;
+  setRealtimeStatus("Connecting", "");
+  ws.onopen = () => {
+    state.realtime.connected = true;
+    state.realtime.fallback = false;
+    state.realtime.reconnectAttempts = 0;
+    state.pollDelayMs = POLL_FALLBACK_MAX_MS;
+    setRealtimeStatus("Connected", "success");
+  };
+  ws.onmessage = (message) => {
+    try {
+      handleRealtimeEvent(JSON.parse(message.data || "{}"));
+    } catch (_) {
+      // Ignore malformed push messages; the polling fallback remains active.
+    }
+  };
+  ws.onerror = () => {
+    state.realtime.connected = false;
+    state.realtime.fallback = true;
+    setRealtimeStatus("Fallback polling", "");
+  };
+  ws.onclose = () => {
+    if (state.realtime.socket !== ws) return;
+    state.realtime.connected = false;
+    state.realtime.fallback = true;
+    setRealtimeStatus("Fallback polling", "");
+    const attempt = Math.min(6, state.realtime.reconnectAttempts + 1);
+    state.realtime.reconnectAttempts = attempt;
+    const delay = Math.min(POLL_FALLBACK_MAX_MS, 1000 * (2 ** attempt)) + Math.floor(Math.random() * 1500);
+    window.setTimeout(() => connectRealtime(), delay);
+  };
+}
+
+function scheduleRefresh(delayMs = state.pollDelayMs) {
+  if (state.schedulerTimer) window.clearTimeout(state.schedulerTimer);
+  state.schedulerTimer = window.setTimeout(backgroundRefresh, delayMs);
+}
+
+async function backgroundRefresh() {
+  if (state.refreshRunning) return scheduleRefresh(Math.min(POLL_FALLBACK_MAX_MS, state.pollDelayMs + 5000));
+  state.refreshRunning = true;
+  try {
+    await refreshAll({ cacheOnly: false });
+    state.pollDelayMs = state.realtime.connected ? POLL_FALLBACK_MAX_MS : Math.min(POLL_FALLBACK_MAX_MS, Math.max(POLL_FALLBACK_MIN_MS, state.pollDelayMs + 5000));
+  } finally {
+    state.refreshRunning = false;
+    scheduleRefresh(state.pollDelayMs + Math.floor(Math.random() * 1500));
+  }
+}
+
+async function refreshAll(options = {}) {
   refreshRPCSettingsUI();
-  await refreshNetwork();
+  await refreshNetwork(options);
   updateWalletUI();
-  await refreshBalance();
-  await refreshTransactions();
-  await refreshValidators();
-  await refreshGovernance();
-  await refreshBridge();
+  await refreshBalance(options);
+  await refreshTransactions(options);
+  await refreshValidators(options);
+  await refreshGovernance(options);
+  await refreshBridge(options);
 }
 
 function initTheme() {
@@ -1065,9 +1400,11 @@ function initTheme() {
 
 state.rpcManager = new WalletRPCManager();
 state.rpc = state.rpcManager.active;
+state.dataCache = new WalletDataCache(WALLET_CACHE_KEY);
 window.MSC_WALLET_RPC_MANAGER = state.rpcManager;
 installShell();
 bindEvents();
 initTheme();
-refreshAll();
-window.setInterval(refreshAll, 5000);
+refreshAll({ cacheOnly: true });
+connectRealtime();
+scheduleRefresh(1000 + Math.floor(Math.random() * 1500));

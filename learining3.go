@@ -34013,6 +34013,7 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/wallet", s.handleWalletInfo)
 
 	mux.HandleFunc("/wallet/status", s.handleWalletStatus)
+	mux.HandleFunc("/wallet/events", s.handleWalletEvents)
 
 	mux.HandleFunc("/wallet/create", s.handleWalletCreate)
 
@@ -34138,6 +34139,7 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/v1/governance/apply", s.handleV1GovernanceApply)
 	mux.HandleFunc("/v1/upgrade/status", s.handleV1UpgradeStatus)
 	mux.HandleFunc("/v1/balance", s.handleV1Balance)
+	mux.HandleFunc("/v1/wallet/events", s.handleWalletEvents)
 	mux.HandleFunc("/v1/nonce", s.handleV1Nonce)
 	mux.HandleFunc("/v1/dtl/quote", s.handleV1DTLQuote)
 	mux.HandleFunc("/v1/dtl/route_quote", s.handleV1DTLRouteQuote)
@@ -42474,7 +42476,7 @@ func authorized(r *http.Request) bool {
 
 		switch path {
 
-		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/validators/diversity", "/consensus/mode", "/formal/verification", "/storage/policy", "/bridge/status", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/consensus/mode", "/v1/formal/verification", "/v1/storage/policy", "/v1/bridge/status", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/validators/diversity", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
+		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/validators/diversity", "/consensus/mode", "/formal/verification", "/storage/policy", "/bridge/status", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/wallet/events", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/consensus/mode", "/v1/formal/verification", "/v1/storage/policy", "/v1/bridge/status", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/wallet/events", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/validators/diversity", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
 
 			return true
 
