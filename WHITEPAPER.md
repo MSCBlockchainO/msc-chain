@@ -106,6 +106,64 @@ Blocks commit state roots, mempool roots, receipt roots, validator set hashes, n
 same input block + same pre-state => same post-state + same receipts
 ```
 
+### 5.1 Formal Verification And Runtime Proof Obligations
+
+MSC Chain separates formal-verification claims into two categories:
+
+- machine-checked implementation invariants that are enforced by Go code, tests, RPC, and Prometheus;
+- independent mathematical models, such as TLA+, Coq, or Isabelle proofs, which remain a launch-gate item until externally produced and reviewed.
+
+The current implementation exposes a formal-verification audit surface:
+
+```text
+GET /formal/verification
+GET /v1/formal/verification
+```
+
+The response reports:
+
+- runtime invariant health;
+- checked invariant count;
+- failed invariant count;
+- current height and finalized height;
+- active validator count;
+- required quorum;
+- strict quorum floor;
+- consensus detector mode;
+- explicit assumptions;
+- safety and liveness proof obligations;
+- external proof status.
+
+Core runtime invariants include:
+
+- finalized height must never exceed local height;
+- required finality quorum must be at least `floor(2n/3)+1`;
+- active validator count must not exceed the known validator set;
+- finality timeout must be classified as `HALTED` or stronger;
+- partition risk must be classified as `PARTITION` or stronger;
+- attack signals must not be active during healthy operation.
+
+Formal proof obligations tracked by the node include:
+
+| Obligation | Type | Current status |
+| --- | --- | --- |
+| No two finalized hashes at the same height | Safety | Machine-checked in runtime and tests |
+| Strict finality quorum | Safety | Machine-checked in runtime and tests |
+| Irreversible finalized roots | Safety | Machine-checked in finality artifact tests |
+| Eventual finality under quorum and partial synchrony | Liveness | Runtime-observed, not theorem-proven |
+| Independent TLA+/Coq/Isabelle model | Formal model | Pending external review |
+
+Prometheus exposes:
+
+```text
+msc_formal_verification_healthy
+msc_formal_invariants_checked
+msc_formal_invariants_failed
+msc_formal_external_model_checked
+```
+
+Mainnet rule: MSC Chain must not claim complete formal verification until an independent consensus model proves safety and liveness assumptions outside the Go implementation. Until then, the formal-verification subsystem is an auditable runtime guardrail and launch-gate tracker.
+
 ## 6. Validator System
 
 MSC Mainnet launches with four frozen core validators:
@@ -817,7 +875,7 @@ This section is the production command reference for operators. Do not commit va
 ### Build And Test
 
 ```powershell
-go test . -run "TestOperator|TestProductionGenesis|TestConsensusMode|TestGovernance|TestProtocolUpgrade|TestEmergency" -count=1
+go test . -run "TestOperator|TestProductionGenesis|TestConsensusMode|TestFormalVerification|TestGovernance|TestProtocolUpgrade|TestEmergency" -count=1
 go build -o msc-node.exe .
 .\msc-node.exe help
 ```
@@ -1072,6 +1130,7 @@ Node status commands:
 ```powershell
 Invoke-RestMethod https://mscblockexplorer.in/status
 Invoke-RestMethod https://mscblockexplorer.in/consensus/mode
+Invoke-RestMethod https://mscblockexplorer.in/formal/verification
 Invoke-RestMethod https://mscblockexplorer.in/storage/policy
 Invoke-RestMethod https://mscblockexplorer.in/v1/validators/diversity
 Invoke-RestMethod https://mscblockexplorer.in/v1/peers

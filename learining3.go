@@ -34013,6 +34013,7 @@ func (s *Server) Start(addr string) {
 
 	mux.HandleFunc("/status", s.handleStatus)
 	mux.HandleFunc("/consensus/mode", s.handleConsensusMode)
+	mux.HandleFunc("/formal/verification", s.handleFormalVerification)
 	mux.HandleFunc("/storage/policy", s.handleStoragePolicy)
 
 	mux.HandleFunc("/snapshot/latest", s.handleSnapshotLatest)
@@ -34094,6 +34095,7 @@ func (s *Server) Start(addr string) {
 	// Versioned exchange/API endpoints.
 	mux.HandleFunc("/v1/status", s.handleV1Status)
 	mux.HandleFunc("/v1/consensus/mode", s.handleV1ConsensusMode)
+	mux.HandleFunc("/v1/formal/verification", s.handleV1FormalVerification)
 	mux.HandleFunc("/v1/storage/policy", s.handleV1StoragePolicy)
 	mux.HandleFunc("/v1/snapshot/latest", s.handleV1SnapshotLatest)
 	mux.HandleFunc("/v1/snapshot/create", s.handleV1SnapshotCreate)
@@ -37017,6 +37019,7 @@ func (s *Server) handleMetrics(
 	runtime.ReadMemStats(&metricsMem)
 
 	runtime := s.Node.runtimeStatusSnapshot()
+	formalReport := s.Node.formalVerificationReportFromRuntime(runtime)
 	s.Node.observePeerConnectivityGauge(runtime.Peers)
 	stats := s.Node.MapStats()
 	obs := s.Node.observabilityStatsSnapshot()
@@ -37281,6 +37284,10 @@ func (s *Server) handleMetrics(
 	appendPromGauge(&out, "msc_consensus_detector_last_finality_seconds", "Consensus Mode Detector last finality age input in seconds.", baseLabels, float64(runtime.ConsensusDetectorLastFinalitySec))
 	appendPromGauge(&out, "msc_consensus_detector_partition_risk", "Consensus Mode Detector partition risk signal (1/0).", baseLabels, boolToPromFloat(runtime.ConsensusDetectorPartitionRisk))
 	appendPromGauge(&out, "msc_consensus_detector_attack_signal", "Consensus Mode Detector attack signal (1/0).", baseLabels, boolToPromFloat(runtime.ConsensusDetectorAttack))
+	appendPromGauge(&out, "msc_formal_verification_healthy", "Formal verification runtime invariant health signal (1/0).", promLabels(baseLabels, map[string]string{"version": formalReport.Version, "status": formalReport.Status}), boolToPromFloat(formalReport.Healthy))
+	appendPromGauge(&out, "msc_formal_invariants_checked", "Runtime invariants checked by the formal-verification audit surface.", promLabels(baseLabels, map[string]string{"version": formalReport.Version}), float64(formalReport.InvariantsChecked))
+	appendPromGauge(&out, "msc_formal_invariants_failed", "Runtime invariants currently failing in the formal-verification audit surface.", promLabels(baseLabels, map[string]string{"version": formalReport.Version}), float64(formalReport.InvariantsFailed))
+	appendPromGauge(&out, "msc_formal_external_model_checked", "External formal model proof status (1 when independently model-checked).", promLabels(baseLabels, map[string]string{"version": formalReport.Version, "status": formalReport.ExternalProofStatus}), boolToPromFloat(formalReport.ExternalModelChecked))
 	appendPromGauge(&out, "msc_consensus_block_production_status", "Current block production status; active status has value 1.", promLabels(baseLabels, map[string]string{"status": runtime.BlockProductionStatus, "reason": runtime.BlockProductionReason}), 1)
 	appendPromGauge(&out, "msc_consensus_tx_lane_status", "Current transaction lane status; active status has value 1.", promLabels(baseLabels, map[string]string{"status": runtime.TxLaneStatus, "reason": runtime.TxLaneReason}), 1)
 	appendPromGauge(&out, "msc_quorum_required", "Strict quorum required for consensus readiness/finality.", baseLabels, float64(quorumRequired))
@@ -42442,7 +42449,7 @@ func authorized(r *http.Request) bool {
 
 		switch path {
 
-		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/validators/diversity", "/consensus/mode", "/storage/policy", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/consensus/mode", "/v1/storage/policy", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/validators/diversity", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
+		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/validators/diversity", "/consensus/mode", "/formal/verification", "/storage/policy", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/consensus/mode", "/v1/formal/verification", "/v1/storage/policy", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/validators/diversity", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
 
 			return true
 
