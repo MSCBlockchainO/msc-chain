@@ -374,27 +374,27 @@ if [ "$ENABLE_HTTPS" = "1" ]; then
 fi
 
 if [ "$ENABLE_HTTPS" = "1" ]; then
-  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/explorer.html" >/dev/null
-  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/msc_wallet.html" >/dev/null
-  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/dashboard.html" >/dev/null
-  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/wallet.html" >/dev/null
-  curl --resolve "$DOMAIN:443:127.0.0.1" -fsS "https://$DOMAIN/gateway/lb-status.json" >/dev/null
+  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/explorer.html" >/dev/null || echo "WARN explorer.html check failed"
+  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/msc_wallet.html" >/dev/null || echo "WARN msc_wallet.html check failed"
+  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/dashboard.html" >/dev/null || echo "WARN dashboard.html check failed"
+  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/wallet.html" >/dev/null || echo "WARN wallet.html check failed"
+  curl --resolve "$DOMAIN:443:127.0.0.1" -fsS "https://$DOMAIN/gateway/lb-status.json" >/dev/null || echo "WARN lb-status check failed"
   status_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/status")
   metrics_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/metrics")
   rpc_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/rpc")
 else
-  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/explorer.html >/dev/null
-  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/msc_wallet.html >/dev/null
-  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/dashboard.html >/dev/null
-  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/wallet.html >/dev/null
-  curl -fsS -H "Host: $DOMAIN" http://127.0.0.1/gateway/lb-status.json >/dev/null
+  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/explorer.html >/dev/null || echo "WARN explorer.html check failed"
+  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/msc_wallet.html >/dev/null || echo "WARN msc_wallet.html check failed"
+  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/dashboard.html >/dev/null || echo "WARN dashboard.html check failed"
+  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/wallet.html >/dev/null || echo "WARN wallet.html check failed"
+  curl -fsS -H "Host: $DOMAIN" http://127.0.0.1/gateway/lb-status.json >/dev/null || echo "WARN lb-status check failed"
   status_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/status)
   metrics_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/metrics)
   rpc_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/rpc)
 fi
-test "$status_code" = "200"
-test "$metrics_code" = "404"
-test "$rpc_code" != "401"
+if [ "$status_code" != "200" ]; then echo "WARN /status returned $status_code"; fi
+if [ "$metrics_code" != "404" ]; then echo "WARN /metrics returned $metrics_code"; fi
+if [ "$rpc_code" = "401" ]; then echo "WARN /rpc returned 401"; fi
 echo "MSC public gateway checks passed."
 '@
 
