@@ -291,12 +291,15 @@ func (n *Node) cachePostCommitLedger(height uint64, ledger Ledger) {
 		n.postCommitLedgerByHeight = make(map[uint64]Ledger)
 	}
 	n.postCommitLedgerByHeight[height] = ledger.Clone()
-	const cacheDepth = 256
+	cacheDepth := n.ledgerMemoryCacheDepth()
+	removed := 0
 	for h := range n.postCommitLedgerByHeight {
 		if h+cacheDepth < height {
 			delete(n.postCommitLedgerByHeight, h)
+			removed++
 		}
 	}
+	maybeReleaseMemoryAfterLedgerCachePrune(removed, height)
 }
 
 func (n *Node) cachedPostCommitLedger(height uint64) (Ledger, bool) {

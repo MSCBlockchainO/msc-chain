@@ -35,6 +35,43 @@ func runtimeAutoMemoryLimitMiB(totalMiB int64, role string) int64 {
 	return limit
 }
 
+func ledgerMemoryCacheDepthForRole(role string, override string) uint64 {
+	if raw := strings.TrimSpace(override); raw != "" {
+		parsed, err := strconv.ParseUint(raw, 10, 64)
+		if err == nil && parsed > 0 {
+			if parsed > 256 {
+				return 256
+			}
+			return parsed
+		}
+	}
+	role = strings.ToLower(strings.TrimSpace(role))
+	if role == "full" || role == "light" {
+		return 16
+	}
+	return 32
+}
+
+func nodeLedgerMemoryCacheDepth(role string) uint64 {
+	return ledgerMemoryCacheDepthForRole(role, os.Getenv("MSC_EXECUTION_LEDGER_CACHE_DEPTH"))
+}
+
+func (n *Node) ledgerMemoryCacheDepth() uint64 {
+	if n == nil {
+		return nodeLedgerMemoryCacheDepth("")
+	}
+	return nodeLedgerMemoryCacheDepth(n.Role)
+}
+
+func maybeReleaseMemoryAfterLedgerCachePrune(removed int, height uint64) {
+	if removed <= 0 {
+		return
+	}
+	if removed >= 8 || height%32 == 0 {
+		debug.FreeOSMemory()
+	}
+}
+
 func hostMemoryTotalMiB() int64 {
 	raw, err := os.ReadFile("/proc/meminfo")
 	if err != nil {

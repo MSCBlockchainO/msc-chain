@@ -2772,12 +2772,15 @@ func (n *Node) cacheExecutionSnapshotLedger(height uint64, ledger Ledger) {
 		n.snapshotExecutionLedgerByHeight = make(map[uint64]Ledger)
 	}
 	n.snapshotExecutionLedgerByHeight[height] = ledger.Clone()
-	const cacheDepth = 256
+	cacheDepth := n.ledgerMemoryCacheDepth()
+	removed := 0
 	for h := range n.snapshotExecutionLedgerByHeight {
 		if h+cacheDepth < height {
 			delete(n.snapshotExecutionLedgerByHeight, h)
+			removed++
 		}
 	}
+	maybeReleaseMemoryAfterLedgerCachePrune(removed, height)
 }
 
 func (n *Node) cachedExecutionSnapshotLedger(height uint64) (Ledger, bool) {

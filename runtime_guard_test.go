@@ -26,3 +26,28 @@ func TestRuntimeAutoMemoryLimitMiB(t *testing.T) {
 		})
 	}
 }
+
+func TestLedgerMemoryCacheDepthForRole(t *testing.T) {
+	tests := []struct {
+		name     string
+		role     string
+		override string
+		want     uint64
+	}{
+		{name: "validator default", role: "validator", want: 32},
+		{name: "auto default", role: "auto", want: 32},
+		{name: "full default", role: "full", want: 16},
+		{name: "light default", role: "light", want: 16},
+		{name: "override", role: "validator", override: "64", want: 64},
+		{name: "override capped", role: "validator", override: "999", want: 256},
+		{name: "invalid override", role: "full", override: "x", want: 16},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ledgerMemoryCacheDepthForRole(tt.role, tt.override)
+			if got != tt.want {
+				t.Fatalf("ledgerMemoryCacheDepthForRole(%q, %q) = %d, want %d", tt.role, tt.override, got, tt.want)
+			}
+		})
+	}
+}
