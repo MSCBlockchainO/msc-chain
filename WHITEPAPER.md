@@ -188,6 +188,26 @@ The MPC path is fail-closed:
 
 MPC mode is intended for large validators that do not want one `validator.sec` compromise to compromise the whole validator. The MSC node does not implement the threshold cryptography internally; it defines the deterministic payload, fail-closed signer boundary, verification, configuration, and observability contract for external MPC systems.
 
+### Recommended Mainnet Signing Policy
+
+MSC launch policy is:
+
+1. Use local `validator.sec` only for bootstrap, development, and emergency break-glass operation.
+2. Move production validators to HSM/external-signer mode first, one validator at a time, after signer rehearsal.
+3. Keep MPC/threshold signing disabled on core validators until the threshold signer cluster has passed long-running testnet and EC2 rehearsal.
+4. For future large validators, prefer MPC threshold signing once participant monitoring, failover, and signer quorum recovery are proven.
+
+The effective signer is observable through `/status` and Prometheus:
+
+- `validator_signer_mode`: `software`, `hsm`, `mpc`, `public_key_only`, or `none`;
+- `validator_signer_ready`;
+- `validator_signer_provider`;
+- `validator_signer_reason`;
+- `msc_validator_signer_mode_code`;
+- `msc_validator_signer_ready`.
+
+If both HSM and MPC are configured, MPC is the effective signer. MSC does not silently fall back to software signing when HSM or MPC mode is enabled. This is intentional: signer infrastructure failure should make the validator unavailable rather than secretly downgrading to a hot key.
+
 ## 8. Slashing And Liveness
 
 MSC Chain applies economic penalties for severe validator faults and inactivity.
@@ -848,6 +868,13 @@ It must return the same response shape:
 ```
 
 When `mpc_enabled=true`, MSC does not fall back to a local software validator key. This is intentional: unavailable MPC means the validator is unavailable rather than silently signing with a single hot key.
+
+Signer readiness checks:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:26657/status | Select-Object validator_signer_mode,validator_signer_ready,validator_signer_provider,validator_signer_reason
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:26657/metrics | Select-String "msc_validator_signer_"
+```
 
 Transaction and staking commands:
 

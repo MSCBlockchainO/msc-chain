@@ -121,6 +121,28 @@ func TestValidatorHSMRejectsBadExternalSignature(t *testing.T) {
 	}
 }
 
+func TestValidatorHSMModeDisablesSoftwareKeyFallback(t *testing.T) {
+	defer restoreValidatorHSMGlobals(t)()
+	pub, priv, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ValidatorHSMEnabled = true
+	ValidatorHSMProvider = "external"
+	ValidatorHSMKeyID = "slot-1"
+	ValidatorHSMPublicKeyHex = hex.EncodeToString(pub)
+	ValidatorHSMExternalSignerCommand = ""
+
+	key := ValidatorKey{ID: "H", PublicKey: pub, PrivateKey: priv}
+	if isValidatorSigningKeyUsable(key) {
+		t.Fatal("hsm mode must not fall back to local private key when signer is not ready")
+	}
+	n := &Node{ID: "H", ValidatorKey: key}
+	if _, ok := n.signValidatorPayload([]byte("must fail closed")); ok {
+		t.Fatal("expected HSM mode to fail closed without external signer")
+	}
+}
+
 func TestLoadValidatorHSMKeyDoesNotRequirePrivateKey(t *testing.T) {
 	defer restoreValidatorHSMGlobals(t)()
 	pub, _, err := ed25519.GenerateKey(cryptorand.Reader)
@@ -281,5 +303,37 @@ func TestLoadValidatorMPCKeyDoesNotRequirePrivateKey(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "validator.sec")); !os.IsNotExist(err) {
 		t.Fatalf("validator.sec should not be created in MPC mode, err=%v", err)
+	}
+}
+
+func TestValidatorSignerStatusEffectiveModes(t *testing.T) {
+	defer restoreValidatorHSMGlobals(t)()
+	pub, priv, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := ValidatorKey{ID: "S", PublicKey: pub, PrivateKey: priv}
+	if st := validatorSignerStatus("S", key); !st.Ready || st.Mode != "software" {
+		t.Fatalf("software signer status = %+v", st)
+	}
+
+	ValidatorHSMEnabled = true
+	ValidatorHSMProvider = "ledger_enterprise"
+	ValidatorHSMKeyID = "key-S"
+	ValidatorHSMPublicKeyHex = hex.EncodeToString(pub)
+	ValidatorHSMExternalSignerCommand = "signer"
+	if st := validatorSignerStatus("S", key); !st.Ready || st.Mode != "hsm" || st.Provider != "ledger_enterprise" {
+		t.Fatalf("hsm signer status = %+v", st)
+	}
+
+	ValidatorMPCEnabled = true
+	ValidatorMPCProvider = "threshold_ed25519"
+	ValidatorMPCKeyID = "cluster-S"
+	ValidatorMPCPublicKeyHex = hex.EncodeToString(pub)
+	ValidatorMPCExternalSignerCommand = "mpc-signer"
+	ValidatorMPCThreshold = 2
+	ValidatorMPCParticipants = 3
+	if st := validatorSignerStatus("S", key); !st.Ready || st.Mode != "mpc" || st.Threshold != 2 || st.Participants != 3 {
+		t.Fatalf("mpc signer status = %+v", st)
 	}
 }

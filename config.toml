@@ -124,6 +124,11 @@ allow_env_password_in_production = true
 core_env_password_allowed = true
 core_password_file = "" 
 password_mode = "file_or_prompt"
+# Mainnet signer policy:
+# - Current production recommendation: HSM/external signer per validator.
+# - Keep hsm_enabled=false until hsm_public_key and hsm_external_signer_command are configured and rehearsed.
+# - Future large-validator path: enable MPC threshold signing instead of HSM after a 24h/72h rehearsal.
+# - If mpc_enabled=true, MPC is the effective signer and software/HSM fallback is disabled.
 hsm_enabled = false
 hsm_provider = "external"
 hsm_key_id = ""
@@ -306,7 +311,7 @@ open_browser = true
 timeout_seconds = 600
 challenge_ttl_seconds = 180
 token_ttl_seconds = 86400
-core_validators = ["A","B","C","D"]
+ core_validators = ["A","B","C","D"]
 
 [core]
 registry_path = "core_validators.json"

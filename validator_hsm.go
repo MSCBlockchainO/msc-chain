@@ -155,14 +155,14 @@ func isValidatorSigningKeyUsable(v ValidatorKey) bool {
 	if ValidatorMPCEnabled {
 		return validatorMPCSigningKeyUsable(v)
 	}
-	if len(v.PrivateKey) == ed25519.PrivateKeySize {
-		return true
+	if ValidatorHSMEnabled {
+		if !validatorHSMReady() {
+			return false
+		}
+		pub, ok := validatorHSMConfiguredPublicKey()
+		return ok && bytes.Equal(pub, v.PublicKey)
 	}
-	if !ValidatorHSMEnabled || !validatorHSMReady() {
-		return false
-	}
-	pub, ok := validatorHSMConfiguredPublicKey()
-	return ok && bytes.Equal(pub, v.PublicKey)
+	return len(v.PrivateKey) == ed25519.PrivateKeySize
 }
 
 func LoadValidatorHSMKey(nodeID, nodePath string) (ValidatorKey, bool) {
@@ -228,41 +228,44 @@ func (n *Node) signValidatorPayload(payload []byte) ([]byte, bool) {
 	if ValidatorMPCEnabled {
 		return n.signValidatorPayloadWithMPC(payload)
 	}
+	if ValidatorHSMEnabled {
+		if !validatorHSMReady() {
+			return nil, false
+		}
+		pub, ok := validatorHSMConfiguredPublicKey()
+		if !ok || !bytes.Equal(pub, n.ValidatorKey.PublicKey) {
+			return nil, false
+		}
+		sig, err := validatorHSMExternalSignerRunner(validatorHSMRequest{
+			Domain:       "msc-validator-ed25519-v1",
+			SignerMode:   "hsm",
+			ValidatorID:  normalizeValidatorID(n.ValidatorKey.ID),
+			Provider:     normalizeValidatorHSMProvider(ValidatorHSMProvider),
+			KeyID:        strings.TrimSpace(ValidatorHSMKeyID),
+			PublicKeyHex: hex.EncodeToString(pub),
+			PayloadHex:   hex.EncodeToString(payload),
+		})
+		if err != nil {
+			fmt.Printf("[VALIDATOR-HSM] signer_failed validator=%s provider=%s error=%v\n",
+				normalizeValidatorID(n.ValidatorKey.ID),
+				normalizeValidatorHSMProvider(ValidatorHSMProvider),
+				err,
+			)
+			return nil, false
+		}
+		if len(sig) != ed25519.SignatureSize || !ed25519.Verify(pub, payload, sig) {
+			fmt.Printf("[VALIDATOR-HSM] signer_rejected validator=%s provider=%s reason=invalid_signature\n",
+				normalizeValidatorID(n.ValidatorKey.ID),
+				normalizeValidatorHSMProvider(ValidatorHSMProvider),
+			)
+			return nil, false
+		}
+		return sig, true
+	}
 	if len(n.ValidatorKey.PrivateKey) == ed25519.PrivateKeySize {
 		return ed25519.Sign(n.ValidatorKey.PrivateKey, payload), true
 	}
-	if !ValidatorHSMEnabled || !validatorHSMReady() {
-		return nil, false
-	}
-	pub, ok := validatorHSMConfiguredPublicKey()
-	if !ok || !bytes.Equal(pub, n.ValidatorKey.PublicKey) {
-		return nil, false
-	}
-	sig, err := validatorHSMExternalSignerRunner(validatorHSMRequest{
-		Domain:       "msc-validator-ed25519-v1",
-		SignerMode:   "hsm",
-		ValidatorID:  normalizeValidatorID(n.ValidatorKey.ID),
-		Provider:     normalizeValidatorHSMProvider(ValidatorHSMProvider),
-		KeyID:        strings.TrimSpace(ValidatorHSMKeyID),
-		PublicKeyHex: hex.EncodeToString(pub),
-		PayloadHex:   hex.EncodeToString(payload),
-	})
-	if err != nil {
-		fmt.Printf("[VALIDATOR-HSM] signer_failed validator=%s provider=%s error=%v\n",
-			normalizeValidatorID(n.ValidatorKey.ID),
-			normalizeValidatorHSMProvider(ValidatorHSMProvider),
-			err,
-		)
-		return nil, false
-	}
-	if len(sig) != ed25519.SignatureSize || !ed25519.Verify(pub, payload, sig) {
-		fmt.Printf("[VALIDATOR-HSM] signer_rejected validator=%s provider=%s reason=invalid_signature\n",
-			normalizeValidatorID(n.ValidatorKey.ID),
-			normalizeValidatorHSMProvider(ValidatorHSMProvider),
-		)
-		return nil, false
-	}
-	return sig, true
+	return nil, false
 }
 
 func runValidatorHSMExternalSigner(req validatorHSMRequest) ([]byte, error) {
