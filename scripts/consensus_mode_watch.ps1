@@ -2,6 +2,7 @@ param(
     [string]$Target = "https://mscblockexplorer.in",
     [int]$DurationSeconds = 180,
     [int]$IntervalSeconds = 2,
+    [int]$MaxErrors = 3,
     [switch]$FailOnAnyDegraded
 )
 
@@ -13,18 +14,32 @@ if ($DurationSeconds -lt 1) {
 if ($IntervalSeconds -lt 1) {
     throw "IntervalSeconds must be >= 1"
 }
+if ($MaxErrors -lt 0) {
+    throw "MaxErrors must be >= 0"
+}
 
 $base = $Target.TrimEnd("/")
 $deadline = (Get-Date).AddSeconds($DurationSeconds)
 $samples = 0
 $falseDegraded = 0
 $realDegraded = 0
+$errors = 0
 $lastHeight = 0
 
 Write-Host "Watching consensus mode at $base for ${DurationSeconds}s..."
 
 while ((Get-Date) -lt $deadline) {
-    $mode = Invoke-RestMethod -Uri "$base/consensus/mode" -TimeoutSec 10
+    try {
+        $mode = Invoke-RestMethod -Uri "$base/consensus/mode" -TimeoutSec 10
+    } catch {
+        $errors++
+        Write-Warning "sample_error=$errors $($_.Exception.Message)"
+        if ($errors -gt $MaxErrors) {
+            throw "Consensus mode watch exceeded MaxErrors=$MaxErrors"
+        }
+        Start-Sleep -Seconds $IntervalSeconds
+        continue
+    }
     $samples++
     $height = [uint64]$mode.height
     if ($height -gt $lastHeight) {
@@ -70,4 +85,4 @@ if ($FailOnAnyDegraded -and $realDegraded -gt 0) {
     throw "Consensus detector produced $realDegraded real DEGRADED sample(s)"
 }
 
-Write-Host "PASS: samples=$samples false_degraded=$falseDegraded real_degraded=$realDegraded last_height=$lastHeight"
+Write-Host "PASS: samples=$samples errors=$errors false_degraded=$falseDegraded real_degraded=$realDegraded last_height=$lastHeight"
