@@ -35386,6 +35386,8 @@ func (s *Server) handleStatus(
 			onboardingStateLite = string(OnboardingStateActive)
 			activationBlockerLite = "active"
 		}
+		hsmStatusLite := validatorHSMStatus(s.Node.ID, s.Node.ValidatorKey)
+		mpcStatusLite := validatorMPCStatus(s.Node.ID, s.Node.ValidatorKey)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"node_id":                                    s.Node.ID,
@@ -35516,6 +35518,18 @@ func (s *Server) handleStatus(
 			"genesis_validator_set_frozen":               GenesisValidatorSetFrozen,
 			"genesis_frozen_validator_set_size":          GenesisFrozenValidatorSetSize,
 			"wait_reason":                                runtime.WaitReason,
+			"validator_hsm_enabled":                      hsmStatusLite.Enabled,
+			"validator_hsm_ready":                        hsmStatusLite.Ready,
+			"validator_hsm_provider":                     hsmStatusLite.Provider,
+			"validator_hsm_key_id":                       hsmStatusLite.KeyID,
+			"validator_hsm_reason":                       hsmStatusLite.Reason,
+			"validator_mpc_enabled":                      mpcStatusLite.Enabled,
+			"validator_mpc_ready":                        mpcStatusLite.Ready,
+			"validator_mpc_provider":                     mpcStatusLite.Provider,
+			"validator_mpc_key_id":                       mpcStatusLite.KeyID,
+			"validator_mpc_threshold":                    mpcStatusLite.Threshold,
+			"validator_mpc_participants":                 mpcStatusLite.Participants,
+			"validator_mpc_reason":                       mpcStatusLite.Reason,
 			"active_set_mode":                            displayActiveSetMode(),
 			"committee_size":                             committeeSizeLite,
 			"committee_target":                           committeeTargetLite,
