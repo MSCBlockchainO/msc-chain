@@ -6577,10 +6577,24 @@ func snapshotSessionActiveForHeight(session SnapshotSession, localHeight uint64)
 }
 
 func statusNearTipSyncCompleteAllowed(localHeight, targetHeight uint64, snapshotActive bool) bool {
-	return !snapshotActive &&
-		consensusStarted.Load() &&
-		targetHeight > localHeight &&
-		nearSyncTip(localHeight, targetHeight)
+	return statusNearTipSyncCompleteAllowedForRole(localHeight, targetHeight, snapshotActive, "validator")
+}
+
+func statusNearTipSyncCompleteAllowedForRole(localHeight, targetHeight uint64, snapshotActive bool, role string) bool {
+	if snapshotActive || targetHeight <= localHeight {
+		return false
+	}
+	role = normalizeNodeRole(role)
+	lag := targetHeight - localHeight
+	grace := syncNearTipGraceBlocks()
+	if role == "full" || role == "light" {
+		grace = validatorLivenessMaxHeightDriftBlocks()
+		if grace < syncNearTipGraceBlocks() {
+			grace = syncNearTipGraceBlocks()
+		}
+		return lag <= grace
+	}
+	return consensusStarted.Load() && lag <= grace
 }
 
 func (n *Node) consensusSyncReferenceHeight() uint64 {
@@ -34359,7 +34373,7 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 	if networkBestHeight > out.SyncTarget {
 		out.SyncTarget = networkBestHeight
 	}
-	nearTipComplete := statusNearTipSyncCompleteAllowed(out.Height, out.SyncTarget, snapshotSessionActive)
+	nearTipComplete := statusNearTipSyncCompleteAllowedForRole(out.Height, out.SyncTarget, snapshotSessionActive, role)
 	if out.SyncTarget > out.Height && !nearTipComplete {
 		out.Syncing = true
 		out.SyncLagBlocks = out.SyncTarget - out.Height
@@ -34672,7 +34686,7 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 			preliminarySyncTarget = preliminarySnapshotSession.FreezeHeight
 		}
 	}
-	preliminaryNearTipComplete := statusNearTipSyncCompleteAllowed(out.Height, preliminarySyncTarget, preliminarySnapshotActive)
+	preliminaryNearTipComplete := statusNearTipSyncCompleteAllowedForRole(out.Height, preliminarySyncTarget, preliminarySnapshotActive, role)
 	if out.Syncing && preliminaryNearTipComplete {
 		out.Syncing = false
 	}
@@ -34804,7 +34818,7 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 	}
 	out.SyncAnchorFallbackReady = n.allowFreshNodeBlockCatchup(out.Height, bestTarget)
 	out.ExecMismatchUniqueSignersCurrentEpoch = n.executionMismatchUniqueSignersAtEpoch(n.currentEpoch())
-	nearTipComplete := statusNearTipSyncCompleteAllowed(out.Height, bestTarget, snapshotSessionActive)
+	nearTipComplete := statusNearTipSyncCompleteAllowedForRole(out.Height, bestTarget, snapshotSessionActive, role)
 	if bestTarget > out.Height && !nearTipComplete {
 		out.Syncing = true
 	} else if nearTipComplete {

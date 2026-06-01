@@ -1814,6 +1814,70 @@ func TestRuntimeStatusKeepsMultiBlockLagSyncingAfterConsensusStarted(t *testing.
 	}
 }
 
+func TestRuntimeStatusFullNodeLiveTailDoesNotFlapSyncing(t *testing.T) {
+	defer withOnboardingStrictActivationGlobals(t)()
+	configureStrictActivationDefaults()
+
+	prevStarted := consensusStarted.Load()
+	consensusStarted.Store(true)
+	t.Cleanup(func() {
+		consensusStarted.Store(prevStarted)
+	})
+
+	n := makeStrictActivationNode(50)
+	n.Role = "full"
+	n.Consensus = &ConsensusState{
+		Syncing:    false,
+		SyncTarget: n.Blockchain.Height() + validatorLivenessMaxHeightDriftBlocks(),
+	}
+	setStrictActivationObservedHeight(n, n.Blockchain.Height()+validatorLivenessMaxHeightDriftBlocks())
+
+	status := n.runtimeStatusSnapshot()
+	if status.Syncing {
+		t.Fatalf("expected full node live-tail lag not to report syncing")
+	}
+	if !status.SyncComplete {
+		t.Fatalf("expected full node live-tail lag to remain sync-complete")
+	}
+	if status.WaitReason == "syncing" {
+		t.Fatalf("expected full node wait reason not to be syncing")
+	}
+	if status.SyncLagBlocks == 0 {
+		t.Fatalf("expected live-tail lag to remain visible")
+	}
+}
+
+func TestRuntimeStatusFullNodeLargeLagStillSyncing(t *testing.T) {
+	defer withOnboardingStrictActivationGlobals(t)()
+	configureStrictActivationDefaults()
+
+	prevStarted := consensusStarted.Load()
+	consensusStarted.Store(true)
+	t.Cleanup(func() {
+		consensusStarted.Store(prevStarted)
+	})
+
+	lag := validatorLivenessMaxHeightDriftBlocks() + 1
+	n := makeStrictActivationNode(50)
+	n.Role = "full"
+	n.Consensus = &ConsensusState{
+		Syncing:    false,
+		SyncTarget: n.Blockchain.Height() + lag,
+	}
+	setStrictActivationObservedHeight(n, n.Blockchain.Height()+lag)
+
+	status := n.runtimeStatusSnapshot()
+	if !status.Syncing {
+		t.Fatalf("expected full node large lag to report syncing")
+	}
+	if status.SyncComplete {
+		t.Fatalf("expected full node large lag to remain incomplete")
+	}
+	if status.WaitReason != "syncing" {
+		t.Fatalf("expected syncing wait reason, got=%q", status.WaitReason)
+	}
+}
+
 func TestRuntimeStatusFastPathKeepsRecentDegradedPolicyVisible(t *testing.T) {
 	defer withOnboardingStrictActivationGlobals(t)()
 	configureStrictActivationDefaults()
