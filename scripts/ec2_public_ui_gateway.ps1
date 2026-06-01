@@ -90,13 +90,25 @@ if [ "${#MSC_RPC_TARGETS[@]}" -eq 0 ]; then
   MSC_RPC_TARGETS=("127.0.0.1:26665")
 fi
 upstream_body="upstream msc_rpc_backend {\n    least_conn;\n    keepalive 32;\n"
+upstream_count=0
+first_clean=""
 for target in "${MSC_RPC_TARGETS[@]}"; do
   clean="$(echo "$target" | xargs)"
   [ -z "$clean" ] && continue
   clean="${clean#http://}"
   clean="${clean#https://}"
-  upstream_body="${upstream_body}    server ${clean} max_fails=2 fail_timeout=10s;\n"
+  [ -z "$first_clean" ] && first_clean="$clean"
+  if curl -fsS --max-time 2 "http://${clean}/status" >/dev/null 2>&1; then
+    upstream_body="${upstream_body}    server ${clean} max_fails=2 fail_timeout=10s;\n"
+    upstream_count=$((upstream_count + 1))
+  else
+    echo "WARN skipping unreachable nginx upstream target ${clean}; lb-status will still report it."
+  fi
 done
+if [ "$upstream_count" -eq 0 ] && [ -n "$first_clean" ]; then
+  echo "WARN no RPC targets answered health check; keeping first target ${first_clean} in upstream."
+  upstream_body="${upstream_body}    server ${first_clean} max_fails=2 fail_timeout=10s;\n"
+fi
 upstream_body="${upstream_body}}\n"
 printf "%b" "$upstream_body" | sudo tee /etc/nginx/conf.d/msc_rpc_upstream.conf >/dev/null
 
