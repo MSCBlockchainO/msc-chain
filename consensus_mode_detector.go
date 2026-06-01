@@ -98,7 +98,7 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 	case finalityLag > 0:
 		result.Mode = ConsensusDetectorDegraded
 		result.Reason = "finality_lag"
-	case m.MaxValidatorLag > 0:
+	case m.MaxValidatorLag > consensusDetectorDegradedValidatorLagBlocks():
 		result.Mode = ConsensusDetectorDegraded
 		result.Reason = "validator_lag"
 	case m.PeerCount > 0 && m.PeerCount < 3:
@@ -148,6 +148,14 @@ func consensusDetectorMetricRecoveryValidatorLagBlocks(m ConsensusDetectorMetric
 		return 100
 	}
 	return ConsensusDetectorRecoveryValidatorLagBlocks
+}
+
+func consensusDetectorDegradedValidatorLagBlocks() uint64 {
+	threshold := validatorLivenessMaxHeightDriftBlocks()
+	if threshold == 0 {
+		return 1
+	}
+	return threshold
 }
 
 func consensusDetectorModeCode(mode ConsensusDetectorMode) int {

@@ -36197,6 +36197,7 @@ func consensusModeResponse(runtime RuntimeStatusSnapshot, metrics ConsensusDetec
 		"peer_count":                     metrics.PeerCount,
 		"missed_votes":                   metrics.MissedVotes,
 		"block_time_ms":                  metrics.BlockTimeMS,
+		"degraded_validator_lag_blocks":  consensusDetectorDegradedValidatorLagBlocks(),
 		"degraded_after_seconds":         consensusDetectorMetricDegradedAfterSec(metrics),
 		"halted_after_seconds":           consensusDetectorMetricHaltedAfterSec(metrics),
 		"recovery_validator_lag_blocks":  consensusDetectorMetricRecoveryValidatorLagBlocks(metrics),

@@ -104,6 +104,26 @@ func TestDetectConsensusModePriorityAndModes(t *testing.T) {
 			want: ConsensusDetectorDegraded,
 		},
 		{
+			name: "normal one block validator lag",
+			in: ConsensusDetectorMetrics{
+				TotalValidators:  4,
+				ActiveValidators: 4,
+				Quorum:           3,
+				MaxValidatorLag:  1,
+			},
+			want: ConsensusDetectorNormal,
+		},
+		{
+			name: "degraded above liveness drift",
+			in: ConsensusDetectorMetrics{
+				TotalValidators:  4,
+				ActiveValidators: 4,
+				Quorum:           3,
+				MaxValidatorLag:  9,
+			},
+			want: ConsensusDetectorDegraded,
+		},
+		{
 			name: "recovery above validator lag threshold",
 			in: ConsensusDetectorMetrics{
 				TotalValidators:  4,
