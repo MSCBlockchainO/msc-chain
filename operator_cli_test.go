@@ -135,6 +135,24 @@ func TestOperatorMPCSignCommandSignsExternalSignerRequest(t *testing.T) {
 	}
 }
 
+func TestOperatorMPCSignCommandAcceptsPasswordFile(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "mpc")
+	if _, err := writeValidatorMPCShares("F", outDir, 2, 3, "mpc-share-pass", false); err != nil {
+		t.Fatalf("write shares: %v", err)
+	}
+	passFile := filepath.Join(outDir, "share.pass")
+	if err := os.WriteFile(passFile, []byte("mpc-share-pass\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := operatorReadMPCSharePassword("", passFile)
+	if err != nil {
+		t.Fatalf("read password file: %v", err)
+	}
+	if got != "mpc-share-pass" {
+		t.Fatalf("password file read mismatch")
+	}
+}
+
 func TestValidatorMPCSignRequestAcceptsUTF8BOM(t *testing.T) {
 	req := []byte{0xef, 0xbb, 0xbf}
 	req = append(req, []byte(`{"public_key_hex":"`+strings.Repeat("11", ed25519.PublicKeySize)+`","payload_hex":"abcd"}`)...)

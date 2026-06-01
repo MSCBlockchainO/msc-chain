@@ -146,13 +146,14 @@ func operatorValidatorMPCSignCommand(args []string) error {
 	fs.Var(&shares, "share", "MPC share file; repeat or comma-separate")
 	fs.Var(&shares, "shares", "comma-separated MPC share files")
 	passwordEnv := fs.String("password-env", operatorMPCSharePasswordEnv, "MPC share password environment variable")
+	passwordFile := fs.String("password-file", "", "file containing MPC share password")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if len(shares) == 0 {
 		return errors.New("--share or --shares required")
 	}
-	password, err := operatorReadExistingPassword("MPC share password: ", *passwordEnv)
+	password, err := operatorReadMPCSharePassword(*passwordEnv, *passwordFile)
 	if err != nil {
 		return err
 	}
@@ -182,6 +183,21 @@ func operatorValidatorMPCSignCommand(args []string) error {
 		"mpc_threshold": ref.Threshold,
 	})
 	return nil
+}
+
+func operatorReadMPCSharePassword(envName, passwordFile string) (string, error) {
+	if strings.TrimSpace(passwordFile) != "" {
+		raw, err := os.ReadFile(operatorResolvePath(passwordFile))
+		if err != nil {
+			return "", err
+		}
+		password := strings.TrimSpace(string(raw))
+		if password == "" {
+			return "", errors.New("mpc share password file is empty")
+		}
+		return password, nil
+	}
+	return operatorReadExistingPassword("MPC share password: ", envName)
 }
 
 func operatorReadMPCPublicKey(pubFile, shareFile string) (string, string, error) {

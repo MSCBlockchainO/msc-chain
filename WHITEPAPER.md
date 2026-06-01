@@ -816,6 +816,27 @@ It does not write `validator.sec`. The full validator private key is not stored 
 
 For production large validators, replace the built-in share-file signer with an audited MPC/DKG signer cluster. The chain-facing contract stays the same: provide one validator public key, and return a valid Ed25519 threshold signature for MSC's canonical signing payload.
 
+EC2 node-local MPC enablement helper:
+
+```bash
+cd ~/msc-chain
+scripts/enable_mpc_signing.sh A 2 3
+./msc-node --mode=full --role=validator --id=A --port=7001 --datadir=runtime-data/distributed/A --rpcaddr 127.0.0.1:26657 --config runtime-data/distributed/A/config.mpc.toml
+```
+
+The helper writes node-local files only:
+
+```text
+runtime-data/distributed/A/mpc/validator.pub
+runtime-data/distributed/A/mpc/share1.sec
+runtime-data/distributed/A/mpc/share2.sec
+runtime-data/distributed/A/mpc/share3.sec
+runtime-data/distributed/A/mpc/share.pass
+runtime-data/distributed/A/config.mpc.toml
+```
+
+Do not commit `share*.sec` or `share.pass`. Each validator must generate its own MPC public key and shares. Never reuse one node's MPC config on another validator.
+
 HSM-backed validator startup:
 
 ```powershell
