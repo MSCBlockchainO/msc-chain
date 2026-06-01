@@ -22,6 +22,7 @@ NODE_NICE="${NODE_NICE:-0}"
 OOM_SCORE_ADJ="${OOM_SCORE_ADJ:--500}"
 GOMAXPROCS="${GOMAXPROCS:-}"
 GOMEMLIMIT="${GOMEMLIMIT:-}"
+GOGC="${GOGC:-75}"
 HEALTHCHECK_SECONDS="${HEALTHCHECK_SECONDS:-0}"
 HEALTHCHECK_TIMEOUT_SECONDS="${HEALTHCHECK_TIMEOUT_SECONDS:-8}"
 FULLNODE_ACTIVITY_GRACE_SECONDS="${FULLNODE_ACTIVITY_GRACE_SECONDS:-300}"
@@ -34,9 +35,17 @@ if [[ -z "$GOMEMLIMIT" && -r /proc/meminfo ]]; then
   mem_kib="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || printf '0')"
   if [[ "$mem_kib" =~ ^[0-9]+$ ]] && (( mem_kib >= 2097152 )); then
     # Leave headroom for Pebble, libp2p, nginx, and the OS while avoiding
-    # tiny legacy limits that make validators slow down under pressure.
+    # both tiny legacy limits and OOM-prone heap targets on 8 GiB EC2 nodes.
     mem_mib=$((mem_kib / 1024))
-    GOMEMLIMIT="$((mem_mib * 70 / 100))MiB"
+    if [[ "$ROLE" == "full" || "$ROLE" == "light" ]]; then
+      limit_mib=$((mem_mib * 40 / 100))
+      (( limit_mib > 3072 )) && limit_mib=3072
+    else
+      limit_mib=$((mem_mib * 45 / 100))
+      (( limit_mib > 3584 )) && limit_mib=3584
+    fi
+    (( limit_mib < 1536 )) && limit_mib=1536
+    GOMEMLIMIT="${limit_mib}MiB"
   fi
 fi
 
@@ -109,6 +118,9 @@ start_node() {
   if [[ -n "$GOMEMLIMIT" ]]; then
     env_args+=("GOMEMLIMIT=$GOMEMLIMIT")
   fi
+  if [[ -n "$GOGC" ]]; then
+    env_args+=("GOGC=$GOGC")
+  fi
   log "start node=$NODE_ID role=$ROLE rpc=$RPC_ADDR p2p=$P2P_PORT"
   nohup env "${env_args[@]}" nice -n "$NODE_NICE" "$BINARY" \
       --mode=full \
@@ -128,7 +140,7 @@ start_node() {
   if [[ -w "/proc/$NODE_PID/oom_score_adj" ]]; then
     printf '%s' "$OOM_SCORE_ADJ" > "/proc/$NODE_PID/oom_score_adj" 2>/dev/null || true
   fi
-  log "node pid=$NODE_PID nice=$NODE_NICE oom_score_adj=$OOM_SCORE_ADJ gomaxprocs=${GOMAXPROCS:-auto} gomemlimit=${GOMEMLIMIT:-auto}"
+  log "node pid=$NODE_PID nice=$NODE_NICE oom_score_adj=$OOM_SCORE_ADJ gomaxprocs=${GOMAXPROCS:-auto} gomemlimit=${GOMEMLIMIT:-auto} gogc=${GOGC:-auto}"
 }
 
 node_healthy() {
