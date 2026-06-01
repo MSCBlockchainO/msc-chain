@@ -167,11 +167,14 @@ func TestBridgeStatusAndVerifyHandlers(t *testing.T) {
 	withBridgeTestConfig(t, func() {
 		oldRequireWallet := ConfigAuthRequireWallet
 		oldAPIToken := apiToken
+		oldRequireRead := ConfigRPCRequireAuthForReadEndpoints
 		defer func() {
 			ConfigAuthRequireWallet = oldRequireWallet
 			apiToken = oldAPIToken
+			ConfigRPCRequireAuthForReadEndpoints = oldRequireRead
 		}()
-		ConfigAuthRequireWallet = false
+		ConfigAuthRequireWallet = true
+		ConfigRPCRequireAuthForReadEndpoints = false
 		apiToken = ""
 
 		BridgeEnabled = true

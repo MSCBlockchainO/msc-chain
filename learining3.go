@@ -42482,6 +42482,13 @@ func authorized(r *http.Request) bool {
 
 	}
 
+	if !ConfigRPCRequireAuthForReadEndpoints && r.Method == http.MethodPost {
+		switch r.URL.Path {
+		case "/bridge/verify", "/v1/bridge/verify":
+			return true
+		}
+	}
+
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 
 	if header == "" {
