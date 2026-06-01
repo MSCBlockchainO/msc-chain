@@ -3,23 +3,88 @@ const STORAGE_KEY = "msc_wallet_browser_v1";
 const CHAIN_ID = "91938";
 const DEFAULT_STAKE_EPOCHS = 19872000;
 const AES_ITERATIONS = 150000;
+const RPC_ENDPOINTS_KEY = "msc_rpc_endpoints_v1";
+const RPC_MODE_KEY = "msc_rpc_mode_v1";
+const LEGACY_RPC_KEY = "msc_rpc";
+const DEFAULT_PUBLIC_RPCS = ["https://mscblockexplorer.in"];
+const HEALTH_CHECK_MIN_MS = 15000;
+const REQUEST_TIMEOUT_MS = 7000;
 
 const $ = (id) => document.getElementById(id);
 const page = document.body.dataset.page || "dashboard";
 
 const state = {
-  rpc: normalizeRPC(localStorage.getItem("msc_rpc") || window.location.origin),
+  rpc: "",
   wallet: null,
   secretKey: null,
   status: null,
   cmd: null,
+  rpcManager: null,
+  balanceVerification: null,
 };
 
 function normalizeRPC(raw) {
   let value = String(raw || "").trim();
   if (!value) value = window.location.origin;
+  if (value === "null" || value === "file://") value = "";
+  if (!value) value = DEFAULT_PUBLIC_RPCS[0];
   if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(value)) value = `https://${value}`;
   return value.replace(/\/+$/, "");
+}
+
+function isUsableRPC(raw) {
+  const value = String(raw || "").trim();
+  return !!value && value !== "null" && value !== "file://" && !value.startsWith("chrome-extension:");
+}
+
+function uniqueRPCs(items) {
+  const seen = new Set();
+  const out = [];
+  for (const item of items || []) {
+    if (!isUsableRPC(item)) continue;
+    const rpc = normalizeRPC(item);
+    const key = rpc.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(rpc);
+  }
+  return out;
+}
+
+function parseRPCEndpointList(raw) {
+  if (Array.isArray(raw)) return uniqueRPCs(raw);
+  const text = String(raw || "").trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) return uniqueRPCs(parsed);
+  } catch (_) {
+    // Comma/newline separated lists are easier for operators to edit by hand.
+  }
+  return uniqueRPCs(text.split(/[\n,]+/));
+}
+
+function defaultRPCEndpoints() {
+  const fromWindow = Array.isArray(window.MSC_PUBLIC_RPC_ENDPOINTS) ? window.MSC_PUBLIC_RPC_ENDPOINTS : [];
+  const origin = isUsableRPC(window.location.origin) && /^https?:\/\//i.test(window.location.origin) ? [window.location.origin] : [];
+  return uniqueRPCs([...origin, ...fromWindow, ...DEFAULT_PUBLIC_RPCS]);
+}
+
+function loadRPCMode() {
+  const mode = String(localStorage.getItem(RPC_MODE_KEY) || "auto").toLowerCase();
+  return ["auto", "manual", "custom"].includes(mode) ? mode : "auto";
+}
+
+function loadRPCEndpoints() {
+  const saved = localStorage.getItem(RPC_ENDPOINTS_KEY);
+  const legacy = localStorage.getItem(LEGACY_RPC_KEY);
+  const savedList = parseRPCEndpointList(saved);
+  const legacyList = legacy ? parseRPCEndpointList(legacy) : [];
+  const defaults = defaultRPCEndpoints();
+  const endpoints = savedList.length ? savedList : uniqueRPCs([...legacyList, ...defaults]);
+  if (!savedList.length) localStorage.setItem(RPC_ENDPOINTS_KEY, JSON.stringify(endpoints));
+  if (legacyList.length && endpoints[0]) localStorage.setItem(LEGACY_RPC_KEY, endpoints[0]);
+  return endpoints.length ? endpoints : defaults;
 }
 
 function bytesToHex(bytes) {
@@ -134,6 +199,24 @@ function setStatus(id, text, tone = "") {
   node.classList.toggle("error", tone === "error");
 }
 
+function renderVerification(verification) {
+  const mode = verification?.mode || "spv_pending";
+  let text = "SPV pending";
+  let tone = "";
+  if (mode === "quorum") {
+    text = `Quorum verified ${verification.matches}/${verification.checked}`;
+    tone = "success";
+  } else if (mode === "unverified") {
+    text = "RPC unverified";
+  } else if (mode === "mismatch") {
+    text = "RPC mismatch";
+    tone = "error";
+  }
+  setStatus("balanceVerification", text, tone);
+  setStatus("dashboardVerification", text, tone);
+  setText("settingsRpcVerification", text);
+}
+
 function formatNumber(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return value === 0 ? "0" : "-";
@@ -144,12 +227,53 @@ function stripHTML(value) {
   return String(value || "").replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-async function api(path, options = {}) {
-  const res = await fetch(`${state.rpc}${path}`, {
-    method: options.method || "GET",
-    headers: options.body ? { "Content-Type": "application/json" } : undefined,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+function stableStringify(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+}
+
+function quorumKey(path, data) {
+  if (path.startsWith("/balance")) {
+    return stableStringify({ balance: data?.balance ?? data?.Balance ?? null, coin: data?.coin ?? data?.Coin ?? "MSC" });
+  }
+  if (path.startsWith("/wallet/status")) {
+    return stableStringify({
+      stake: data?.stake ?? 0,
+      rewards: data?.rewards ?? data?.reward_balance ?? 0,
+      validator_id: data?.validator_id || "",
+      status: data?.status || "",
+      locked_until_epoch: data?.locked_until_epoch ?? 0,
+    });
+  }
+  return stableStringify(data);
+}
+
+function isRetryableRPCError(err) {
+  if (!err) return true;
+  if (err.name === "AbortError" || err.network) return true;
+  const status = Number(err.status || 0);
+  return status === 0 || status === 429 || status >= 500;
+}
+
+async function fetchRPC(baseUrl, path, options = {}) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), options.timeoutMs || REQUEST_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`${baseUrl}${path}`, {
+      method: options.method || "GET",
+      headers: options.body ? { "Content-Type": "application/json" } : undefined,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    err.network = true;
+    err.rpc = baseUrl;
+    throw err;
+  } finally {
+    window.clearTimeout(timeout);
+  }
   const text = await res.text();
   let data = text;
   try {
@@ -161,12 +285,267 @@ async function api(path, options = {}) {
     const err = new Error(typeof data === "string" ? data : data?.error || data?.message || res.statusText);
     err.status = res.status;
     err.data = data;
+    err.rpc = baseUrl;
     throw err;
   }
   return data;
 }
 
+class WalletRPCManager {
+  constructor() {
+    this.mode = loadRPCMode();
+    this.endpoints = loadRPCEndpoints();
+    this.active = this.endpoints[0] || DEFAULT_PUBLIC_RPCS[0];
+    this.health = new Map();
+    this.lastHealthAt = 0;
+    this.suspicious = new Set();
+  }
+
+  setConfig({ mode, endpoints }) {
+    this.mode = ["auto", "manual", "custom"].includes(mode) ? mode : "auto";
+    this.endpoints = uniqueRPCs(endpoints && endpoints.length ? endpoints : defaultRPCEndpoints());
+    if (!this.endpoints.length) this.endpoints = defaultRPCEndpoints();
+    this.active = this.endpoints.includes(this.active) ? this.active : this.endpoints[0];
+    localStorage.setItem(RPC_MODE_KEY, this.mode);
+    localStorage.setItem(RPC_ENDPOINTS_KEY, JSON.stringify(this.endpoints));
+    localStorage.setItem(LEGACY_RPC_KEY, this.active);
+    this.lastHealthAt = 0;
+  }
+
+  recordError(rpc, err) {
+    const previous = this.health.get(rpc) || { rpc, score: 0 };
+    this.health.set(rpc, {
+      ...previous,
+      rpc,
+      ok: false,
+      healthy: false,
+      score: 0,
+      error: err?.status ? `${err.status} ${err.message || ""}`.trim() : err?.message || "unreachable",
+      checkedAt: Date.now(),
+      suspicious: this.suspicious.has(rpc),
+    });
+  }
+
+  async checkEndpoint(rpc) {
+    const started = performance.now();
+    try {
+      const [status, cmdResult] = await Promise.allSettled([
+        fetchRPC(rpc, "/status", { timeoutMs: 5000 }),
+        fetchRPC(rpc, "/consensus/mode", { timeoutMs: 5000 }),
+      ]);
+      if (status.status !== "fulfilled") throw status.reason;
+      const data = status.value || {};
+      const cmd = cmdResult.status === "fulfilled" ? cmdResult.value || {} : {};
+      const height = Number(data.height || data.chain_height || data.best?.height || 0);
+      const finalized = Number(data.finalized_height || data.finalized || data.best?.finalized_height || 0);
+      const peers = Number(data.peers || data.peer_count || 0);
+      const lag = Number(data.network_lag_blocks ?? data.local_lag_blocks ?? data.lag ?? 0);
+      const syncing = !!data.syncing || String(data.consensus || "").toLowerCase().includes("syncing");
+      const latency = Math.round(performance.now() - started);
+      const cmdMode = String(cmd.mode || data.consensus_mode || "UNKNOWN").toUpperCase();
+      let score = 40;
+      if (!syncing) score += 18;
+      if (peers >= 3) score += 12;
+      else score += Math.max(0, peers * 3);
+      if (lag <= 2) score += 12;
+      else if (lag <= 20) score += 6;
+      if (latency <= 250) score += 12;
+      else if (latency <= 1000) score += 7;
+      else if (latency <= 2500) score += 3;
+      if (cmdMode === "NORMAL") score += 8;
+      else if (cmdMode === "STRICT" || cmdMode === "RECOVERY") score += 3;
+      else if (cmdMode === "HALTED" || cmdMode === "ATTACK") score -= 30;
+      if (this.suspicious.has(rpc)) score -= 20;
+      const entry = {
+        rpc,
+        ok: true,
+        healthy: !syncing && lag <= 50 && score > 0,
+        score: Math.max(0, Math.min(100, score)),
+        height,
+        finalized,
+        peers,
+        lag,
+        syncing,
+        latency,
+        cmdMode,
+        checkedAt: Date.now(),
+        suspicious: this.suspicious.has(rpc),
+      };
+      this.health.set(rpc, entry);
+      return entry;
+    } catch (err) {
+      this.recordError(rpc, err);
+      return this.health.get(rpc);
+    }
+  }
+
+  async refreshHealth(force = false) {
+    const jitter = Math.floor(Math.random() * 1500);
+    if (!force && Date.now() - this.lastHealthAt < HEALTH_CHECK_MIN_MS + jitter) return this.healthList();
+    this.lastHealthAt = Date.now();
+    const checks = await Promise.all(this.endpoints.map((rpc) => this.checkEndpoint(rpc)));
+    const maxHeight = Math.max(0, ...checks.map((item) => Number(item?.height || 0)));
+    checks.forEach((item) => {
+      if (!item?.ok || !maxHeight) return;
+      const staleBy = maxHeight - Number(item.height || 0);
+      if (staleBy > 20) {
+        item.score = Math.max(0, item.score - Math.min(35, staleBy));
+        item.healthy = false;
+      }
+      item.staleBy = staleBy;
+      this.health.set(item.rpc, item);
+    });
+    const best = this.bestEndpoints(1)[0];
+    if (best) {
+      this.active = best;
+      state.rpc = best;
+      localStorage.setItem(LEGACY_RPC_KEY, best);
+    }
+    return this.healthList();
+  }
+
+  healthList() {
+    return this.endpoints.map((rpc) => this.health.get(rpc) || { rpc, ok: false, healthy: false, score: 0, error: "unchecked" });
+  }
+
+  bestEndpoints(limit = this.endpoints.length) {
+    if (this.mode === "manual") return this.endpoints.slice(0, limit);
+    return this.healthList()
+      .slice()
+      .sort((a, b) => {
+        if (b.healthy !== a.healthy) return Number(b.healthy) - Number(a.healthy);
+        if ((b.score || 0) !== (a.score || 0)) return (b.score || 0) - (a.score || 0);
+        if ((b.height || 0) !== (a.height || 0)) return (b.height || 0) - (a.height || 0);
+        return (a.latency || 999999) - (b.latency || 999999);
+      })
+      .map((item) => item.rpc)
+      .slice(0, limit);
+  }
+
+  async request(path, options = {}) {
+    await this.refreshHealth(false);
+    const method = String(options.method || "GET").toUpperCase();
+    const candidates = this.bestEndpoints();
+    const ordered = candidates.length ? candidates : this.endpoints;
+    let lastErr;
+    for (const rpc of ordered) {
+      try {
+        const data = await fetchRPC(rpc, path, options);
+        this.active = rpc;
+        state.rpc = rpc;
+        localStorage.setItem(LEGACY_RPC_KEY, rpc);
+        return data;
+      } catch (err) {
+        lastErr = err;
+        this.recordError(rpc, err);
+        if (method !== "GET" && !isRetryableRPCError(err)) break;
+        if (method === "GET" && err.status && err.status < 500 && err.status !== 429) break;
+      }
+    }
+    throw lastErr || new Error("All RPC endpoints unavailable");
+  }
+
+  async quorumRead(path) {
+    await this.refreshHealth(false);
+    const targets = this.bestEndpoints(3);
+    const usableTargets = targets.length ? targets : this.endpoints.slice(0, 3);
+    const settled = await Promise.allSettled(usableTargets.map(async (rpc) => ({ rpc, data: await fetchRPC(rpc, path) })));
+    const successes = settled.filter((item) => item.status === "fulfilled").map((item) => item.value);
+    if (!successes.length) {
+      const err = settled.find((item) => item.status === "rejected")?.reason || new Error("All RPC endpoints unavailable");
+      throw err;
+    }
+    if (successes.length === 1) {
+      return { data: successes[0].data, verification: { mode: "unverified", rpc: successes[0].rpc, matches: 1, checked: 1 } };
+    }
+    const groups = new Map();
+    successes.forEach((item) => {
+      const key = quorumKey(path, item.data);
+      const group = groups.get(key) || [];
+      group.push(item);
+      groups.set(key, group);
+    });
+    const majority = Array.from(groups.values()).sort((a, b) => b.length - a.length)[0];
+    if (majority.length >= 2) {
+      const majorityRPCs = new Set(majority.map((item) => item.rpc));
+      successes.forEach((item) => {
+        if (!majorityRPCs.has(item.rpc)) this.suspicious.add(item.rpc);
+      });
+      return {
+        data: majority[0].data,
+        verification: { mode: "quorum", rpc: majority[0].rpc, matches: majority.length, checked: successes.length },
+      };
+    }
+    successes.slice(1).forEach((item) => this.suspicious.add(item.rpc));
+    return {
+      data: successes[0].data,
+      verification: { mode: "mismatch", rpc: successes[0].rpc, matches: 1, checked: successes.length },
+    };
+  }
+
+  lightClientStatus() {
+    return {
+      mode: "spv_pending",
+      endpoints: this.endpoints,
+      proofEndpoints: ["/light/headers", "/light/checkpoint/latest", "/proof/balance", "/proof/tx", "/proof/receipt"],
+    };
+  }
+
+  async lightHeaders(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return this.request(`/light/headers${query ? `?${query}` : ""}`);
+  }
+
+  async lightCheckpointLatest() {
+    return this.request("/light/checkpoint/latest");
+  }
+
+  async proof(kind, params = {}) {
+    const cleanKind = String(kind || "").replace(/[^a-z0-9_-]/gi, "");
+    if (!cleanKind) throw new Error("Proof kind required");
+    const query = new URLSearchParams(params).toString();
+    return this.request(`/proof/${cleanKind}${query ? `?${query}` : ""}`);
+  }
+}
+
+async function api(path, options = {}) {
+  return state.rpcManager.request(path, options);
+}
+
+async function quorumApi(path) {
+  return state.rpcManager.quorumRead(path);
+}
+
+function refreshRPCSettingsUI() {
+  if (!state.rpcManager) return;
+  state.rpc = state.rpcManager.active;
+  setText("topRpc", String(state.rpc || "-").replace(/^https?:\/\//, ""));
+  setValue("settingsRpcMode", state.rpcManager.mode);
+  setValue("settingsRpc", state.rpcManager.active);
+  setValue("settingsRpcEndpoints", state.rpcManager.endpoints.join("\n"));
+  setText("settingsActiveRpc", state.rpcManager.active || "-");
+  const healthBox = $("settingsRpcHealth");
+  if (healthBox) {
+    const rows = state.rpcManager.healthList().map((item) => {
+      const tone = item.healthy ? "success" : item.ok ? "" : "error";
+      const flags = [item.suspicious ? "suspicious" : "", item.syncing ? "syncing" : "", item.error || ""].filter(Boolean).join(" | ");
+      return `
+        <div class="health-row ${tone}">
+          <span class="mono">${item.rpc}</span>
+          <span>${item.healthy ? "healthy" : item.ok ? "degraded" : "offline"}</span>
+          <span>score ${Math.round(item.score || 0)}</span>
+          <span>h ${formatNumber(item.height || 0)}</span>
+          <span>${item.latency ? `${item.latency}ms` : "-"}</span>
+          <span>${flags || "-"}</span>
+        </div>`;
+    });
+    healthBox.innerHTML = rows.join("") || `<div class="list-item">No RPC endpoints configured</div>`;
+  }
+}
+
 async function refreshNetwork() {
+  await state.rpcManager.refreshHealth(false);
+  refreshRPCSettingsUI();
   try {
     const status = await api("/status");
     state.status = status;
@@ -206,16 +585,21 @@ async function refreshBalance() {
   setText("receiveAddress", state.wallet.address);
   setValue("sendFrom", state.wallet.address);
   try {
-    const bal = await api(`/balance?address=${encodeURIComponent(state.wallet.address)}&coin=MSC&state=finalized`);
+    const balResult = await quorumApi(`/balance?address=${encodeURIComponent(state.wallet.address)}&coin=MSC&state=finalized`);
+    const bal = balResult.data;
+    state.balanceVerification = balResult.verification;
+    renderVerification(balResult.verification);
     const amount = bal.balance ?? bal.Balance ?? "-";
     setText("totalBalance", `${formatNumber(amount)} MSC`);
     setText("walletBalance", `${formatNumber(amount)} MSC`);
     setText("assetMSC", `${formatNumber(amount)} MSC`);
   } catch (err) {
     setText("walletBalance", "balance unavailable");
+    renderVerification({ mode: "mismatch", checked: 0, matches: 0 });
   }
   try {
-    const ws = await api(`/wallet/status?address=${encodeURIComponent(state.wallet.address)}`);
+    const wsResult = await quorumApi(`/wallet/status?address=${encodeURIComponent(state.wallet.address)}`);
+    const ws = wsResult.data;
     setText("stakedBalance", `${formatNumber(ws.stake || 0)} MSC`);
     setText("rewardBalance", `${formatNumber(ws.rewards || 0)} MSC`);
     setText("delegations", ws.validator_id ? `${ws.validator_id}: ${formatNumber(ws.stake || 0)} MSC` : "No active delegation");
@@ -589,6 +973,7 @@ function installShell() {
         </div>
         <div class="status-row">
           <span id="networkPill" class="pill">Mainnet</span>
+          <span class="pill">RPC <strong id="topRpc">-</strong></span>
           <span class="pill">Height <strong id="topHeight">-</strong></span>
           <span class="pill">CMD <strong id="topCmd">-</strong></span>
           <span class="pill">Wallet <strong id="topWallet">No wallet</strong></span>
@@ -611,8 +996,12 @@ function bindEvents() {
   });
   $("settingsForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
-    state.rpc = normalizeRPC($("settingsRpc").value);
-    localStorage.setItem("msc_rpc", state.rpc);
+    const manual = parseRPCEndpointList($("settingsRpc")?.value || "");
+    const listed = parseRPCEndpointList($("settingsRpcEndpoints")?.value || "");
+    const mode = $("settingsRpcMode")?.value || "auto";
+    const endpoints = mode === "manual" ? uniqueRPCs([...manual, ...listed]) : uniqueRPCs([...listed, ...manual]);
+    state.rpcManager.setConfig({ mode, endpoints });
+    state.rpc = state.rpcManager.active;
     document.body.dataset.theme = $("settingsTheme").value;
     localStorage.setItem("msc_wallet_theme", $("settingsTheme").value);
     refreshAll();
@@ -642,7 +1031,7 @@ function bindEvents() {
 }
 
 async function refreshAll() {
-  setValue("settingsRpc", state.rpc);
+  refreshRPCSettingsUI();
   await refreshNetwork();
   updateWalletUI();
   await refreshBalance();
@@ -658,6 +1047,9 @@ function initTheme() {
   setValue("settingsTheme", theme);
 }
 
+state.rpcManager = new WalletRPCManager();
+state.rpc = state.rpcManager.active;
+window.MSC_WALLET_RPC_MANAGER = state.rpcManager;
 installShell();
 bindEvents();
 initTheme();

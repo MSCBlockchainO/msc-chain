@@ -296,6 +296,34 @@ button:disabled {
   gap: 10px;
 }
 
+.health-list {
+  display: grid;
+  gap: 8px;
+}
+
+.health-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(5, minmax(86px, 1fr));
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.health-row.success {
+  border-color: rgba(0, 214, 143, 0.3);
+  color: var(--success);
+}
+
+.health-row.error {
+  border-color: rgba(255, 95, 122, 0.3);
+  color: var(--danger);
+}
+
 .list-item {
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -372,6 +400,10 @@ body[data-theme="light"] {
   }
 
   .two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .health-row {
     grid-template-columns: 1fr;
   }
 }

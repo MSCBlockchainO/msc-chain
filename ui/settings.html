@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="wallet_pages.css?v=20260601b" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260601c" />
 </head>
 <body data-page="settings">
   <main class="content">
@@ -18,7 +18,24 @@
     </section>
     <section class="card">
       <form id="settingsForm">
-        <div class="field"><label for="settingsRpc">RPC Selection</label><input id="settingsRpc" placeholder="https://mscblockexplorer.in" /></div>
+        <div class="row">
+          <div class="field">
+            <label for="settingsRpcMode">RPC Mode</label>
+            <select id="settingsRpcMode">
+              <option value="auto">Auto failover</option>
+              <option value="manual">Manual first endpoint</option>
+              <option value="custom">Custom public pool</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="settingsRpc">Primary / Manual RPC</label>
+            <input id="settingsRpc" placeholder="https://mscblockexplorer.in" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="settingsRpcEndpoints">Public RPC Pool</label>
+          <textarea id="settingsRpcEndpoints" rows="5" placeholder="https://mscblockexplorer.in"></textarea>
+        </div>
         <div class="row">
           <div class="field"><label for="settingsTheme">Theme</label><select id="settingsTheme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
           <div class="field"><label for="settingsLanguage">Language</label><select id="settingsLanguage"><option>English</option><option>Hindi/Urdu</option></select></div>
@@ -27,9 +44,18 @@
         <button class="primary" type="submit">Save Settings</button>
       </form>
     </section>
+    <section class="card">
+      <div class="label">Active RPC</div>
+      <div id="settingsActiveRpc" class="value mono">-</div>
+      <div class="row">
+        <div><div class="label">Read Verification</div><div id="settingsRpcVerification" class="mono">SPV pending</div></div>
+        <div><div class="label">Policy</div><div class="mono">Public full nodes only by default</div></div>
+      </div>
+      <div id="settingsRpcHealth" class="health-list"></div>
+    </section>
   </main>
   <script src="vendor/nacl.min.js"></script>
   <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
-  <script src="wallet_pages.js?v=20260601b"></script>
+  <script src="wallet_pages.js?v=20260601c"></script>
 </body>
 </html>
