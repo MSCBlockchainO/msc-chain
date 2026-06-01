@@ -176,6 +176,11 @@ func withRPCHardening(node *Node, next http.Handler) http.Handler {
 		}
 
 		node.observeRPCRequestStart()
+		if r != nil && (r.URL.Path == "/wallet/events" || r.URL.Path == "/v1/wallet/events") {
+			defer node.observeRPCRequestFinish(http.StatusSwitchingProtocols)
+			next.ServeHTTP(w, r)
+			return
+		}
 		recorder := &rpcStatusRecorder{ResponseWriter: w}
 		defer func() {
 			node.observeRPCRequestFinish(recorder.status)

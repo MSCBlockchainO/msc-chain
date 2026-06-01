@@ -60,6 +60,48 @@ func TestWalletEventsWebSocketHello(t *testing.T) {
 	}
 }
 
+func TestWalletEventsThroughRPCHardening(t *testing.T) {
+	oldRequireRead := ConfigRPCRequireAuthForReadEndpoints
+	oldAPIToken := apiToken
+	defer func() {
+		ConfigRPCRequireAuthForReadEndpoints = oldRequireRead
+		apiToken = oldAPIToken
+	}()
+	ConfigRPCRequireAuthForReadEndpoints = false
+	apiToken = ""
+
+	node := &Node{
+		ID:   "F",
+		Role: "full",
+		Blockchain: &Blockchain{
+			Blocks: []Block{{ID: 1, BlockHash: "h1"}},
+		},
+		lastCommitHeight: 1,
+		lastCommitAt:     time.Now(),
+	}
+	server := NewServer(node)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/wallet/events", server.handleWalletEvents)
+	ts := httptest.NewServer(withRPCHardening(node, mux))
+	defer ts.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/wallet/events"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial wallet events through hardening: %v", err)
+	}
+	defer conn.Close()
+
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var event walletEvent
+	if err := conn.ReadJSON(&event); err != nil {
+		t.Fatalf("read hardened hello event: %v", err)
+	}
+	if event.Type != "hello" || event.Height != 1 {
+		t.Fatalf("unexpected hardened hello event: %+v", event)
+	}
+}
+
 func TestWalletEventsRejectsNonGet(t *testing.T) {
 	server := NewServer(&Node{})
 	req := httptest.NewRequest(http.MethodPost, "/wallet/events", nil)
