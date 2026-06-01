@@ -73,14 +73,45 @@ func TestDetectConsensusModePriorityAndModes(t *testing.T) {
 			want: ConsensusDetectorStrict,
 		},
 		{
-			name: "degraded slow blocks",
+			name: "normal short healthy block age",
 			in: ConsensusDetectorMetrics{
 				TotalValidators:  4,
 				ActiveValidators: 4,
 				Quorum:           3,
 				BlockTimeMS:      6000,
 			},
+			want: ConsensusDetectorNormal,
+		},
+		{
+			name: "degraded sustained slow blocks",
+			in: ConsensusDetectorMetrics{
+				TotalValidators:  4,
+				ActiveValidators: 4,
+				Quorum:           3,
+				BlockTimeMS:      12000,
+			},
 			want: ConsensusDetectorDegraded,
+		},
+		{
+			name: "degraded finality lag",
+			in: ConsensusDetectorMetrics{
+				Height:           101,
+				FinalizedHeight:  100,
+				TotalValidators:  4,
+				ActiveValidators: 4,
+				Quorum:           3,
+			},
+			want: ConsensusDetectorDegraded,
+		},
+		{
+			name: "recovery above validator lag threshold",
+			in: ConsensusDetectorMetrics{
+				TotalValidators:  4,
+				ActiveValidators: 4,
+				Quorum:           3,
+				MaxValidatorLag:  101,
+			},
+			want: ConsensusDetectorRecovery,
 		},
 		{
 			name: "normal healthy",
@@ -150,5 +181,8 @@ func TestHandleConsensusModeEndpoint(t *testing.T) {
 	}
 	if payload["mainnet_safety"] != "observe_classify_alert_only" {
 		t.Fatalf("unexpected safety marker: %#v", payload["mainnet_safety"])
+	}
+	if payload["degraded_after_seconds"] == nil || payload["halted_after_seconds"] == nil || payload["recovery_validator_lag_blocks"] == nil {
+		t.Fatalf("expected detector thresholds in response: %#v", payload)
 	}
 }

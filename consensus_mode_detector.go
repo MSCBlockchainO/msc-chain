@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 type ConsensusDetectorMode string
@@ -34,6 +35,10 @@ type ConsensusDetectorMetrics struct {
 	LastFinalitySec   int64
 	PartitionRisk     bool
 	FinalityLagBlocks uint64
+
+	DegradedAfterSec           int64
+	HaltedAfterSec             int64
+	RecoveryValidatorLagBlocks uint64
 }
 
 type ConsensusDetectorResult struct {
@@ -44,6 +49,10 @@ type ConsensusDetectorResult struct {
 	LastFinalitySec   int64
 	PartitionRisk     bool
 	Attack            bool
+
+	DegradedAfterSec           int64
+	HaltedAfterSec             int64
+	RecoveryValidatorLagBlocks uint64
 }
 
 func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
@@ -51,21 +60,27 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 	if finalityLag == 0 && m.Height > m.FinalizedHeight {
 		finalityLag = m.Height - m.FinalizedHeight
 	}
+	degradedAfterSec := consensusDetectorMetricDegradedAfterSec(m)
+	haltedAfterSec := consensusDetectorMetricHaltedAfterSec(m)
+	recoveryLagBlocks := consensusDetectorMetricRecoveryValidatorLagBlocks(m)
 
 	result := ConsensusDetectorResult{
-		Mode:              ConsensusDetectorNormal,
-		Reason:            "healthy",
-		FinalityLagBlocks: finalityLag,
-		LastFinalitySec:   m.LastFinalitySec,
-		PartitionRisk:     m.PartitionRisk,
-		Attack:            m.DoubleSign || m.ForkDetected,
+		Mode:                       ConsensusDetectorNormal,
+		Reason:                     "healthy",
+		FinalityLagBlocks:          finalityLag,
+		LastFinalitySec:            m.LastFinalitySec,
+		PartitionRisk:              m.PartitionRisk,
+		Attack:                     m.DoubleSign || m.ForkDetected,
+		DegradedAfterSec:           degradedAfterSec,
+		HaltedAfterSec:             haltedAfterSec,
+		RecoveryValidatorLagBlocks: recoveryLagBlocks,
 	}
 
 	switch {
 	case m.DoubleSign || m.ForkDetected:
 		result.Mode = ConsensusDetectorAttack
 		result.Reason = "attack_signal"
-	case m.LastFinalitySec > 60:
+	case m.LastFinalitySec > haltedAfterSec:
 		result.Mode = ConsensusDetectorHalted
 		result.Reason = "finality_timeout"
 	case m.Quorum > 0 && m.ActiveValidators < m.Quorum:
@@ -74,21 +89,65 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 	case m.PartitionRisk:
 		result.Mode = ConsensusDetectorPartition
 		result.Reason = "partition_risk"
-	case m.SyncingValidators > 0 || m.MaxValidatorLag > 100:
+	case m.SyncingValidators > 0 || m.MaxValidatorLag > recoveryLagBlocks:
 		result.Mode = ConsensusDetectorRecovery
 		result.Reason = "validator_recovery"
 	case m.Quorum > 0 && m.ActiveValidators == m.Quorum:
 		result.Mode = ConsensusDetectorStrict
 		result.Reason = "minimum_quorum_active"
-	case m.BlockTimeMS > 5000 || m.MissedVotes > 0:
+	case finalityLag > 0:
 		result.Mode = ConsensusDetectorDegraded
-		result.Reason = "slow_or_missed_votes"
+		result.Reason = "finality_lag"
+	case m.MaxValidatorLag > 0:
+		result.Mode = ConsensusDetectorDegraded
+		result.Reason = "validator_lag"
+	case m.PeerCount > 0 && m.PeerCount < 3:
+		result.Mode = ConsensusDetectorDegraded
+		result.Reason = "peer_instability"
+	case m.MissedVotes > 0 && m.Quorum > 0 && m.ActiveValidators-m.MissedVotes <= m.Quorum:
+		result.Mode = ConsensusDetectorDegraded
+		result.Reason = "validator_lag"
+	case m.LastFinalitySec >= degradedAfterSec || m.BlockTimeMS >= degradedAfterSec*1000:
+		result.Mode = ConsensusDetectorDegraded
+		result.Reason = "slow_blocks_sustained"
 	default:
 		result.Mode = ConsensusDetectorNormal
 		result.Reason = "healthy"
 	}
 	result.Code = consensusDetectorModeCode(result.Mode)
 	return result
+}
+
+func consensusDetectorMetricDegradedAfterSec(m ConsensusDetectorMetrics) int64 {
+	if m.DegradedAfterSec > 0 {
+		return m.DegradedAfterSec
+	}
+	sec := int64(ConsensusDetectorDegradedAfter / time.Second)
+	if sec <= 0 {
+		return 12
+	}
+	return sec
+}
+
+func consensusDetectorMetricHaltedAfterSec(m ConsensusDetectorMetrics) int64 {
+	if m.HaltedAfterSec > 0 {
+		return m.HaltedAfterSec
+	}
+	sec := int64(ConsensusDetectorHaltedAfter / time.Second)
+	if sec <= 0 {
+		return 60
+	}
+	return sec
+}
+
+func consensusDetectorMetricRecoveryValidatorLagBlocks(m ConsensusDetectorMetrics) uint64 {
+	if m.RecoveryValidatorLagBlocks > 0 {
+		return m.RecoveryValidatorLagBlocks
+	}
+	if ConsensusDetectorRecoveryValidatorLagBlocks == 0 {
+		return 100
+	}
+	return ConsensusDetectorRecoveryValidatorLagBlocks
 }
 
 func consensusDetectorModeCode(mode ConsensusDetectorMode) int {
@@ -174,6 +233,10 @@ func (n *Node) consensusDetectorMetricsFromRuntime(runtime RuntimeStatusSnapshot
 		LastFinalitySec:   lastFinalitySec,
 		PartitionRisk:     partitionRisk,
 		FinalityLagBlocks: finalityLag,
+
+		DegradedAfterSec:           int64(ConsensusDetectorDegradedAfter / time.Second),
+		HaltedAfterSec:             int64(ConsensusDetectorHaltedAfter / time.Second),
+		RecoveryValidatorLagBlocks: ConsensusDetectorRecoveryValidatorLagBlocks,
 	}
 }
 

@@ -149,7 +149,7 @@ func (n *Node) formalVerificationReportFromRuntime(runtime RuntimeStatusSnapshot
 		formalInvariant(
 			"consensus_detector_reports_finality_timeout",
 			"critical",
-			detector.LastFinalitySec <= 60 || detector.Mode == ConsensusDetectorHalted || detector.Mode == ConsensusDetectorAttack,
+			detector.LastFinalitySec <= detector.HaltedAfterSec || detector.Mode == ConsensusDetectorHalted || detector.Mode == ConsensusDetectorAttack,
 			fmt.Sprintf("last_finality_seconds=%d detector_mode=%s", detector.LastFinalitySec, detector.Mode),
 		),
 		formalInvariant(

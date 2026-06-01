@@ -27028,6 +27028,12 @@ type ConsensusConfig struct {
 	PostBlockSafeModeHistoryBlocks uint64 `toml:"post_block_safe_mode_history_blocks"`
 
 	PostBlockSafeModeLiveQuorumBPS uint64 `toml:"post_block_safe_mode_live_quorum_bps"`
+
+	DetectorDegradedAfterSeconds uint64 `toml:"detector_degraded_after_seconds"`
+
+	DetectorHaltedAfterSeconds uint64 `toml:"detector_halted_after_seconds"`
+
+	DetectorRecoveryValidatorLagBlocks uint64 `toml:"detector_recovery_validator_lag_blocks"`
 }
 
 type RPCConfig struct {
@@ -28268,6 +28274,30 @@ func applyConsensusConfig(cc ConsensusConfig) bool {
 	parse("min_block_interval", cc.MinBlockInterval, &ConsensusMinBlockInterval)
 
 	parse("recompute_pause", cc.RecomputePause, &ConsensusRecomputePause)
+
+	if cc.DetectorDegradedAfterSeconds > 0 {
+
+		ConsensusDetectorDegradedAfter = time.Duration(cc.DetectorDegradedAfterSeconds) * time.Second
+
+		changed = true
+
+	}
+
+	if cc.DetectorHaltedAfterSeconds > 0 {
+
+		ConsensusDetectorHaltedAfter = time.Duration(cc.DetectorHaltedAfterSeconds) * time.Second
+
+		changed = true
+
+	}
+
+	if cc.DetectorRecoveryValidatorLagBlocks > 0 {
+
+		ConsensusDetectorRecoveryValidatorLagBlocks = cc.DetectorRecoveryValidatorLagBlocks
+
+		changed = true
+
+	}
 
 	if cc.WeakSubjectivityDepth > 0 {
 
@@ -30409,7 +30439,7 @@ func loadConfigOverrides(path string) error {
 
 	if applyConsensusConfig(cfg.Consensus) {
 
-		fmt.Printf("CONSENSUS config loaded: propose=%s prevote=%s precommit=%s commit=%s min_block_interval=%s recompute_pause=%s weak_subjectivity_depth=%d max_future_gap=%d validator_set_commitment_v2_height=%d validator_set_hash_v3_height=%d deterministic_tx_order=%t round_timeout=%s round_max=%d round_skew=%d barrier_relax=%s barrier_drop=%d barrier_retry_mode=%s exec_quorum_emergency=%t exec_quorum_emergency_stall=%s penalty_mode=%s invalid_proposer_q=%d exec_mismatch_q=%d exec_mismatch_slash=%d propose_requires_sync_ready=%t post_block_safe_mode=%t safe_mode_min=%s safe_mode_max=%s safe_mode_history=%d safe_mode_live_quorum_bps=%d\n",
+		fmt.Printf("CONSENSUS config loaded: propose=%s prevote=%s precommit=%s commit=%s min_block_interval=%s recompute_pause=%s weak_subjectivity_depth=%d max_future_gap=%d validator_set_commitment_v2_height=%d validator_set_hash_v3_height=%d deterministic_tx_order=%t round_timeout=%s round_max=%d round_skew=%d barrier_relax=%s barrier_drop=%d barrier_retry_mode=%s exec_quorum_emergency=%t exec_quorum_emergency_stall=%s penalty_mode=%s invalid_proposer_q=%d exec_mismatch_q=%d exec_mismatch_slash=%d propose_requires_sync_ready=%t post_block_safe_mode=%t safe_mode_min=%s safe_mode_max=%s safe_mode_history=%d safe_mode_live_quorum_bps=%d detector_degraded_after=%s detector_halted_after=%s detector_recovery_validator_lag_blocks=%d\n",
 
 			ConsensusTimeoutPropose,
 
@@ -30468,6 +30498,12 @@ func loadConfigOverrides(path string) error {
 			ConsensusPostBlockSafeModeHistoryBlocks,
 
 			ConsensusPostBlockSafeModeLiveQuorumBPS,
+
+			ConsensusDetectorDegradedAfter,
+
+			ConsensusDetectorHaltedAfter,
+
+			ConsensusDetectorRecoveryValidatorLagBlocks,
 		)
 
 	}
@@ -36159,6 +36195,11 @@ func consensusModeResponse(runtime RuntimeStatusSnapshot, metrics ConsensusDetec
 		"last_finality_seconds":          runtime.ConsensusDetectorLastFinalitySec,
 		"max_validator_lag":              metrics.MaxValidatorLag,
 		"peer_count":                     metrics.PeerCount,
+		"missed_votes":                   metrics.MissedVotes,
+		"block_time_ms":                  metrics.BlockTimeMS,
+		"degraded_after_seconds":         consensusDetectorMetricDegradedAfterSec(metrics),
+		"halted_after_seconds":           consensusDetectorMetricHaltedAfterSec(metrics),
+		"recovery_validator_lag_blocks":  consensusDetectorMetricRecoveryValidatorLagBlocks(metrics),
 		"syncing_validators":             metrics.SyncingValidators,
 		"partition_risk":                 runtime.ConsensusDetectorPartitionRisk,
 		"attack":                         runtime.ConsensusDetectorAttack,

@@ -370,6 +370,17 @@ var ConsensusMinBlockInterval = 4 * time.Second
 // set membership changes or a validator-set mismatch is detected.
 var ConsensusRecomputePause = 4 * time.Second
 
+// ConsensusDetectorDegradedAfter controls when CMD marks sustained block/finality
+// slowness as DEGRADED. It is intentionally higher than normal block cadence.
+var ConsensusDetectorDegradedAfter = 12 * time.Second
+
+// ConsensusDetectorHaltedAfter controls when CMD reports finality timeout as HALTED.
+var ConsensusDetectorHaltedAfter = 60 * time.Second
+
+// ConsensusDetectorRecoveryValidatorLagBlocks sends large lag into RECOVERY
+// instead of DEGRADED because catch-up behavior should be explicit.
+var ConsensusDetectorRecoveryValidatorLagBlocks uint64 = 100
+
 // WeakSubjectivityDepth rejects blocks that are too far behind local finalized
 // history to mitigate long-range rewrite attacks. 0 disables the guard.
 var WeakSubjectivityDepth uint64 = 2048
