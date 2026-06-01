@@ -829,7 +829,7 @@ EC2 node-local MPC enablement helper:
 ```bash
 cd ~/msc-chain
 scripts/enable_mpc_signing.sh A 2 3
-./msc-node --mode=full --role=validator --id=A --port=7001 --datadir=runtime-data/distributed/A --rpcaddr 127.0.0.1:26657 --config runtime-data/distributed/A/config.mpc.toml
+MSC_ALLOW_CONFIG_OVERRIDE=1 ./msc-node --mode=full --role=validator --id=A --port=7001 --datadir=runtime-data/distributed/A --rpcaddr 127.0.0.1:26657 --config runtime-data/distributed/A/config.mpc.toml
 ```
 
 The helper writes node-local files only:

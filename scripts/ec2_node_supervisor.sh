@@ -121,6 +121,9 @@ start_node() {
   if [[ -n "$GOGC" ]]; then
     env_args+=("GOGC=$GOGC")
   fi
+  if [[ "$CONFIG" != "config.toml" ]]; then
+    env_args+=("MSC_ALLOW_CONFIG_OVERRIDE=1")
+  fi
   log "start node=$NODE_ID role=$ROLE rpc=$RPC_ADDR p2p=$P2P_PORT"
   nohup env "${env_args[@]}" nice -n "$NODE_NICE" "$BINARY" \
       --mode=full \

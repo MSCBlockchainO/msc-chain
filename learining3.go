@@ -32503,6 +32503,9 @@ func resolveConfigPath(configArg, nodeID string, configExplicit bool) (string, e
 	if strings.EqualFold(cfg, "config.toml") || cfg == "" {
 		return "config.toml", nil
 	}
+	if configExplicit && envBool("MSC_ALLOW_CONFIG_OVERRIDE") {
+		return cfg, nil
+	}
 	if configExplicit {
 		return "", fmt.Errorf("only config.toml is allowed in single-config mode")
 	}

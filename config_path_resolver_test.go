@@ -32,6 +32,19 @@ func TestResolveConfigPathExplicitWins(t *testing.T) {
 	}
 }
 
+func TestResolveConfigPathExplicitOverrideAllowed(t *testing.T) {
+	tmp := t.TempDir()
+	withWorkingDir(t, tmp)
+	t.Setenv("MSC_ALLOW_CONFIG_OVERRIDE", "1")
+	got, err := resolveConfigPath("runtime-data/distributed/A/config.mpc.toml", "A", true)
+	if err != nil {
+		t.Fatalf("resolve config override: %v", err)
+	}
+	if got != "runtime-data/distributed/A/config.mpc.toml" {
+		t.Fatalf("expected explicit override config path, got %q", got)
+	}
+}
+
 func TestResolveConfigPathDoesNotAutoSelectPerNode(t *testing.T) {
 	tmp := t.TempDir()
 	withWorkingDir(t, tmp)
