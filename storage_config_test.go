@@ -8,6 +8,8 @@ import (
 
 func TestStorageConfigAppliesMainnetRetentionPolicy(t *testing.T) {
 	oldEpochLength := StorageEpochLengthBlocks
+	oldHistoryProfile := StorageHistoryProfile
+	oldPruningEnabled := StorageStatePruningEnabled
 	oldRetainedEpochs := StorageValidatorRetainedEpochs
 	oldRollbackWindow := StorageValidatorRollbackWindowBlocks
 	oldSnapshotKeepLast := StorageValidatorSnapshotKeepLast
@@ -26,6 +28,8 @@ func TestStorageConfigAppliesMainnetRetentionPolicy(t *testing.T) {
 	oldStateLayout := StorageStateLayoutMode
 	t.Cleanup(func() {
 		StorageEpochLengthBlocks = oldEpochLength
+		StorageHistoryProfile = oldHistoryProfile
+		StorageStatePruningEnabled = oldPruningEnabled
 		StorageValidatorRetainedEpochs = oldRetainedEpochs
 		StorageValidatorRollbackWindowBlocks = oldRollbackWindow
 		StorageValidatorSnapshotKeepLast = oldSnapshotKeepLast
@@ -45,8 +49,11 @@ func TestStorageConfigAppliesMainnetRetentionPolicy(t *testing.T) {
 	})
 
 	coldEnabled := true
+	pruningEnabled := true
 	stateRentEnabled := true
 	changed := applyStorageConfig(StorageConfig{
+		HistoryProfile:                      "FULL",
+		StatePruningEnabled:                 &pruningEnabled,
 		EpochLengthBlocks:                   uint64Ptr(50),
 		ValidatorRetainedEpochs:             uint64Ptr(12),
 		ValidatorRollbackWindowBlocks:       uint64Ptr(512),
@@ -70,6 +77,8 @@ func TestStorageConfigAppliesMainnetRetentionPolicy(t *testing.T) {
 	}
 
 	if StorageEpochLengthBlocks != 50 ||
+		StorageHistoryProfile != storageProfileFull ||
+		!StorageStatePruningEnabled ||
 		StorageValidatorRetainedEpochs != 12 ||
 		StorageValidatorRollbackWindowBlocks != 512 ||
 		StorageValidatorSnapshotKeepLast != 4 ||
@@ -97,6 +106,12 @@ func TestConfigTomlCarriesMainnetStoragePolicy(t *testing.T) {
 	}
 	if cfg.Storage.ValidatorRetainedEpochs == nil || *cfg.Storage.ValidatorRetainedEpochs != 10 {
 		t.Fatalf("validator retained epochs not pinned in config")
+	}
+	if normalizeStorageHistoryProfile(cfg.Storage.HistoryProfile) != storageProfileAuto {
+		t.Fatalf("storage history profile must default to auto")
+	}
+	if cfg.Storage.StatePruningEnabled == nil || !*cfg.Storage.StatePruningEnabled {
+		t.Fatalf("state pruning must be explicitly enabled for mainnet")
 	}
 	if cfg.Storage.ValidatorSnapshotKeepLast == nil || *cfg.Storage.ValidatorSnapshotKeepLast != 3 {
 		t.Fatalf("validator snapshot keep-last not pinned in config")

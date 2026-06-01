@@ -433,6 +433,8 @@ var SyncSnapshotWarmupBlocks uint64 = 5
 var SyncSnapshotWarmupSeconds uint64 = 10
 
 var StorageEpochLengthBlocks uint64 = 100
+var StorageHistoryProfile = "auto"
+var StorageStatePruningEnabled = true
 var StorageValidatorRetainedEpochs uint64 = 10
 var StorageValidatorRollbackWindowBlocks uint64 = 256
 var StorageValidatorSnapshotKeepLast uint64 = 3

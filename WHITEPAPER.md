@@ -447,6 +447,76 @@ Storage is split into separate Pebble stores:
 
 Database writes use synced Pebble batches, and the storage layer can quarantine corrupted DB paths during recovery.
 
+### 14.1 State Pruning And Archive Policy
+
+MSC Chain treats state pruning as a mainnet safety requirement. Validators are not expected to retain unlimited historical state. Archive retention is separated into archive nodes so validator disk growth stays bounded even after very large block counts.
+
+Storage profile is configured through `[storage]`:
+
+```toml
+history_profile = "auto" # auto | validator | full | archive
+state_pruning_enabled = true
+validator_retained_epochs = 10
+validator_rollback_window_blocks = 256
+validator_snapshot_keep_last = 3
+validator_recent_block_window = 2048
+full_node_history_blocks = 5256000
+cold_export_enabled = true
+cold_export_compression = "zstd"
+parallel_gc_workers = 4
+```
+
+Profile rules:
+
+- `validator`: keep current/finalized state, last validator epochs, rollback window, recent hot blocks, compacted snapshots, finality artifacts, and cold block exports.
+- `full`: keep extended recent block history for public RPC/explorer use, but do not promise complete historical state.
+- `archive`: retain full hot history and skip pruning. Use this only for dedicated archive nodes with large storage.
+- `auto`: validators use `validator`, full nodes use `full`, and `sync.history_mode = "archive_full"` forces `archive`.
+
+The storage manager runs after finalized epochs and may:
+
+- persist a state checkpoint;
+- compact old snapshot metadata and deltas;
+- prune old execution snapshot cache;
+- prune old hot block files;
+- export old block files to `cold-storage/blocks` using `zstd`;
+- write a durable `state_prune_marker` in `meta.db`.
+
+The prune marker records:
+
+- finalized height;
+- retain-from height;
+- pruned-through height;
+- hot window size;
+- snapshot retention;
+- block prune boundary;
+- cold export boundary;
+- latest checkpoint height.
+
+Operators can inspect pruning policy:
+
+```bash
+curl -s http://127.0.0.1:26657/storage/policy | jq
+curl -s http://127.0.0.1:26657/v1/storage/policy | jq
+```
+
+Important Prometheus metrics:
+
+```text
+msc_storage_pruning_enabled
+msc_storage_archive_mode
+msc_storage_retain_from_height
+msc_storage_hot_window_blocks
+msc_storage_pruned_states_total
+msc_storage_pruned_snapshots_total
+msc_storage_gc_cycles_total
+msc_storage_gc_duration_seconds
+msc_cold_exports_total
+msc_cold_storage_size_bytes
+```
+
+Mainnet rule: validator nodes should not run as archive nodes. Archive service should be separated into dedicated full-history infrastructure.
+
 ## 16. Light Client Protocol
 
 MSC Chain should support trust-minimized wallets and mobile clients that do not need to trust a public RPC server for balances, transactions, or state claims. Public RPC remains useful for availability, but a wallet should be able to verify the data it receives.
@@ -1002,6 +1072,7 @@ Node status commands:
 ```powershell
 Invoke-RestMethod https://mscblockexplorer.in/status
 Invoke-RestMethod https://mscblockexplorer.in/consensus/mode
+Invoke-RestMethod https://mscblockexplorer.in/storage/policy
 Invoke-RestMethod https://mscblockexplorer.in/v1/validators/diversity
 Invoke-RestMethod https://mscblockexplorer.in/v1/peers
 Invoke-WebRequest -UseBasicParsing https://mscblockexplorer.in/metrics

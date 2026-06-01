@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	storageProfileAuto      = "auto"
 	storageProfileValidator = "validator"
 	storageProfileFull      = "full"
 	storageProfileArchive   = "archive"
@@ -44,6 +45,7 @@ type StateCheckpoint struct {
 
 type StoragePolicy struct {
 	Profile                      string
+	PruningEnabled               bool
 	EpochLengthBlocks            uint64
 	RetainedEpochs               uint64
 	RollbackWindowBlocks         uint64
@@ -68,31 +70,58 @@ type StorageManager struct {
 }
 
 type StorageManagerReport struct {
-	Profile               string `json:"profile"`
-	FinalizedHeight       uint64 `json:"finalized_height"`
-	RetainFromHeight      uint64 `json:"retain_from_height"`
-	SnapshotsPruned       int    `json:"snapshots_pruned"`
-	RegistryPruned        bool   `json:"registry_pruned"`
-	ExecutionCachePruned  int    `json:"execution_cache_pruned"`
-	BlockFilesPruned      int    `json:"block_files_pruned"`
-	ColdStorageExported   int    `json:"cold_storage_exported"`
-	StateCheckpointHeight uint64 `json:"state_checkpoint_height"`
-	ArchiveModeSkipped    bool   `json:"archive_mode_skipped"`
-	ParallelGCWorkers     uint64 `json:"parallel_gc_workers"`
-	StateRentEnabled      bool   `json:"state_rent_enabled"`
-	StateLayoutMode       string `json:"state_layout_mode"`
+	Profile                string `json:"profile"`
+	PruningEnabled         bool   `json:"pruning_enabled"`
+	FinalizedHeight        uint64 `json:"finalized_height"`
+	RetainFromHeight       uint64 `json:"retain_from_height"`
+	HotWindowBlocks        uint64 `json:"hot_window_blocks"`
+	SnapshotsPruned        int    `json:"snapshots_pruned"`
+	RegistryPruned         bool   `json:"registry_pruned"`
+	ExecutionCachePruned   int    `json:"execution_cache_pruned"`
+	BlockFilesPruned       int    `json:"block_files_pruned"`
+	ColdStorageExported    int    `json:"cold_storage_exported"`
+	StateCheckpointHeight  uint64 `json:"state_checkpoint_height"`
+	ArchiveModeSkipped     bool   `json:"archive_mode_skipped"`
+	PruningDisabledSkipped bool   `json:"pruning_disabled_skipped"`
+	ParallelGCWorkers      uint64 `json:"parallel_gc_workers"`
+	StateRentEnabled       bool   `json:"state_rent_enabled"`
+	StateLayoutMode        string `json:"state_layout_mode"`
+}
+
+func normalizeStorageHistoryProfile(profile string) string {
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "", storageProfileAuto:
+		return storageProfileAuto
+	case storageProfileValidator, "validator_node":
+		return storageProfileValidator
+	case storageProfileFull, "full_node":
+		return storageProfileFull
+	case storageProfileArchive, "archive_node":
+		return storageProfileArchive
+	default:
+		return storageProfileAuto
+	}
+}
+
+func storageProfileForNode(n *Node) string {
+	configured := normalizeStorageHistoryProfile(StorageHistoryProfile)
+	if configured == storageProfileArchive || normalizeSyncHistoryMode(SyncHistoryMode) == SyncHistoryModeArchive {
+		return storageProfileArchive
+	}
+	if configured == storageProfileValidator || configured == storageProfileFull {
+		return configured
+	}
+	if n != nil && strings.EqualFold(strings.TrimSpace(n.Role), "full") {
+		return storageProfileFull
+	}
+	return storageProfileValidator
 }
 
 func defaultStoragePolicyForNode(n *Node) StoragePolicy {
-	profile := storageProfileValidator
-	if n != nil && strings.EqualFold(strings.TrimSpace(n.Role), "full") {
-		profile = storageProfileFull
-	}
-	if normalizeSyncHistoryMode(SyncHistoryMode) == SyncHistoryModeArchive {
-		profile = storageProfileArchive
-	}
+	profile := storageProfileForNode(n)
 	policy := StoragePolicy{
 		Profile:                      profile,
+		PruningEnabled:               StorageStatePruningEnabled,
 		EpochLengthBlocks:            StorageEpochLengthBlocks,
 		RetainedEpochs:               StorageValidatorRetainedEpochs,
 		RollbackWindowBlocks:         StorageValidatorRollbackWindowBlocks,
@@ -124,6 +153,7 @@ func defaultStoragePolicyForNode(n *Node) StoragePolicy {
 	}
 	if profile == storageProfileArchive {
 		policy.ColdExportEnabled = false
+		policy.PruningEnabled = false
 	}
 	return policy
 }
@@ -163,6 +193,10 @@ func (m *StorageManager) normalizePolicy() StoragePolicy {
 	if strings.TrimSpace(policy.Profile) == "" {
 		policy = defaultStoragePolicyForNode(m.Node)
 	}
+	policy.Profile = normalizeStorageHistoryProfile(policy.Profile)
+	if policy.Profile == storageProfileAuto {
+		policy.Profile = storageProfileForNode(m.Node)
+	}
 	if policy.EpochLengthBlocks == 0 {
 		policy.EpochLengthBlocks = 100
 	}
@@ -181,6 +215,9 @@ func (m *StorageManager) normalizePolicy() StoragePolicy {
 	if strings.TrimSpace(policy.StateLayoutMode) == "" {
 		policy.StateLayoutMode = "merkle"
 	}
+	if policy.Profile == storageProfileArchive {
+		policy.PruningEnabled = false
+	}
 	return policy
 }
 
@@ -197,6 +234,7 @@ func (m *StorageManager) RunOnce(reason string) (report StorageManagerReport, er
 	n := m.Node
 	policy := m.normalizePolicy()
 	report.Profile = policy.Profile
+	report.PruningEnabled = policy.PruningEnabled
 	report.ParallelGCWorkers = policy.ParallelGCWorkers
 	report.StateRentEnabled = policy.StateRentEnabled
 	report.StateLayoutMode = policy.StateLayoutMode
@@ -215,8 +253,18 @@ func (m *StorageManager) RunOnce(reason string) (report StorageManagerReport, er
 		report.ArchiveModeSkipped = true
 		return report, nil
 	}
+	if !policy.PruningEnabled {
+		report.PruningDisabledSkipped = true
+		if checkpoint, err := n.persistStateCheckpoint(finalized); err != nil {
+			return report, err
+		} else {
+			report.StateCheckpointHeight = checkpoint.Height
+		}
+		return report, nil
+	}
 	retainFrom := storageRetainFromHeight(finalized, policy)
 	report.RetainFromHeight = retainFrom
+	report.HotWindowBlocks = storageHotWindowBlocks(finalized, retainFrom)
 
 	if checkpoint, err := n.persistStateCheckpoint(finalized); err != nil {
 		return report, err
@@ -284,6 +332,13 @@ func storageRetainFromHeight(finalized uint64, policy StoragePolicy) uint64 {
 		return 1
 	}
 	return finalized - window + 1
+}
+
+func storageHotWindowBlocks(finalized uint64, retainFrom uint64) uint64 {
+	if finalized == 0 || retainFrom == 0 || retainFrom > finalized {
+		return 0
+	}
+	return finalized - retainFrom + 1
 }
 
 func stateCheckpointDBKey(height uint64) []byte {
@@ -364,8 +419,10 @@ func (n *Node) recordStorageManagerMarker(policy StoragePolicy, report StorageMa
 		}
 		marker.Mode = normalizeSyncHistoryMode(SyncHistoryMode)
 		marker.Profile = strings.TrimSpace(policy.Profile)
+		marker.PruningEnabled = policy.PruningEnabled
 		marker.FinalizedHeight = maxUint64Value(marker.FinalizedHeight, report.FinalizedHeight)
 		marker.RetainFromHeight = maxUint64Value(marker.RetainFromHeight, report.RetainFromHeight)
+		marker.HotWindowBlocks = storageHotWindowBlocks(marker.FinalizedHeight, marker.RetainFromHeight)
 		if report.RetainFromHeight > 1 {
 			marker.PrunedThroughHeight = maxUint64Value(marker.PrunedThroughHeight, report.RetainFromHeight-1)
 		}

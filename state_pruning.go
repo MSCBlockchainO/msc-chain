@@ -20,8 +20,10 @@ type StatePruneMarker struct {
 	Version                int    `json:"version"`
 	Mode                   string `json:"mode"`
 	Profile                string `json:"profile,omitempty"`
+	PruningEnabled         bool   `json:"pruning_enabled"`
 	FinalizedHeight        uint64 `json:"finalized_height"`
 	RetainFromHeight       uint64 `json:"retain_from_height"`
+	HotWindowBlocks        uint64 `json:"hot_window_blocks,omitempty"`
 	PrunedThroughHeight    uint64 `json:"pruned_through_height"`
 	SnapshotRetention      uint64 `json:"snapshot_retention"`
 	BlockPrunedThrough     uint64 `json:"block_pruned_through,omitempty"`
@@ -101,8 +103,10 @@ func (n *Node) recordStatePruneMarker(kind string, finalizedHeight uint64, retai
 		marker.Mode = normalizeSyncHistoryMode(SyncHistoryMode)
 		policy := defaultStoragePolicyForNode(n)
 		marker.Profile = strings.TrimSpace(policy.Profile)
+		marker.PruningEnabled = policy.PruningEnabled
 		marker.FinalizedHeight = maxUint64Value(marker.FinalizedHeight, finalizedHeight)
 		marker.RetainFromHeight = maxUint64Value(marker.RetainFromHeight, retainFromHeight)
+		marker.HotWindowBlocks = storageHotWindowBlocks(marker.FinalizedHeight, marker.RetainFromHeight)
 		marker.PrunedThroughHeight = maxUint64Value(marker.PrunedThroughHeight, prunedThrough)
 		marker.SnapshotRetention = keepLast
 		marker.ParallelGCWorkers = maxUint64Value(marker.ParallelGCWorkers, policy.ParallelGCWorkers)

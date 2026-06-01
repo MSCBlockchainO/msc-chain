@@ -61,6 +61,7 @@ func TestStorageManagerValidatorPolicyPrunesAndCheckpoints(t *testing.T) {
 	}
 	manager := &StorageManager{Node: n, Policy: StoragePolicy{
 		Profile:                      storageProfileValidator,
+		PruningEnabled:               true,
 		EpochLengthBlocks:            2,
 		RetainedEpochs:               3,
 		RollbackWindowBlocks:         4,
@@ -80,6 +81,9 @@ func TestStorageManagerValidatorPolicyPrunesAndCheckpoints(t *testing.T) {
 	}
 	if report.RetainFromHeight != 35 {
 		t.Fatalf("retain_from = %d, want 35", report.RetainFromHeight)
+	}
+	if !report.PruningEnabled || report.HotWindowBlocks != 6 {
+		t.Fatalf("unexpected pruning policy in report: %+v", report)
 	}
 	if report.StateCheckpointHeight != 40 {
 		t.Fatalf("checkpoint height = %d, want 40", report.StateCheckpointHeight)
@@ -129,6 +133,9 @@ func TestStorageManagerValidatorPolicyPrunesAndCheckpoints(t *testing.T) {
 	if marker.ParallelGCWorkers != 2 || !marker.StateRentEnabled || marker.StateRentArchiveEpochs != 2 || marker.StateLayoutMode != "merkle" {
 		t.Fatalf("storage policy marker mismatch: %+v", marker)
 	}
+	if !marker.PruningEnabled || marker.HotWindowBlocks != 6 {
+		t.Fatalf("storage pruning marker mismatch: %+v", marker)
+	}
 }
 
 func TestStorageManagerArchiveProfileSkipsPruning(t *testing.T) {
@@ -156,8 +163,45 @@ func TestStorageManagerArchiveProfileSkipsPruning(t *testing.T) {
 	if !report.ArchiveModeSkipped {
 		t.Fatalf("expected archive skip, got %+v", report)
 	}
+	if report.PruningEnabled {
+		t.Fatalf("archive mode must disable pruning in report: %+v", report)
+	}
 	if _, err := n.GetSnapshot(1); err != nil {
 		t.Fatalf("archive mode must retain snapshot: %v", err)
+	}
+}
+
+func TestStoragePolicySnapshotReportsRetention(t *testing.T) {
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+	oldProfile := StorageHistoryProfile
+	oldPruning := StorageStatePruningEnabled
+	StorageHistoryProfile = storageProfileAuto
+	StorageStatePruningEnabled = true
+	t.Cleanup(func() {
+		StorageHistoryProfile = oldProfile
+		StorageStatePruningEnabled = oldPruning
+	})
+	blocks := storageManagerTestBlocks(20)
+	n := &Node{
+		ID:         "A",
+		DataDir:    t.TempDir(),
+		Role:       "validator",
+		DB:         db,
+		Blockchain: &Blockchain{Blocks: blocks},
+	}
+	n.commitMu.Lock()
+	n.finalizedHeight = 20
+	n.commitMu.Unlock()
+	resp := n.storagePolicySnapshot()
+	if resp["profile"] != storageProfileValidator {
+		t.Fatalf("unexpected profile: %+v", resp)
+	}
+	if resp["state_pruning_enabled"] != true || resp["archive_mode"] != false {
+		t.Fatalf("unexpected pruning flags: %+v", resp)
+	}
+	if got := resp["retain_from_height"].(uint64); got == 0 {
+		t.Fatalf("expected retain_from height in storage policy: %+v", resp)
 	}
 }
 

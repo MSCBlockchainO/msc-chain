@@ -27481,6 +27481,10 @@ type StorageConfig struct {
 
 	EncryptionKeyBase64 string `toml:"encryption_key_base64"`
 
+	HistoryProfile string `toml:"history_profile"`
+
+	StatePruningEnabled *bool `toml:"state_pruning_enabled"`
+
 	EpochLengthBlocks *uint64 `toml:"epoch_length_blocks"`
 
 	ValidatorRetainedEpochs *uint64 `toml:"validator_retained_epochs"`
@@ -28675,6 +28679,16 @@ func applyStorageConfig(sc StorageConfig) bool {
 
 	if strings.TrimSpace(sc.EncryptionKeyBase64) != "" {
 		ConfigStorageEncryptionKeyBase64 = strings.TrimSpace(sc.EncryptionKeyBase64)
+		changed = true
+	}
+
+	if strings.TrimSpace(sc.HistoryProfile) != "" {
+		StorageHistoryProfile = normalizeStorageHistoryProfile(sc.HistoryProfile)
+		changed = true
+	}
+
+	if sc.StatePruningEnabled != nil {
+		StorageStatePruningEnabled = *sc.StatePruningEnabled
 		changed = true
 	}
 
@@ -33999,6 +34013,7 @@ func (s *Server) Start(addr string) {
 
 	mux.HandleFunc("/status", s.handleStatus)
 	mux.HandleFunc("/consensus/mode", s.handleConsensusMode)
+	mux.HandleFunc("/storage/policy", s.handleStoragePolicy)
 
 	mux.HandleFunc("/snapshot/latest", s.handleSnapshotLatest)
 
@@ -34079,6 +34094,7 @@ func (s *Server) Start(addr string) {
 	// Versioned exchange/API endpoints.
 	mux.HandleFunc("/v1/status", s.handleV1Status)
 	mux.HandleFunc("/v1/consensus/mode", s.handleV1ConsensusMode)
+	mux.HandleFunc("/v1/storage/policy", s.handleV1StoragePolicy)
 	mux.HandleFunc("/v1/snapshot/latest", s.handleV1SnapshotLatest)
 	mux.HandleFunc("/v1/snapshot/create", s.handleV1SnapshotCreate)
 	mux.HandleFunc("/v1/snapshot/export", s.handleV1SnapshotExport)
@@ -37189,6 +37205,14 @@ func (s *Server) handleMetrics(
 	syncModeCode := syncModeMetricCode(runtime.SyncStage, runtime.SyncMode)
 	storageRootSizeBytes, coldStorageSizeBytes := s.Node.storageDirectorySizeSnapshot()
 	storageDiskUsagePercent := diskUsagePercent(nodeDataPath(s.Node.DataDir, s.Node.ID))
+	storagePolicy := defaultStoragePolicyForNode(s.Node)
+	storageArchiveMode := storagePolicy.Profile == storageProfileArchive || s.Node.statePruningArchiveMode()
+	storageRetainFrom := uint64(0)
+	storageHotWindow := uint64(0)
+	if runtime.FinalizedHeight > 0 && storagePolicy.PruningEnabled && !storageArchiveMode {
+		storageRetainFrom = storageRetainFromHeight(runtime.FinalizedHeight, storagePolicy)
+		storageHotWindow = storageHotWindowBlocks(runtime.FinalizedHeight, storageRetainFrom)
+	}
 	storagePrunedStates := obs.StoragePrunedStatesTotal
 	storagePrunedSnapshots := obs.StoragePrunedSnapshotsTotal
 	storageGCCycles := obs.StorageGCCyclesTotal
@@ -37390,6 +37414,11 @@ func (s *Server) handleMetrics(
 	appendPromGauge(&out, "msc_storage_size_bytes", "Approximate on-disk node data size in bytes.", baseLabels, float64(storageRootSizeBytes))
 	appendPromGauge(&out, "msc_disk_usage_percent", "Filesystem disk usage percent for the node data volume.", baseLabels, storageDiskUsagePercent)
 	appendPromGauge(&out, "msc_storage_disk_usage_percent", "Alias for filesystem disk usage percent for the node data volume.", baseLabels, storageDiskUsagePercent)
+	storagePolicyLabels := promLabels(baseLabels, map[string]string{"profile": storagePolicy.Profile})
+	appendPromGauge(&out, "msc_storage_pruning_enabled", "State pruning policy enabled for this node profile (1/0).", storagePolicyLabels, boolToPromFloat(storagePolicy.PruningEnabled && !storageArchiveMode))
+	appendPromGauge(&out, "msc_storage_archive_mode", "Archive storage mode active (1/0).", storagePolicyLabels, boolToPromFloat(storageArchiveMode))
+	appendPromGauge(&out, "msc_storage_retain_from_height", "Oldest hot-state height retained by the storage policy.", storagePolicyLabels, float64(storageRetainFrom))
+	appendPromGauge(&out, "msc_storage_hot_window_blocks", "Number of recent hot-state blocks retained by the storage policy.", storagePolicyLabels, float64(storageHotWindow))
 	appendPromGauge(&out, "msc_storage_pruned_states_total", "Highest state height boundary pruned by the storage manager.", baseLabels, float64(storagePrunedStates))
 	appendPromGauge(&out, "msc_storage_pruned_snapshots_total", "Snapshots pruned by the storage manager.", baseLabels, float64(storagePrunedSnapshots))
 	appendPromGauge(&out, "msc_storage_gc_cycles_total", "Storage manager GC/compaction cycles observed.", baseLabels, float64(storageGCCycles))
@@ -42413,7 +42442,7 @@ func authorized(r *http.Request) bool {
 
 		switch path {
 
-		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/validators/diversity", "/consensus/mode", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/consensus/mode", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/validators/diversity", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
+		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/validators/diversity", "/consensus/mode", "/storage/policy", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/consensus/mode", "/v1/storage/policy", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/validators/diversity", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
 
 			return true
 
