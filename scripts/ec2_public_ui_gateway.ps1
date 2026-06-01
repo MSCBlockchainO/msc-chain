@@ -423,7 +423,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "failed to prepare remote UI upload directory" }
     scp -i $KeyPath -o StrictHostKeyChecking=no $uiArchive "${target}:msc-ui-upload.tar"
     if ($LASTEXITCODE -ne 0) { throw "failed to upload UI archive" }
-    ssh -i $KeyPath -o StrictHostKeyChecking=no $target "tar --no-same-owner --no-same-permissions -xf ~/msc-ui-upload.tar -C ~/msc-ui-upload"
+    ssh -i $KeyPath -o StrictHostKeyChecking=no $target 'sudo tar --delay-directory-restore --no-same-owner --no-same-permissions -xf "$HOME/msc-ui-upload.tar" -C "$HOME/msc-ui-upload" && sudo chown -R "$USER:$USER" "$HOME/msc-ui-upload" && sudo find "$HOME/msc-ui-upload" -type d -exec chmod 0755 {} \; && sudo find "$HOME/msc-ui-upload" -type f -exec chmod 0644 {} \;'
     if ($LASTEXITCODE -ne 0) { throw "failed to extract UI archive" }
     $remote | ssh -i $KeyPath -o StrictHostKeyChecking=no $target "$envPrefix bash -s"
     if ($LASTEXITCODE -ne 0) { throw "remote gateway provisioning failed" }
