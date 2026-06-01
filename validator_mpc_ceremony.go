@@ -86,9 +86,38 @@ func generateValidatorMPCShares(validatorID string, threshold, participants int)
 }
 
 func writeValidatorMPCShares(validatorID string, outDir string, threshold, participants int, password string, force bool) (validatorMPCKeygenResult, error) {
+	pub, shares, err := generateValidatorMPCShares(validatorID, threshold, participants)
+	if err != nil {
+		return validatorMPCKeygenResult{}, err
+	}
+	return writeValidatorMPCShareFiles(validatorID, outDir, threshold, participants, password, force, pub, shares, "Built-in share files are for dev/test or controlled operator rehearsal. For production large validators, use an audited external MPC/DKG signer and the same mpc_external_signer_command contract.")
+}
+
+func writeValidatorMPCSharesFromSeed(validatorID string, outDir string, threshold, participants int, password string, force bool, seed []byte) (validatorMPCKeygenResult, error) {
 	id := normalizeValidatorID(validatorID)
 	if id == "" {
 		return validatorMPCKeygenResult{}, errors.New("validator id is required")
+	}
+	if len(seed) != ed25519.SeedSize {
+		return validatorMPCKeygenResult{}, errors.New("invalid validator seed length")
+	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	defer ZeroMemory(priv)
+	pub := append(ed25519.PublicKey(nil), priv.Public().(ed25519.PublicKey)...)
+	shares, err := splitValidatorMPCSeed(seed, threshold, participants)
+	if err != nil {
+		return validatorMPCKeygenResult{}, err
+	}
+	return writeValidatorMPCShareFiles(id, outDir, threshold, participants, password, force, pub, shares, "Existing validator.sec was migrated into MPC shares for the same consensus public key. Keep validator.sec only as an offline break-glass backup.")
+}
+
+func writeValidatorMPCShareFiles(validatorID string, outDir string, threshold, participants int, password string, force bool, pub ed25519.PublicKey, shares []validatorMPCPlainShare, warning string) (validatorMPCKeygenResult, error) {
+	id := normalizeValidatorID(validatorID)
+	if id == "" {
+		return validatorMPCKeygenResult{}, errors.New("validator id is required")
+	}
+	if len(pub) != ed25519.PublicKeySize {
+		return validatorMPCKeygenResult{}, errors.New("invalid validator public key")
 	}
 	if strings.TrimSpace(password) == "" {
 		return validatorMPCKeygenResult{}, errors.New("mpc share password required")
@@ -98,10 +127,6 @@ func writeValidatorMPCShares(validatorID string, outDir string, threshold, parti
 		outDir = filepath.Join("data", id, "mpc")
 	}
 	if err := ensurePrivateDirectory(outDir); err != nil {
-		return validatorMPCKeygenResult{}, err
-	}
-	pub, shares, err := generateValidatorMPCShares(id, threshold, participants)
-	if err != nil {
 		return validatorMPCKeygenResult{}, err
 	}
 	pubHex := hex.EncodeToString(pub)
@@ -175,7 +200,7 @@ func writeValidatorMPCShares(validatorID string, outDir string, threshold, parti
 		ShareFiles:    shareFiles,
 		SignerCommand: signerCommand,
 		ConfigTOML:    config,
-		Warning:       "Built-in share files are for dev/test or controlled operator rehearsal. For production large validators, use an audited external MPC/DKG signer and the same mpc_external_signer_command contract.",
+		Warning:       warning,
 	}, nil
 }
 

@@ -14,6 +14,7 @@ cd "$(dirname "$0")/.."
 
 NODE_ID="$(printf '%s' "$NODE_ID" | tr '[:lower:]' '[:upper:]')"
 NODE_DIR="runtime-data/distributed/$NODE_ID"
+NODE_PATH="$NODE_DIR/node_$NODE_ID"
 MPC_DIR="$NODE_DIR/mpc"
 CONFIG_SRC="config.toml"
 CONFIG_DST="$NODE_DIR/config.mpc.toml"
@@ -35,12 +36,28 @@ chmod 600 "$PASS_FILE" 2>/dev/null || true
 export MSC_MPC_SHARE_PASSWORD="$(cat "$PASS_FILE")"
 
 if [ ! -s "$MPC_DIR/validator.pub" ]; then
-  ./msc-node validator mpc-keygen \
-    --validator "$NODE_ID" \
-    --threshold "$THRESHOLD" \
-    --participants "$PARTICIPANTS" \
-    --outdir "$MPC_DIR" \
-    --force >/tmp/msc_mpc_keygen_"$NODE_ID".json
+  if [ -s "$NODE_PATH/validator.sec" ]; then
+    if [ -z "${MSC_VALIDATOR_PASSWORD:-}" ]; then
+      echo "MSC_VALIDATOR_PASSWORD is required to migrate existing $NODE_PATH/validator.sec into MPC shares" >&2
+      exit 1
+    fi
+    ./msc-node validator mpc-import-key \
+      --id "$NODE_ID" \
+      --nodepath "$NODE_PATH" \
+      --threshold "$THRESHOLD" \
+      --participants "$PARTICIPANTS" \
+      --outdir "$MPC_DIR" \
+      --validator-password-env MSC_VALIDATOR_PASSWORD \
+      --password-env MSC_MPC_SHARE_PASSWORD \
+      --force >/tmp/msc_mpc_keygen_"$NODE_ID".json
+  else
+    ./msc-node validator mpc-keygen \
+      --validator "$NODE_ID" \
+      --threshold "$THRESHOLD" \
+      --participants "$PARTICIPANTS" \
+      --outdir "$MPC_DIR" \
+      --force >/tmp/msc_mpc_keygen_"$NODE_ID".json
+  fi
 fi
 
 PUBKEY="$(./msc-node validator mpc-pubkey --pub "$MPC_DIR/validator.pub" | python3 -c 'import json,sys; print(json.load(sys.stdin)["public_key"])')"

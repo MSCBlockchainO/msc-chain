@@ -67,6 +67,71 @@ func operatorValidatorMPCKeygenCommand(args []string) error {
 	return nil
 }
 
+func operatorValidatorMPCImportKeyCommand(args []string) error {
+	fs := flag.NewFlagSet("validator mpc-import-key", flag.ContinueOnError)
+	validatorID := fs.String("validator", "", "validator id")
+	idAlias := fs.String("id", "", "validator id alias")
+	dataDir := fs.String("datadir", "data", "base data directory")
+	nodePathFlag := fs.String("nodepath", "", "direct node data path override")
+	outDir := fs.String("outdir", "", "output directory for validator.pub and share*.sec")
+	threshold := fs.Int("threshold", 2, "threshold shares required to sign")
+	participants := fs.Int("participants", 3, "total share count")
+	validatorPasswordEnvFlag := fs.String("validator-password-env", validatorPasswordEnv, "validator.sec password environment variable")
+	sharePasswordEnv := fs.String("password-env", operatorMPCSharePasswordEnv, "MPC share password environment variable")
+	force := fs.Bool("force", false, "overwrite existing MPC share files")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	id := strings.TrimSpace(*validatorID)
+	if id == "" {
+		id = strings.TrimSpace(*idAlias)
+	}
+	nodePath, normalizedID, err := operatorValidatorNodePath(id, *dataDir, *nodePathFlag)
+	if err != nil {
+		return err
+	}
+	dest := strings.TrimSpace(*outDir)
+	if dest == "" {
+		dest = filepath.Join(filepath.Dir(nodePath), "mpc")
+	}
+	keyPath := filepath.Join(nodePath, "validator.sec")
+	raw, err := os.ReadFile(keyPath)
+	if err != nil {
+		return err
+	}
+	var enc SecureWallet
+	if err := json.Unmarshal(raw, &enc); err != nil {
+		return fmt.Errorf("decode validator.sec: %w", err)
+	}
+	validatorPassword, err := operatorReadExistingPassword("Validator key password: ", *validatorPasswordEnvFlag)
+	if err != nil {
+		return err
+	}
+	defer operatorZeroString(&validatorPassword)
+	priv, err := DecryptPrivateKey(enc, validatorPassword)
+	if err != nil {
+		return err
+	}
+	defer ZeroMemory(priv)
+	if len(priv) != ed25519.PrivateKeySize {
+		return errors.New("invalid validator private key length")
+	}
+	sharePassword, err := operatorReadNewPassword("New MPC share password: ", "Confirm MPC share password: ", *sharePasswordEnv)
+	if err != nil {
+		return err
+	}
+	defer operatorZeroString(&sharePassword)
+	seed := priv.Seed()
+	defer ZeroMemory(seed)
+	result, err := writeValidatorMPCSharesFromSeed(normalizedID, dest, *threshold, *participants, sharePassword, *force, seed)
+	if err != nil {
+		return err
+	}
+	result.Warning = "Existing validator.sec migrated to MPC shares for the same public key. Keep validator.sec offline as break-glass backup; do not run MPC and software signing at the same time."
+	operatorPrintJSON(result)
+	return nil
+}
+
 func operatorValidatorMPCPubkeyCommand(args []string) error {
 	fs := flag.NewFlagSet("validator mpc-pubkey", flag.ContinueOnError)
 	pubFile := fs.String("pub", "", "validator.pub file from mpc-keygen")

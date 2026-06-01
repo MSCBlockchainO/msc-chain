@@ -97,6 +97,51 @@ func TestOperatorMPCKeygenCreatesSharesWithoutValidatorSec(t *testing.T) {
 	}
 }
 
+func TestOperatorMPCImportKeyPreservesExistingValidatorPubkey(t *testing.T) {
+	root := t.TempDir()
+	nodePath := filepath.Join(root, "node_A")
+	if err := ensurePrivateDirectory(nodePath); err != nil {
+		t.Fatal(err)
+	}
+	pub, priv, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ZeroMemory(priv)
+	enc, err := EncryptPrivateKey(priv, "validator-pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := SecureWallet{Address: "A", PublicKey: hex.EncodeToString(pub), Crypto: enc}
+	raw, _ := json.MarshalIndent(w, "", "  ")
+	if err := writePrivateFile(filepath.Join(nodePath, "validator.sec"), raw); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(validatorPasswordEnv, "validator-pass")
+	t.Setenv(operatorMPCSharePasswordEnv, "mpc-share-pass")
+	outDir := filepath.Join(root, "mpc")
+	if err := operatorValidatorMPCImportKeyCommand([]string{"--id", "A", "--nodepath", nodePath, "--threshold", "2", "--participants", "3", "--outdir", outDir}); err != nil {
+		t.Fatalf("mpc-import-key: %v", err)
+	}
+	pubRaw, err := os.ReadFile(filepath.Join(outDir, "validator.pub"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalizeConsensusPubKeyHex(string(pubRaw)) != hex.EncodeToString(pub) {
+		t.Fatalf("mpc import changed validator public key")
+	}
+	_, seed, _, err := reconstructValidatorMPCSeedFromFiles([]string{filepath.Join(outDir, "share1.sec"), filepath.Join(outDir, "share2.sec")}, "mpc-share-pass")
+	if err != nil {
+		t.Fatalf("reconstruct imported shares: %v", err)
+	}
+	defer ZeroMemory(seed)
+	gotPriv := ed25519.NewKeyFromSeed(seed)
+	defer ZeroMemory(gotPriv)
+	if hex.EncodeToString(gotPriv.Public().(ed25519.PublicKey)) != hex.EncodeToString(pub) {
+		t.Fatalf("imported shares reconstruct wrong public key")
+	}
+}
+
 func TestOperatorMPCSignCommandSignsExternalSignerRequest(t *testing.T) {
 	outDir := filepath.Join(t.TempDir(), "mpc")
 	t.Setenv(operatorMPCSharePasswordEnv, "mpc-share-pass")

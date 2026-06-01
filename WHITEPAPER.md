@@ -799,6 +799,14 @@ $env:MSC_MPC_SHARE_PASSWORD = "<strong-share-password>"
 .\msc-node.exe validator create-mpc --wallet .\.msc\secure_wallet.json --validator F --mpc-pub data/F/mpc/validator.pub --amount 100 --rpc https://mscblockexplorer.in
 ```
 
+For an existing validator whose public key is already registered on-chain, migrate the existing `validator.sec` into MPC shares instead of generating a new validator public key:
+
+```powershell
+$env:MSC_VALIDATOR_PASSWORD = "<existing-validator-key-password>"
+$env:MSC_MPC_SHARE_PASSWORD = "<strong-share-password>"
+.\msc-node.exe validator mpc-import-key --id A --datadir runtime-data/distributed/A --threshold 2 --participants 3 --outdir runtime-data/distributed/A/mpc
+```
+
 The built-in `mpc-keygen` creates:
 
 ```text

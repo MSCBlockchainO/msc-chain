@@ -107,6 +107,7 @@ func operatorPrintHelp() {
 	fmt.Println("  validator-pubkey --id F --datadir data/F")
 	fmt.Println("  validator create --wallet wallet.json --validator F --validator-pubkey <hex> --amount 100 --rpc http://127.0.0.1:26657")
 	fmt.Println("  validator mpc-keygen --validator F --threshold 2 --participants 3 --outdir data/F/mpc")
+	fmt.Println("  validator mpc-import-key --id A --datadir runtime-data/distributed/A --threshold 2 --participants 3 --outdir runtime-data/distributed/A/mpc")
 	fmt.Println("  validator mpc-pubkey --pub data/F/mpc/validator.pub")
 	fmt.Println("  validator create-mpc --wallet wallet.json --validator F --mpc-pub data/F/mpc/validator.pub --amount 100 --rpc http://127.0.0.1:26657")
 	fmt.Println("  validator mpc-sign --shares data/F/mpc/share1.sec,data/F/mpc/share2.sec  < signer_request.json")
@@ -392,7 +393,7 @@ func operatorValidatorPubkeyCommand(args []string) error {
 
 func operatorValidatorCommand(args []string) error {
 	if len(args) == 0 {
-		return errors.New("validator subcommand required (create, create-mpc, mpc-keygen, mpc-pubkey, mpc-sign)")
+		return errors.New("validator subcommand required (create, create-mpc, mpc-keygen, mpc-import-key, mpc-pubkey, mpc-sign)")
 	}
 	sub := strings.ToLower(strings.TrimSpace(args[0]))
 	switch sub {
@@ -402,6 +403,8 @@ func operatorValidatorCommand(args []string) error {
 		return operatorValidatorCreateMPCCommand(args[1:])
 	case "mpc-keygen":
 		return operatorValidatorMPCKeygenCommand(args[1:])
+	case "mpc-import-key":
+		return operatorValidatorMPCImportKeyCommand(args[1:])
 	case "mpc-pubkey":
 		return operatorValidatorMPCPubkeyCommand(args[1:])
 	case "mpc-sign":
