@@ -134,7 +134,7 @@ server {
         try_files /index.html =404;
     }
 
-    location ~ ^/(dashboard\.html|send\.html|receive\.html|transactions\.html|staking\.html|validators\.html|governance\.html|bridge\.html|security\.html|settings\.html|login\.html|create-wallet\.html|explorer\.html|explorer\.js|explorer\.css|msc_wallet\.js|msc_wallet\.css|app\.js|styles\.css)$ {
+    location ~ ^/(dashboard\.html|send\.html|receive\.html|transactions\.html|staking\.html|validators\.html|governance\.html|bridge\.html|security\.html|settings\.html|login\.html|create-wallet\.html|explorer\.html|explorer\.js|explorer\.css|wallet_pages\.js|wallet_pages\.css|msc_wallet\.js|msc_wallet\.css|app\.js|styles\.css)$ {
         limit_req zone=msc_static burst=60 nodelay;
         try_files $uri =404;
     }
