@@ -353,7 +353,10 @@ WantedBy=multi-user.target
 SERVICE
 sudo systemctl daemon-reload
 sudo systemctl enable --now msc-lb-health.service
-sleep 1
+for i in $(seq 1 12); do
+  [ -s /var/www/msc-ui/gateway/lb-status.json ] && break
+  sleep 1
+done
 sudo nginx -t
 sudo systemctl enable --now nginx
 sudo systemctl reload nginx
