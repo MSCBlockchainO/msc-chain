@@ -27189,6 +27189,22 @@ type ValidatorEngineConfig struct {
 
 	HSMRequireUserPresence bool `toml:"hsm_require_user_presence"`
 
+	MPCEnabled bool `toml:"mpc_enabled"`
+
+	MPCProvider string `toml:"mpc_provider"`
+
+	MPCKeyID string `toml:"mpc_key_id"`
+
+	MPCPublicKey string `toml:"mpc_public_key"`
+
+	MPCExternalSignerCommand string `toml:"mpc_external_signer_command"`
+
+	MPCTimeoutMS int `toml:"mpc_timeout_ms"`
+
+	MPCThreshold int `toml:"mpc_threshold"`
+
+	MPCParticipants int `toml:"mpc_participants"`
+
 	DiversityEnabled bool `toml:"diversity_enabled"`
 
 	DiversityMode string `toml:"diversity_mode"`
@@ -29281,6 +29297,49 @@ func applyValidatorEngineConfig(vc ValidatorEngineConfig) bool {
 		changed = true
 	}
 
+	if vc.MPCEnabled {
+		ValidatorMPCEnabled = true
+		changed = true
+	}
+
+	if strings.TrimSpace(vc.MPCProvider) != "" {
+		nextProvider := normalizeValidatorMPCProvider(vc.MPCProvider)
+		if nextProvider != normalizeValidatorMPCProvider(ValidatorMPCProvider) {
+			ValidatorMPCProvider = nextProvider
+			changed = true
+		}
+	}
+
+	if strings.TrimSpace(vc.MPCKeyID) != "" && strings.TrimSpace(vc.MPCKeyID) != ValidatorMPCKeyID {
+		ValidatorMPCKeyID = strings.TrimSpace(vc.MPCKeyID)
+		changed = true
+	}
+
+	if strings.TrimSpace(vc.MPCPublicKey) != "" && strings.TrimSpace(vc.MPCPublicKey) != ValidatorMPCPublicKeyHex {
+		ValidatorMPCPublicKeyHex = strings.TrimSpace(vc.MPCPublicKey)
+		changed = true
+	}
+
+	if strings.TrimSpace(vc.MPCExternalSignerCommand) != "" && strings.TrimSpace(vc.MPCExternalSignerCommand) != ValidatorMPCExternalSignerCommand {
+		ValidatorMPCExternalSignerCommand = strings.TrimSpace(vc.MPCExternalSignerCommand)
+		changed = true
+	}
+
+	if vc.MPCTimeoutMS > 0 && vc.MPCTimeoutMS != ValidatorMPCTimeoutMS {
+		ValidatorMPCTimeoutMS = vc.MPCTimeoutMS
+		changed = true
+	}
+
+	if vc.MPCThreshold > 0 && vc.MPCThreshold != ValidatorMPCThreshold {
+		ValidatorMPCThreshold = vc.MPCThreshold
+		changed = true
+	}
+
+	if vc.MPCParticipants > 0 && vc.MPCParticipants != ValidatorMPCParticipants {
+		ValidatorMPCParticipants = vc.MPCParticipants
+		changed = true
+	}
+
 	if vc.DiversityEnabled {
 		ValidatorDiversityEnabled = true
 		changed = true
@@ -31198,6 +31257,70 @@ func loadConfigOverrides(path string) error {
 		ValidatorHSMRequireUserPresence = cfg.Validators.HSMRequireUserPresence
 
 		fmt.Printf("VALIDATOR HSM config loaded: require_user_presence=%t (explicit)\n", ValidatorHSMRequireUserPresence)
+
+	}
+
+	if meta.IsDefined("validators", "mpc_enabled") {
+
+		ValidatorMPCEnabled = cfg.Validators.MPCEnabled
+
+		fmt.Printf("VALIDATOR MPC config loaded: enabled=%t (explicit)\n", ValidatorMPCEnabled)
+
+	}
+
+	if meta.IsDefined("validators", "mpc_provider") {
+
+		ValidatorMPCProvider = normalizeValidatorMPCProvider(cfg.Validators.MPCProvider)
+
+		fmt.Printf("VALIDATOR MPC config loaded: provider=%s (explicit)\n", ValidatorMPCProvider)
+
+	}
+
+	if meta.IsDefined("validators", "mpc_key_id") {
+
+		ValidatorMPCKeyID = strings.TrimSpace(cfg.Validators.MPCKeyID)
+
+		fmt.Printf("VALIDATOR MPC config loaded: key_id=%s (explicit)\n", ValidatorMPCKeyID)
+
+	}
+
+	if meta.IsDefined("validators", "mpc_public_key") {
+
+		ValidatorMPCPublicKeyHex = strings.TrimSpace(cfg.Validators.MPCPublicKey)
+
+		fmt.Printf("VALIDATOR MPC config loaded: public_key_configured=%t (explicit)\n", ValidatorMPCPublicKeyHex != "")
+
+	}
+
+	if meta.IsDefined("validators", "mpc_external_signer_command") {
+
+		ValidatorMPCExternalSignerCommand = strings.TrimSpace(cfg.Validators.MPCExternalSignerCommand)
+
+		fmt.Printf("VALIDATOR MPC config loaded: external_signer_configured=%t (explicit)\n", ValidatorMPCExternalSignerCommand != "")
+
+	}
+
+	if meta.IsDefined("validators", "mpc_timeout_ms") && cfg.Validators.MPCTimeoutMS > 0 {
+
+		ValidatorMPCTimeoutMS = cfg.Validators.MPCTimeoutMS
+
+		fmt.Printf("VALIDATOR MPC config loaded: timeout_ms=%d (explicit)\n", ValidatorMPCTimeoutMS)
+
+	}
+
+	if meta.IsDefined("validators", "mpc_threshold") && cfg.Validators.MPCThreshold > 0 {
+
+		ValidatorMPCThreshold = cfg.Validators.MPCThreshold
+
+		fmt.Printf("VALIDATOR MPC config loaded: threshold=%d (explicit)\n", ValidatorMPCThreshold)
+
+	}
+
+	if meta.IsDefined("validators", "mpc_participants") && cfg.Validators.MPCParticipants > 0 {
+
+		ValidatorMPCParticipants = cfg.Validators.MPCParticipants
+
+		fmt.Printf("VALIDATOR MPC config loaded: participants=%d (explicit)\n", ValidatorMPCParticipants)
 
 	}
 
@@ -35421,6 +35544,7 @@ func (s *Server) handleStatus(
 	validatorKeyLoaded := keyHealth.Loaded
 	validatorKeyFingerprint := keyHealth.Fingerprint
 	hsmStatus := validatorHSMStatus(s.Node.ID, s.Node.ValidatorKey)
+	mpcStatus := validatorMPCStatus(s.Node.ID, s.Node.ValidatorKey)
 	validatorPasswordMode, validatorSecretSource := validatorSecretRuntime(s.Node.ID)
 	if strings.TrimSpace(validatorPasswordMode) == "" {
 		validatorPasswordMode = configuredValidatorPasswordMode()
@@ -35770,6 +35894,16 @@ func (s *Server) handleStatus(
 		"validator_hsm_external_signer_configured":     hsmStatus.ExternalSignerConfigured,
 		"validator_hsm_require_user_presence":          hsmStatus.RequireUserPresence,
 		"validator_hsm_reason":                         hsmStatus.Reason,
+		"validator_mpc":                                mpcStatus,
+		"validator_mpc_enabled":                        mpcStatus.Enabled,
+		"validator_mpc_ready":                          mpcStatus.Ready,
+		"validator_mpc_provider":                       mpcStatus.Provider,
+		"validator_mpc_key_id":                         mpcStatus.KeyID,
+		"validator_mpc_fingerprint":                    mpcStatus.Fingerprint,
+		"validator_mpc_external_signer_configured":     mpcStatus.ExternalSignerConfigured,
+		"validator_mpc_threshold":                      mpcStatus.Threshold,
+		"validator_mpc_participants":                   mpcStatus.Participants,
+		"validator_mpc_reason":                         mpcStatus.Reason,
 		"validator_password_mode":                      validatorPasswordMode,
 		"validator_secret_source":                      validatorSecretSource,
 		"exec_current_round":                           execCurrentRound,
@@ -37049,6 +37183,7 @@ func (s *Server) handleMetrics(
 		txConfirmedEstimate = 0
 	}
 	hsmStatus := validatorHSMStatus(s.Node.ID, s.Node.ValidatorKey)
+	mpcStatus := validatorMPCStatus(s.Node.ID, s.Node.ValidatorKey)
 
 	baseLabels := map[string]string{
 		"node_id":  strings.TrimSpace(s.Node.ID),
@@ -37203,6 +37338,12 @@ func (s *Server) handleMetrics(
 	appendPromGauge(&out, "msc_validator_hsm_ready", "Validator HSM/external signer readiness (1/0).", promLabels(baseLabels, map[string]string{"provider": hsmStatus.Provider, "reason": hsmStatus.Reason}), boolToPromFloat(hsmStatus.Ready))
 	appendPromGauge(&out, "msc_validator_hsm_external_signer_configured", "Validator HSM external signer command configured (1/0).", promLabels(baseLabels, map[string]string{"provider": hsmStatus.Provider}), boolToPromFloat(hsmStatus.ExternalSignerConfigured))
 	appendPromGauge(&out, "msc_validator_hsm_timeout_ms", "Validator HSM external signer timeout in milliseconds.", promLabels(baseLabels, map[string]string{"provider": hsmStatus.Provider}), float64(hsmStatus.TimeoutMS))
+	appendPromGauge(&out, "msc_validator_mpc_enabled", "Validator MPC/threshold signing mode enabled (1/0).", promLabels(baseLabels, map[string]string{"provider": mpcStatus.Provider, "key_id": mpcStatus.KeyID}), boolToPromFloat(mpcStatus.Enabled))
+	appendPromGauge(&out, "msc_validator_mpc_ready", "Validator MPC/threshold signer readiness (1/0).", promLabels(baseLabels, map[string]string{"provider": mpcStatus.Provider, "reason": mpcStatus.Reason}), boolToPromFloat(mpcStatus.Ready))
+	appendPromGauge(&out, "msc_validator_mpc_external_signer_configured", "Validator MPC external signer command configured (1/0).", promLabels(baseLabels, map[string]string{"provider": mpcStatus.Provider}), boolToPromFloat(mpcStatus.ExternalSignerConfigured))
+	appendPromGauge(&out, "msc_validator_mpc_threshold", "Validator MPC threshold configured for the signer.", promLabels(baseLabels, map[string]string{"provider": mpcStatus.Provider}), float64(mpcStatus.Threshold))
+	appendPromGauge(&out, "msc_validator_mpc_participants", "Validator MPC participant count configured for the signer.", promLabels(baseLabels, map[string]string{"provider": mpcStatus.Provider}), float64(mpcStatus.Participants))
+	appendPromGauge(&out, "msc_validator_mpc_timeout_ms", "Validator MPC external signer timeout in milliseconds.", promLabels(baseLabels, map[string]string{"provider": mpcStatus.Provider}), float64(mpcStatus.TimeoutMS))
 
 	appendPromGauge(&out, "msc_storage_size_bytes", "Approximate on-disk node data size in bytes.", baseLabels, float64(storageRootSizeBytes))
 	appendPromGauge(&out, "msc_disk_usage_percent", "Filesystem disk usage percent for the node data volume.", baseLabels, storageDiskUsagePercent)

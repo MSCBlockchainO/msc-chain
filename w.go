@@ -941,6 +941,12 @@ func getValidatorKeyLoadMeta(nodeID string) (validatorKeyLoadMeta, bool) {
 }
 
 func validatorKeyMode() string {
+	if ValidatorMPCEnabled {
+		return "mpc"
+	}
+	if ValidatorHSMEnabled {
+		return "hsm"
+	}
 	if ValidatorKeyBackupRequired || strings.TrimSpace(ValidatorRequiredKeyFingerprint) != "" {
 		return "strict"
 	}
@@ -1279,7 +1285,7 @@ func CollectValidatorKeyHealth(nodeID, nodePath string, key ValidatorKey) Valida
 		}
 	}
 	backupPresent, backupAge, _ := validateValidatorBackup(nodePath, out.Fingerprint)
-	if ValidatorHSMEnabled && out.Loaded {
+	if (ValidatorHSMEnabled || ValidatorMPCEnabled) && out.Loaded {
 		backupPresent = true
 		backupAge = 0
 	}

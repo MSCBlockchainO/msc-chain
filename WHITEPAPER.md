@@ -142,6 +142,7 @@ The operator policy is:
 
 - `validator.sec` is the identity root;
 - HSM/external-signer mode can replace `validator.sec` for validator consensus signing;
+- MPC/threshold-signing mode can split validator signing authority across multiple signer participants;
 - fingerprint mismatch fails startup;
 - backup restore is preferred over chain reset;
 - key backup is required;
@@ -170,6 +171,22 @@ The HSM path is fail-closed:
 - `/status` and `/metrics` expose HSM readiness, provider, key ID, signer configuration, and failure reason.
 
 This allows large validators to run MSC consensus keys behind dedicated signing hardware while still preserving deterministic consensus signing and operator observability.
+
+### MPC Validator Signing
+
+MSC also supports MPC-backed validator signing through a threshold signer adapter. In this mode the node stores only the validator consensus public key. It sends canonical Ed25519 signing payloads to an external MPC signer command, and that command coordinates threshold participants to return one final 64-byte Ed25519 signature for the pinned validator public key.
+
+The MPC path is fail-closed:
+
+- `validators.mpc_enabled=true` disables software private-key fallback;
+- `validators.mpc_public_key` pins the expected validator consensus public key;
+- `validators.mpc_external_signer_command` must return a valid 64-byte Ed25519 signature;
+- optional `validators.mpc_threshold` and `validators.mpc_participants` document and expose the threshold policy;
+- every returned signature is verified against the pinned public key before use;
+- a timeout, bad signature, wrong key, missing signer command, or invalid threshold makes the validator signer unavailable;
+- `/status` and `/metrics` expose MPC readiness, provider, key ID, threshold, participant count, and failure reason.
+
+MPC mode is intended for large validators that do not want one `validator.sec` compromise to compromise the whole validator. The MSC node does not implement the threshold cryptography internally; it defines the deterministic payload, fail-closed signer boundary, verification, configuration, and observability contract for external MPC systems.
 
 ## 8. Slashing And Liveness
 
@@ -675,6 +692,7 @@ Known risks and limitations:
 - public gateway security depends on correct deployment and DNS/TLS setup;
 - validator key loss or poor backup hygiene can affect liveness;
 - HSM adapters must be rehearsed per provider; a signer timeout or unavailable HSM makes that validator unable to vote until recovered;
+- MPC signer clusters must be rehearsed as production infrastructure; an unavailable threshold quorum makes that validator unable to vote until signer quorum recovers;
 - any governance threshold can be compromised if enough signing keys are compromised;
 - trustless mobile wallet verification requires the light client proof APIs and verifier library described in Section 16;
 - production readiness should include independent audit, long-duration distributed chaos runs, and public monitoring.
@@ -792,6 +810,44 @@ It must return either raw signature hex or JSON:
 ```
 
 The node verifies the returned signature before using it. A bad signature, timeout, missing command, wrong public key, or fingerprint mismatch makes the validator signer unavailable.
+
+MPC-backed validator startup uses the same node command, but enables threshold signing in `config.toml`:
+
+```toml
+[validators]
+mpc_enabled = true
+mpc_provider = "threshold_ed25519"
+mpc_key_id = "msc-validator-F-cluster"
+mpc_public_key = "<32-byte-ed25519-public-key-hex>"
+mpc_external_signer_command = "msc-mpc-signer --cluster msc-validator-F"
+mpc_timeout_ms = 3000
+mpc_threshold = 2
+mpc_participants = 3
+```
+
+The MPC signer receives JSON on stdin:
+
+```json
+{
+  "domain": "msc-validator-mpc-ed25519-v1",
+  "signer_mode": "mpc",
+  "validator_id": "F",
+  "provider": "threshold_ed25519",
+  "key_id": "msc-validator-F-cluster",
+  "public_key_hex": "<pubkey>",
+  "payload_hex": "<canonical-signing-payload>",
+  "threshold": 2,
+  "participants": 3
+}
+```
+
+It must return the same response shape:
+
+```json
+{"signature_hex":"<64-byte-ed25519-threshold-signature-hex>"}
+```
+
+When `mpc_enabled=true`, MSC does not fall back to a local software validator key. This is intentional: unavailable MPC means the validator is unavailable rather than silently signing with a single hot key.
 
 Transaction and staking commands:
 

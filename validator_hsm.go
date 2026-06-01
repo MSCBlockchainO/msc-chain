@@ -39,11 +39,14 @@ type ValidatorHSMStatus struct {
 
 type validatorHSMRequest struct {
 	Domain       string `json:"domain"`
+	SignerMode   string `json:"signer_mode,omitempty"`
 	ValidatorID  string `json:"validator_id"`
 	Provider     string `json:"provider"`
 	KeyID        string `json:"key_id,omitempty"`
 	PublicKeyHex string `json:"public_key_hex"`
 	PayloadHex   string `json:"payload_hex"`
+	Threshold    int    `json:"threshold,omitempty"`
+	Participants int    `json:"participants,omitempty"`
 }
 
 type validatorHSMResponse struct {
@@ -101,6 +104,9 @@ func validatorHSMFingerprint() string {
 }
 
 func validatorHSMReady() bool {
+	if ValidatorMPCEnabled {
+		return validatorMPCReady()
+	}
 	if !ValidatorHSMEnabled {
 		return false
 	}
@@ -146,6 +152,9 @@ func isValidatorSigningKeyUsable(v ValidatorKey) bool {
 	if len(v.PublicKey) != ed25519.PublicKeySize {
 		return false
 	}
+	if ValidatorMPCEnabled {
+		return validatorMPCSigningKeyUsable(v)
+	}
 	if len(v.PrivateKey) == ed25519.PrivateKeySize {
 		return true
 	}
@@ -157,6 +166,9 @@ func isValidatorSigningKeyUsable(v ValidatorKey) bool {
 }
 
 func LoadValidatorHSMKey(nodeID, nodePath string) (ValidatorKey, bool) {
+	if ValidatorMPCEnabled {
+		return loadValidatorMPCKey(nodeID, nodePath)
+	}
 	id := normalizeValidatorID(nodeID)
 	if !ValidatorHSMEnabled {
 		return ValidatorKey{}, false
@@ -213,6 +225,9 @@ func (n *Node) signValidatorPayload(payload []byte) ([]byte, bool) {
 	if n == nil || len(payload) == 0 || len(n.ValidatorKey.PublicKey) != ed25519.PublicKeySize {
 		return nil, false
 	}
+	if ValidatorMPCEnabled {
+		return n.signValidatorPayloadWithMPC(payload)
+	}
 	if len(n.ValidatorKey.PrivateKey) == ed25519.PrivateKeySize {
 		return ed25519.Sign(n.ValidatorKey.PrivateKey, payload), true
 	}
@@ -225,6 +240,7 @@ func (n *Node) signValidatorPayload(payload []byte) ([]byte, bool) {
 	}
 	sig, err := validatorHSMExternalSignerRunner(validatorHSMRequest{
 		Domain:       "msc-validator-ed25519-v1",
+		SignerMode:   "hsm",
 		ValidatorID:  normalizeValidatorID(n.ValidatorKey.ID),
 		Provider:     normalizeValidatorHSMProvider(ValidatorHSMProvider),
 		KeyID:        strings.TrimSpace(ValidatorHSMKeyID),

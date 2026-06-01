@@ -22,6 +22,15 @@ func restoreValidatorHSMGlobals(t *testing.T) func() {
 	prevPresence := ValidatorHSMRequireUserPresence
 	prevFingerprint := ValidatorRequiredKeyFingerprint
 	prevRunner := validatorHSMExternalSignerRunner
+	prevMPCEnabled := ValidatorMPCEnabled
+	prevMPCProvider := ValidatorMPCProvider
+	prevMPCKeyID := ValidatorMPCKeyID
+	prevMPCPub := ValidatorMPCPublicKeyHex
+	prevMPCCommand := ValidatorMPCExternalSignerCommand
+	prevMPCTimeout := ValidatorMPCTimeoutMS
+	prevMPCThreshold := ValidatorMPCThreshold
+	prevMPCParticipants := ValidatorMPCParticipants
+	prevMPCRunner := validatorMPCExternalSignerRunner
 	return func() {
 		ValidatorHSMEnabled = prevEnabled
 		ValidatorHSMProvider = prevProvider
@@ -32,6 +41,15 @@ func restoreValidatorHSMGlobals(t *testing.T) func() {
 		ValidatorHSMRequireUserPresence = prevPresence
 		ValidatorRequiredKeyFingerprint = prevFingerprint
 		validatorHSMExternalSignerRunner = prevRunner
+		ValidatorMPCEnabled = prevMPCEnabled
+		ValidatorMPCProvider = prevMPCProvider
+		ValidatorMPCKeyID = prevMPCKeyID
+		ValidatorMPCPublicKeyHex = prevMPCPub
+		ValidatorMPCExternalSignerCommand = prevMPCCommand
+		ValidatorMPCTimeoutMS = prevMPCTimeout
+		ValidatorMPCThreshold = prevMPCThreshold
+		ValidatorMPCParticipants = prevMPCParticipants
+		validatorMPCExternalSignerRunner = prevMPCRunner
 	}
 }
 
@@ -155,5 +173,113 @@ func TestValidatorHSMStatusReasons(t *testing.T) {
 	st = validatorHSMStatus("H", ValidatorKey{ID: "H", PublicKey: pub})
 	if st.Ready || st.Reason != "missing_external_signer_command" {
 		t.Fatalf("status = %+v", st)
+	}
+}
+
+func TestValidatorMPCExternalSignerSignsAndVerifies(t *testing.T) {
+	defer restoreValidatorHSMGlobals(t)()
+	pub, priv, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ValidatorMPCEnabled = true
+	ValidatorMPCProvider = "threshold_ed25519"
+	ValidatorMPCKeyID = "cluster-F"
+	ValidatorMPCPublicKeyHex = hex.EncodeToString(pub)
+	ValidatorMPCExternalSignerCommand = "test-mpc-signer"
+	ValidatorMPCTimeoutMS = 4000
+	ValidatorMPCThreshold = 2
+	ValidatorMPCParticipants = 3
+	validatorMPCExternalSignerRunner = func(req validatorHSMRequest) ([]byte, error) {
+		if req.Domain != "msc-validator-mpc-ed25519-v1" {
+			t.Fatalf("domain = %q", req.Domain)
+		}
+		if req.SignerMode != "mpc" {
+			t.Fatalf("signer mode = %q, want mpc", req.SignerMode)
+		}
+		if req.Provider != "threshold_ed25519" {
+			t.Fatalf("provider = %q", req.Provider)
+		}
+		if req.Threshold != 2 || req.Participants != 3 {
+			t.Fatalf("threshold tuple = %d/%d", req.Threshold, req.Participants)
+		}
+		payload, err := hex.DecodeString(req.PayloadHex)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ed25519.Sign(priv, payload), nil
+	}
+	n := &Node{
+		ID: "F",
+		ValidatorKey: ValidatorKey{
+			ID:        "F",
+			PublicKey: pub,
+		},
+	}
+	payload := []byte("msc mpc sign payload")
+	sig, ok := n.signValidatorPayload(payload)
+	if !ok {
+		t.Fatal("expected MPC signer success")
+	}
+	if !ed25519.Verify(pub, payload, sig) {
+		t.Fatal("signature did not verify")
+	}
+}
+
+func TestValidatorMPCModeDisablesSoftwareKeyFallback(t *testing.T) {
+	defer restoreValidatorHSMGlobals(t)()
+	pub, priv, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ValidatorMPCEnabled = true
+	ValidatorMPCProvider = "threshold"
+	ValidatorMPCKeyID = "cluster-F"
+	ValidatorMPCPublicKeyHex = hex.EncodeToString(pub)
+	ValidatorMPCExternalSignerCommand = ""
+
+	key := ValidatorKey{ID: "F", PublicKey: pub, PrivateKey: priv}
+	if isValidatorSigningKeyUsable(key) {
+		t.Fatal("mpc mode must not fall back to local private key when signer is not ready")
+	}
+	n := &Node{ID: "F", ValidatorKey: key}
+	if _, ok := n.signValidatorPayload([]byte("must fail closed")); ok {
+		t.Fatal("expected MPC mode to fail closed without external signer")
+	}
+}
+
+func TestLoadValidatorMPCKeyDoesNotRequirePrivateKey(t *testing.T) {
+	defer restoreValidatorHSMGlobals(t)()
+	pub, _, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ValidatorMPCEnabled = true
+	ValidatorMPCProvider = "threshold"
+	ValidatorMPCKeyID = "cluster-F"
+	ValidatorMPCPublicKeyHex = hex.EncodeToString(pub)
+	ValidatorMPCExternalSignerCommand = "test-mpc-signer"
+	ValidatorMPCThreshold = 2
+	ValidatorMPCParticipants = 3
+
+	dir := t.TempDir()
+	key, handled := LoadValidatorHSMKey("F", dir)
+	if !handled {
+		t.Fatal("expected MPC key path to be handled")
+	}
+	if key.ID != "F" {
+		t.Fatalf("key id = %q, want F", key.ID)
+	}
+	if !bytes.Equal(key.PublicKey, pub) {
+		t.Fatal("loaded MPC public key mismatch")
+	}
+	if len(key.PrivateKey) != 0 {
+		t.Fatal("MPC key must not load a private key into process memory")
+	}
+	if !isValidatorSigningKeyUsable(key) {
+		t.Fatal("MPC public key should be usable through external signer")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "validator.sec")); !os.IsNotExist(err) {
+		t.Fatalf("validator.sec should not be created in MPC mode, err=%v", err)
 	}
 }
