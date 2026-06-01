@@ -150,12 +150,15 @@ body {
 .nav-item {
   width: 100%;
   min-height: 42px;
+  display: flex;
+  align-items: center;
   text-align: left;
   border-radius: 8px;
   padding: 10px 12px;
   color: var(--muted);
   background: transparent;
   letter-spacing: 0;
+  text-decoration: none;
 }
 
 .nav-item:hover,
@@ -376,6 +379,17 @@ body {
   animation: rise 0.6s ease forwards;
 }
 
+.panel.wallet-page-focus {
+  border-color: rgba(255, 155, 63, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(255, 155, 63, 0.12),
+    var(--shadow);
+}
+
+.wallet-page-panel {
+  scroll-margin-top: 150px;
+}
+
 .hidden {
   display: none !important;
 }
@@ -486,6 +500,40 @@ button:hover {
   border-radius: 14px;
   display: grid;
   gap: 10px;
+}
+
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.security-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.security-card {
+  min-height: 136px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.security-value {
+  font-size: 16px;
+  color: var(--ink);
+  line-height: 1.35;
 }
 
 .secret {

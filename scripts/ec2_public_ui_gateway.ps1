@@ -121,12 +121,12 @@ server {
 
     location = /msc_wallet.html {
         limit_req zone=msc_static burst=60 nodelay;
-        try_files /index.html =404;
+        try_files /msc_wallet.html =404;
     }
 
     location = /wallet.html {
         limit_req zone=msc_static burst=60 nodelay;
-        try_files /index.html =404;
+        try_files /wallet.html =404;
     }
 
     location = /index.html {
@@ -134,7 +134,7 @@ server {
         try_files /index.html =404;
     }
 
-    location ~ ^/(explorer\.html|explorer\.js|explorer\.css|msc_wallet\.js|msc_wallet\.css|app\.js|styles\.css)$ {
+    location ~ ^/(dashboard\.html|send\.html|receive\.html|transactions\.html|staking\.html|validators\.html|governance\.html|bridge\.html|security\.html|settings\.html|login\.html|create-wallet\.html|explorer\.html|explorer\.js|explorer\.css|msc_wallet\.js|msc_wallet\.css|app\.js|styles\.css)$ {
         limit_req zone=msc_static burst=60 nodelay;
         try_files $uri =404;
     }
@@ -223,12 +223,16 @@ fi
 if [ "$ENABLE_HTTPS" = "1" ]; then
   curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/explorer.html" >/dev/null
   curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/msc_wallet.html" >/dev/null
+  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/dashboard.html" >/dev/null
+  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/wallet.html" >/dev/null
   status_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/status")
   metrics_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/metrics")
   rpc_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/rpc")
 else
   curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/explorer.html >/dev/null
   curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/msc_wallet.html >/dev/null
+  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/dashboard.html >/dev/null
+  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/wallet.html >/dev/null
   status_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/status)
   metrics_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/metrics)
   rpc_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/rpc)
@@ -281,6 +285,7 @@ Write-Host "Gateway checks passed."
 if ($enableHttps) {
     Write-Host "  Explorer: https://$Domain/explorer.html"
     Write-Host "  Wallet  : https://$Domain/msc_wallet.html"
+    Write-Host "  Dashboard: https://$Domain/dashboard.html"
 } else {
     Write-Host "  Temporary Explorer: http://$GatewayHost/explorer.html"
     Write-Host "  Temporary Wallet  : http://$GatewayHost/msc_wallet.html"

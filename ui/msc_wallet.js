@@ -700,6 +700,22 @@ const bridgeApprovalFee = el("bridgeApprovalFee");
 const bridgeApprovalSpeed = el("bridgeApprovalSpeed");
 const bridgeApproveBtn = el("bridgeApproveBtn");
 const bridgeRejectBtn = el("bridgeRejectBtn");
+const walletBridgeStatus = el("walletBridgeStatus");
+const walletBridgeMode = el("walletBridgeMode");
+const walletBridgeChains = el("walletBridgeChains");
+const walletBridgeAssets = el("walletBridgeAssets");
+const walletBridgeLightClient = el("walletBridgeLightClient");
+const walletBridgeRefreshBtn = el("walletBridgeRefresh");
+const walletBridgeVerifyBtn = el("walletBridgeVerifyBtn");
+const walletBridgeProofInput = el("walletBridgeProofInput");
+const walletBridgeResult = el("walletBridgeResult");
+const walletSecurityStatus = el("walletSecurityStatus");
+const walletSecurityEncryption = el("walletSecurityEncryption");
+const walletSecurityBackup = el("walletSecurityBackup");
+const walletSecurityMPC = el("walletSecurityMPC");
+const walletSecurityHSM = el("walletSecurityHSM");
+const walletSecuritySession = el("walletSecuritySession");
+const walletSecurityRPC = el("walletSecurityRPC");
 
 const applyAdminMode = (forceEnabled) => {
   const enabled = forceEnabled === true || state.adminMode || !!state.apiToken;
@@ -1689,6 +1705,25 @@ const setMetricText = (node, text) => {
   if (node) node.textContent = text;
 };
 
+const WALLET_PAGE_ROUTES = Object.freeze({
+  "": { page: "dashboard", target: "walletDashboard" },
+  "index.html": { page: "dashboard", target: "walletDashboard" },
+  "msc_wallet.html": { page: "dashboard", target: "walletDashboard" },
+  "dashboard.html": { page: "dashboard", target: "walletDashboard" },
+  "wallet.html": { page: "wallet", target: "walletAccount" },
+  "send.html": { page: "send", target: "sendForm" },
+  "receive.html": { page: "receive", target: "faucetForm" },
+  "transactions.html": { page: "transactions", target: "walletHistory" },
+  "staking.html": { page: "staking", target: "stakeForm" },
+  "validators.html": { page: "validators", target: "validatorDashboard" },
+  "governance.html": { page: "governance", target: "governanceDashboard" },
+  "bridge.html": { page: "bridge", target: "walletBridge" },
+  "security.html": { page: "security", target: "walletSecurity" },
+  "settings.html": { page: "settings", target: "netControls" },
+  "login.html": { page: "login", target: "authCard" },
+  "create-wallet.html": { page: "create-wallet", target: "walletAccount", tab: "create" },
+});
+
 const formatMSCDisplay = (value, coin = "MSC") => {
   if (value === undefined || value === null || value === "") return `— ${coin}`;
   return `${formatNumber(value)} ${coin}`;
@@ -1745,7 +1780,40 @@ const setWallet3ActiveTarget = (targetId) => {
   });
 };
 
-const navigateWallet3 = (targetId) => {
+const currentWalletPageFile = () => {
+  try {
+    return String(window.location.pathname || "")
+      .split("/")
+      .filter(Boolean)
+      .pop() || "";
+  } catch (_) {
+    return "";
+  }
+};
+
+const currentWalletRoute = () =>
+  WALLET_PAGE_ROUTES[currentWalletPageFile()] || WALLET_PAGE_ROUTES["index.html"];
+
+const setWalletPageFocus = (targetId) => {
+  document.querySelectorAll(".wallet-page-focus").forEach((node) => {
+    node.classList.remove("wallet-page-focus");
+  });
+  const target = el(targetId);
+  const panel = target?.closest?.(".panel") || (target?.classList?.contains("panel") ? target : null);
+  if (panel) {
+    panel.classList.add("wallet-page-focus");
+  }
+};
+
+const activateWalletTab = (tabName) => {
+  if (!tabName) return;
+  const tabButton = document.querySelector(`.tab[data-tab="${tabName}"]`);
+  if (tabButton && typeof tabButton.click === "function") {
+    tabButton.click();
+  }
+};
+
+const navigateWallet3 = (targetId, { smooth = true } = {}) => {
   if (!targetId) return;
   const target = el(targetId);
   if (!target) return;
@@ -1754,7 +1822,8 @@ const navigateWallet3 = (targetId) => {
     return;
   }
   setWallet3ActiveTarget(targetId);
-  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  setWalletPageFocus(targetId);
+  target.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
   const focusable = target.matches("input, textarea, select, button")
     ? target
     : target.querySelector("input, textarea, select, button");
@@ -1763,9 +1832,28 @@ const navigateWallet3 = (targetId) => {
   }
 };
 
+const applyWalletPageRoute = () => {
+  const route = currentWalletRoute();
+  document.body.dataset.walletPage = route.page;
+  setWallet3ActiveTarget(route.target);
+  activateWalletTab(route.tab);
+  window.setTimeout(() => navigateWallet3(route.target, { smooth: false }), 80);
+};
+
 const initWallet3Navigation = () => {
   document.querySelectorAll("[data-wallet-target]").forEach((button) => {
     button.addEventListener("click", (event) => {
+      const href = button.getAttribute("href") || "";
+      if (href && !href.startsWith("#")) {
+        const nextFile = String(new URL(href, window.location.href).pathname || "")
+          .split("/")
+          .filter(Boolean)
+          .pop() || "";
+        const currentFile = currentWalletPageFile() || "index.html";
+        if (nextFile && nextFile !== currentFile) {
+          return;
+        }
+      }
       event.preventDefault();
       navigateWallet3(button.dataset.walletTarget || "");
     });
@@ -1781,6 +1869,7 @@ const initWallet3Navigation = () => {
       window.location.href = `explorer.html?q=${encodeURIComponent(query)}`;
     });
   }
+  applyWalletPageRoute();
 };
 
 const resetNetworkDiagnostics = (chainValue = "—") => {
@@ -2300,6 +2389,8 @@ const connectToRPC = async ({ persist = false } = {}) => {
   await syncAll();
   scheduleAutoSync();
   await syncInjectedProviderState({ emitAccounts: false, emitChain: true });
+  loadWalletBridgeStatus().catch(() => {});
+  updateWalletSecurityPanel();
 };
 
 const logActivity = (message) => {
@@ -2310,6 +2401,72 @@ const logActivity = (message) => {
   log.prepend(item);
   if (log.children.length > 8) {
     log.removeChild(log.lastChild);
+  }
+};
+
+const formatPrettyJSON = (value) => {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (_) {
+    return String(value || "");
+  }
+};
+
+const updateWalletSecurityPanel = () => {
+  if (walletSecurityStatus) {
+    setStatus(walletSecurityStatus, state.secretKey ? "Unlocked" : state.wallet ? "Locked" : "No wallet", state.secretKey ? "success" : "info");
+  }
+  setMetricText(walletSecurityEncryption, state.wallet ? "AES-GCM local vault" : "Create or import wallet");
+  setMetricText(walletSecurityBackup, state.wallet ? "Export and store offline" : "No wallet backup yet");
+  setMetricText(walletSecurityMPC, "Validator-side optional");
+  setMetricText(walletSecurityHSM, "External signer optional");
+  setMetricText(walletSecuritySession, state.secretKey ? "Unlocked session" : "Locked session");
+  setMetricText(walletSecurityRPC, isProtectedPublicGatewayRPC(state.rpcUrl) ? "Public full-node gateway" : "Custom RPC");
+};
+
+const loadWalletBridgeStatus = async () => {
+  if (!walletBridgeStatus) return;
+  setStatus(walletBridgeStatus, "Loading", "info");
+  try {
+    const data = await apiWithFallback("/bridge/status", { method: "GET" });
+    const enabled = !!data?.enabled;
+    const mode = String(data?.mode || (enabled ? "enabled" : "disabled"));
+    setStatus(walletBridgeStatus, enabled ? "Enabled" : "Verification Only", enabled ? "success" : "info");
+    setMetricText(walletBridgeMode, mode);
+    setMetricText(walletBridgeChains, formatNumber(data?.registered_chains ?? 0));
+    setMetricText(walletBridgeAssets, formatNumber(data?.registered_assets ?? 0));
+    setMetricText(walletBridgeLightClient, data?.light_client_required === false ? "Optional" : "Required");
+    setMetricText(walletBridgeResult, formatPrettyJSON(data));
+  } catch (err) {
+    setStatus(walletBridgeStatus, "Unavailable", "error");
+    setMetricText(walletBridgeResult, `Bridge status error: ${String(err?.message || err)}`);
+  }
+};
+
+const verifyWalletBridgeProof = async () => {
+  if (!walletBridgeVerifyBtn || !walletBridgeResult) return;
+  const raw = String(walletBridgeProofInput?.value || "").trim();
+  if (!raw) {
+    setMetricText(walletBridgeResult, "Paste bridge proof JSON first.");
+    return;
+  }
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch (err) {
+    setMetricText(walletBridgeResult, `Invalid JSON: ${String(err?.message || err)}`);
+    return;
+  }
+  walletBridgeVerifyBtn.disabled = true;
+  setMetricText(walletBridgeResult, "Verifying proof...");
+  try {
+    const data = await apiWithFallback("/bridge/verify", { method: "POST", body: payload });
+    setMetricText(walletBridgeResult, formatPrettyJSON(data));
+  } catch (err) {
+    const details = err?.data ? formatPrettyJSON(err.data) : String(err?.message || err);
+    setMetricText(walletBridgeResult, details);
+  } finally {
+    walletBridgeVerifyBtn.disabled = false;
   }
 };
 
@@ -4572,6 +4729,7 @@ const updateWalletUI = () => {
   }
 
   updateWallet3Chrome();
+  updateWalletSecurityPanel();
   syncInjectedProviderState({ emitAccounts: true, emitChain: false });
 };
 
@@ -6398,6 +6556,12 @@ const init = () => {
   if (authConnect) {
     authConnect.addEventListener("click", startAuthFlow);
   }
+  if (walletBridgeRefreshBtn) {
+    walletBridgeRefreshBtn.addEventListener("click", loadWalletBridgeStatus);
+  }
+  if (walletBridgeVerifyBtn) {
+    walletBridgeVerifyBtn.addEventListener("click", verifyWalletBridgeProof);
+  }
 
   el("balanceForm").addEventListener("submit", fetchBalance);
   el("faucetForm").addEventListener("submit", requestFaucet);
@@ -6560,6 +6724,8 @@ const init = () => {
   });
 
   connectToRPC({ persist: false });
+  updateWalletSecurityPanel();
+  loadWalletBridgeStatus().catch(() => {});
   window.MSC_WALLET_APP_READY = true;
 };
 
