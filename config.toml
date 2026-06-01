@@ -129,6 +129,7 @@ password_mode = "file_or_prompt"
 # - Keep hsm_enabled=false until hsm_public_key and hsm_external_signer_command are configured and rehearsed.
 # - Future large-validator path: enable MPC threshold signing instead of HSM after a 24h/72h rehearsal.
 # - If mpc_enabled=true, MPC is the effective signer and software/HSM fallback is disabled.
+# - Built-in rehearsal command: validator mpc-keygen --validator F --threshold 2 --participants 3 --outdir data/F/mpc.
 hsm_enabled = false
 hsm_provider = "external"
 hsm_key_id = ""

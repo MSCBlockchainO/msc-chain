@@ -790,6 +790,32 @@ Validator key commands:
 .\msc-node.exe validator create --wallet .\.msc\secure_wallet.json --validator F --validator-pubkey <32-byte-ed25519-pubkey-hex> --amount 100 --rpc https://mscblockexplorer.in
 ```
 
+MPC validator key ceremony commands:
+
+```powershell
+$env:MSC_MPC_SHARE_PASSWORD = "<strong-share-password>"
+.\msc-node.exe validator mpc-keygen --validator F --threshold 2 --participants 3 --outdir data/F/mpc
+.\msc-node.exe validator mpc-pubkey --pub data/F/mpc/validator.pub
+.\msc-node.exe validator create-mpc --wallet .\.msc\secure_wallet.json --validator F --mpc-pub data/F/mpc/validator.pub --amount 100 --rpc https://mscblockexplorer.in
+```
+
+The built-in `mpc-keygen` creates:
+
+```text
+data/F/mpc/validator.pub
+data/F/mpc/share1.sec
+data/F/mpc/share2.sec
+data/F/mpc/share3.sec
+```
+
+It does not write `validator.sec`. The full validator private key is not stored on disk by the MSC node. The encrypted share files are enough to test the MPC external-signer path:
+
+```powershell
+.\msc-node.exe validator mpc-sign --shares data/F/mpc/share1.sec,data/F/mpc/share2.sec
+```
+
+For production large validators, replace the built-in share-file signer with an audited MPC/DKG signer cluster. The chain-facing contract stays the same: provide one validator public key, and return a valid Ed25519 threshold signature for MSC's canonical signing payload.
+
 HSM-backed validator startup:
 
 ```powershell
@@ -839,7 +865,7 @@ mpc_enabled = true
 mpc_provider = "threshold_ed25519"
 mpc_key_id = "msc-validator-F-cluster"
 mpc_public_key = "<32-byte-ed25519-public-key-hex>"
-mpc_external_signer_command = "msc-mpc-signer --cluster msc-validator-F"
+mpc_external_signer_command = "./msc-node validator mpc-sign --shares data/F/mpc/share1.sec,data/F/mpc/share2.sec --password-env MSC_MPC_SHARE_PASSWORD"
 mpc_timeout_ms = 3000
 mpc_threshold = 2
 mpc_participants = 3

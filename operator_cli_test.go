@@ -4,6 +4,8 @@ import (
 	"crypto/ed25519"
 	cryptorand "crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -56,6 +58,92 @@ func TestOperatorCLICommandRecognition(t *testing.T) {
 	}
 	if isOperatorCLICommand("--mode") || isOperatorCLICommand("node") || strings.TrimSpace(" ") != "" {
 		t.Fatalf("unexpected operator command recognition")
+	}
+}
+
+func TestOperatorMPCKeygenCreatesSharesWithoutValidatorSec(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "mpc")
+	t.Setenv(operatorMPCSharePasswordEnv, "mpc-share-pass")
+	if err := operatorValidatorMPCKeygenCommand([]string{"--validator", "F", "--threshold", "2", "--participants", "3", "--outdir", outDir}); err != nil {
+		t.Fatalf("mpc-keygen: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "validator.sec")); !os.IsNotExist(err) {
+		t.Fatalf("mpc-keygen must not create validator.sec, err=%v", err)
+	}
+	pubRaw, err := os.ReadFile(filepath.Join(outDir, "validator.pub"))
+	if err != nil {
+		t.Fatalf("validator.pub missing: %v", err)
+	}
+	pub := normalizeConsensusPubKeyHex(string(pubRaw))
+	if pub == "" {
+		t.Fatalf("invalid mpc public key file")
+	}
+	_, seed, ref, err := reconstructValidatorMPCSeedFromFiles([]string{
+		filepath.Join(outDir, "share1.sec"),
+		filepath.Join(outDir, "share2.sec"),
+	}, "mpc-share-pass")
+	if err != nil {
+		t.Fatalf("reconstruct mpc seed: %v", err)
+	}
+	defer ZeroMemory(seed)
+	if ref.ValidatorID != "F" || ref.Threshold != 2 || ref.Participants != 3 {
+		t.Fatalf("unexpected mpc ref: %+v", ref)
+	}
+	priv := ed25519.NewKeyFromSeed(seed)
+	defer ZeroMemory(priv)
+	got := hex.EncodeToString(priv.Public().(ed25519.PublicKey))
+	if got != pub {
+		t.Fatalf("reconstructed public key mismatch: got=%s want=%s", got, pub)
+	}
+}
+
+func TestOperatorMPCSignCommandSignsExternalSignerRequest(t *testing.T) {
+	outDir := filepath.Join(t.TempDir(), "mpc")
+	t.Setenv(operatorMPCSharePasswordEnv, "mpc-share-pass")
+	result, err := writeValidatorMPCShares("F", outDir, 2, 3, "mpc-share-pass", false)
+	if err != nil {
+		t.Fatalf("write shares: %v", err)
+	}
+	payload := []byte("msc mpc signer payload")
+	req := validatorHSMRequest{
+		Domain:       "msc-validator-mpc-ed25519-v1",
+		SignerMode:   "mpc",
+		ValidatorID:  "F",
+		Provider:     "threshold_ed25519",
+		PublicKeyHex: result.PublicKeyHex,
+		PayloadHex:   hex.EncodeToString(payload),
+		Threshold:    2,
+		Participants: 3,
+	}
+	raw, _ := json.Marshal(req)
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = r
+	t.Cleanup(func() {
+		os.Stdin = oldStdin
+		_ = r.Close()
+	})
+	if _, err := w.Write(raw); err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+	if err := operatorValidatorMPCSignCommand([]string{"--shares", filepath.Join(outDir, "share1.sec") + "," + filepath.Join(outDir, "share2.sec")}); err != nil {
+		t.Fatalf("mpc-sign: %v", err)
+	}
+}
+
+func TestValidatorMPCSignRequestAcceptsUTF8BOM(t *testing.T) {
+	req := []byte{0xef, 0xbb, 0xbf}
+	req = append(req, []byte(`{"public_key_hex":"`+strings.Repeat("11", ed25519.PublicKeySize)+`","payload_hex":"abcd"}`)...)
+	got, err := validatorMPCSignRequestFromReader(strings.NewReader(string(req)))
+	if err != nil {
+		t.Fatalf("parse BOM signer request: %v", err)
+	}
+	if got.PayloadHex != "abcd" {
+		t.Fatalf("unexpected request: %+v", got)
 	}
 }
 
