@@ -451,7 +451,7 @@ class WalletRPCManager {
         return data;
       } catch (err) {
         lastErr = err;
-        this.recordError(rpc, err);
+        if (isRetryableRPCError(err)) this.recordError(rpc, err);
         if (method !== "GET" && !isRetryableRPCError(err)) break;
         if (method === "GET" && err.status && err.status < 500 && err.status !== 429) break;
       }
