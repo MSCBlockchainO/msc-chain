@@ -70,6 +70,20 @@ function defaultRPCEndpoints() {
   return uniqueRPCs([...origin, ...fromWindow, ...DEFAULT_PUBLIC_RPCS]);
 }
 
+function rpcPolicyWarning(rpc) {
+  try {
+    const url = new URL(rpc);
+    const host = url.hostname;
+    const port = Number(url.port || 0);
+    if (host === "localhost" || host === "127.0.0.1" || host === "::1") return "local/custom";
+    if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(host)) return "private/custom";
+    if (port >= 26657 && port <= 26666) return "validator-port/custom";
+  } catch (_) {
+    return "custom";
+  }
+  return "";
+}
+
 function loadRPCMode() {
   const mode = String(localStorage.getItem(RPC_MODE_KEY) || "auto").toLowerCase();
   return ["auto", "manual", "custom"].includes(mode) ? mode : "auto";
@@ -528,7 +542,9 @@ function refreshRPCSettingsUI() {
   if (healthBox) {
     const rows = state.rpcManager.healthList().map((item) => {
       const tone = item.healthy ? "success" : item.ok ? "" : "error";
-      const flags = [item.suspicious ? "suspicious" : "", item.syncing ? "syncing" : "", item.error || ""].filter(Boolean).join(" | ");
+      const flags = [rpcPolicyWarning(item.rpc), item.suspicious ? "suspicious" : "", item.syncing ? "syncing" : "", item.error || ""]
+        .filter(Boolean)
+        .join(" | ");
       return `
         <div class="health-row ${tone}">
           <span class="mono">${item.rpc}</span>
