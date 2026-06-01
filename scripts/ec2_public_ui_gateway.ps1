@@ -419,11 +419,11 @@ if (-not $enableHttps) {
 $uiArchive = Join-Path ([System.IO.Path]::GetTempPath()) ("msc-ui-upload-{0}.tar" -f ([System.Guid]::NewGuid().ToString("N")))
 try {
     tar -cf $uiArchive -C $UiSource .
-    ssh -i $KeyPath -o StrictHostKeyChecking=no $target 'sudo rm -rf "$HOME/msc-ui-upload" "$HOME/msc-ui-upload.tar" && mkdir -p "$HOME/msc-ui-upload"'
+    ssh -i $KeyPath -o StrictHostKeyChecking=no $target 'sudo rm -rf "$HOME/msc-ui-upload" "$HOME/msc-ui-upload.tar" && mkdir -p "$HOME/msc-ui-upload" && sudo chown -R "$USER:$USER" "$HOME/msc-ui-upload"'
     if ($LASTEXITCODE -ne 0) { throw "failed to prepare remote UI upload directory" }
     scp -i $KeyPath -o StrictHostKeyChecking=no $uiArchive "${target}:msc-ui-upload.tar"
     if ($LASTEXITCODE -ne 0) { throw "failed to upload UI archive" }
-    ssh -i $KeyPath -o StrictHostKeyChecking=no $target "tar -xf ~/msc-ui-upload.tar -C ~/msc-ui-upload"
+    ssh -i $KeyPath -o StrictHostKeyChecking=no $target "tar --no-same-owner --no-same-permissions -xf ~/msc-ui-upload.tar -C ~/msc-ui-upload"
     if ($LASTEXITCODE -ne 0) { throw "failed to extract UI archive" }
     $remote | ssh -i $KeyPath -o StrictHostKeyChecking=no $target "$envPrefix bash -s"
     if ($LASTEXITCODE -ne 0) { throw "remote gateway provisioning failed" }
