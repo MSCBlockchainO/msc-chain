@@ -850,6 +850,63 @@ function renderPublicNodesRegistry(data) {
     .join("") || `<div class="list-item">No public full nodes discovered yet</div>`;
 }
 
+function normalizeGatewayPublicNodes(payload) {
+  const backends = Array.isArray(payload?.backends) ? payload.backends : Array.isArray(payload?.upstreams) ? payload.upstreams : null;
+  if (!backends) return payload;
+  const nodes = backends.map((item) => ({
+    ...item,
+    id: item.id || item.node_id || item.target || item.rpc_url || "-",
+    rpc_url: item.rpc_url || window.location.origin,
+    role: item.role || "full",
+    public_gateway: item.public_gateway !== false,
+    healthy: !!item.healthy || Number(item.status_code) === 200,
+  }));
+  const healthy = Number(payload.healthy ?? nodes.filter((item) => item.healthy).length);
+  const bestNode =
+    nodes.find((item) => item.rpc_url === payload.best) ||
+    nodes.slice().sort((a, b) => Number(b.score || 0) - Number(a.score || 0)).find((item) => item.healthy) ||
+    nodes[0] ||
+    null;
+  return {
+    status: payload.status || (healthy > 0 ? "healthy" : "down"),
+    healthy,
+    total: Number(payload.total ?? nodes.length),
+    best: payload.best || bestNode?.rpc_url || "",
+    best_node: bestNode,
+    nodes,
+    ts: payload.ts || Math.floor(Date.now() / 1000),
+  };
+}
+
+function mergePublicNodeRegistry(base, update) {
+  const baseNodes = Array.isArray(base?.nodes) ? base.nodes : [];
+  const updateNodes = Array.isArray(update?.nodes) ? update.nodes : [];
+  if (!baseNodes.length || updateNodes.length >= baseNodes.length) return update;
+  const keyFor = (node) => String(node.id || node.target || node.rpc_url || "").trim();
+  const merged = new Map(baseNodes.map((node) => [keyFor(node), node]));
+  for (const node of updateNodes) {
+    const key = keyFor(node);
+    if (!key) continue;
+    merged.set(key, { ...(merged.get(key) || {}), ...node });
+  }
+  const nodes = Array.from(merged.values());
+  const healthy = nodes.filter((node) => node.healthy).length;
+  const bestNode =
+    nodes.find((node) => node.rpc_url === update?.best) ||
+    nodes.slice().sort((a, b) => Number(b.score || 0) - Number(a.score || 0)).find((node) => node.healthy) ||
+    nodes[0] ||
+    null;
+  return {
+    ...(base || {}),
+    ...(update || {}),
+    healthy,
+    total: nodes.length,
+    best: update?.best || base?.best || bestNode?.rpc_url || "",
+    best_node: bestNode,
+    nodes,
+  };
+}
+
 function applyPublicNodeRegistry(data) {
   if (!data || typeof data !== "object") return;
   const nodes = Array.isArray(data.nodes) ? data.nodes : [];
@@ -874,18 +931,25 @@ async function refreshPublicNodes(options = {}) {
     const origins = uniqueRPCs([state.rpcManager?.active, window.location.origin, ...defaultRPCEndpoints()]);
     for (const rpc of origins) {
       try {
-        const data = unwrapV1(await state.rpcManager.fetchDedup(rpc, "/v1/public-nodes", { timeoutMs: 5000 }));
+        const data = normalizeGatewayPublicNodes(await state.rpcManager.fetchDedup(rpc, "/gateway/lb-status.json", { timeoutMs: 5000 }));
         state.dataCache?.set("public-nodes", { data, verification: null });
         result = { data, fromCache: false };
         break;
       } catch (err) {
         try {
-          const data = unwrapV1(await state.rpcManager.fetchDedup(rpc, "/public-nodes", { timeoutMs: 5000 }));
+          const data = unwrapV1(await state.rpcManager.fetchDedup(rpc, "/v1/public-nodes", { timeoutMs: 5000 }));
           state.dataCache?.set("public-nodes", { data, verification: null });
           result = { data, fromCache: false };
           break;
         } catch (_) {
-          // Older nodes may not have the registry endpoint yet.
+          try {
+            const data = unwrapV1(await state.rpcManager.fetchDedup(rpc, "/public-nodes", { timeoutMs: 5000 }));
+            state.dataCache?.set("public-nodes", { data, verification: null });
+            result = { data, fromCache: false };
+            break;
+          } catch (__) {
+            // Older nodes may not have the registry endpoint yet.
+          }
         }
       }
     }
@@ -1521,14 +1585,14 @@ function renderRealtimeEvent(event) {
   if (event.network_health) setText("networkStatus", event.network_health);
   if (event.last_block_age_seconds !== undefined) setLastBlockAgeBase(event.last_block_age_seconds);
   if (Array.isArray(event.public_nodes)) {
-    applyPublicNodeRegistry({
+    applyPublicNodeRegistry(mergePublicNodeRegistry(state.publicNodesRegistry, {
       status: event.public_nodes_healthy === event.public_nodes_total ? "healthy" : event.public_nodes_healthy > 0 ? "degraded" : "down",
       healthy: event.public_nodes_healthy || 0,
       total: event.public_nodes_total || event.public_nodes.length,
       best: event.public_nodes_best || "",
       nodes: event.public_nodes,
       ts: event.ts || Math.floor(Date.now() / 1000),
-    });
+    }));
     refreshRPCSettingsUI();
   }
   state.status = {
