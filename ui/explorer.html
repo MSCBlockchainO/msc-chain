@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -32,42 +32,85 @@
   <title>MSC Chain Explorer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="explorer.css" />
 </head>
 <body>
-  <div class="bg-orb orb-a"></div>
-  <div class="bg-orb orb-b"></div>
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">MSC</div>
-      <div>
-        <h1>Chain Explorer</h1>
-        <p>Live blocks, transactions, validators, and peer health</p>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">MSC</div>
+        <div>
+          <div class="title">MSC Explorer</div>
+          <div class="subtitle">Mainnet visibility</div>
+        </div>
       </div>
-    </div>
-    <div id="connControls" class="conn">
-      <label>
-        RPC
-        <input id="rpcUrl" type="text" placeholder="https://127.0.0.1:26657" />
-      </label>
-      <label id="apiTokenField" class="admin-field">
-        API Token
-        <input id="apiToken" type="password" placeholder="Read token (optional)" />
-      </label>
-      <label>
-        Refresh (ms)
-        <input id="refreshMs" type="number" min="500" step="100" value="3000" />
-      </label>
-      <button id="connectBtn" class="btn-primary">Connect</button>
-      <button id="refreshBtn" class="btn-ghost">Refresh</button>
-      <button id="adminToggleBtn" class="btn-ghost" type="button">Admin</button>
-      <a href="dtl_ide.html" class="btn-ghost" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">DTL IDE</a>
-      <div id="connState" class="pill">Disconnected</div>
-    </div>
-  </header>
+      <nav class="nav" aria-label="Explorer navigation">
+        <a href="dashboard.html">Dashboard</a>
+        <a href="wallet.html">Wallet</a>
+        <a href="send.html">Send</a>
+        <a href="receive.html">Receive</a>
+        <a href="transactions.html">Transactions</a>
+        <a href="staking.html">Staking</a>
+        <a href="validators.html">Validators</a>
+        <a href="governance.html">Governance</a>
+        <a href="bridge.html">Bridge</a>
+        <a href="security.html">Security</a>
+        <a href="settings.html">Settings</a>
+        <a class="active" href="explorer.html">Explorer</a>
+        <a href="dtl_ide.html">DTL IDE</a>
+      </nav>
+    </aside>
 
-  <main class="layout">
+    <div class="main">
+      <header class="topbar">
+        <div class="topline">
+          <div class="brand">
+            <div class="logo">MSC</div>
+            <div>
+              <div class="title">Explorer 3.0</div>
+              <div class="subtitle">Blocks, transactions, validators, and peer health</div>
+            </div>
+          </div>
+          <form id="quickSearchForm" class="quick-search">
+            <input id="quickSearchInput" type="search" placeholder="Search tx / block / hash" />
+            <button class="btn-primary" type="submit">Search</button>
+          </form>
+        </div>
+        <div class="status-row">
+          <span id="connState" class="pill">Disconnected</span>
+          <span class="pill">Height <strong id="topHeight">-</strong></span>
+          <span class="pill">Last block <strong id="topLastBlockAge">-</strong></span>
+          <span class="pill">CMD <strong id="topCmd">-</strong></span>
+          <span class="pill">Peers <strong id="topPeers">-</strong></span>
+          <span class="pill">State <strong id="topState">-</strong></span>
+        </div>
+        <div id="connControls" class="conn">
+          <label>
+            RPC
+            <input id="rpcUrl" type="text" placeholder="https://127.0.0.1:26657" />
+          </label>
+          <label id="apiTokenField" class="admin-field">
+            API Token
+            <input id="apiToken" type="password" placeholder="Read token (optional)" />
+          </label>
+          <label>
+            Refresh (ms)
+            <input id="refreshMs" type="number" min="500" step="100" value="3000" />
+          </label>
+          <button id="connectBtn" class="btn-primary">Connect</button>
+          <button id="refreshBtn" class="btn-ghost">Refresh</button>
+          <button id="adminToggleBtn" class="btn-ghost" type="button">Admin</button>
+        </div>
+      </header>
+
+  <main class="layout content">
+    <section class="page-hero">
+      <div class="eyebrow">MSC Mainnet</div>
+      <h1>Chain Explorer</h1>
+      <p class="muted">Live blocks, finality, block age, validator readiness, and peer health.</p>
+    </section>
+
     <section class="card status-grid">
       <div>
         <div class="label">Node</div>
@@ -88,6 +131,10 @@
       <div>
         <div class="label">Finalized</div>
         <div id="finalized" class="mono value">-</div>
+      </div>
+      <div>
+        <div class="label">Last Block Age</div>
+        <div id="lastBlockAge" class="mono value">-</div>
       </div>
       <div>
         <div class="label">Peers</div>
@@ -270,7 +317,9 @@
       </div>
     </section>
   </main>
+    </div>
+  </div>
 
-  <script src="explorer.js?v=20260228c"></script>
+  <script src="explorer.js?v=20260602a"></script>
 </body>
 </html>

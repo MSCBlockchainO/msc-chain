@@ -40,11 +40,19 @@
     refreshBtn: byId("refreshBtn"),
     adminToggleBtn: byId("adminToggleBtn"),
     connState: byId("connState"),
+    quickSearchForm: byId("quickSearchForm"),
+    quickSearchInput: byId("quickSearchInput"),
+    topHeight: byId("topHeight"),
+    topLastBlockAge: byId("topLastBlockAge"),
+    topCmd: byId("topCmd"),
+    topPeers: byId("topPeers"),
+    topState: byId("topState"),
     nodeId: byId("nodeId"),
     chainId: byId("chainId"),
     nodeRole: byId("nodeRole"),
     height: byId("height"),
     finalized: byId("finalized"),
+    lastBlockAge: byId("lastBlockAge"),
     peerCount: byId("peerCount"),
     quorum: byId("quorum"),
     consensusDetectorMode: byId("consensusDetectorMode"),
@@ -162,6 +170,34 @@
     const d = new Date(ms);
     if (Number.isNaN(d.getTime())) return String(ts);
     return `${d.toLocaleString()} (${ts})`;
+  };
+
+  const fmtAge = (seconds) => {
+    const n = Number(seconds);
+    if (!Number.isFinite(n) || n < 0) return "-";
+    if (n < 60) return `${Math.trunc(n)}s`;
+    const mins = Math.floor(n / 60);
+    const secs = Math.trunc(n % 60);
+    if (mins < 60) return secs ? `${mins}m ${secs}s` : `${mins}m`;
+    const hours = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return remMins ? `${hours}h ${remMins}m` : `${hours}h`;
+  };
+
+  const blockAgeTone = (status) => {
+    const age = asIntOrNull(status.last_block_age_seconds);
+    if (age === null) return "";
+    const haltedAfter = asIntOrNull(status.halted_after_seconds) || 60;
+    const degradedAfter = asIntOrNull(status.degraded_after_seconds) || 12;
+    if (age >= haltedAfter) return "bad";
+    if (age >= degradedAfter) return "warn";
+    return "ok";
+  };
+
+  const setTone = (el, tone) => {
+    if (!el) return;
+    el.classList.remove("ok", "warn", "bad");
+    if (tone) el.classList.add(tone);
   };
 
   const inferLogicalClock = (ts, height) => {
@@ -372,6 +408,9 @@
     const successHeight = asIntOrNull(status.validator_autoheal_last_success_height);
     const laneCandidates = asIntOrNull(status.validator_bootstrap_lane_candidates);
     const laneSlotsUsed = asIntOrNull(status.validator_bootstrap_lane_slots_used);
+    const blockAge = asIntOrNull(status.last_block_age_seconds);
+    const blockAgeText = blockAge === null ? "-" : fmtAge(blockAge);
+    const ageTone = blockAgeTone(status);
     const expectedHash = asTextOrDash(status.validator_autoheal_expected_hash);
     const gotHash = asTextOrDash(status.validator_autoheal_got_hash);
     const mismatchHashText =
@@ -384,6 +423,10 @@
     els.nodeRole.textContent = status.role || (status.is_validator ? "validator" : "full");
     els.height.textContent = String(status.height ?? "-");
     els.finalized.textContent = String(status.finalized_height ?? "-");
+    if (els.lastBlockAge) {
+      els.lastBlockAge.textContent = blockAgeText;
+      setTone(els.lastBlockAge, ageTone);
+    }
     els.peerCount.textContent = String(status.peers ?? "-");
     els.quorum.textContent = `${quorumLive === null ? "-" : quorumLive} / ${requiredQuorum === null ? "-" : requiredQuorum}`;
     els.consensusDetectorMode.textContent = asTextOrDash(status.consensus_detector_mode);
@@ -406,6 +449,21 @@
     if (status.consensus_running) parts.push("CONSENSUS");
     if (status.consensus_ready) parts.push("CONSENSUS_OK");
     els.stateText.textContent = parts.join(" | ");
+    if (els.topHeight) els.topHeight.textContent = String(status.height ?? "-");
+    if (els.topLastBlockAge) {
+      els.topLastBlockAge.textContent = blockAgeText;
+      setTone(els.topLastBlockAge, ageTone);
+    }
+    if (els.topCmd) {
+      els.topCmd.textContent = asTextOrDash(status.consensus_detector_mode);
+      const cmd = String(status.consensus_detector_mode || "").toUpperCase();
+      setTone(els.topCmd, cmd === "NORMAL" ? "ok" : cmd === "HALTED" || cmd === "EMERGENCY" || cmd === "ATTACK" ? "bad" : "warn");
+    }
+    if (els.topPeers) els.topPeers.textContent = String(status.peers ?? "-");
+    if (els.topState) {
+      els.topState.textContent = status.syncing ? "SYNCING" : status.ready ? "READY" : "LIVE";
+      setTone(els.topState, status.syncing ? "warn" : "ok");
+    }
   };
 
   const renderBlocks = (payload) => {
@@ -777,6 +835,31 @@
   els.refreshBtn.addEventListener("click", refreshAll);
   if (els.adminToggleBtn) {
     els.adminToggleBtn.addEventListener("click", () => setAdminMode(!state.adminMode));
+  }
+
+  if (els.quickSearchForm && els.quickSearchInput) {
+    els.quickSearchForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const query = (els.quickSearchInput.value || "").trim();
+      if (!query) return;
+      try {
+        if (/^\d+$/.test(query)) {
+          const h = Number(query);
+          state.selectedBlockHeight = h;
+          await loadBlockByHeight(h);
+          return;
+        }
+        try {
+          await loadTx(query);
+        } catch (_) {
+          await loadBlockByHash(query);
+        }
+      } catch (err) {
+        els.txDetailMeta.textContent = "Search error";
+        els.txDetail.textContent = `Search failed\n\n${err.message || err}`;
+        showBlockError(err);
+      }
+    });
   }
 
   els.blockSearchForm.addEventListener("submit", async (e) => {
