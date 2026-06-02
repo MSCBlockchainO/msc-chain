@@ -58,6 +58,11 @@ type publicNodeHealthView struct {
 	NetworkHealth       string `json:"network_health,omitempty"`
 	LatencyMS           int64  `json:"latency_ms"`
 	Healthy             bool   `json:"healthy"`
+	HealthState         string `json:"health_state,omitempty"`
+	HealthReason        string `json:"health_reason,omitempty"`
+	BadSamples          int    `json:"bad_samples,omitempty"`
+	GoodSamples         int    `json:"good_samples,omitempty"`
+	LastHealthyAt       int64  `json:"last_healthy_at,omitempty"`
 	Score               int    `json:"score"`
 	SuspiciousReason    string `json:"suspicious_reason,omitempty"`
 	LastChecked         int64  `json:"last_checked"`
@@ -84,7 +89,15 @@ var (
 	publicNodeRegistryCachedKey string
 	publicNodeRegistryCheckedAt time.Time
 	publicNodeRegistryCached    publicNodesPayload
+	publicNodeHealthMemory      = map[string]publicNodeHealthSample{}
 )
+
+type publicNodeHealthSample struct {
+	GoodSamples   int
+	BadSamples    int
+	LastHealthyAt int64
+	LastState     string
+}
 
 func applyPublicNodesConfig(cfg PublicNodesConfig) bool {
 	nodes := make([]PublicNodeConfig, 0, len(cfg.Nodes)+len(cfg.Endpoints))
@@ -364,16 +377,184 @@ func annotatePublicNodeHeightLag(views []publicNodeHealthView) {
 			maxHeight = view.Height
 		}
 	}
-	if maxHeight == 0 {
-		return
-	}
 	for i := range views {
-		if views[i].Height > 0 && maxHeight >= views[i].Height {
+		if maxHeight > 0 && views[i].Height > 0 && maxHeight >= views[i].Height {
 			views[i].HeightLagBlocks = maxHeight - views[i].Height
 		}
 		views[i].Score = publicNodeScore(views[i])
-		views[i].Healthy = views[i].Score >= 60 && views[i].SuspiciousReason == ""
+		applyPublicNodeHealthHysteresis(&views[i])
 	}
+}
+
+func publicNodeHealthKey(view publicNodeHealthView) string {
+	key := strings.TrimSpace(view.ID) + "|" + strings.TrimSpace(view.RPCURL)
+	if strings.TrimSpace(key) == "|" {
+		return strings.TrimSpace(view.RPCURL)
+	}
+	return key
+}
+
+func publicNodeHardFailReason(view publicNodeHealthView) string {
+	if strings.TrimSpace(view.SuspiciousReason) != "" {
+		switch view.SuspiciousReason {
+		case "validator_rpc_not_allowed", "chain_id_mismatch", "genesis_hash_mismatch", "bad_status":
+			return view.SuspiciousReason
+		}
+	}
+	if view.StatusCode != 0 && view.StatusCode != http.StatusOK {
+		return "bad_status"
+	}
+	switch strings.ToUpper(strings.TrimSpace(view.ConsensusMode)) {
+	case "ATTACK", "PARTITION", "HALTED":
+		return strings.ToLower(strings.TrimSpace(view.ConsensusMode))
+	}
+	return ""
+}
+
+func publicNodeBadReason(view publicNodeHealthView) string {
+	if view.Error != "" || view.StatusCode == 0 {
+		return "timeout"
+	}
+	if view.HeightLagBlocks > 20 {
+		return "height_lag"
+	}
+	if view.FinalityLag > 20 {
+		return "finality_lag"
+	}
+	if view.LastBlockAgeSeconds > 60 {
+		return "block_stalled"
+	}
+	return ""
+}
+
+func publicNodeWarningReason(view publicNodeHealthView) string {
+	if view.HeightLagBlocks > 2 {
+		return "height_lag"
+	}
+	if view.FinalityLag > 2 {
+		return "finality_lag"
+	}
+	if view.LastBlockAgeSeconds >= 12 {
+		return "slow_block_age"
+	}
+	switch strings.ToUpper(strings.TrimSpace(view.ConsensusMode)) {
+	case "STRICT", "RECOVERY", "DEGRADED", "EMERGENCY":
+		return strings.ToLower(strings.TrimSpace(view.ConsensusMode))
+	}
+	if view.Score > 0 && view.Score < 60 {
+		return "low_score"
+	}
+	return ""
+}
+
+func publicNodeBadThreshold(reason string) int {
+	switch reason {
+	case "height_lag":
+		return 3
+	case "timeout", "block_stalled", "finality_lag":
+		return 2
+	default:
+		return 2
+	}
+}
+
+func applyPublicNodeHealthHysteresis(view *publicNodeHealthView) {
+	if view == nil {
+		return
+	}
+	key := publicNodeHealthKey(*view)
+	now := time.Now().Unix()
+	hardReason := publicNodeHardFailReason(*view)
+	badReason := publicNodeBadReason(*view)
+	warnReason := publicNodeWarningReason(*view)
+
+	publicNodeRegistryMu.Lock()
+	sample := publicNodeHealthMemory[key]
+	if hardReason != "" {
+		sample.GoodSamples = 0
+		sample.BadSamples++
+		sample.LastState = "unhealthy"
+		publicNodeHealthMemory[key] = sample
+		publicNodeRegistryMu.Unlock()
+		view.HealthState = "unhealthy"
+		view.HealthReason = hardReason
+		view.BadSamples = sample.BadSamples
+		view.GoodSamples = sample.GoodSamples
+		view.LastHealthyAt = sample.LastHealthyAt
+		view.Healthy = false
+		if view.SuspiciousReason == "" {
+			view.SuspiciousReason = hardReason
+		}
+		return
+	}
+
+	if badReason != "" {
+		sample.GoodSamples = 0
+		sample.BadSamples++
+		threshold := publicNodeBadThreshold(badReason)
+		unhealthy := sample.BadSamples >= threshold
+		if badReason == "height_lag" && view.HeightLagBlocks > 64 {
+			unhealthy = true
+		}
+		if badReason == "finality_lag" && view.FinalityLag > 64 {
+			unhealthy = true
+		}
+		if unhealthy {
+			sample.LastState = "unhealthy"
+		} else {
+			sample.LastState = "warning"
+		}
+		publicNodeHealthMemory[key] = sample
+		publicNodeRegistryMu.Unlock()
+		view.HealthState = sample.LastState
+		view.HealthReason = badReason
+		view.BadSamples = sample.BadSamples
+		view.GoodSamples = sample.GoodSamples
+		view.LastHealthyAt = sample.LastHealthyAt
+		view.Healthy = !unhealthy
+		if unhealthy && view.SuspiciousReason == "" {
+			view.SuspiciousReason = badReason
+		}
+		return
+	}
+
+	if warnReason != "" {
+		sample.BadSamples = 0
+		sample.GoodSamples = 0
+		sample.LastState = "warning"
+		publicNodeHealthMemory[key] = sample
+		publicNodeRegistryMu.Unlock()
+		view.HealthState = "warning"
+		view.HealthReason = warnReason
+		view.BadSamples = sample.BadSamples
+		view.GoodSamples = sample.GoodSamples
+		view.LastHealthyAt = sample.LastHealthyAt
+		view.Healthy = true
+		return
+	}
+
+	sample.BadSamples = 0
+	sample.GoodSamples++
+	healthy := sample.LastState == "healthy" || sample.GoodSamples >= 2
+	if healthy {
+		sample.LastState = "healthy"
+		sample.LastHealthyAt = now
+	} else {
+		sample.LastState = "warning"
+	}
+	publicNodeHealthMemory[key] = sample
+	publicNodeRegistryMu.Unlock()
+
+	view.HealthState = sample.LastState
+	if healthy {
+		view.HealthReason = "healthy"
+	} else {
+		view.HealthReason = "warming_up"
+	}
+	view.BadSamples = sample.BadSamples
+	view.GoodSamples = sample.GoodSamples
+	view.LastHealthyAt = sample.LastHealthyAt
+	view.Healthy = true
 }
 
 func probePublicNode(cfg PublicNodeConfig) publicNodeHealthView {
@@ -398,7 +579,7 @@ func probePublicNode(cfg PublicNodeConfig) publicNodeHealthView {
 	view.LatencyMS = int64(time.Since(started) / time.Millisecond)
 	if err != nil {
 		view.Error = err.Error()
-		view.SuspiciousReason = "unreachable"
+		view.HealthReason = "timeout"
 		view.Score = 0
 		return view
 	}

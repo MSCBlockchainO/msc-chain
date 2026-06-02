@@ -363,7 +363,10 @@ function publicNodeHeightLag(node, bestHeight) {
 }
 
 function publicNodeTone(node, bestHeight) {
-  if (!node?.healthy || node?.suspicious_reason || node?.error) return "error";
+  const healthState = String(node?.health_state || "").toLowerCase();
+  if (healthState === "unhealthy") return "error";
+  if (healthState === "warning") return "warn";
+  if (!node?.healthy || node?.suspicious_reason) return "error";
   const heightLag = publicNodeHeightLag(node, bestHeight);
   const finalityLag = Number(node?.finality_lag || 0);
   const age = publicNodeDisplayAgeSeconds(node);
@@ -604,10 +607,12 @@ class WalletRPCManager {
       .map((item) => ({ node: item.node, rpc: normalizeRPC(item.raw) }));
     const maxHeight = Math.max(0, ...normalized.map((item) => Number(item.node.height || 0)));
     for (const { node, rpc } of normalized) {
+      const healthState = String(node.health_state || "").toLowerCase();
       const suspiciousReason = String(node.suspicious_reason || "").trim();
-      if (suspiciousReason) this.suspicious.add(rpc);
+      if (suspiciousReason || healthState === "unhealthy") this.suspicious.add(rpc);
+      else if (healthState === "healthy" || healthState === "warning") this.suspicious.delete(rpc);
       const staleBy = maxHeight && node.height ? maxHeight - Number(node.height || 0) : 0;
-      const healthy = !!node.healthy && !suspiciousReason && staleBy <= 20;
+      const healthy = !!node.healthy && healthState !== "unhealthy" && !suspiciousReason;
       this.health.set(rpc, {
         ...(this.health.get(rpc) || {}),
         rpc,
@@ -622,8 +627,9 @@ class WalletRPCManager {
         latency: Number(node.latency_ms || 0),
         cmdMode: String(node.consensus_mode || "UNKNOWN").toUpperCase(),
         checkedAt: Number(node.last_checked || 0) ? Number(node.last_checked) * 1000 : Date.now(),
-        suspicious: !!suspiciousReason || this.suspicious.has(rpc),
-        error: suspiciousReason || node.error || "",
+        suspicious: healthState === "unhealthy" || !!suspiciousReason || this.suspicious.has(rpc),
+        error: suspiciousReason || node.health_reason || node.error || "",
+        healthState: healthState || (healthy ? "healthy" : "unknown"),
         staleBy,
         source: "public-node-registry",
         publicGateway: node.public_gateway !== false,
@@ -974,12 +980,13 @@ function renderPublicNodesRegistry(data) {
       const finalityLag = Number(item.finality_lag || 0);
       const ageSeconds = publicNodeDisplayAgeSeconds(item);
       const tone = publicNodeTone(item, bestHeight);
-      const flags = [item.consensus_mode, item.network_health, item.suspicious_reason, item.error].filter(Boolean).join(" | ");
+      const state = item.health_state || (item.healthy ? "healthy" : "unhealthy");
+      const flags = [state, item.health_reason, item.consensus_mode, item.network_health, item.suspicious_reason, item.error].filter(Boolean).join(" | ");
       return `
         <div class="health-row public-node-row ${tone}">
           <span class="mono">${item.id || "-"}</span>
           <span class="mono">${item.rpc_url || "-"}</span>
-          <span>${item.healthy ? "healthy" : "degraded"}</span>
+          <span>${escapeHTML(state)}</span>
           <span>score ${Math.round(Number(item.score || 0))}</span>
           <span>h ${formatNumber(item.height || 0)}</span>
           <span>lag ${formatBlocks(heightLag)}</span>
@@ -1002,7 +1009,7 @@ function normalizeGatewayPublicNodes(payload) {
     rpc_url: item.rpc_url || window.location.origin,
     role: item.role || "full",
     public_gateway: item.public_gateway !== false,
-    healthy: !!item.healthy || Number(item.status_code) === 200,
+    healthy: item.health_state ? String(item.health_state).toLowerCase() !== "unhealthy" : (!!item.healthy || Number(item.status_code) === 200),
   }));
   const healthy = Number(payload.healthy ?? nodes.filter((item) => item.healthy).length);
   const bestNode =
@@ -1129,14 +1136,15 @@ function refreshRPCSettingsUI() {
   const healthBox = $("settingsRpcHealth");
   if (healthBox) {
     const rows = health.map((item) => {
-      const tone = item.healthy ? "success" : item.ok ? "" : "error";
+      const healthState = item.healthState || (item.healthy ? "healthy" : item.ok ? "warning" : "unhealthy");
+      const tone = healthState === "unhealthy" ? "error" : healthState === "warning" ? "warn" : "success";
       const flags = [item.publicGateway ? "public" : "", rpcPolicyWarning(item.rpc), item.suspicious ? "suspicious" : "", item.syncing ? "syncing" : "", item.error || ""]
         .filter(Boolean)
         .join(" | ");
       return `
         <div class="health-row rpc-health-row ${tone}">
           <span class="mono">${item.rpc}</span>
-          <span>${item.healthy ? "healthy" : item.ok ? "degraded" : "offline"}</span>
+          <span>${escapeHTML(healthState)}</span>
           <span>score ${Math.round(item.score || 0)}</span>
           <span>h ${formatNumber(item.height || 0)}</span>
           <span>lag ${formatBlocks(item.staleBy ?? item.lag ?? 0)}</span>

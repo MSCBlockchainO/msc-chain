@@ -312,6 +312,14 @@ import urllib.request
 targets = [item.strip() for item in sys.argv[1].split(",") if item.strip()]
 out = sys.argv[2]
 domain = os.environ.get("DOMAIN", "").strip()
+state_path = "/tmp/msc-lb-health-state.json"
+try:
+    with open(state_path, "r", encoding="utf-8") as fh:
+        health_memory = json.load(fh)
+        if not isinstance(health_memory, dict):
+            health_memory = {}
+except Exception:
+    health_memory = {}
 backends = []
 healthy_count = 0
 for target in targets:
@@ -360,10 +368,6 @@ for target in targets:
     suspicious = ""
     if role == "validator":
         suspicious = "validator_rpc_not_allowed"
-    elif finality_lag > 20:
-        suspicious = "finality_lag"
-    elif block_age > 60:
-        suspicious = "block_stalled"
     score = 0
     if healthy and not suspicious:
         score = 35
@@ -375,8 +379,6 @@ for target in targets:
         score += 9 if latency_ms <= 250 else (5 if latency_ms <= 1000 else (2 if latency_ms <= 2500 else 0))
         score = max(0, min(100, score))
     node_healthy = healthy and score >= 60 and not suspicious
-    if node_healthy:
-        healthy_count += 1
     rpc_url = base
     if domain and base.startswith("http://127.0.0.1"):
         rpc_url = "https://" + domain
@@ -406,19 +408,127 @@ for target in targets:
     })
 max_height = max([int(item.get("height") or 0) for item in backends], default=0)
 healthy_count = 0
+def hard_fail_reason(item):
+    suspicious = str(item.get("suspicious_reason") or "")
+    if suspicious in ("validator_rpc_not_allowed", "chain_id_mismatch", "genesis_hash_mismatch", "bad_status"):
+        return suspicious
+    status_code = int(item.get("status_code") or 0)
+    if status_code and status_code != 200:
+        return "bad_status"
+    mode = str(item.get("consensus_mode") or "").upper()
+    if mode in ("ATTACK", "PARTITION", "HALTED"):
+        return mode.lower()
+    return ""
+
+def bad_reason(item):
+    if item.get("error") or int(item.get("status_code") or 0) == 0:
+        return "timeout"
+    if int(item.get("height_lag_blocks") or 0) > 20:
+        return "height_lag"
+    if int(item.get("finality_lag") or 0) > 20:
+        return "finality_lag"
+    if int(item.get("last_block_age_seconds") or 0) > 60:
+        return "block_stalled"
+    return ""
+
+def warning_reason(item):
+    if int(item.get("height_lag_blocks") or 0) > 2:
+        return "height_lag"
+    if int(item.get("finality_lag") or 0) > 2:
+        return "finality_lag"
+    if int(item.get("last_block_age_seconds") or 0) >= 12:
+        return "slow_block_age"
+    mode = str(item.get("consensus_mode") or "").upper()
+    if mode in ("STRICT", "RECOVERY", "DEGRADED", "EMERGENCY"):
+        return mode.lower()
+    if int(item.get("score") or 0) > 0 and int(item.get("score") or 0) < 60:
+        return "low_score"
+    return ""
+
+def bad_threshold(reason):
+    if reason == "height_lag":
+        return 3
+    return 2
+
+now = int(time.time())
 for item in backends:
     height = int(item.get("height") or 0)
     height_lag = max(0, max_height - height) if max_height and height else 0
     item["height_lag_blocks"] = height_lag
-    if height_lag > 20 and not item.get("suspicious_reason"):
-        item["suspicious_reason"] = "height_lag"
-        item["score"] = max(0, int(item.get("score") or 0) - min(25, height_lag))
-        item["healthy"] = False
-    elif height_lag > 2:
+    if height_lag > 2:
         item["score"] = max(0, int(item.get("score") or 0) - min(10, height_lag - 2))
-        item["healthy"] = bool(item.get("healthy")) and int(item["score"]) >= 60
+    key = str(item.get("id") or item.get("target") or item.get("rpc_url") or "")
+    sample = health_memory.get(key, {})
+    if not isinstance(sample, dict):
+        sample = {}
+    good_samples = int(sample.get("good_samples") or 0)
+    bad_samples = int(sample.get("bad_samples") or 0)
+    last_state = str(sample.get("last_state") or "")
+    last_healthy_at = int(sample.get("last_healthy_at") or 0)
+    reason = hard_fail_reason(item)
+    if reason:
+        good_samples = 0
+        bad_samples += 1
+        health_state = "unhealthy"
+        item["healthy"] = False
+        item["suspicious_reason"] = reason
+        item["score"] = 0
+    else:
+        reason = bad_reason(item)
+        if reason:
+            good_samples = 0
+            bad_samples += 1
+            unhealthy = bad_samples >= bad_threshold(reason)
+            if reason == "height_lag" and height_lag > 64:
+                unhealthy = True
+            if reason == "finality_lag" and int(item.get("finality_lag") or 0) > 64:
+                unhealthy = True
+            health_state = "unhealthy" if unhealthy else "warning"
+            item["healthy"] = not unhealthy
+            if unhealthy:
+                item["suspicious_reason"] = reason
+            else:
+                item["suspicious_reason"] = ""
+        else:
+            reason = warning_reason(item)
+            if reason:
+                good_samples = 0
+                bad_samples = 0
+                health_state = "warning"
+                item["healthy"] = True
+                item["suspicious_reason"] = ""
+            else:
+                bad_samples = 0
+                good_samples += 1
+                if last_state == "healthy" or good_samples >= 2:
+                    health_state = "healthy"
+                    reason = "healthy"
+                    last_healthy_at = now
+                else:
+                    health_state = "warning"
+                    reason = "warming_up"
+                item["healthy"] = True
+                item["suspicious_reason"] = ""
+    item["health_state"] = health_state
+    item["health_reason"] = reason
+    item["bad_samples"] = bad_samples
+    item["good_samples"] = good_samples
+    item["last_healthy_at"] = last_healthy_at
+    health_memory[key] = {
+        "good_samples": good_samples,
+        "bad_samples": bad_samples,
+        "last_healthy_at": last_healthy_at,
+        "last_state": health_state,
+    }
     if item.get("healthy"):
         healthy_count += 1
+try:
+    tmp_state = state_path + ".tmp"
+    with open(tmp_state, "w", encoding="utf-8") as fh:
+        json.dump(health_memory, fh, separators=(",", ":"))
+    os.replace(tmp_state, state_path)
+except Exception:
+    pass
 healthy_sorted = sorted(
     [item for item in backends if item.get("healthy")],
     key=lambda item: (

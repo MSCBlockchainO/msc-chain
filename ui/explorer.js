@@ -270,7 +270,10 @@
   };
 
   const publicNodeTone = (node, bestHeight) => {
-    if (!node?.healthy || node?.suspicious_reason || node?.error) return "bad";
+    const healthState = String(node?.health_state || "").toLowerCase();
+    if (healthState === "unhealthy") return "bad";
+    if (healthState === "warning") return "warn";
+    if (!node?.healthy || node?.suspicious_reason) return "bad";
     const heightLag = publicNodeHeightLag(node, bestHeight);
     const finalityLag = asIntOrNull(node?.finality_lag) || 0;
     const age = publicNodeDisplayAgeSeconds(node);
@@ -299,7 +302,7 @@
       rpc_url: item.rpc_url || window.location.origin,
       role: item.role || "full",
       public_gateway: item.public_gateway !== false,
-      healthy: !!item.healthy || Number(item.status_code) === 200,
+      healthy: item.health_state ? String(item.health_state).toLowerCase() !== "unhealthy" : (!!item.healthy || Number(item.status_code) === 200),
     }));
     const healthy = Number(payload.healthy ?? nodes.filter((item) => item.healthy).length);
     const bestNode =
@@ -962,8 +965,8 @@
 
     els.publicNodesBody.innerHTML = nodes
       .map((node) => {
-        const status = node.healthy ? "healthy" : node.suspicious_reason || node.error ? "suspicious" : "degraded";
-        const reason = node.suspicious_reason || node.error || node.network_health || "-";
+        const status = node.health_state || (node.healthy ? "healthy" : node.suspicious_reason || node.error ? "unhealthy" : "warning");
+        const reason = node.health_reason || node.suspicious_reason || node.error || node.network_health || "-";
         const tone = publicNodeTone(node, bestHeight);
         const heightLag = publicNodeHeightLag(node, bestHeight);
         const finalityLag = asIntOrNull(node.finality_lag) || 0;
@@ -971,7 +974,7 @@
         return `<tr class="${tone}">
           <td class="mono">${node.id || "-"}</td>
           <td class="mono">${short(node.rpc_url || "-", 18)}</td>
-          <td class="mono ${node.healthy ? "ok" : "warn"}">${status}</td>
+          <td class="mono ${tone === "ok" ? "ok" : tone === "warn" ? "warn" : "bad"}">${status}</td>
           <td class="mono">${node.height ?? 0}</td>
           <td class="mono">${fmtBlocks(heightLag)}</td>
           <td class="mono">${fmtBlocks(finalityLag)}</td>
