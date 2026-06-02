@@ -209,6 +209,18 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    location = /public-nodes {
+        limit_req zone=msc_static burst=60 nodelay;
+        add_header Cache-Control "no-store" always;
+        try_files /gateway/public-nodes.json =404;
+    }
+
+    location = /v1/public-nodes {
+        limit_req zone=msc_static burst=60 nodelay;
+        add_header Cache-Control "no-store" always;
+        try_files /gateway/public-nodes.json =404;
+    }
+
     location ~ ^/(status|healthz|misbehavior|validators|validatorset/hash|validatorset/audit|validators/pending|validators/diversity|public-nodes|consensus/mode|formal/verification|storage/policy|bridge/status|bridge/verify|light/headers|light/checkpoint/latest|proof/balance|proof/tx|proof/receipt|tx/status|txs|explorer/blocks|explorer/block|explorer/tx|explorer/peers|balance|nonce|nonce/pending|wallet/status|coins|tokenomics|governance/status|governance/proposals|upgrade/status|dtl/quote|dtl/route_quote|dtl/farm_info|dtl/season_info|dtl/leaderboard|dtl/nft721/owner|dtl/nft1155/owner|v1/) {
         limit_req zone=msc_read burst=40 nodelay;
         proxy_pass http://msc_rpc_backend;
@@ -284,6 +296,7 @@ sudo tee /usr/local/bin/msc-lb-health.sh >/dev/null <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 out="/var/www/msc-ui/gateway/lb-status.json"
+public_nodes_out="/var/www/msc-ui/gateway/public-nodes.json"
 targets="${RPC_TARGETS:-${RPC_TARGET:-127.0.0.1:26665}}"
 mkdir -p "$(dirname "$out")"
 while true; do
@@ -406,6 +419,17 @@ for item in backends:
         item["healthy"] = bool(item.get("healthy")) and int(item["score"]) >= 60
     if item.get("healthy"):
         healthy_count += 1
+healthy_sorted = sorted(
+    [item for item in backends if item.get("healthy")],
+    key=lambda item: (
+        -int(item.get("score") or 0),
+        int(item.get("height_lag_blocks") or 0),
+        int(item.get("finality_lag") or 0),
+        int(item.get("latency_ms") or 0),
+        str(item.get("id") or item.get("target") or ""),
+    ),
+)
+best_node = healthy_sorted[0] if healthy_sorted else (backends[0] if backends else None)
 payload = {
     "status": "healthy" if healthy_count == len(backends) and backends else ("degraded" if healthy_count else "down"),
     "healthy": healthy_count,
@@ -415,15 +439,32 @@ payload = {
     "backends": backends,
     "ts": int(time.time()),
 }
+public_nodes = {
+    "status": payload["status"],
+    "chain_id": str(backends[0].get("chain_id") or "") if backends else "",
+    "genesis_hash": str(backends[0].get("genesis_hash") or "") if backends else "",
+    "healthy": healthy_count,
+    "total": len(backends),
+    "best": str(best_node.get("rpc_url") or "") if best_node else "",
+    "best_node": best_node,
+    "nodes": backends,
+    "ts": payload["ts"],
+}
 with open(out, "w", encoding="utf-8") as fh:
     json.dump(payload, fh, separators=(",", ":"))
+with open(out + ".public-nodes", "w", encoding="utf-8") as fh:
+    json.dump({"success": True, "data": public_nodes}, fh, separators=(",", ":"))
 PY
   then
     sudo mv "$tmp" "$out"
+    sudo mv "$tmp.public-nodes" "$public_nodes_out"
     sudo chmod 0644 "$out"
+    sudo chmod 0644 "$public_nodes_out"
     sudo chown www-data:www-data "$out" 2>/dev/null || sudo chown nginx:nginx "$out" 2>/dev/null || true
+    sudo chown www-data:www-data "$public_nodes_out" 2>/dev/null || sudo chown nginx:nginx "$public_nodes_out" 2>/dev/null || true
   else
     rm -f "$tmp"
+    rm -f "$tmp.public-nodes"
   fi
   sleep 5
 done
