@@ -295,6 +295,13 @@ func publicNodesSourceKey(nodes []PublicNodeConfig) string {
 
 func publicNodesSnapshot(node *Node, force bool) publicNodesPayload {
 	nodes := configuredPublicNodes()
+	if len(nodes) == 1 && strings.EqualFold(nodes[0].ID, "F") && strings.EqualFold(nodes[0].RPCURL, defaultPublicNodeRPC) && node != nil {
+		nodeID := strings.TrimSpace(node.ID)
+		nodeRole := strings.ToLower(strings.TrimSpace(node.Role))
+		if nodeID != "" && nodeRole != "validator" && !isCoreValidator(nodeID) {
+			nodes[0].ID = nodeID
+		}
+	}
 	sourceKey := publicNodesSourceKey(nodes)
 	publicNodeRegistryMu.Lock()
 	if !force && sourceKey == publicNodeRegistryCachedKey && !publicNodeRegistryCheckedAt.IsZero() && time.Since(publicNodeRegistryCheckedAt) < publicNodeProbeTTL {

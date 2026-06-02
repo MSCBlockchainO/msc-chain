@@ -105,6 +105,19 @@ func TestPublicNodesEndpointReturnsTrustedFullNodes(t *testing.T) {
 	}
 }
 
+func TestPublicNodesDefaultUsesServingFullNodeID(t *testing.T) {
+	withPublicNodeRegistryTestEnv(t, "")
+
+	server := NewServer(&Node{ID: "G", Role: "full"})
+	payload := publicNodesSnapshot(server.Node, true)
+	if payload.Total != 1 {
+		t.Fatalf("expected one default public node, got %d", payload.Total)
+	}
+	if payload.Nodes[0].ID != "G" {
+		t.Fatalf("expected serving full-node id G, got %q", payload.Nodes[0].ID)
+	}
+}
+
 func TestPublicNodesThroughRPCHardening(t *testing.T) {
 	oldRequireRead := ConfigRPCRequireAuthForReadEndpoints
 	oldAPIToken := apiToken
