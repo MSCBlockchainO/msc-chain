@@ -541,12 +541,56 @@ class WalletRPCManager {
     }
   }
 
+  async checkGatewayAggregate(rpc, started) {
+    const payload = await this.fetchDedup(rpc, "/gateway/lb-status.json", { timeoutMs: 8000 });
+    const registry = normalizeGatewayPublicNodes(payload);
+    const nodes = Array.isArray(registry?.nodes) ? registry.nodes : [];
+    if (!nodes.length) throw new Error("gateway health unavailable");
+    this.updateHealthFromPublicNodes(nodes);
+    const bestNode =
+      nodes.slice().sort((a, b) => {
+        if (Number(b.healthy) !== Number(a.healthy)) return Number(b.healthy) - Number(a.healthy);
+        if ((b.score || 0) !== (a.score || 0)) return Number(b.score || 0) - Number(a.score || 0);
+        if ((b.height || 0) !== (a.height || 0)) return Number(b.height || 0) - Number(a.height || 0);
+        return Number(a.latency_ms || 999999) - Number(b.latency_ms || 999999);
+      })[0];
+    const healthyCount = Number(registry.healthy ?? nodes.filter((node) => node.healthy).length);
+    if (!bestNode || healthyCount <= 0) throw new Error("all gateway backends unhealthy");
+    const latency = Math.round(performance.now() - started);
+    const entry = {
+      ...(this.health.get(rpc) || {}),
+      rpc,
+      ok: true,
+      healthy: true,
+      score: Math.max(60, Math.min(100, Number(bestNode.score || 0))),
+      height: Number(bestNode.height || 0),
+      finalized: Number(bestNode.finalized_height || 0),
+      peers: Number(bestNode.peer_count || 0),
+      lag: Number(bestNode.finality_lag || 0),
+      syncing: false,
+      latency,
+      cmdMode: String(bestNode.consensus_mode || "UNKNOWN").toUpperCase(),
+      checkedAt: Date.now(),
+      suspicious: false,
+      error: healthyCount < Number(registry.total || nodes.length) ? `${healthyCount}/${registry.total || nodes.length} backends healthy` : "",
+      source: "gateway-lb",
+      publicGateway: true,
+    };
+    this.health.set(rpc, entry);
+    return entry;
+  }
+
   async checkEndpoint(rpc) {
     const started = performance.now();
     try {
+      try {
+        return await this.checkGatewayAggregate(rpc, started);
+      } catch (_) {
+        // Custom RPCs may not expose gateway health; fall back to direct node status.
+      }
       const [status, cmdResult] = await Promise.allSettled([
-        this.fetchDedup(rpc, "/status", { timeoutMs: 5000 }),
-        this.fetchDedup(rpc, "/consensus/mode", { timeoutMs: 5000 }),
+        this.fetchDedup(rpc, "/status", { timeoutMs: 8000 }),
+        this.fetchDedup(rpc, "/consensus/mode", { timeoutMs: 8000 }),
       ]);
       if (status.status !== "fulfilled") throw status.reason;
       const data = status.value || {};
@@ -785,7 +829,7 @@ async function refreshLoadBalancerStatus(options = {}) {
     const origins = uniqueRPCs([window.location.origin, state.rpcManager?.active, ...defaultRPCEndpoints()]);
     for (const rpc of origins) {
       try {
-        const data = await state.rpcManager.fetchDedup(rpc, "/gateway/lb-status.json", { timeoutMs: 4000 });
+        const data = await state.rpcManager.fetchDedup(rpc, "/gateway/lb-status.json", { timeoutMs: 8000 });
         state.dataCache?.set("lb-status", { data, verification: null });
         result = { data, fromCache: false };
         break;
