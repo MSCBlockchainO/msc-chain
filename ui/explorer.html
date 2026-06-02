@@ -316,10 +316,38 @@
         </table>
       </div>
     </section>
+    <section class="card">
+      <div class="card-head">
+        <h2>Public Full Nodes</h2>
+        <span id="publicNodesMeta" class="meta">-</span>
+      </div>
+      <div class="helper-note">Trusted public full/archive nodes only. Validator RPCs are excluded from wallet defaults.</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>RPC</th>
+              <th>Status</th>
+              <th>Height</th>
+              <th>Finalized</th>
+              <th>Lag</th>
+              <th>Age</th>
+              <th>Peers</th>
+              <th>Latency</th>
+              <th>CMD</th>
+              <th>Score</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="publicNodesBody"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
     </div>
   </div>
 
-  <script src="explorer.js?v=20260602b"></script>
+  <script src="explorer.js?v=20260602c"></script>
 </body>
 </html>

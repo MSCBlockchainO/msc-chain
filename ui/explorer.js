@@ -18,6 +18,7 @@
     adminMode: localStorage.getItem("msc_admin_mode") === "1",
     latestValidators: null,
     latestPeers: null,
+    latestPublicNodes: null,
     latestStatus: null,
     latestBlocks: null,
     txRawMode: false,
@@ -94,6 +95,8 @@
     txRawToggle: byId("txRawToggle"),
     peersMeta: byId("peersMeta"),
     peersBody: byId("peersBody"),
+    publicNodesMeta: byId("publicNodesMeta"),
+    publicNodesBody: byId("publicNodesBody"),
   };
 
   const LEGACY_CONTRACT_TX_KEYS = new Set([
@@ -762,6 +765,41 @@
       .join("");
   };
 
+  const renderPublicNodes = (data) => {
+    if (!els.publicNodesBody || !els.publicNodesMeta) return;
+    const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
+    const healthy = Number(data?.healthy ?? nodes.filter((item) => item.healthy).length);
+    const total = Number(data?.total ?? nodes.length);
+    const best = data?.best || data?.best_node?.rpc_url || "-";
+    els.publicNodesMeta.textContent = `healthy=${healthy}/${total} best=${best}`;
+
+    if (!nodes.length) {
+      els.publicNodesBody.innerHTML = "<tr><td colspan=\"12\">No public full nodes discovered yet</td></tr>";
+      return;
+    }
+
+    els.publicNodesBody.innerHTML = nodes
+      .map((node) => {
+        const status = node.healthy ? "healthy" : node.suspicious_reason || node.error ? "suspicious" : "degraded";
+        const reason = node.suspicious_reason || node.error || node.network_health || "-";
+        return `<tr>
+          <td class="mono">${node.id || "-"}</td>
+          <td class="mono">${short(node.rpc_url || "-", 18)}</td>
+          <td class="mono ${node.healthy ? "ok" : "warn"}">${status}</td>
+          <td class="mono">${node.height ?? 0}</td>
+          <td class="mono">${node.finalized_height ?? 0}</td>
+          <td class="mono">${node.finality_lag ?? "-"}</td>
+          <td class="mono">${node.last_block_age_seconds ?? "-"}s</td>
+          <td class="mono">${node.peer_count ?? "-"}</td>
+          <td class="mono">${node.latency_ms ?? "-"}ms</td>
+          <td class="mono">${node.consensus_mode || "-"}</td>
+          <td class="mono">${Math.round(Number(node.score || 0))}</td>
+          <td class="mono">${reason}</td>
+        </tr>`;
+      })
+      .join("");
+  };
+
   const normalizePendingEntries = (values) =>
     (Array.isArray(values) ? values : []).map((x) => {
       if (x && typeof x === "object") {
@@ -806,6 +844,8 @@
 
   const fetchPeersData = async () => apiV1("/v1/peers", "/explorer/peers");
 
+  const fetchPublicNodesData = async () => apiV1("/v1/public-nodes", "/public-nodes");
+
   const refreshBlocksPanel = async () => {
     const payload = await fetchBlocksData();
     state.latestBlocks = payload;
@@ -841,6 +881,18 @@
     };
     state.latestStatus = merged;
 
+    if (Array.isArray(event.public_nodes)) {
+      state.latestPublicNodes = {
+        status: event.public_nodes_healthy === event.public_nodes_total ? "healthy" : event.public_nodes_healthy > 0 ? "degraded" : "down",
+        healthy: event.public_nodes_healthy || 0,
+        total: event.public_nodes_total || event.public_nodes.length,
+        best: event.public_nodes_best || "",
+        nodes: event.public_nodes,
+        ts: event.ts || Math.floor(Date.now() / 1000),
+      };
+      renderPublicNodes(state.latestPublicNodes);
+    }
+
     if (incomingHeight !== null && incomingHeight > currentHeight + 1) {
       refreshBlocksPanel()
         .then((payload) => {
@@ -864,6 +916,7 @@
     if (state.latestStatus) renderStatus(state.latestStatus);
     if (state.latestBlocks) renderBlocks(state.latestBlocks);
     if (state.latestPeers) renderPeers(state.latestPeers);
+    if (state.latestPublicNodes) renderPublicNodes(state.latestPublicNodes);
     if (state.latestValidators && state.latestPeers) renderValidatorsDualView();
   };
 
@@ -898,6 +951,7 @@
         fetchBlocksData(),
         fetchValidatorsData(),
         fetchPeersData(),
+        fetchPublicNodesData(),
       ];
       const results = await Promise.allSettled(tasks);
       if (seq < state.lastAppliedSeq) {
@@ -907,10 +961,12 @@
       const nextBlocks = results[1];
       const nextValidators = results[2];
       const nextPeers = results[3];
+      const nextPublicNodes = results[4];
       if (nextStatus.status === "fulfilled") state.latestStatus = nextStatus.value;
       if (nextBlocks.status === "fulfilled") state.latestBlocks = nextBlocks.value;
       if (nextValidators.status === "fulfilled") state.latestValidators = nextValidators.value;
       if (nextPeers.status === "fulfilled") state.latestPeers = nextPeers.value;
+      if (nextPublicNodes.status === "fulfilled") state.latestPublicNodes = nextPublicNodes.value;
       state.lastAppliedSeq = seq;
       renderAllFromState();
       const failed = results.filter((r) => r.status === "rejected");

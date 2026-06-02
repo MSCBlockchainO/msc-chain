@@ -55,6 +55,15 @@
       <div id="settingsRpcHealth" class="health-list"></div>
     </section>
     <section class="card">
+      <div class="label">Discovered Public Full Nodes</div>
+      <div class="row">
+        <div><div class="label">Healthy</div><div id="settingsPublicNodesSummary" class="mono">0/0 healthy</div></div>
+        <div><div class="label">Best RPC</div><div id="settingsPublicNodesBest" class="mono">-</div></div>
+        <div><div class="label">Endpoint</div><div class="mono">/v1/public-nodes</div></div>
+      </div>
+      <div id="settingsPublicNodesHealth" class="health-list"></div>
+    </section>
+    <section class="card">
       <div class="label">Gateway Load Balancer</div>
       <div class="row">
         <div><div class="label">Status</div><div id="settingsLbStatus" class="mono">unavailable</div></div>
@@ -66,6 +75,6 @@
   </main>
   <script src="vendor/nacl.min.js"></script>
   <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
-  <script src="wallet_pages.js?v=20260602b"></script>
+  <script src="wallet_pages.js?v=20260602c"></script>
 </body>
 </html>

@@ -18,20 +18,24 @@ var walletEventsUpgrader = websocket.Upgrader{
 }
 
 type walletEvent struct {
-	Type                string `json:"type"`
-	Height              uint64 `json:"height,omitempty"`
-	FinalizedHeight     uint64 `json:"finalized_height,omitempty"`
-	Hash                string `json:"hash,omitempty"`
-	Mode                string `json:"mode,omitempty"`
-	Reason              string `json:"reason,omitempty"`
-	FinalityLag         uint64 `json:"finality_lag,omitempty"`
-	LastBlockAgeSeconds uint64 `json:"last_block_age_seconds"`
-	PeerCount           int    `json:"peer_count,omitempty"`
-	ActiveValidators    int    `json:"active_validators,omitempty"`
-	TotalValidators     int    `json:"total_validators,omitempty"`
-	Quorum              int    `json:"quorum,omitempty"`
-	NetworkHealth       string `json:"network_health,omitempty"`
-	TS                  int64  `json:"ts"`
+	Type                string                 `json:"type"`
+	Height              uint64                 `json:"height,omitempty"`
+	FinalizedHeight     uint64                 `json:"finalized_height,omitempty"`
+	Hash                string                 `json:"hash,omitempty"`
+	Mode                string                 `json:"mode,omitempty"`
+	Reason              string                 `json:"reason,omitempty"`
+	FinalityLag         uint64                 `json:"finality_lag,omitempty"`
+	LastBlockAgeSeconds uint64                 `json:"last_block_age_seconds"`
+	PeerCount           int                    `json:"peer_count,omitempty"`
+	ActiveValidators    int                    `json:"active_validators,omitempty"`
+	TotalValidators     int                    `json:"total_validators,omitempty"`
+	Quorum              int                    `json:"quorum,omitempty"`
+	NetworkHealth       string                 `json:"network_health,omitempty"`
+	TS                  int64                  `json:"ts"`
+	PublicNodesTotal    int                    `json:"public_nodes_total,omitempty"`
+	PublicNodesHealthy  int                    `json:"public_nodes_healthy,omitempty"`
+	PublicNodesBest     string                 `json:"public_nodes_best,omitempty"`
+	PublicNodes         []publicNodeHealthView `json:"public_nodes,omitempty"`
 }
 
 func (s *Server) handleWalletEvents(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +151,7 @@ func walletEventFromRuntime(kind string, runtime RuntimeStatusSnapshot, node *No
 	if totalValidators == 0 {
 		totalValidators = runtime.LiveValidators
 	}
-	return walletEvent{
+	event := walletEvent{
 		Type:                kind,
 		Height:              runtime.Height,
 		FinalizedHeight:     runtime.FinalizedHeight,
@@ -163,6 +167,12 @@ func walletEventFromRuntime(kind string, runtime RuntimeStatusSnapshot, node *No
 		NetworkHealth:       runtime.NetworkHealth,
 		TS:                  time.Now().Unix(),
 	}
+	publicNodes := publicNodesSnapshot(node, false)
+	event.PublicNodesTotal = publicNodes.Total
+	event.PublicNodesHealthy = publicNodes.Healthy
+	event.PublicNodesBest = publicNodes.Best
+	event.PublicNodes = publicNodes.Nodes
+	return event
 }
 
 func walletEventValidatorState(runtime RuntimeStatusSnapshot, node *Node) string {

@@ -209,7 +209,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    location ~ ^/(status|healthz|misbehavior|validators|validatorset/hash|validatorset/audit|validators/pending|validators/diversity|consensus/mode|formal/verification|storage/policy|bridge/status|bridge/verify|light/headers|light/checkpoint/latest|proof/balance|proof/tx|proof/receipt|tx/status|txs|explorer/blocks|explorer/block|explorer/tx|explorer/peers|balance|nonce|nonce/pending|wallet/status|coins|tokenomics|governance/status|governance/proposals|upgrade/status|dtl/quote|dtl/route_quote|dtl/farm_info|dtl/season_info|dtl/leaderboard|dtl/nft721/owner|dtl/nft1155/owner|v1/) {
+    location ~ ^/(status|healthz|misbehavior|validators|validatorset/hash|validatorset/audit|validators/pending|validators/diversity|public-nodes|consensus/mode|formal/verification|storage/policy|bridge/status|bridge/verify|light/headers|light/checkpoint/latest|proof/balance|proof/tx|proof/receipt|tx/status|txs|explorer/blocks|explorer/block|explorer/tx|explorer/peers|balance|nonce|nonce/pending|wallet/status|coins|tokenomics|governance/status|governance/proposals|upgrade/status|dtl/quote|dtl/route_quote|dtl/farm_info|dtl/season_info|dtl/leaderboard|dtl/nft721/owner|dtl/nft1155/owner|v1/) {
         limit_req zone=msc_read burst=40 nodelay;
         proxy_pass http://msc_rpc_backend;
         proxy_http_version 1.1;
@@ -290,6 +290,7 @@ while true; do
   tmp="$(mktemp)"
   if python3 - "$targets" "$tmp" <<'PY'
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -297,6 +298,7 @@ import urllib.request
 
 targets = [item.strip() for item in sys.argv[1].split(",") if item.strip()]
 out = sys.argv[2]
+domain = os.environ.get("DOMAIN", "").strip()
 backends = []
 healthy_count = 0
 for target in targets:
@@ -306,25 +308,86 @@ for target in targets:
     status_code = 0
     healthy = False
     error = ""
+    status_data = {}
+    cmd_data = {}
     try:
         req = urllib.request.Request(base + "/status", headers={"User-Agent": "msc-lb-health/1"})
         with urllib.request.urlopen(req, timeout=3) as res:
             status_code = int(res.status)
+            raw = res.read(65536).decode("utf-8", "replace")
             healthy = status_code == 200
-            res.read(2048)
+            try:
+                status_data = json.loads(raw or "{}")
+            except Exception:
+                status_data = {}
     except urllib.error.HTTPError as exc:
         status_code = int(exc.code)
         error = str(exc)
     except Exception as exc:
         error = str(exc)
-    latency_ms = int((time.perf_counter() - started) * 1000)
     if healthy:
+        try:
+            req = urllib.request.Request(base + "/consensus/mode", headers={"User-Agent": "msc-lb-health/1"})
+            with urllib.request.urlopen(req, timeout=3) as res:
+                raw = res.read(32768).decode("utf-8", "replace")
+                try:
+                    cmd_data = json.loads(raw or "{}")
+                except Exception:
+                    cmd_data = {}
+        except Exception:
+            cmd_data = {}
+    latency_ms = int((time.perf_counter() - started) * 1000)
+    role = str(status_data.get("role") or "full").lower()
+    height = int(status_data.get("height") or status_data.get("chain_height") or 0)
+    finalized = int(status_data.get("finalized_height") or status_data.get("finalized") or 0)
+    finality_lag = int(cmd_data.get("finality_lag") or max(0, height - finalized))
+    peers = int(status_data.get("peers") or status_data.get("peer_count") or 0)
+    block_age = int(status_data.get("last_block_age_seconds") or 0)
+    mode = str(cmd_data.get("mode") or status_data.get("consensus_detector_mode") or "").upper()
+    suspicious = ""
+    if role == "validator":
+        suspicious = "validator_rpc_not_allowed"
+    elif finality_lag > 20:
+        suspicious = "finality_lag"
+    elif block_age > 60:
+        suspicious = "block_stalled"
+    score = 0
+    if healthy and not suspicious:
+        score = 35
+        score += 15 if height > 0 else 0
+        score += 14 if finality_lag <= 2 else (7 if finality_lag <= 20 else 0)
+        score += 12 if peers >= 3 else max(0, peers * 3)
+        score += 10 if block_age <= 12 else (4 if block_age <= 60 else 0)
+        score += 9 if mode == "NORMAL" else (4 if mode in ("STRICT", "RECOVERY") else (-30 if mode in ("EMERGENCY", "HALTED", "ATTACK", "PARTITION") else 0))
+        score += 9 if latency_ms <= 250 else (5 if latency_ms <= 1000 else (2 if latency_ms <= 2500 else 0))
+        score = max(0, min(100, score))
+    node_healthy = healthy and score >= 60 and not suspicious
+    if node_healthy:
         healthy_count += 1
+    rpc_url = base
+    if domain and base.startswith("http://127.0.0.1"):
+        rpc_url = "https://" + domain
     backends.append({
         "target": target,
-        "healthy": healthy,
+        "id": str(status_data.get("node_id") or target).strip(),
+        "rpc_url": rpc_url,
+        "role": role,
+        "public_gateway": True,
+        "healthy": node_healthy,
         "latency_ms": latency_ms,
         "status_code": status_code,
+        "chain_id": str(status_data.get("chain_id") or ""),
+        "genesis_hash": str(status_data.get("genesis_hash") or status_data.get("expected_genesis_hash") or ""),
+        "version": str(status_data.get("version") or ""),
+        "height": height,
+        "finalized_height": finalized,
+        "finality_lag": finality_lag,
+        "last_block_age_seconds": block_age,
+        "peer_count": peers,
+        "consensus_mode": mode,
+        "network_health": str(status_data.get("network_health") or ""),
+        "score": score,
+        "suspicious_reason": suspicious,
         "last_checked": int(time.time()),
         "error": error,
     })
@@ -360,6 +423,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+Environment=DOMAIN=$DOMAIN
 Environment=RPC_TARGETS=$RPC_TARGETS
 Environment=RPC_TARGET=$RPC_TARGET
 ExecStart=/usr/local/bin/msc-lb-health.sh

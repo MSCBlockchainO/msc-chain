@@ -20,6 +20,9 @@ func TestWalletEventsWebSocketHello(t *testing.T) {
 	}()
 	ConfigRPCRequireAuthForReadEndpoints = false
 	apiToken = ""
+	publicNodeProbe := newPublicNodeProbeServer("full", 1, 1, "NORMAL", "abc")
+	defer publicNodeProbe.Close()
+	withPublicNodeRegistryTestEnv(t, "F|"+publicNodeProbe.URL+"|full")
 
 	node := &Node{
 		ID:   "F",
@@ -61,6 +64,9 @@ func TestWalletEventsWebSocketHello(t *testing.T) {
 	if event.LastBlockAgeSeconds == 0 || event.LastBlockAgeSeconds > 5 {
 		t.Fatalf("unexpected last block age: %+v", event)
 	}
+	if event.PublicNodesTotal != 1 || event.PublicNodesHealthy != 1 || event.PublicNodesBest == "" {
+		t.Fatalf("unexpected public node event summary: %+v", event)
+	}
 }
 
 func TestWalletEventsThroughRPCHardening(t *testing.T) {
@@ -72,6 +78,9 @@ func TestWalletEventsThroughRPCHardening(t *testing.T) {
 	}()
 	ConfigRPCRequireAuthForReadEndpoints = false
 	apiToken = ""
+	publicNodeProbe := newPublicNodeProbeServer("full", 1, 1, "NORMAL", "abc")
+	defer publicNodeProbe.Close()
+	withPublicNodeRegistryTestEnv(t, "F|"+publicNodeProbe.URL+"|full")
 
 	node := &Node{
 		ID:   "F",

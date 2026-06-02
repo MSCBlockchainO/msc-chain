@@ -27557,6 +27557,8 @@ type ConfigFile struct {
 
 	Core CoreConfig `toml:"core"`
 
+	PublicNodes PublicNodesConfig `toml:"public_nodes"`
+
 	Storage StorageConfig `toml:"storage"`
 }
 
@@ -32543,6 +32545,12 @@ func loadConfigOverrides(path string) error {
 
 	}
 
+	if applyPublicNodesConfig(cfg.PublicNodes) {
+
+		fmt.Printf("PUBLIC_NODES config loaded: nodes=%d\n", len(ConfigPublicNodes))
+
+	}
+
 	if applyStorageConfig(cfg.Storage) {
 
 		fmt.Printf("STORAGE config loaded: key_env=%s key_file=%s key_hex=%t key_b64=%t\n",
@@ -34064,6 +34072,7 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/unstake", s.handleUnstake)
 
 	mux.HandleFunc("/status", s.handleStatus)
+	mux.HandleFunc("/public-nodes", s.handlePublicNodes)
 	mux.HandleFunc("/consensus/mode", s.handleConsensusMode)
 	mux.HandleFunc("/formal/verification", s.handleFormalVerification)
 	mux.HandleFunc("/storage/policy", s.handleStoragePolicy)
@@ -34148,6 +34157,7 @@ func (s *Server) Start(addr string) {
 
 	// Versioned exchange/API endpoints.
 	mux.HandleFunc("/v1/status", s.handleV1Status)
+	mux.HandleFunc("/v1/public-nodes", s.handlePublicNodes)
 	mux.HandleFunc("/v1/consensus/mode", s.handleV1ConsensusMode)
 	mux.HandleFunc("/v1/formal/verification", s.handleV1FormalVerification)
 	mux.HandleFunc("/v1/storage/policy", s.handleV1StoragePolicy)
