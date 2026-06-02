@@ -36,6 +36,7 @@ type walletEvent struct {
 	PublicNodesHealthy  int                    `json:"public_nodes_healthy,omitempty"`
 	PublicNodesBest     string                 `json:"public_nodes_best,omitempty"`
 	PublicNodes         []publicNodeHealthView `json:"public_nodes,omitempty"`
+	TSMS                int64                  `json:"ts_ms,omitempty"`
 }
 
 func (s *Server) handleWalletEvents(w http.ResponseWriter, r *http.Request) {
@@ -135,6 +136,9 @@ func walletEventsWrite(conn *websocket.Conn, event walletEvent) error {
 	if event.TS == 0 {
 		event.TS = time.Now().Unix()
 	}
+	if event.TSMS == 0 {
+		event.TSMS = time.Now().UnixMilli()
+	}
 	_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	return conn.WriteJSON(event)
 }
@@ -166,6 +170,7 @@ func walletEventFromRuntime(kind string, runtime RuntimeStatusSnapshot, node *No
 		Quorum:              runtime.RequiredQuorum,
 		NetworkHealth:       runtime.NetworkHealth,
 		TS:                  time.Now().Unix(),
+		TSMS:                time.Now().UnixMilli(),
 	}
 	publicNodes := publicNodesSnapshot(node, false)
 	event.PublicNodesTotal = publicNodes.Total

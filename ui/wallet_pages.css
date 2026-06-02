@@ -345,9 +345,33 @@ button:disabled {
   color: var(--success);
 }
 
+.health-row.warn {
+  border-color: rgba(255, 155, 63, 0.35);
+  color: var(--accent);
+}
+
 .health-row.error {
   border-color: rgba(255, 95, 122, 0.3);
   color: var(--danger);
+}
+
+.health-row.rpc-health-row {
+  grid-template-columns: minmax(220px, 1.8fr) minmax(92px, 0.7fr) minmax(82px, 0.6fr) minmax(92px, 0.7fr) minmax(110px, 0.75fr) minmax(92px, 0.65fr) minmax(160px, 1.2fr);
+}
+
+.health-row.public-node-row {
+  grid-template-columns:
+    minmax(48px, 0.4fr)
+    minmax(170px, 1.45fr)
+    minmax(86px, 0.7fr)
+    minmax(82px, 0.65fr)
+    minmax(92px, 0.75fr)
+    minmax(112px, 0.8fr)
+    minmax(128px, 0.9fr)
+    minmax(82px, 0.65fr)
+    minmax(92px, 0.65fr)
+    minmax(96px, 0.7fr)
+    minmax(160px, 1.25fr);
 }
 
 .list-item {

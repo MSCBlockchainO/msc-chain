@@ -6819,6 +6819,55 @@ func syncDeltaReplayVerifyWorkers() int {
 	return SyncDeltaReplayVerifyWorkers
 }
 
+func applyFullNodeSafeSyncProfile(role string) {
+	role = normalizeNodeRole(role)
+	if role != "full" && role != "light" {
+		return
+	}
+	changes := []string{}
+	ensureUint64 := func(name string, ptr *uint64, value uint64) {
+		if ptr == nil || *ptr >= value {
+			return
+		}
+		old := *ptr
+		*ptr = value
+		changes = append(changes, fmt.Sprintf("%s=%d->%d", name, old, value))
+	}
+	ensureIntAtLeast := func(name string, ptr *int, value int) {
+		if ptr == nil || *ptr >= value {
+			return
+		}
+		old := *ptr
+		*ptr = value
+		changes = append(changes, fmt.Sprintf("%s=%d->%d", name, old, value))
+	}
+	capInt := func(name string, ptr *int, value int) {
+		if ptr == nil || *ptr <= 0 || *ptr <= value {
+			return
+		}
+		old := *ptr
+		*ptr = value
+		changes = append(changes, fmt.Sprintf("%s=%d->%d", name, old, value))
+	}
+	ensureUint64("direct_gossip_max_blocks", &SyncDirectGossipMaxBlocks, 512)
+	ensureUint64("fast_block_sync_max_blocks", &SyncFastBlockSyncMaxBlocks, 1024)
+	ensureUint64("restart_snapshot_grace_blocks", &SyncRestartSnapshotGraceBlocks, 512)
+	ensureUint64("snapshot_threshold_blocks", &SyncSnapshotCatchupThresholdBlocks, 4096)
+	ensureUint64("delta_replay_batch_blocks", &SyncDeltaReplayBatchBlocks, 2048)
+	ensureUint64("sync_peer_timeout_seconds", &SyncPeerTimeoutSeconds, 20)
+	ensureIntAtLeast("delta_replay_verify_workers", &SyncDeltaReplayVerifyWorkers, 4)
+	capInt("delta_replay_verify_workers", &SyncDeltaReplayVerifyWorkers, 4)
+	capInt("snapshot_parallel_chunks", &SyncSnapshotParallelChunks, 4)
+	if SyncSnapshotParallelChunks <= 0 {
+		old := SyncSnapshotParallelChunks
+		SyncSnapshotParallelChunks = 4
+		changes = append(changes, fmt.Sprintf("snapshot_parallel_chunks=%d->%d", old, SyncSnapshotParallelChunks))
+	}
+	if len(changes) > 0 {
+		log.Printf("[SYNC-PROFILE] role=%s profile=safe_full_node changes=%s", role, strings.Join(changes, ","))
+	}
+}
+
 func deltaReplayVerifyWorkerCount(batchSize int) int {
 	if batchSize <= 0 {
 		return 1
@@ -23310,6 +23359,7 @@ func StartNode(
 		log.Printf("[WARN] validator key unavailable for %s; switching role to full observer mode", nodeID)
 		role = "full"
 	}
+	applyFullNodeSafeSyncProfile(role)
 	keyFP := validatorKeyFingerprint(vKey.PublicKey)
 	if keyLoaded {
 		log.Printf("[IDENTITY] key_loaded=true validator=%s fingerprint=%s expected=%s match=%t source=%s mode=%s",

@@ -177,3 +177,23 @@ func TestPublicNodesMarksWrongGenesisSuspicious(t *testing.T) {
 		t.Fatalf("expected suspicious wrong genesis node, got %+v", payload.Nodes[0])
 	}
 }
+
+func TestPublicNodesComputesHeightLag(t *testing.T) {
+	fast := newPublicNodeProbeServer("full", 45680, 45680, "NORMAL", "abc")
+	slow := newPublicNodeProbeServer("full", 45677, 45677, "NORMAL", "abc")
+	defer fast.Close()
+	defer slow.Close()
+	withPublicNodeRegistryTestEnv(t, "F|"+fast.URL+"|full;G|"+slow.URL+"|full")
+
+	payload := publicNodesSnapshot(&Node{ID: "F", Role: "full"}, true)
+	if payload.Total != 2 {
+		t.Fatalf("expected two public nodes, got %d", payload.Total)
+	}
+	lagByID := map[string]uint64{}
+	for _, node := range payload.Nodes {
+		lagByID[node.ID] = node.HeightLagBlocks
+	}
+	if lagByID["F"] != 0 || lagByID["G"] != 3 {
+		t.Fatalf("unexpected height lag map: %+v nodes=%+v", lagByID, payload.Nodes)
+	}
+}

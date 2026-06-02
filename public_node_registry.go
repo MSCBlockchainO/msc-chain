@@ -50,6 +50,7 @@ type publicNodeHealthView struct {
 	Region              string `json:"region,omitempty"`
 	Height              uint64 `json:"height"`
 	FinalizedHeight     uint64 `json:"finalized_height"`
+	HeightLagBlocks     uint64 `json:"height_lag_blocks,omitempty"`
 	FinalityLag         uint64 `json:"finality_lag"`
 	LastBlockAgeSeconds uint64 `json:"last_block_age_seconds"`
 	PeerCount           int    `json:"peer_count"`
@@ -319,6 +320,7 @@ func publicNodesSnapshot(node *Node, force bool) publicNodesPayload {
 		}
 		views = append(views, view)
 	}
+	annotatePublicNodeHeightLag(views)
 	best := publicNodeBest(views)
 	healthy := 0
 	for _, view := range views {
@@ -353,6 +355,25 @@ func publicNodesSnapshot(node *Node, force bool) publicNodesPayload {
 	publicNodeRegistryCached = payload
 	publicNodeRegistryMu.Unlock()
 	return payload
+}
+
+func annotatePublicNodeHeightLag(views []publicNodeHealthView) {
+	maxHeight := uint64(0)
+	for _, view := range views {
+		if view.Height > maxHeight {
+			maxHeight = view.Height
+		}
+	}
+	if maxHeight == 0 {
+		return
+	}
+	for i := range views {
+		if views[i].Height > 0 && maxHeight >= views[i].Height {
+			views[i].HeightLagBlocks = maxHeight - views[i].Height
+		}
+		views[i].Score = publicNodeScore(views[i])
+		views[i].Healthy = views[i].Score >= 60 && views[i].SuspiciousReason == ""
+	}
 }
 
 func probePublicNode(cfg PublicNodeConfig) publicNodeHealthView {
@@ -461,6 +482,13 @@ func publicNodeScore(view publicNodeHealthView) int {
 	score := 35
 	if view.Height > 0 {
 		score += 15
+	}
+	if view.HeightLagBlocks <= 2 {
+		score += 8
+	} else if view.HeightLagBlocks <= 20 {
+		score += 3
+	} else {
+		score -= 20
 	}
 	if view.FinalityLag <= 2 {
 		score += 14

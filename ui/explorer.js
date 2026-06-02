@@ -36,7 +36,11 @@
     lastBlockAgeBaseSeconds: null,
     lastBlockAgeUpdatedAt: 0,
     blockAgeTimer: null,
+    eventDelayMs: null,
   };
+
+  const UPTIME_CACHE_KEY = "msc_public_node_uptime_v1";
+  const UPTIME_MAX_SAMPLES = 200;
 
   const byId = (id) => document.getElementById(id);
 
@@ -54,6 +58,7 @@
     quickSearchInput: byId("quickSearchInput"),
     topHeight: byId("topHeight"),
     topLastBlockAge: byId("topLastBlockAge"),
+    topEventDelay: byId("topEventDelay"),
     topCmd: byId("topCmd"),
     topPeers: byId("topPeers"),
     topState: byId("topState"),
@@ -196,6 +201,85 @@
     return remMins ? `${hours}h ${remMins}m` : `${hours}h`;
   };
 
+  const fmtBlocks = (value) => {
+    const n = asIntOrNull(value);
+    if (n === null || n < 0) return "-";
+    return `${n} block${n === 1 ? "" : "s"}`;
+  };
+
+  const fmtLatency = (value) => {
+    const n = asIntOrNull(value);
+    if (n === null || n < 0) return "-";
+    return `${n}ms`;
+  };
+
+  const publicNodeKey = (node) => String(node?.id || node?.target || node?.rpc_url || node?.rpc || "-").trim();
+
+  const loadUptimeCache = () => {
+    try {
+      return JSON.parse(localStorage.getItem(UPTIME_CACHE_KEY) || "{}") || {};
+    } catch (_) {
+      return {};
+    }
+  };
+
+  const saveUptimeCache = (cache) => {
+    try {
+      localStorage.setItem(UPTIME_CACHE_KEY, JSON.stringify(cache));
+    } catch (_) {
+      // Uptime samples are display-only.
+    }
+  };
+
+  const recordPublicNodeUptime = (nodes) => {
+    if (!Array.isArray(nodes) || !nodes.length) return;
+    const cache = loadUptimeCache();
+    const now = Date.now();
+    for (const node of nodes) {
+      const key = publicNodeKey(node);
+      if (!key || key === "-") continue;
+      const samples = Array.isArray(cache[key]) ? cache[key] : [];
+      samples.push({ t: now, h: !!node.healthy });
+      cache[key] = samples.slice(-UPTIME_MAX_SAMPLES);
+    }
+    saveUptimeCache(cache);
+  };
+
+  const publicNodeUptimePct = (node) => {
+    const samples = loadUptimeCache()[publicNodeKey(node)] || [];
+    if (!samples.length) return "-";
+    const healthy = samples.filter((sample) => !!sample.h).length;
+    return `${Math.round((healthy / samples.length) * 100)}%`;
+  };
+
+  const publicNodeDisplayAgeSeconds = (node) => {
+    const base = asIntOrNull(node?.last_block_age_seconds);
+    if (base === null) return null;
+    const checked = Number(node?.last_checked || 0);
+    const checkedMs = checked > 0 ? (checked < 1e12 ? checked * 1000 : checked) : 0;
+    const elapsed = checkedMs > 0 ? Math.max(0, Math.floor((Date.now() - checkedMs) / 1000)) : 0;
+    return base + elapsed;
+  };
+
+  const publicNodeHeightLag = (node, bestHeight) => {
+    const explicit = asIntOrNull(node?.height_lag_blocks);
+    if (explicit !== null && explicit >= 0) return explicit;
+    const h = asIntOrNull(node?.height);
+    if (h === null || !Number.isFinite(bestHeight) || bestHeight <= 0) return 0;
+    return Math.max(0, Math.trunc(bestHeight - h));
+  };
+
+  const publicNodeTone = (node, bestHeight) => {
+    if (!node?.healthy || node?.suspicious_reason || node?.error) return "bad";
+    const heightLag = publicNodeHeightLag(node, bestHeight);
+    const finalityLag = asIntOrNull(node?.finality_lag) || 0;
+    const age = publicNodeDisplayAgeSeconds(node);
+    const cmd = String(node?.consensus_mode || "").toUpperCase();
+    if (heightLag > 20 || finalityLag > 20 || (age !== null && age > 60) || ["EMERGENCY", "HALTED", "ATTACK", "PARTITION"].includes(cmd)) return "bad";
+    if (heightLag > 2 || finalityLag > 2 || (age !== null && age >= 12) || ["STRICT", "RECOVERY", "DEGRADED"].includes(cmd)) return "warn";
+    return "ok";
+  };
+
   const blockAgeTone = (status) => {
     const age = asIntOrNull(status.last_block_age_seconds);
     if (age === null) return "";
@@ -289,6 +373,13 @@
     }
   };
 
+  const renderEventDelay = () => {
+    const n = asIntOrNull(state.eventDelayMs);
+    if (els.topEventDelay) {
+      els.topEventDelay.textContent = n === null ? "-" : fmtLatency(n);
+    }
+  };
+
   const updateBlockAgeBase = (age) => {
     const n = asIntOrNull(age);
     if (n === null) return;
@@ -301,6 +392,7 @@
     if (state.blockAgeTimer) return;
     state.blockAgeTimer = setInterval(() => {
       renderBlockAgeDisplay(currentLastBlockAge());
+      renderEventDelay();
       if (state.latestPublicNodes) renderPublicNodes(state.latestPublicNodes);
     }, 1000);
   };
@@ -863,35 +955,32 @@
     els.publicNodesMeta.textContent = `healthy=${healthy}/${total} best=${best}`;
 
     if (!nodes.length) {
-      els.publicNodesBody.innerHTML = "<tr><td colspan=\"12\">No public full nodes discovered yet</td></tr>";
+      els.publicNodesBody.innerHTML = "<tr><td colspan=\"13\">No public full nodes discovered yet</td></tr>";
       return;
     }
-
-    const displayNodeAge = (node) => {
-      const base = asIntOrNull(node.last_block_age_seconds);
-      if (base === null) return "-";
-      const checked = Number(node.last_checked || 0);
-      const checkedMs = checked > 0 ? (checked < 1e12 ? checked * 1000 : checked) : 0;
-      const elapsed = checkedMs > 0 ? Math.max(0, Math.floor((Date.now() - checkedMs) / 1000)) : 0;
-      return `${base + elapsed}s`;
-    };
+    const bestHeight = Math.max(0, ...nodes.map((node) => Number(node.height || 0)).filter((height) => Number.isFinite(height)));
 
     els.publicNodesBody.innerHTML = nodes
       .map((node) => {
         const status = node.healthy ? "healthy" : node.suspicious_reason || node.error ? "suspicious" : "degraded";
         const reason = node.suspicious_reason || node.error || node.network_health || "-";
-        return `<tr>
+        const tone = publicNodeTone(node, bestHeight);
+        const heightLag = publicNodeHeightLag(node, bestHeight);
+        const finalityLag = asIntOrNull(node.finality_lag) || 0;
+        const age = publicNodeDisplayAgeSeconds(node);
+        return `<tr class="${tone}">
           <td class="mono">${node.id || "-"}</td>
           <td class="mono">${short(node.rpc_url || "-", 18)}</td>
           <td class="mono ${node.healthy ? "ok" : "warn"}">${status}</td>
           <td class="mono">${node.height ?? 0}</td>
-          <td class="mono">${node.finalized_height ?? 0}</td>
-          <td class="mono">${node.finality_lag ?? "-"}</td>
-          <td class="mono">${displayNodeAge(node)}</td>
+          <td class="mono">${fmtBlocks(heightLag)}</td>
+          <td class="mono">${fmtBlocks(finalityLag)}</td>
+          <td class="mono">${age === null ? "-" : fmtAge(age)}</td>
           <td class="mono">${node.peer_count ?? "-"}</td>
-          <td class="mono">${node.latency_ms ?? "-"}ms</td>
+          <td class="mono">${fmtLatency(node.latency_ms)}</td>
           <td class="mono">${node.consensus_mode || "-"}</td>
           <td class="mono">${Math.round(Number(node.score || 0))}</td>
+          <td class="mono">${publicNodeUptimePct(node)}</td>
           <td class="mono">${reason}</td>
         </tr>`;
       })
@@ -959,6 +1048,11 @@
 
   const renderRealtimeEvent = (event) => {
     if (!event || typeof event !== "object") return;
+    const sentMs = Number(event.ts_ms || (event.ts ? Number(event.ts) * 1000 : 0));
+    if (Number.isFinite(sentMs) && sentMs > 0) {
+      state.eventDelayMs = Math.max(0, Date.now() - sentMs);
+      renderEventDelay();
+    }
     const incomingHeight = asIntOrNull(event.height);
     const incomingFinalized = asIntOrNull(event.finalized_height);
     const currentHeight = Math.max(
@@ -994,6 +1088,7 @@
         nodes: event.public_nodes,
         ts: event.ts || Math.floor(Date.now() / 1000),
       });
+      recordPublicNodeUptime(state.latestPublicNodes.nodes);
       renderPublicNodes(state.latestPublicNodes);
     }
 
@@ -1070,7 +1165,10 @@
       if (nextBlocks.status === "fulfilled") state.latestBlocks = nextBlocks.value;
       if (nextValidators.status === "fulfilled") state.latestValidators = nextValidators.value;
       if (nextPeers.status === "fulfilled") state.latestPeers = nextPeers.value;
-      if (nextPublicNodes.status === "fulfilled") state.latestPublicNodes = nextPublicNodes.value;
+      if (nextPublicNodes.status === "fulfilled") {
+        state.latestPublicNodes = nextPublicNodes.value;
+        recordPublicNodeUptime(state.latestPublicNodes.nodes);
+      }
       state.lastAppliedSeq = seq;
       renderAllFromState();
       const failed = results.filter((r) => r.status === "rejected");

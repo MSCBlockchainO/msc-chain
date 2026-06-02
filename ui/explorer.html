@@ -33,7 +33,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="explorer.css" />
+  <link rel="stylesheet" href="explorer.css?v=20260602h" />
 </head>
 <body>
   <div class="app-shell">
@@ -81,6 +81,7 @@
           <span id="connState" class="pill">Disconnected</span>
           <span class="pill">Height <strong id="topHeight">-</strong></span>
           <span class="pill">Last block <strong id="topLastBlockAge">-</strong></span>
+          <span class="pill">Event <strong id="topEventDelay">-</strong></span>
           <span class="pill">CMD <strong id="topCmd">-</strong></span>
           <span class="pill">Peers <strong id="topPeers">-</strong></span>
           <span class="pill">State <strong id="topState">-</strong></span>
@@ -330,13 +331,14 @@
               <th>RPC</th>
               <th>Status</th>
               <th>Height</th>
-              <th>Finalized</th>
-              <th>Lag</th>
+              <th>Height Lag</th>
+              <th>Finality Lag</th>
               <th>Age</th>
               <th>Peers</th>
               <th>Latency</th>
               <th>CMD</th>
               <th>Score</th>
+              <th>Uptime</th>
               <th>Reason</th>
             </tr>
           </thead>
@@ -348,6 +350,6 @@
     </div>
   </div>
 
-  <script src="explorer.js?v=20260602e"></script>
+  <script src="explorer.js?v=20260602h"></script>
 </body>
 </html>

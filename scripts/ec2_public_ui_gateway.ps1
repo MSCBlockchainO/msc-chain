@@ -391,6 +391,21 @@ for target in targets:
         "last_checked": int(time.time()),
         "error": error,
     })
+max_height = max([int(item.get("height") or 0) for item in backends], default=0)
+healthy_count = 0
+for item in backends:
+    height = int(item.get("height") or 0)
+    height_lag = max(0, max_height - height) if max_height and height else 0
+    item["height_lag_blocks"] = height_lag
+    if height_lag > 20 and not item.get("suspicious_reason"):
+        item["suspicious_reason"] = "height_lag"
+        item["score"] = max(0, int(item.get("score") or 0) - min(25, height_lag))
+        item["healthy"] = False
+    elif height_lag > 2:
+        item["score"] = max(0, int(item.get("score") or 0) - min(10, height_lag - 2))
+        item["healthy"] = bool(item.get("healthy")) and int(item["score"]) >= 60
+    if item.get("healthy"):
+        healthy_count += 1
 payload = {
     "status": "healthy" if healthy_count == len(backends) and backends else ("degraded" if healthy_count else "down"),
     "healthy": healthy_count,

@@ -410,6 +410,18 @@ tr.clickable:hover {
   cursor: pointer;
 }
 
+tr.ok {
+  background: rgba(0, 214, 143, 0.035);
+}
+
+tr.warn {
+  background: rgba(255, 155, 63, 0.055);
+}
+
+tr.bad {
+  background: rgba(255, 95, 122, 0.06);
+}
+
 .chips {
   display: flex;
   gap: 8px;

@@ -64,6 +64,9 @@ func TestWalletEventsWebSocketHello(t *testing.T) {
 	if event.LastBlockAgeSeconds == 0 || event.LastBlockAgeSeconds > 5 {
 		t.Fatalf("unexpected last block age: %+v", event)
 	}
+	if event.TSMS <= 0 {
+		t.Fatalf("expected ts_ms in hello event: %+v", event)
+	}
 	if event.PublicNodesTotal != 1 || event.PublicNodesHealthy != 1 || event.PublicNodesBest == "" {
 		t.Fatalf("unexpected public node event summary: %+v", event)
 	}

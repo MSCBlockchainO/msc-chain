@@ -24,6 +24,8 @@ const CACHE_TTL = {
 };
 const POLL_FALLBACK_MIN_MS = 15000;
 const POLL_FALLBACK_MAX_MS = 60000;
+const UPTIME_CACHE_KEY = "msc_public_node_uptime_v1";
+const UPTIME_MAX_SAMPLES = 200;
 
 const $ = (id) => document.getElementById(id);
 const page = document.body.dataset.page || "dashboard";
@@ -54,6 +56,7 @@ const state = {
     finalizedHeight: 0,
     lastBlockAgeBaseSeconds: null,
     lastBlockAgeUpdatedAt: 0,
+    eventDelayMs: null,
   },
   blockAgeTimer: null,
 };
@@ -284,8 +287,94 @@ function formatAge(seconds) {
   return remMins ? `${hours}h ${remMins}m` : `${hours}h`;
 }
 
+function formatBlocks(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return "-";
+  const blocks = Math.trunc(n);
+  return `${blocks} block${blocks === 1 ? "" : "s"}`;
+}
+
+function formatLatency(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return "-";
+  return `${Math.round(n)}ms`;
+}
+
 function pillHTML(label, id, fallback = "-") {
   return `<span class="pill-label">${label}</span><strong id="${id}">${fallback}</strong>`;
+}
+
+function publicNodeKey(node) {
+  return String(node?.id || node?.target || node?.rpc_url || node?.rpc || "-").trim();
+}
+
+function loadUptimeCache() {
+  try {
+    return JSON.parse(localStorage.getItem(UPTIME_CACHE_KEY) || "{}") || {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveUptimeCache(cache) {
+  try {
+    localStorage.setItem(UPTIME_CACHE_KEY, JSON.stringify(cache));
+  } catch (_) {
+    // Uptime is display-only; storage pressure must not break the wallet.
+  }
+}
+
+function recordPublicNodeUptime(nodes) {
+  if (!Array.isArray(nodes) || nodes.length === 0) return;
+  const now = Date.now();
+  const cache = loadUptimeCache();
+  for (const node of nodes) {
+    const key = publicNodeKey(node);
+    if (!key || key === "-") continue;
+    const samples = Array.isArray(cache[key]) ? cache[key] : [];
+    samples.push({ t: now, h: !!node.healthy });
+    cache[key] = samples.slice(-UPTIME_MAX_SAMPLES);
+  }
+  saveUptimeCache(cache);
+}
+
+function publicNodeUptimePct(node) {
+  const samples = loadUptimeCache()[publicNodeKey(node)] || [];
+  if (!samples.length) return "-";
+  const healthy = samples.filter((sample) => !!sample.h).length;
+  return `${Math.round((healthy / samples.length) * 100)}%`;
+}
+
+function publicNodeDisplayAgeSeconds(node) {
+  const base = Number(node?.last_block_age_seconds);
+  if (!Number.isFinite(base) || base < 0) return null;
+  const checked = Number(node?.last_checked || 0);
+  const checkedMs = checked > 0 ? (checked < 1e12 ? checked * 1000 : checked) : 0;
+  const elapsed = checkedMs > 0 ? Math.max(0, Math.floor((Date.now() - checkedMs) / 1000)) : 0;
+  return Math.trunc(base) + elapsed;
+}
+
+function publicNodeHeightLag(node, bestHeight) {
+  const explicit = Number(node?.height_lag_blocks);
+  if (Number.isFinite(explicit) && explicit >= 0) return Math.trunc(explicit);
+  const height = Number(node?.height || 0);
+  if (!Number.isFinite(bestHeight) || bestHeight <= 0 || !Number.isFinite(height) || height <= 0) return 0;
+  return Math.max(0, Math.trunc(bestHeight - height));
+}
+
+function publicNodeTone(node, bestHeight) {
+  if (!node?.healthy || node?.suspicious_reason || node?.error) return "error";
+  const heightLag = publicNodeHeightLag(node, bestHeight);
+  const finalityLag = Number(node?.finality_lag || 0);
+  const age = publicNodeDisplayAgeSeconds(node);
+  const cmd = String(node?.consensus_mode || "").toUpperCase();
+  if (heightLag > 20 || finalityLag > 20 || (age !== null && age > 60) || ["EMERGENCY", "HALTED", "ATTACK", "PARTITION"].includes(cmd)) {
+    return "error";
+  }
+  if (heightLag > 2 || finalityLag > 2 || (age !== null && age >= 12) || ["STRICT", "RECOVERY", "DEGRADED"].includes(cmd)) {
+    return "warn";
+  }
+  return "success";
 }
 
 function currentLastBlockAge() {
@@ -308,10 +397,17 @@ function renderLastBlockAge() {
   setText("topLastBlockAge", formatAge(currentLastBlockAge()));
 }
 
+function renderEventDelay() {
+  const delay = Number(state.realtime.eventDelayMs);
+  setText("topEventDelay", Number.isFinite(delay) && delay >= 0 ? formatLatency(delay) : "-");
+  setText("settingsEventDelay", Number.isFinite(delay) && delay >= 0 ? formatLatency(delay) : "-");
+}
+
 function startBlockAgeTicker() {
   if (state.blockAgeTimer) return;
   state.blockAgeTimer = window.setInterval(() => {
     renderLastBlockAge();
+    renderEventDelay();
     renderPublicNodesRegistry(state.publicNodesRegistry);
   }, 1000);
 }
@@ -867,31 +963,30 @@ function renderPublicNodesRegistry(data) {
   const nodes = Array.isArray(registry.nodes) ? registry.nodes : [];
   const healthy = Number(registry.healthy ?? nodes.filter((item) => item.healthy).length);
   const total = Number(registry.total ?? nodes.length);
+  const bestHeight = Math.max(0, ...nodes.map((item) => Number(item.height || 0)).filter((height) => Number.isFinite(height)));
   setText("settingsPublicNodesSummary", `${healthy}/${total} healthy`);
   setText("settingsPublicNodesBest", registry.best || registry.best_node?.rpc_url || "-");
   const box = $("settingsPublicNodesHealth");
   if (!box) return;
-  const displayNodeAge = (item) => {
-    const base = Number(item.last_block_age_seconds);
-    if (!Number.isFinite(base) || base < 0) return "-";
-    const checked = Number(item.last_checked || 0);
-    const checkedMs = checked > 0 ? (checked < 1e12 ? checked * 1000 : checked) : 0;
-    const elapsed = checkedMs > 0 ? Math.max(0, Math.floor((Date.now() - checkedMs) / 1000)) : 0;
-    return formatAge(Math.trunc(base) + elapsed);
-  };
   box.innerHTML = nodes
     .map((item) => {
-      const tone = item.healthy ? "success" : item.suspicious_reason || item.error ? "error" : "";
+      const heightLag = publicNodeHeightLag(item, bestHeight);
+      const finalityLag = Number(item.finality_lag || 0);
+      const ageSeconds = publicNodeDisplayAgeSeconds(item);
+      const tone = publicNodeTone(item, bestHeight);
       const flags = [item.consensus_mode, item.network_health, item.suspicious_reason, item.error].filter(Boolean).join(" | ");
       return `
-        <div class="health-row ${tone}">
+        <div class="health-row public-node-row ${tone}">
           <span class="mono">${item.id || "-"}</span>
           <span class="mono">${item.rpc_url || "-"}</span>
           <span>${item.healthy ? "healthy" : "degraded"}</span>
           <span>score ${Math.round(Number(item.score || 0))}</span>
           <span>h ${formatNumber(item.height || 0)}</span>
-          <span>age ${displayNodeAge(item)}</span>
-          <span>${item.latency_ms ?? "-"}ms</span>
+          <span>lag ${formatBlocks(heightLag)}</span>
+          <span>finality ${formatBlocks(finalityLag)}</span>
+          <span>age ${ageSeconds === null ? "-" : formatAge(ageSeconds)}</span>
+          <span>${formatLatency(item.latency_ms)}</span>
+          <span>uptime ${publicNodeUptimePct(item)}</span>
           <span>${flags || "-"}</span>
         </div>`;
     })
@@ -959,6 +1054,7 @@ function applyPublicNodeRegistry(data) {
   if (!data || typeof data !== "object") return;
   const nodes = Array.isArray(data.nodes) ? data.nodes : [];
   state.publicNodesRegistry = data;
+  recordPublicNodeUptime(nodes);
   if (state.rpcManager && nodes.length) {
     state.rpcManager.mergePublicNodes(nodes);
   }
@@ -1006,6 +1102,20 @@ async function refreshPublicNodes(options = {}) {
   else renderPublicNodesRegistry(state.publicNodesRegistry);
 }
 
+function selectedRPCReason(active, items) {
+  const list = (items || []).filter((item) => item && (item.healthy || item.ok));
+  const current = list.find((item) => item.rpc === active) || (items || []).find((item) => item && item.rpc === active);
+  if (!current) return "-";
+  if (list.length <= 1) return "Only Healthy Backend";
+  const maxScore = Math.max(...list.map((item) => Number(item.score || 0)));
+  if (Number(current.score || 0) >= maxScore) return "Highest Score";
+  const minLag = Math.min(...list.map((item) => Number(item.staleBy ?? item.lag ?? 0)));
+  if (Number(current.staleBy ?? current.lag ?? 0) <= minLag) return "Lowest Lag";
+  const minLatency = Math.min(...list.map((item) => Number(item.latency || 999999)));
+  if (Number(current.latency || 999999) <= minLatency) return "Lowest Latency";
+  return "Realtime Quality";
+}
+
 function refreshRPCSettingsUI() {
   if (!state.rpcManager) return;
   state.rpc = state.rpcManager.active;
@@ -1014,20 +1124,23 @@ function refreshRPCSettingsUI() {
   setValue("settingsRpc", state.rpcManager.active);
   setValue("settingsRpcEndpoints", state.rpcManager.endpoints.join("\n"));
   setText("settingsActiveRpc", state.rpcManager.active || "-");
+  const health = state.rpcManager.healthList();
+  setText("settingsRpcSelectedReason", selectedRPCReason(state.rpcManager.active, health));
   const healthBox = $("settingsRpcHealth");
   if (healthBox) {
-    const rows = state.rpcManager.healthList().map((item) => {
+    const rows = health.map((item) => {
       const tone = item.healthy ? "success" : item.ok ? "" : "error";
       const flags = [item.publicGateway ? "public" : "", rpcPolicyWarning(item.rpc), item.suspicious ? "suspicious" : "", item.syncing ? "syncing" : "", item.error || ""]
         .filter(Boolean)
         .join(" | ");
       return `
-        <div class="health-row ${tone}">
+        <div class="health-row rpc-health-row ${tone}">
           <span class="mono">${item.rpc}</span>
           <span>${item.healthy ? "healthy" : item.ok ? "degraded" : "offline"}</span>
           <span>score ${Math.round(item.score || 0)}</span>
           <span>h ${formatNumber(item.height || 0)}</span>
-          <span>${item.latency ? `${item.latency}ms` : "-"}</span>
+          <span>lag ${formatBlocks(item.staleBy ?? item.lag ?? 0)}</span>
+          <span>${formatLatency(item.latency)}</span>
           <span>${flags || "-"}</span>
         </div>`;
     });
@@ -1528,6 +1641,7 @@ function installShell() {
           <span id="networkPill" class="pill">Mainnet</span>
           <span class="pill">${pillHTML("RPC", "topRpc")}</span>
           <span class="pill">${pillHTML("Realtime", "topRealtime", "Polling")}</span>
+          <span class="pill">${pillHTML("Event", "topEventDelay")}</span>
           <span class="pill">${pillHTML("Height", "topHeight")}</span>
           <span class="pill">${pillHTML("Last block", "topLastBlockAge")}</span>
           <span class="pill">${pillHTML("CMD", "topCmd")}</span>
@@ -1655,6 +1769,11 @@ function renderRealtimeEvent(event) {
 
 function handleRealtimeEvent(event) {
   state.realtime.lastEventAt = Date.now();
+  const eventSentMs = Number(event?.ts_ms || (event?.ts ? Number(event.ts) * 1000 : 0));
+  if (Number.isFinite(eventSentMs) && eventSentMs > 0) {
+    state.realtime.eventDelayMs = Math.max(0, Date.now() - eventSentMs);
+    renderEventDelay();
+  }
   renderRealtimeEvent(event);
   if (event.type === "hello") {
     invalidateNetworkCache();
