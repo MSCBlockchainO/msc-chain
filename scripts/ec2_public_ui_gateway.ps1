@@ -223,12 +223,15 @@ server {
         limit_req zone=msc_read burst=40 nodelay;
         proxy_pass http://msc_rpc_backend;
         proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_cache off;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        add_header Cache-Control "no-store";
         proxy_read_timeout 3600s;
         proxy_send_timeout 3600s;
     }
@@ -237,12 +240,15 @@ server {
         limit_req zone=msc_read burst=40 nodelay;
         proxy_pass http://msc_rpc_backend;
         proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_cache off;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        add_header Cache-Control "no-store";
         proxy_read_timeout 3600s;
         proxy_send_timeout 3600s;
     }

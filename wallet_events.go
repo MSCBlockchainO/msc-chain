@@ -18,19 +18,20 @@ var walletEventsUpgrader = websocket.Upgrader{
 }
 
 type walletEvent struct {
-	Type             string `json:"type"`
-	Height           uint64 `json:"height,omitempty"`
-	FinalizedHeight  uint64 `json:"finalized_height,omitempty"`
-	Hash             string `json:"hash,omitempty"`
-	Mode             string `json:"mode,omitempty"`
-	Reason           string `json:"reason,omitempty"`
-	FinalityLag      uint64 `json:"finality_lag,omitempty"`
-	PeerCount        int    `json:"peer_count,omitempty"`
-	ActiveValidators int    `json:"active_validators,omitempty"`
-	TotalValidators  int    `json:"total_validators,omitempty"`
-	Quorum           int    `json:"quorum,omitempty"`
-	NetworkHealth    string `json:"network_health,omitempty"`
-	TS               int64  `json:"ts"`
+	Type                string `json:"type"`
+	Height              uint64 `json:"height,omitempty"`
+	FinalizedHeight     uint64 `json:"finalized_height,omitempty"`
+	Hash                string `json:"hash,omitempty"`
+	Mode                string `json:"mode,omitempty"`
+	Reason              string `json:"reason,omitempty"`
+	FinalityLag         uint64 `json:"finality_lag,omitempty"`
+	LastBlockAgeSeconds uint64 `json:"last_block_age_seconds,omitempty"`
+	PeerCount           int    `json:"peer_count,omitempty"`
+	ActiveValidators    int    `json:"active_validators,omitempty"`
+	TotalValidators     int    `json:"total_validators,omitempty"`
+	Quorum              int    `json:"quorum,omitempty"`
+	NetworkHealth       string `json:"network_health,omitempty"`
+	TS                  int64  `json:"ts"`
 }
 
 func (s *Server) handleWalletEvents(w http.ResponseWriter, r *http.Request) {
@@ -147,19 +148,20 @@ func walletEventFromRuntime(kind string, runtime RuntimeStatusSnapshot, node *No
 		totalValidators = runtime.LiveValidators
 	}
 	return walletEvent{
-		Type:             kind,
-		Height:           runtime.Height,
-		FinalizedHeight:  runtime.FinalizedHeight,
-		Hash:             walletEventBlockHash(node, runtime.Height),
-		Mode:             mode,
-		Reason:           runtime.ConsensusDetectorReason,
-		FinalityLag:      runtime.ConsensusDetectorFinalityLagBlocks,
-		PeerCount:        runtime.Peers,
-		ActiveValidators: runtime.LiveValidators,
-		TotalValidators:  totalValidators,
-		Quorum:           runtime.RequiredQuorum,
-		NetworkHealth:    runtime.NetworkHealth,
-		TS:               time.Now().Unix(),
+		Type:                kind,
+		Height:              runtime.Height,
+		FinalizedHeight:     runtime.FinalizedHeight,
+		Hash:                walletEventBlockHash(node, runtime.Height),
+		Mode:                mode,
+		Reason:              runtime.ConsensusDetectorReason,
+		FinalityLag:         runtime.ConsensusDetectorFinalityLagBlocks,
+		LastBlockAgeSeconds: runtime.LastBlockAgeSeconds,
+		PeerCount:           runtime.Peers,
+		ActiveValidators:    runtime.LiveValidators,
+		TotalValidators:     totalValidators,
+		Quorum:              runtime.RequiredQuorum,
+		NetworkHealth:       runtime.NetworkHealth,
+		TS:                  time.Now().Unix(),
 	}
 }
 

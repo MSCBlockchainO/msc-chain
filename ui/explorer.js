@@ -26,6 +26,12 @@
     lastAppliedSeq: 0,
     refreshInFlight: false,
     refreshQueued: false,
+    realtimeSocket: null,
+    realtimeConnected: false,
+    realtimeAttempts: 0,
+    realtimeHeight: 0,
+    realtimeFinalized: 0,
+    heightAnimationTimer: null,
   };
 
   const byId = (id) => document.getElementById(id);
@@ -198,6 +204,83 @@
     if (!el) return;
     el.classList.remove("ok", "warn", "bad");
     if (tone) el.classList.add(tone);
+  };
+
+  const walletEventURL = () => {
+    try {
+      const url = new URL(state.rpcUrl || window.location.origin);
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      url.pathname = "/wallet/events";
+      url.search = "";
+      url.hash = "";
+      return url.toString();
+    } catch (_) {
+      return "";
+    }
+  };
+
+  const renderLiveHeight = ({ height, finalized, lastBlockAge, mode, peers, networkHealth, syncing, ready }) => {
+    const h = asIntOrNull(height);
+    const f = asIntOrNull(finalized);
+    const age = asIntOrNull(lastBlockAge);
+    const statusForTone = {
+      last_block_age_seconds: age,
+      degraded_after_seconds: state.latestStatus?.degraded_after_seconds,
+      halted_after_seconds: state.latestStatus?.halted_after_seconds,
+    };
+    const blockAgeText = age === null ? "-" : fmtAge(age);
+    const ageTone = blockAgeTone(statusForTone);
+    if (h !== null) {
+      if (els.height) els.height.textContent = String(h);
+      if (els.topHeight) els.topHeight.textContent = String(h);
+    }
+    if (f !== null && els.finalized) els.finalized.textContent = String(f);
+    if (els.lastBlockAge) {
+      els.lastBlockAge.textContent = blockAgeText;
+      setTone(els.lastBlockAge, ageTone);
+    }
+    if (els.topLastBlockAge) {
+      els.topLastBlockAge.textContent = blockAgeText;
+      setTone(els.topLastBlockAge, ageTone);
+    }
+    if (els.topCmd && mode) {
+      els.topCmd.textContent = asTextOrDash(mode);
+      const cmd = String(mode || "").toUpperCase();
+      setTone(els.topCmd, cmd === "NORMAL" ? "ok" : cmd === "HALTED" || cmd === "EMERGENCY" || cmd === "ATTACK" ? "bad" : "warn");
+    }
+    if (els.consensusDetectorMode && mode) els.consensusDetectorMode.textContent = asTextOrDash(mode);
+    if (els.topPeers && peers !== undefined && peers !== null) els.topPeers.textContent = String(peers);
+    if (els.peerCount && peers !== undefined && peers !== null) els.peerCount.textContent = String(peers);
+    if (els.topState) {
+      els.topState.textContent = syncing ? "SYNCING" : ready ? "READY" : networkHealth || "LIVE";
+      setTone(els.topState, syncing ? "warn" : "ok");
+    }
+  };
+
+  const animateConfirmedHeights = (heights, event) => {
+    const clean = Array.from(new Set((heights || []).map((x) => asIntOrNull(x)).filter((x) => x !== null && x > 0))).sort((a, b) => a - b);
+    if (state.heightAnimationTimer) {
+      clearTimeout(state.heightAnimationTimer);
+      state.heightAnimationTimer = null;
+    }
+    if (!clean.length) return;
+    let idx = 0;
+    const tick = () => {
+      const h = clean[idx];
+      renderLiveHeight({
+        height: h,
+        finalized: idx === clean.length - 1 ? event.finalized_height : null,
+        lastBlockAge: idx === clean.length - 1 ? event.last_block_age_seconds : null,
+        mode: event.mode,
+        peers: event.peer_count,
+        networkHealth: event.network_health,
+      });
+      idx += 1;
+      if (idx < clean.length) {
+        state.heightAnimationTimer = setTimeout(tick, 160);
+      }
+    };
+    tick();
   };
 
   const inferLogicalClock = (ts, height) => {
@@ -409,8 +492,6 @@
     const laneCandidates = asIntOrNull(status.validator_bootstrap_lane_candidates);
     const laneSlotsUsed = asIntOrNull(status.validator_bootstrap_lane_slots_used);
     const blockAge = asIntOrNull(status.last_block_age_seconds);
-    const blockAgeText = blockAge === null ? "-" : fmtAge(blockAge);
-    const ageTone = blockAgeTone(status);
     const expectedHash = asTextOrDash(status.validator_autoheal_expected_hash);
     const gotHash = asTextOrDash(status.validator_autoheal_got_hash);
     const mismatchHashText =
@@ -421,12 +502,20 @@
     els.nodeId.textContent = status.node_id || "-";
     els.chainId.textContent = status.chain_id || "-";
     els.nodeRole.textContent = status.role || (status.is_validator ? "validator" : "full");
-    els.height.textContent = String(status.height ?? "-");
-    els.finalized.textContent = String(status.finalized_height ?? "-");
-    if (els.lastBlockAge) {
-      els.lastBlockAge.textContent = blockAgeText;
-      setTone(els.lastBlockAge, ageTone);
-    }
+    const statusHeight = asIntOrNull(status.height);
+    const statusFinalized = asIntOrNull(status.finalized_height);
+    const displayHeight = Math.max(statusHeight || 0, state.realtimeHeight || 0) || status.height;
+    const displayFinalized = Math.max(statusFinalized || 0, state.realtimeFinalized || 0) || status.finalized_height;
+    renderLiveHeight({
+      height: displayHeight,
+      finalized: displayFinalized,
+      lastBlockAge: blockAge,
+      mode: status.consensus_detector_mode,
+      peers: status.peers,
+      networkHealth: status.network_health,
+      syncing: status.syncing,
+      ready: status.ready,
+    });
     els.peerCount.textContent = String(status.peers ?? "-");
     els.quorum.textContent = `${quorumLive === null ? "-" : quorumLive} / ${requiredQuorum === null ? "-" : requiredQuorum}`;
     els.consensusDetectorMode.textContent = asTextOrDash(status.consensus_detector_mode);
@@ -449,21 +538,6 @@
     if (status.consensus_running) parts.push("CONSENSUS");
     if (status.consensus_ready) parts.push("CONSENSUS_OK");
     els.stateText.textContent = parts.join(" | ");
-    if (els.topHeight) els.topHeight.textContent = String(status.height ?? "-");
-    if (els.topLastBlockAge) {
-      els.topLastBlockAge.textContent = blockAgeText;
-      setTone(els.topLastBlockAge, ageTone);
-    }
-    if (els.topCmd) {
-      els.topCmd.textContent = asTextOrDash(status.consensus_detector_mode);
-      const cmd = String(status.consensus_detector_mode || "").toUpperCase();
-      setTone(els.topCmd, cmd === "NORMAL" ? "ok" : cmd === "HALTED" || cmd === "EMERGENCY" || cmd === "ATTACK" ? "bad" : "warn");
-    }
-    if (els.topPeers) els.topPeers.textContent = String(status.peers ?? "-");
-    if (els.topState) {
-      els.topState.textContent = status.syncing ? "SYNCING" : status.ready ? "READY" : "LIVE";
-      setTone(els.topState, status.syncing ? "warn" : "ok");
-    }
   };
 
   const renderBlocks = (payload) => {
@@ -732,6 +806,60 @@
 
   const fetchPeersData = async () => apiV1("/v1/peers", "/explorer/peers");
 
+  const refreshBlocksPanel = async () => {
+    const payload = await fetchBlocksData();
+    state.latestBlocks = payload;
+    renderBlocks(payload);
+    return payload;
+  };
+
+  const renderRealtimeEvent = (event) => {
+    if (!event || typeof event !== "object") return;
+    const incomingHeight = asIntOrNull(event.height);
+    const incomingFinalized = asIntOrNull(event.finalized_height);
+    const currentHeight = Math.max(
+      state.realtimeHeight || 0,
+      asIntOrNull(state.latestStatus && state.latestStatus.height) || 0,
+    );
+    if (incomingHeight !== null && incomingHeight > 0) {
+      state.realtimeHeight = Math.max(state.realtimeHeight || 0, incomingHeight);
+    }
+    if (incomingFinalized !== null && incomingFinalized > 0) {
+      state.realtimeFinalized = Math.max(state.realtimeFinalized || 0, incomingFinalized);
+    }
+
+    const merged = {
+      ...(state.latestStatus || {}),
+      height: state.realtimeHeight || incomingHeight || state.latestStatus?.height,
+      finalized_height: state.realtimeFinalized || incomingFinalized || state.latestStatus?.finalized_height,
+      last_block_age_seconds:
+        event.last_block_age_seconds !== undefined ? event.last_block_age_seconds : state.latestStatus?.last_block_age_seconds,
+      consensus_detector_mode: event.mode || state.latestStatus?.consensus_detector_mode,
+      consensus_detector_reason: event.reason || state.latestStatus?.consensus_detector_reason,
+      peers: event.peer_count !== undefined ? event.peer_count : state.latestStatus?.peers,
+      network_health: event.network_health || state.latestStatus?.network_health,
+    };
+    state.latestStatus = merged;
+
+    if (incomingHeight !== null && incomingHeight > currentHeight + 1) {
+      refreshBlocksPanel()
+        .then((payload) => {
+          const confirmed = (payload.blocks || [])
+            .map((b) => asIntOrNull(b.height))
+            .filter((h) => h !== null && h > currentHeight && h <= incomingHeight)
+            .sort((a, b) => a - b);
+          animateConfirmedHeights(confirmed.length ? confirmed : [incomingHeight], event);
+        })
+        .catch(() => animateConfirmedHeights([incomingHeight], event));
+      return;
+    }
+
+    renderStatus(merged);
+    if (event.type === "new_block") {
+      refreshBlocksPanel().catch(() => {});
+    }
+  };
+
   const renderAllFromState = () => {
     if (state.latestStatus) renderStatus(state.latestStatus);
     if (state.latestBlocks) renderBlocks(state.latestBlocks);
@@ -810,7 +938,58 @@
 
   const restartTimer = () => {
     if (state.timer) clearInterval(state.timer);
-    state.timer = setInterval(refreshAll, state.refreshMs);
+    const interval = state.realtimeConnected ? Math.max(state.refreshMs, 15000) : state.refreshMs;
+    state.timer = setInterval(refreshAll, interval);
+  };
+
+  const connectRealtime = (force = false) => {
+    if (!window.WebSocket) {
+      state.realtimeConnected = false;
+      restartTimer();
+      return;
+    }
+    if (!force && state.realtimeSocket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(state.realtimeSocket.readyState)) {
+      return;
+    }
+    try {
+      state.realtimeSocket?.close();
+    } catch (_) {
+      // Best-effort cleanup before reconnecting to the active RPC.
+    }
+    const url = walletEventURL();
+    if (!url) return;
+    const ws = new WebSocket(url);
+    state.realtimeSocket = ws;
+    setConn("Connecting realtime...", "warn");
+    ws.onopen = () => {
+      if (state.realtimeSocket !== ws) return;
+      state.realtimeConnected = true;
+      state.realtimeAttempts = 0;
+      setConn("Realtime connected", "ok");
+      restartTimer();
+    };
+    ws.onmessage = (message) => {
+      try {
+        renderRealtimeEvent(JSON.parse(message.data || "{}"));
+      } catch (_) {
+        // Polling remains active as a safety net for malformed events.
+      }
+    };
+    ws.onerror = () => {
+      if (state.realtimeSocket !== ws) return;
+      state.realtimeConnected = false;
+      setConn("Realtime error - fallback polling", "warn");
+    };
+    ws.onclose = () => {
+      if (state.realtimeSocket !== ws) return;
+      state.realtimeConnected = false;
+      restartTimer();
+      const attempt = Math.min(6, state.realtimeAttempts + 1);
+      state.realtimeAttempts = attempt;
+      const delay = Math.min(60000, 1000 * (2 ** attempt)) + Math.floor(Math.random() * 1500);
+      setConn("Realtime fallback polling", "warn");
+      setTimeout(() => connectRealtime(), delay);
+    };
   };
 
   const applyConnection = () => {
@@ -828,6 +1007,7 @@
     localStorage.setItem("msc_token", state.apiToken);
 
     restartTimer();
+    connectRealtime(true);
     refreshAll();
   };
 
@@ -914,5 +1094,6 @@
   setAdminMode(state.adminMode);
 
   restartTimer();
+  connectRealtime();
   refreshAll();
 })();

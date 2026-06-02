@@ -37,6 +37,9 @@ const state = {
   balanceVerification: null,
   dataCache: null,
   schedulerTimer: null,
+  networkRefreshTimer: null,
+  lastNetworkMetadataRefreshAt: 0,
+  walletRefreshTimer: null,
   refreshRunning: false,
   pollDelayMs: POLL_FALLBACK_MIN_MS,
   realtime: {
@@ -45,6 +48,8 @@ const state = {
     fallback: true,
     lastEventAt: 0,
     reconnectAttempts: 0,
+    height: 0,
+    finalizedHeight: 0,
   },
 };
 
@@ -291,6 +296,12 @@ class WalletDataCache {
 
   set(key, data) {
     this.items[key] = { data, ts: Date.now() };
+    this.persist();
+  }
+
+  remove(key) {
+    if (!Object.prototype.hasOwnProperty.call(this.items, key)) return;
+    delete this.items[key];
     this.persist();
   }
 
@@ -731,10 +742,12 @@ function refreshRPCSettingsUI() {
 
 function renderNetworkStatus(status) {
   if (!status) return;
-  state.status = status;
   const best = status.best || status;
-  const height = best.height || status.height || status.chain_height || best.finalized_height || "-";
-  const finalized = best.finalized_height || status.finalized_height || status.finalized || "-";
+  const rawHeight = Number(best.height || status.height || status.chain_height || best.finalized_height || 0);
+  const rawFinalized = Number(best.finalized_height || status.finalized_height || status.finalized || 0);
+  const height = Math.max(Number.isFinite(rawHeight) ? rawHeight : 0, state.realtime.height || 0);
+  const finalized = Math.max(Number.isFinite(rawFinalized) ? rawFinalized : 0, state.realtime.finalizedHeight || 0);
+  state.status = { ...status, height, finalized_height: finalized };
   setText("topHeight", formatNumber(height));
   setText("networkStatus", status.health || status.network_health || "connected");
   setText("blockHeight", formatNumber(height));
@@ -1274,36 +1287,71 @@ function bindEvents() {
   });
 }
 
+function invalidateNetworkCache() {
+  state.dataCache?.remove("status");
+  state.dataCache?.remove("cmd");
+}
+
+function scheduleNetworkMetadataRefresh(delayMs = 1500, minGapMs = 10000) {
+  if (state.networkRefreshTimer) return;
+  const sinceLast = Date.now() - state.lastNetworkMetadataRefreshAt;
+  const delay = Math.max(delayMs, minGapMs - sinceLast, 0);
+  state.networkRefreshTimer = window.setTimeout(() => {
+    state.networkRefreshTimer = null;
+    state.lastNetworkMetadataRefreshAt = Date.now();
+    refreshNetwork({ force: true }).catch(() => {});
+  }, delay);
+}
+
+function scheduleWalletDataRefresh(delayMs = 1500) {
+  if (!state.wallet?.address || state.walletRefreshTimer) return;
+  state.walletRefreshTimer = window.setTimeout(() => {
+    state.walletRefreshTimer = null;
+    refreshBalance({ cacheOnly: false }).catch(() => {});
+    refreshTransactions({ cacheOnly: false }).catch(() => {});
+  }, delayMs);
+}
+
 function renderRealtimeEvent(event) {
   if (!event || typeof event !== "object") return;
   if (event.height) {
+    state.realtime.height = Math.max(state.realtime.height || 0, Number(event.height) || 0);
     setText("topHeight", formatNumber(event.height));
     setText("blockHeight", formatNumber(event.height));
     setText("latestBlocks", `height ${formatNumber(event.height)} | finalized ${formatNumber(event.finalized_height || "-")}`);
     setText("txBlockHeight", formatNumber(event.height));
   }
-  if (event.finalized_height) setText("finalizedHeight", formatNumber(event.finalized_height));
+  if (event.finalized_height) {
+    state.realtime.finalizedHeight = Math.max(state.realtime.finalizedHeight || 0, Number(event.finalized_height) || 0);
+    setText("finalizedHeight", formatNumber(event.finalized_height));
+  }
   if (event.mode) {
     setText("topCmd", event.mode);
     setText("cmdStatus", event.mode);
     setText("validatorCMD", event.mode);
+    state.cmd = { ...(state.cmd || {}), mode: event.mode, reason: event.reason || state.cmd?.reason };
   }
   if (event.network_health) setText("networkStatus", event.network_health);
+  state.status = {
+    ...(state.status || {}),
+    height: state.realtime.height || state.status?.height,
+    finalized_height: state.realtime.finalizedHeight || state.status?.finalized_height,
+    network_health: event.network_health || state.status?.network_health,
+  };
 }
 
 function handleRealtimeEvent(event) {
   state.realtime.lastEventAt = Date.now();
   renderRealtimeEvent(event);
   if (event.type === "hello") {
-    refreshNetwork({ cacheOnly: false }).catch(() => {});
+    invalidateNetworkCache();
+    refreshNetwork({ force: true }).catch(() => {});
     return;
   }
   if (event.type === "new_block" || event.type === "finality_update" || event.type === "consensus_mode") {
-    refreshNetwork({ cacheOnly: false }).catch(() => {});
-    if (state.wallet?.address) {
-      refreshBalance({ cacheOnly: false }).catch(() => {});
-      refreshTransactions({ cacheOnly: false }).catch(() => {});
-    }
+    invalidateNetworkCache();
+    scheduleNetworkMetadataRefresh();
+    scheduleWalletDataRefresh();
   }
   if (event.type === "validator_update") refreshValidators({ force: true }).catch(() => {});
   if (event.type === "tx_update" && (!event.address || event.address === state.wallet?.address)) {

@@ -28,7 +28,7 @@ func TestWalletEventsWebSocketHello(t *testing.T) {
 			Blocks: []Block{{ID: 1, BlockHash: "h1"}},
 		},
 		lastCommitHeight: 1,
-		lastCommitAt:     time.Now(),
+		lastCommitAt:     time.Now().Add(-2 * time.Second),
 	}
 	server := NewServer(node)
 	mux := http.NewServeMux()
@@ -57,6 +57,9 @@ func TestWalletEventsWebSocketHello(t *testing.T) {
 	}
 	if event.Height != 1 || event.FinalizedHeight != 1 || event.Hash != "h1" {
 		t.Fatalf("unexpected hello chain fields: %+v", event)
+	}
+	if event.LastBlockAgeSeconds == 0 || event.LastBlockAgeSeconds > 5 {
+		t.Fatalf("unexpected last block age: %+v", event)
 	}
 }
 
