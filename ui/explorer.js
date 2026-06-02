@@ -33,6 +33,9 @@
     realtimeHeight: 0,
     realtimeFinalized: 0,
     heightAnimationTimer: null,
+    lastBlockAgeBaseSeconds: null,
+    lastBlockAgeUpdatedAt: 0,
+    blockAgeTimer: null,
   };
 
   const byId = (id) => document.getElementById(id);
@@ -203,6 +206,48 @@
     return "ok";
   };
 
+  const currentLastBlockAge = () => {
+    const base = asIntOrNull(state.lastBlockAgeBaseSeconds);
+    if (base === null) return null;
+    const updatedAt = Number(state.lastBlockAgeUpdatedAt || 0);
+    const elapsed = updatedAt > 0 ? Math.max(0, Math.floor((Date.now() - updatedAt) / 1000)) : 0;
+    return base + elapsed;
+  };
+
+  const renderBlockAgeDisplay = (age) => {
+    const n = asIntOrNull(age);
+    const blockAgeText = n === null ? "-" : fmtAge(n);
+    const ageTone = blockAgeTone({
+      last_block_age_seconds: n,
+      degraded_after_seconds: state.latestStatus?.degraded_after_seconds,
+      halted_after_seconds: state.latestStatus?.halted_after_seconds,
+    });
+    if (els.lastBlockAge) {
+      els.lastBlockAge.textContent = blockAgeText;
+      setTone(els.lastBlockAge, ageTone);
+    }
+    if (els.topLastBlockAge) {
+      els.topLastBlockAge.textContent = blockAgeText;
+      setTone(els.topLastBlockAge, ageTone);
+    }
+  };
+
+  const updateBlockAgeBase = (age) => {
+    const n = asIntOrNull(age);
+    if (n === null) return;
+    state.lastBlockAgeBaseSeconds = n;
+    state.lastBlockAgeUpdatedAt = Date.now();
+    renderBlockAgeDisplay(n);
+  };
+
+  const startBlockAgeTicker = () => {
+    if (state.blockAgeTimer) return;
+    state.blockAgeTimer = setInterval(() => {
+      renderBlockAgeDisplay(currentLastBlockAge());
+      if (state.latestPublicNodes) renderPublicNodes(state.latestPublicNodes);
+    }, 1000);
+  };
+
   const setTone = (el, tone) => {
     if (!el) return;
     el.classList.remove("ok", "warn", "bad");
@@ -226,26 +271,13 @@
     const h = asIntOrNull(height);
     const f = asIntOrNull(finalized);
     const age = asIntOrNull(lastBlockAge);
-    const statusForTone = {
-      last_block_age_seconds: age,
-      degraded_after_seconds: state.latestStatus?.degraded_after_seconds,
-      halted_after_seconds: state.latestStatus?.halted_after_seconds,
-    };
-    const blockAgeText = age === null ? "-" : fmtAge(age);
-    const ageTone = blockAgeTone(statusForTone);
     if (h !== null) {
       if (els.height) els.height.textContent = String(h);
       if (els.topHeight) els.topHeight.textContent = String(h);
     }
     if (f !== null && els.finalized) els.finalized.textContent = String(f);
-    if (els.lastBlockAge) {
-      els.lastBlockAge.textContent = blockAgeText;
-      setTone(els.lastBlockAge, ageTone);
-    }
-    if (els.topLastBlockAge) {
-      els.topLastBlockAge.textContent = blockAgeText;
-      setTone(els.topLastBlockAge, ageTone);
-    }
+    if (age !== null) updateBlockAgeBase(age);
+    else renderBlockAgeDisplay(currentLastBlockAge());
     if (els.topCmd && mode) {
       els.topCmd.textContent = asTextOrDash(mode);
       const cmd = String(mode || "").toUpperCase();
@@ -778,6 +810,15 @@
       return;
     }
 
+    const displayNodeAge = (node) => {
+      const base = asIntOrNull(node.last_block_age_seconds);
+      if (base === null) return "-";
+      const checked = Number(node.last_checked || 0);
+      const checkedMs = checked > 0 ? (checked < 1e12 ? checked * 1000 : checked) : 0;
+      const elapsed = checkedMs > 0 ? Math.max(0, Math.floor((Date.now() - checkedMs) / 1000)) : 0;
+      return `${base + elapsed}s`;
+    };
+
     els.publicNodesBody.innerHTML = nodes
       .map((node) => {
         const status = node.healthy ? "healthy" : node.suspicious_reason || node.error ? "suspicious" : "degraded";
@@ -789,7 +830,7 @@
           <td class="mono">${node.height ?? 0}</td>
           <td class="mono">${node.finalized_height ?? 0}</td>
           <td class="mono">${node.finality_lag ?? "-"}</td>
-          <td class="mono">${node.last_block_age_seconds ?? "-"}s</td>
+          <td class="mono">${displayNodeAge(node)}</td>
           <td class="mono">${node.peer_count ?? "-"}</td>
           <td class="mono">${node.latency_ms ?? "-"}ms</td>
           <td class="mono">${node.consensus_mode || "-"}</td>
@@ -1149,6 +1190,7 @@
   els.refreshMs.value = String(state.refreshMs);
   setAdminMode(state.adminMode);
 
+  startBlockAgeTicker();
   restartTimer();
   connectRealtime();
   refreshAll();

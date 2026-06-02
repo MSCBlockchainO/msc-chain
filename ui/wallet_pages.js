@@ -52,7 +52,10 @@ const state = {
     reconnectAttempts: 0,
     height: 0,
     finalizedHeight: 0,
+    lastBlockAgeBaseSeconds: null,
+    lastBlockAgeUpdatedAt: 0,
   },
+  blockAgeTimer: null,
 };
 
 function normalizeRPC(raw) {
@@ -267,6 +270,46 @@ function formatNumber(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return value === 0 ? "0" : "-";
   return n.toLocaleString();
+}
+
+function formatAge(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n < 0) return "-";
+  if (n < 60) return `${Math.trunc(n)}s`;
+  const mins = Math.floor(n / 60);
+  const secs = Math.trunc(n % 60);
+  if (mins < 60) return secs ? `${mins}m ${secs}s` : `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins ? `${hours}h ${remMins}m` : `${hours}h`;
+}
+
+function currentLastBlockAge() {
+  const base = Number(state.realtime.lastBlockAgeBaseSeconds);
+  if (!Number.isFinite(base) || base < 0) return null;
+  const updatedAt = Number(state.realtime.lastBlockAgeUpdatedAt || 0);
+  const elapsed = updatedAt > 0 ? Math.max(0, Math.floor((Date.now() - updatedAt) / 1000)) : 0;
+  return Math.trunc(base) + elapsed;
+}
+
+function setLastBlockAgeBase(seconds) {
+  const age = Number(seconds);
+  if (!Number.isFinite(age) || age < 0) return;
+  state.realtime.lastBlockAgeBaseSeconds = Math.trunc(age);
+  state.realtime.lastBlockAgeUpdatedAt = Date.now();
+  renderLastBlockAge();
+}
+
+function renderLastBlockAge() {
+  setText("topLastBlockAge", formatAge(currentLastBlockAge()));
+}
+
+function startBlockAgeTicker() {
+  if (state.blockAgeTimer) return;
+  state.blockAgeTimer = window.setInterval(() => {
+    renderLastBlockAge();
+    renderPublicNodesRegistry(state.publicNodesRegistry);
+  }, 1000);
 }
 
 function stripHTML(value) {
@@ -780,6 +823,14 @@ function renderPublicNodesRegistry(data) {
   setText("settingsPublicNodesBest", registry.best || registry.best_node?.rpc_url || "-");
   const box = $("settingsPublicNodesHealth");
   if (!box) return;
+  const displayNodeAge = (item) => {
+    const base = Number(item.last_block_age_seconds);
+    if (!Number.isFinite(base) || base < 0) return "-";
+    const checked = Number(item.last_checked || 0);
+    const checkedMs = checked > 0 ? (checked < 1e12 ? checked * 1000 : checked) : 0;
+    const elapsed = checkedMs > 0 ? Math.max(0, Math.floor((Date.now() - checkedMs) / 1000)) : 0;
+    return formatAge(Math.trunc(base) + elapsed);
+  };
   box.innerHTML = nodes
     .map((item) => {
       const tone = item.healthy ? "success" : item.suspicious_reason || item.error ? "error" : "";
@@ -791,7 +842,7 @@ function renderPublicNodesRegistry(data) {
           <span>${item.healthy ? "healthy" : "degraded"}</span>
           <span>score ${Math.round(Number(item.score || 0))}</span>
           <span>h ${formatNumber(item.height || 0)}</span>
-          <span>age ${item.last_block_age_seconds ?? "-"}s</span>
+          <span>age ${displayNodeAge(item)}</span>
           <span>${item.latency_ms ?? "-"}ms</span>
           <span>${flags || "-"}</span>
         </div>`;
@@ -880,6 +931,7 @@ function renderNetworkStatus(status) {
   const height = Math.max(Number.isFinite(rawHeight) ? rawHeight : 0, state.realtime.height || 0);
   const finalized = Math.max(Number.isFinite(rawFinalized) ? rawFinalized : 0, state.realtime.finalizedHeight || 0);
   state.status = { ...status, height, finalized_height: finalized };
+  setLastBlockAgeBase(best.last_block_age_seconds ?? status.last_block_age_seconds);
   setText("topHeight", formatNumber(height));
   setText("networkStatus", status.health || status.network_health || "connected");
   setText("blockHeight", formatNumber(height));
@@ -1365,6 +1417,7 @@ function installShell() {
           <span class="pill">RPC <strong id="topRpc">-</strong></span>
           <span class="pill">Realtime <strong id="topRealtime">Polling</strong></span>
           <span class="pill">Height <strong id="topHeight">-</strong></span>
+          <span class="pill">Last block <strong id="topLastBlockAge">-</strong></span>
           <span class="pill">CMD <strong id="topCmd">-</strong></span>
           <span class="pill">Wallet <strong id="topWallet">No wallet</strong></span>
         </div>
@@ -1466,6 +1519,7 @@ function renderRealtimeEvent(event) {
     state.cmd = { ...(state.cmd || {}), mode: event.mode, reason: event.reason || state.cmd?.reason };
   }
   if (event.network_health) setText("networkStatus", event.network_health);
+  if (event.last_block_age_seconds !== undefined) setLastBlockAgeBase(event.last_block_age_seconds);
   if (Array.isArray(event.public_nodes)) {
     applyPublicNodeRegistry({
       status: event.public_nodes_healthy === event.public_nodes_total ? "healthy" : event.public_nodes_healthy > 0 ? "degraded" : "down",
@@ -1482,6 +1536,8 @@ function renderRealtimeEvent(event) {
     height: state.realtime.height || state.status?.height,
     finalized_height: state.realtime.finalizedHeight || state.status?.finalized_height,
     network_health: event.network_health || state.status?.network_health,
+    last_block_age_seconds:
+      event.last_block_age_seconds !== undefined ? event.last_block_age_seconds : state.status?.last_block_age_seconds,
   };
 }
 
@@ -1598,6 +1654,7 @@ window.MSC_WALLET_RPC_MANAGER = state.rpcManager;
 installShell();
 bindEvents();
 initTheme();
+startBlockAgeTicker();
 refreshAll({ cacheOnly: true });
 refreshPublicNodes({ force: true })
   .catch(() => {})
