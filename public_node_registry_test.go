@@ -105,6 +105,36 @@ func TestPublicNodesEndpointReturnsTrustedFullNodes(t *testing.T) {
 	}
 }
 
+func TestPublicNodesThroughRPCHardening(t *testing.T) {
+	oldRequireRead := ConfigRPCRequireAuthForReadEndpoints
+	oldAPIToken := apiToken
+	defer func() {
+		ConfigRPCRequireAuthForReadEndpoints = oldRequireRead
+		apiToken = oldAPIToken
+	}()
+	ConfigRPCRequireAuthForReadEndpoints = false
+	apiToken = ""
+
+	full := newPublicNodeProbeServer("full", 120, 120, "NORMAL", "abc")
+	defer full.Close()
+	withPublicNodeRegistryTestEnv(t, "F|"+full.URL+"|full")
+
+	server := NewServer(&Node{ID: "F", Role: "full"})
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/public-nodes", server.handlePublicNodes)
+	ts := httptest.NewServer(withRPCHardening(server.Node, mux))
+	defer ts.Close()
+
+	res, err := http.Get(ts.URL + "/v1/public-nodes")
+	if err != nil {
+		t.Fatalf("get public nodes through hardening: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.StatusCode)
+	}
+}
+
 func TestPublicNodesExcludesValidatorRPCs(t *testing.T) {
 	full := newPublicNodeProbeServer("full", 120, 120, "NORMAL", "abc")
 	validator := newPublicNodeProbeServer("validator", 120, 120, "NORMAL", "abc")
