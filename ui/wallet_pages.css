@@ -60,6 +60,11 @@ a {
   gap: 12px;
 }
 
+.status-row {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
 .logo {
   width: 46px;
   height: 46px;
@@ -200,6 +205,7 @@ a {
 .pill {
   display: inline-flex;
   align-items: center;
+  gap: 7px;
   width: fit-content;
   min-height: 30px;
   border-radius: 999px;
@@ -210,6 +216,18 @@ a {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.pill-label {
+  color: currentColor;
+  opacity: 0.78;
+}
+
+.pill strong {
+  color: var(--text);
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
 }
 
 .pill.success {
@@ -303,7 +321,7 @@ button:disabled {
 
 .health-row {
   display: grid;
-  grid-template-columns: minmax(220px, 2fr) repeat(5, minmax(86px, 1fr));
+  grid-template-columns: minmax(180px, 1.55fr) minmax(110px, 0.9fr) minmax(90px, 0.7fr) minmax(92px, 0.7fr) minmax(92px, 0.7fr) minmax(180px, 1.35fr);
   gap: 8px;
   align-items: center;
   border: 1px solid var(--border);
@@ -312,6 +330,14 @@ button:disabled {
   padding: 10px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.health-row > span {
+  min-width: 0;
+}
+
+.health-row > span:first-child {
+  overflow-wrap: anywhere;
 }
 
 .health-row.success {

@@ -284,6 +284,10 @@ function formatAge(seconds) {
   return remMins ? `${hours}h ${remMins}m` : `${hours}h`;
 }
 
+function pillHTML(label, id, fallback = "-") {
+  return `<span class="pill-label">${label}</span><strong id="${id}">${fallback}</strong>`;
+}
+
 function currentLastBlockAge() {
   const base = Number(state.realtime.lastBlockAgeBaseSeconds);
   if (!Number.isFinite(base) || base < 0) return null;
@@ -1478,12 +1482,12 @@ function installShell() {
         </div>
         <div class="status-row">
           <span id="networkPill" class="pill">Mainnet</span>
-          <span class="pill">RPC <strong id="topRpc">-</strong></span>
-          <span class="pill">Realtime <strong id="topRealtime">Polling</strong></span>
-          <span class="pill">Height <strong id="topHeight">-</strong></span>
-          <span class="pill">Last block <strong id="topLastBlockAge">-</strong></span>
-          <span class="pill">CMD <strong id="topCmd">-</strong></span>
-          <span class="pill">Wallet <strong id="topWallet">No wallet</strong></span>
+          <span class="pill">${pillHTML("RPC", "topRpc")}</span>
+          <span class="pill">${pillHTML("Realtime", "topRealtime", "Polling")}</span>
+          <span class="pill">${pillHTML("Height", "topHeight")}</span>
+          <span class="pill">${pillHTML("Last block", "topLastBlockAge")}</span>
+          <span class="pill">${pillHTML("CMD", "topCmd")}</span>
+          <span class="pill">${pillHTML("Wallet", "topWallet", "No wallet")}</span>
         </div>
       </header>
     </div>`;
