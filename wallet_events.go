@@ -25,7 +25,7 @@ type walletEvent struct {
 	Mode                string `json:"mode,omitempty"`
 	Reason              string `json:"reason,omitempty"`
 	FinalityLag         uint64 `json:"finality_lag,omitempty"`
-	LastBlockAgeSeconds uint64 `json:"last_block_age_seconds,omitempty"`
+	LastBlockAgeSeconds uint64 `json:"last_block_age_seconds"`
 	PeerCount           int    `json:"peer_count,omitempty"`
 	ActiveValidators    int    `json:"active_validators,omitempty"`
 	TotalValidators     int    `json:"total_validators,omitempty"`
