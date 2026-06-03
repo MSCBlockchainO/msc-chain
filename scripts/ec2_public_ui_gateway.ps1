@@ -124,7 +124,8 @@ upstream_body="${upstream_body}}\n"
 active_upstream_body="${active_upstream_body}}\n"
 printf "%b" "$upstream_body" | sudo tee /etc/nginx/conf.d/msc_rpc_upstream.conf >/dev/null
 printf "%b" "$active_upstream_body" | sudo tee /etc/nginx/conf.d/msc_rpc_active_upstream.conf >/dev/null
-printf "%b" "$public_routes_body" | sudo tee /etc/nginx/conf.d/msc_public_node_routes.conf >/dev/null
+sudo rm -f /etc/nginx/conf.d/msc_public_node_routes.conf
+printf "%b" "$public_routes_body" | sudo tee /etc/nginx/msc_public_node_routes.inc >/dev/null
 
 sudo tee /etc/nginx/conf.d/msc_public_gateway_limits.conf >/dev/null <<'NGINX'
 limit_req_zone $binary_remote_addr zone=msc_static:10m rate=600r/m;
@@ -201,7 +202,7 @@ server {
         try_files $uri =404;
     }
 
-    include /etc/nginx/conf.d/msc_public_node_routes.conf;
+    include /etc/nginx/msc_public_node_routes.inc;
 
     # Public JSON-RPC is allowed only through this full-node gateway. Validator
     # RPC ports must remain private or loopback-only.
