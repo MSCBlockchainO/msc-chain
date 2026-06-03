@@ -327,6 +327,14 @@ func (n *Node) stabilizeConsensusDetectorResult(candidate ConsensusDetectorResul
 		return candidate
 	}
 
+	if consensusDetectorHealthierCandidate(candidate.Mode) &&
+		consensusDetectorSoftStableMode(n.consensusDetectorStableMode, n.consensusDetectorStableReason) {
+		n.consensusDetectorStableMode = string(candidate.Mode)
+		n.consensusDetectorStableReason = candidate.Reason
+		candidate.StableModeReason = candidate.Reason
+		return candidate
+	}
+
 	if candidate.Mode == ConsensusDetectorAttack ||
 		candidate.Mode == ConsensusDetectorHalted ||
 		candidate.Mode == ConsensusDetectorEmergency ||
@@ -345,4 +353,19 @@ func (n *Node) stabilizeConsensusDetectorResult(candidate ConsensusDetectorResul
 	held.Reason = n.consensusDetectorStableReason
 	held.StableModeReason = fmt.Sprintf("holding_%s_pending_%s", strings.ToLower(n.consensusDetectorStableMode), strings.ToLower(string(candidate.Mode)))
 	return held
+}
+
+func consensusDetectorHealthierCandidate(mode ConsensusDetectorMode) bool {
+	return mode == ConsensusDetectorNormal || mode == ConsensusDetectorStrict
+}
+
+func consensusDetectorSoftStableMode(mode, reason string) bool {
+	switch ConsensusDetectorMode(strings.ToUpper(strings.TrimSpace(mode))) {
+	case ConsensusDetectorDegraded, ConsensusDetectorRecovery:
+		return true
+	case ConsensusDetectorPartition:
+		return reason != "network_quorum_loss"
+	default:
+		return false
+	}
 }

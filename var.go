@@ -372,7 +372,7 @@ var ConsensusRecomputePause = 4 * time.Second
 
 // ConsensusDetectorDegradedAfter controls when CMD marks sustained block/finality
 // slowness as DEGRADED. It is intentionally higher than normal block cadence.
-var ConsensusDetectorDegradedAfter = 12 * time.Second
+var ConsensusDetectorDegradedAfter = 30 * time.Second
 
 // ConsensusDetectorHaltedAfter controls when CMD reports finality timeout as HALTED.
 var ConsensusDetectorHaltedAfter = 60 * time.Second

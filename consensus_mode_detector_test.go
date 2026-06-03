@@ -218,6 +218,17 @@ func TestConsensusModeDetectorStabilizesSoftModeChanges(t *testing.T) {
 	if got.Mode != ConsensusDetectorRecovery || got.CandidateSamples != 2 {
 		t.Fatalf("expected second recovery sample to stabilize, got=%+v", got)
 	}
+	healthy := ConsensusDetectorResult{
+		Mode:            ConsensusDetectorNormal,
+		Code:            consensusDetectorModeCode(ConsensusDetectorNormal),
+		Reason:          "healthy",
+		CandidateMode:   ConsensusDetectorNormal,
+		CandidateReason: "healthy",
+	}
+	got = node.stabilizeConsensusDetectorResult(healthy)
+	if got.Mode != ConsensusDetectorNormal || got.CandidateSamples != 1 {
+		t.Fatalf("expected healthy sample to clear soft recovery immediately, got=%+v", got)
+	}
 }
 
 func TestHandleConsensusModeEndpoint(t *testing.T) {

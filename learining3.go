@@ -28330,6 +28330,9 @@ func applyConsensusConfig(cc ConsensusConfig) bool {
 	if cc.DetectorDegradedAfterSeconds > 0 {
 
 		ConsensusDetectorDegradedAfter = time.Duration(cc.DetectorDegradedAfterSeconds) * time.Second
+		if ConsensusDetectorDegradedAfter < 30*time.Second {
+			ConsensusDetectorDegradedAfter = 30 * time.Second
+		}
 
 		changed = true
 
