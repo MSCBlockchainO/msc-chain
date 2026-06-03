@@ -90,7 +90,10 @@ if [ "${#MSC_RPC_TARGETS[@]}" -eq 0 ]; then
   MSC_RPC_TARGETS=("127.0.0.1:26665")
 fi
 upstream_body="upstream msc_rpc_backend {\n    least_conn;\n    keepalive 32;\n"
+active_upstream_body="upstream msc_rpc_active_backend {\n    least_conn;\n    keepalive 32;\n"
+public_routes_body=""
 upstream_count=0
+active_upstream_count=0
 first_clean=""
 for target in "${MSC_RPC_TARGETS[@]}"; do
   clean="$(echo "$target" | xargs)"
@@ -101,6 +104,13 @@ for target in "${MSC_RPC_TARGETS[@]}"; do
   if curl -fsS --max-time 2 "http://${clean}/status" >/dev/null 2>&1; then
     upstream_body="${upstream_body}    server ${clean} max_fails=2 fail_timeout=10s;\n"
     upstream_count=$((upstream_count + 1))
+    if [ "$active_upstream_count" -eq 0 ]; then
+      active_upstream_body="${active_upstream_body}    server ${clean} max_fails=2 fail_timeout=10s;\n"
+      active_upstream_count=$((active_upstream_count + 1))
+    fi
+    node_id="$(curl -fsS --max-time 2 "http://${clean}/status" 2>/dev/null | python3 -c 'import json, re, sys; data=json.load(sys.stdin); raw=str(data.get("node_id") or ""); raw=re.sub(r"[^A-Za-z0-9_-]", "_", raw).strip("_"); print(raw or "NODE")' 2>/dev/null || true)"
+    if [ -z "$node_id" ]; then node_id="NODE${upstream_count}"; fi
+    public_routes_body="${public_routes_body}    location ~ ^/public-rpc/${node_id}/(.*)$ {\n        limit_req zone=msc_read burst=40 nodelay;\n        rewrite ^/public-rpc/${node_id}/(.*)$ /\$1 break;\n        proxy_pass http://${clean};\n        proxy_http_version 1.1;\n        proxy_set_header Host \$host;\n        proxy_set_header X-Real-IP \$remote_addr;\n        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto \$scheme;\n        add_header Cache-Control \"no-store\" always;\n    }\n"
   else
     echo "WARN skipping unreachable nginx upstream target ${clean}; lb-status will still report it."
   fi
@@ -108,9 +118,13 @@ done
 if [ "$upstream_count" -eq 0 ] && [ -n "$first_clean" ]; then
   echo "WARN no RPC targets answered health check; keeping first target ${first_clean} in upstream."
   upstream_body="${upstream_body}    server ${first_clean} max_fails=2 fail_timeout=10s;\n"
+  active_upstream_body="${active_upstream_body}    server ${first_clean} max_fails=2 fail_timeout=10s;\n"
 fi
 upstream_body="${upstream_body}}\n"
+active_upstream_body="${active_upstream_body}}\n"
 printf "%b" "$upstream_body" | sudo tee /etc/nginx/conf.d/msc_rpc_upstream.conf >/dev/null
+printf "%b" "$active_upstream_body" | sudo tee /etc/nginx/conf.d/msc_rpc_active_upstream.conf >/dev/null
+printf "%b" "$public_routes_body" | sudo tee /etc/nginx/conf.d/msc_public_node_routes.conf >/dev/null
 
 sudo tee /etc/nginx/conf.d/msc_public_gateway_limits.conf >/dev/null <<'NGINX'
 limit_req_zone $binary_remote_addr zone=msc_static:10m rate=600r/m;
@@ -187,11 +201,13 @@ server {
         try_files $uri =404;
     }
 
+    include /etc/nginx/conf.d/msc_public_node_routes.conf;
+
     # Public JSON-RPC is allowed only through this full-node gateway. Validator
     # RPC ports must remain private or loopback-only.
     location ~ ^/(rpc|jsonrpc|v1/rpc)$ {
         limit_req zone=msc_rpc burst=30 nodelay;
-        proxy_pass http://msc_rpc_backend;
+        proxy_pass http://msc_rpc_active_backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -201,7 +217,7 @@ server {
 
     location ~ ^/(sendTx|submitTx|faucet|stake|unstake|pool/transfer|auth/challenge|auth/verify|wallet/create|wallet/recover|v1/tx|v1/sendTx|v1/submitTx) {
         limit_req zone=msc_write burst=10 nodelay;
-        proxy_pass http://msc_rpc_backend;
+        proxy_pass http://msc_rpc_active_backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -223,7 +239,7 @@ server {
 
     location ~ ^/(status|healthz|misbehavior|validators|validatorset/hash|validatorset/audit|validators/pending|validators/diversity|public-nodes|consensus/mode|formal/verification|storage/policy|bridge/status|bridge/verify|light/headers|light/checkpoint/latest|proof/balance|proof/tx|proof/receipt|tx/status|txs|explorer/blocks|explorer/block|explorer/tx|explorer/peers|balance|nonce|nonce/pending|wallet/status|coins|tokenomics|governance/status|governance/proposals|upgrade/status|dtl/quote|dtl/route_quote|dtl/farm_info|dtl/season_info|dtl/leaderboard|dtl/nft721/owner|dtl/nft1155/owner|v1/) {
         limit_req zone=msc_read burst=40 nodelay;
-        proxy_pass http://msc_rpc_backend;
+        proxy_pass http://msc_rpc_active_backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -233,7 +249,7 @@ server {
 
     location = /wallet/events {
         limit_req zone=msc_read burst=40 nodelay;
-        proxy_pass http://msc_rpc_backend;
+        proxy_pass http://msc_rpc_active_backend;
         proxy_http_version 1.1;
         proxy_buffering off;
         proxy_cache off;
@@ -250,7 +266,7 @@ server {
 
     location = /v1/wallet/events {
         limit_req zone=msc_read burst=40 nodelay;
-        proxy_pass http://msc_rpc_backend;
+        proxy_pass http://msc_rpc_active_backend;
         proxy_http_version 1.1;
         proxy_buffering off;
         proxy_cache off;
@@ -365,6 +381,8 @@ for target in targets:
     peers = int(status_data.get("peers") or status_data.get("peer_count") or 0)
     block_age = int(status_data.get("last_block_age_seconds") or 0)
     mode = str(cmd_data.get("mode") or status_data.get("consensus_detector_mode") or "").upper()
+    syncing = bool(status_data.get("syncing") or False)
+    sync_complete = bool(status_data.get("sync_complete") if "sync_complete" in status_data else (not syncing))
     suspicious = ""
     if role == "validator":
         suspicious = "validator_rpc_not_allowed"
@@ -379,13 +397,19 @@ for target in targets:
         score += 9 if latency_ms <= 250 else (5 if latency_ms <= 1000 else (2 if latency_ms <= 2500 else 0))
         score = max(0, min(100, score))
     node_healthy = healthy and score >= 60 and not suspicious
+    raw_id = str(status_data.get("node_id") or target).strip()
+    safe_id = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in raw_id).strip("_") or "NODE"
     rpc_url = base
-    if domain and base.startswith("http://127.0.0.1"):
-        rpc_url = "https://" + domain
+    gateway_rpc_url = ""
+    if domain:
+        gateway_rpc_url = "https://" + domain + "/public-rpc/" + safe_id
+        if base.startswith("http://127.0.0.1"):
+            rpc_url = gateway_rpc_url
     backends.append({
         "target": target,
-        "id": str(status_data.get("node_id") or target).strip(),
+        "id": raw_id,
         "rpc_url": rpc_url,
+        "gateway_rpc_url": gateway_rpc_url,
         "role": role,
         "public_gateway": True,
         "healthy": node_healthy,
@@ -401,6 +425,8 @@ for target in targets:
         "peer_count": peers,
         "consensus_mode": mode,
         "network_health": str(status_data.get("network_health") or ""),
+        "syncing": syncing,
+        "sync_complete": sync_complete,
         "score": score,
         "suspicious_reason": suspicious,
         "last_checked": int(time.time()),
@@ -449,6 +475,22 @@ def bad_threshold(reason):
     if reason == "height_lag":
         return 3
     return 2
+
+def active_excluded_reason(item):
+    if not item.get("healthy"):
+        return str(item.get("health_reason") or item.get("suspicious_reason") or "unhealthy")
+    if str(item.get("health_state") or "").lower() != "healthy":
+        return str(item.get("health_reason") or "not_stably_healthy")
+    if int(item.get("height_lag_blocks") or 0) > 2:
+        return "height_lag"
+    if int(item.get("finality_lag") or 0) > 2:
+        return "finality_lag"
+    if item.get("syncing") or not item.get("sync_complete"):
+        return "syncing"
+    mode = str(item.get("consensus_mode") or "").upper()
+    if mode in ("PARTITION", "HALTED", "ATTACK", "RECOVERY", "DEGRADED"):
+        return mode.lower()
+    return ""
 
 now = int(time.time())
 for item in backends:
@@ -522,6 +564,41 @@ for item in backends:
     }
     if item.get("healthy"):
         healthy_count += 1
+active_candidates = []
+for item in backends:
+    excluded = active_excluded_reason(item)
+    item["active_gateway"] = False
+    item["selected_reason"] = ""
+    item["excluded_reason"] = excluded
+    if not excluded:
+        active_candidates.append(item)
+active_candidates = sorted(
+    active_candidates,
+    key=lambda item: (
+        -int(item.get("score") or 0),
+        int(item.get("height_lag_blocks") or 0),
+        int(item.get("finality_lag") or 0),
+        int(item.get("latency_ms") or 0),
+        str(item.get("id") or item.get("target") or ""),
+    ),
+)
+if active_candidates:
+    for item in active_candidates:
+        item["active_gateway"] = True
+        item["selected_reason"] = "stable_healthy_backend"
+        item["excluded_reason"] = ""
+else:
+    fallback = None
+    for candidate in sorted(backends, key=lambda it: (-int(it.get("score") or 0), int(it.get("latency_ms") or 0), str(it.get("id") or it.get("target") or ""))):
+        if candidate.get("status_code") == 200:
+            fallback = candidate
+            break
+    if fallback is None and backends:
+        fallback = backends[0]
+    if fallback is not None:
+        fallback["active_gateway"] = True
+        fallback["selected_reason"] = "fallback_no_strict_backend"
+        fallback["excluded_reason"] = ""
 try:
     tmp_state = state_path + ".tmp"
     with open(tmp_state, "w", encoding="utf-8") as fh:
@@ -540,6 +617,17 @@ healthy_sorted = sorted(
     ),
 )
 best_node = healthy_sorted[0] if healthy_sorted else (backends[0] if backends else None)
+active_targets = [str(item.get("target") or "") for item in backends if item.get("active_gateway") and item.get("target")]
+if not active_targets and backends:
+    active_targets = [str(backends[0].get("target") or "")]
+active_conf = "upstream msc_rpc_active_backend {\n    least_conn;\n    keepalive 32;\n"
+for target in active_targets:
+    clean = target.replace("http://", "").replace("https://", "").strip()
+    if clean:
+        active_conf += f"    server {clean} max_fails=2 fail_timeout=10s;\n"
+active_conf += "}\n"
+with open(out + ".active-upstream", "w", encoding="utf-8") as fh:
+    fh.write(active_conf)
 payload = {
     "status": "healthy" if healthy_count == len(backends) and backends else ("degraded" if healthy_count else "down"),
     "healthy": healthy_count,
@@ -547,6 +635,7 @@ payload = {
     "failover_count": 0,
     "last_switch": "",
     "backends": backends,
+    "active_targets": active_targets,
     "ts": int(time.time()),
 }
 public_nodes = {
@@ -568,6 +657,16 @@ PY
   then
     sudo mv "$tmp" "$out"
     sudo mv "$tmp.public-nodes" "$public_nodes_out"
+    if [ -s "$tmp.active-upstream" ]; then
+      if ! cmp -s "$tmp.active-upstream" /etc/nginx/conf.d/msc_rpc_active_upstream.conf 2>/dev/null; then
+        sudo mv "$tmp.active-upstream" /etc/nginx/conf.d/msc_rpc_active_upstream.conf
+        if sudo nginx -t >/dev/null 2>&1; then
+          sudo systemctl reload nginx >/dev/null 2>&1 || true
+        fi
+      else
+        rm -f "$tmp.active-upstream"
+      fi
+    fi
     sudo chmod 0644 "$out"
     sudo chmod 0644 "$public_nodes_out"
     sudo chown www-data:www-data "$out" 2>/dev/null || sudo chown nginx:nginx "$out" 2>/dev/null || true
@@ -575,6 +674,7 @@ PY
   else
     rm -f "$tmp"
     rm -f "$tmp.public-nodes"
+    rm -f "$tmp.active-upstream"
   fi
   sleep 5
 done

@@ -589,7 +589,7 @@ class WalletRPCManager {
       nodes
         .filter((item) => item && item.public_gateway !== false)
         .filter((item) => !String(item.role || "full").toLowerCase().includes("validator"))
-        .map((item) => item.rpc_url || item.rpc || item.url),
+        .map((item) => item.gateway_rpc_url || item.rpc_url || item.rpc || item.url),
     );
     this.discoveredPublic = new Set(discovered.map((rpc) => rpc.toLowerCase()));
     if (!discovered.length) return;
@@ -602,7 +602,7 @@ class WalletRPCManager {
 
   updateHealthFromPublicNodes(nodes = []) {
     const normalized = nodes
-      .map((node) => ({ node, raw: node?.rpc_url || node?.rpc || node?.url || "" }))
+      .map((node) => ({ node, raw: node?.gateway_rpc_url || node?.rpc_url || node?.rpc || node?.url || "" }))
       .filter((item) => isUsableRPC(item.raw))
       .map((item) => ({ node: item.node, rpc: normalizeRPC(item.raw) }));
     const maxHeight = Math.max(0, ...normalized.map((item) => Number(item.node.height || 0)));
@@ -628,11 +628,14 @@ class WalletRPCManager {
         cmdMode: String(node.consensus_mode || "UNKNOWN").toUpperCase(),
         checkedAt: Number(node.last_checked || 0) ? Number(node.last_checked) * 1000 : Date.now(),
         suspicious: healthState === "unhealthy" || !!suspiciousReason || this.suspicious.has(rpc),
-        error: suspiciousReason || node.health_reason || node.error || "",
+        error: node.excluded_reason || suspiciousReason || node.health_reason || node.error || "",
         healthState: healthState || (healthy ? "healthy" : "unknown"),
         staleBy,
         source: "public-node-registry",
         publicGateway: node.public_gateway !== false,
+        activeGateway: !!node.active_gateway,
+        selectedReason: node.selected_reason || "",
+        excludedReason: node.excluded_reason || "",
       });
     }
     const best = this.bestEndpoints(1)[0];
@@ -981,12 +984,18 @@ function renderPublicNodesRegistry(data) {
       const ageSeconds = publicNodeDisplayAgeSeconds(item);
       const tone = publicNodeTone(item, bestHeight);
       const state = item.health_state || (item.healthy ? "healthy" : "unhealthy");
-      const flags = [state, item.health_reason, item.consensus_mode, item.network_health, item.suspicious_reason, item.error].filter(Boolean).join(" | ");
+      const gateway = item.active_gateway
+        ? `active ${item.selected_reason || ""}`.trim()
+        : item.excluded_reason
+          ? `standby ${item.excluded_reason}`
+          : "standby";
+      const flags = [gateway, state, item.health_reason, item.consensus_mode, item.network_health, item.suspicious_reason, item.error].filter(Boolean).join(" | ");
       return `
         <div class="health-row public-node-row ${tone}">
           <span class="mono">${item.id || "-"}</span>
-          <span class="mono">${item.rpc_url || "-"}</span>
+          <span class="mono">${item.gateway_rpc_url || item.rpc_url || "-"}</span>
           <span>${escapeHTML(state)}</span>
+          <span>${escapeHTML(item.active_gateway ? "active" : "standby")}</span>
           <span>score ${Math.round(Number(item.score || 0))}</span>
           <span>h ${formatNumber(item.height || 0)}</span>
           <span>lag ${formatBlocks(heightLag)}</span>
@@ -1007,6 +1016,7 @@ function normalizeGatewayPublicNodes(payload) {
     ...item,
     id: item.id || item.node_id || item.target || item.rpc_url || "-",
     rpc_url: item.rpc_url || window.location.origin,
+    gateway_rpc_url: item.gateway_rpc_url || item.rpc_url || window.location.origin,
     role: item.role || "full",
     public_gateway: item.public_gateway !== false,
     healthy: item.health_state ? String(item.health_state).toLowerCase() !== "unhealthy" : (!!item.healthy || Number(item.status_code) === 200),

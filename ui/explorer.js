@@ -958,7 +958,7 @@
     els.publicNodesMeta.textContent = `healthy=${healthy}/${total} best=${best}`;
 
     if (!nodes.length) {
-      els.publicNodesBody.innerHTML = "<tr><td colspan=\"13\">No public full nodes discovered yet</td></tr>";
+      els.publicNodesBody.innerHTML = "<tr><td colspan=\"14\">No public full nodes discovered yet</td></tr>";
       return;
     }
     const bestHeight = Math.max(0, ...nodes.map((node) => Number(node.height || 0)).filter((height) => Number.isFinite(height)));
@@ -966,15 +966,17 @@
     els.publicNodesBody.innerHTML = nodes
       .map((node) => {
         const status = node.health_state || (node.healthy ? "healthy" : node.suspicious_reason || node.error ? "unhealthy" : "warning");
-        const reason = node.health_reason || node.suspicious_reason || node.error || node.network_health || "-";
+        const gateway = node.active_gateway ? "active" : node.excluded_reason ? `standby:${node.excluded_reason}` : "standby";
+        const reason = node.selected_reason || node.excluded_reason || node.health_reason || node.suspicious_reason || node.error || node.network_health || "-";
         const tone = publicNodeTone(node, bestHeight);
         const heightLag = publicNodeHeightLag(node, bestHeight);
         const finalityLag = asIntOrNull(node.finality_lag) || 0;
         const age = publicNodeDisplayAgeSeconds(node);
         return `<tr class="${tone}">
           <td class="mono">${node.id || "-"}</td>
-          <td class="mono">${short(node.rpc_url || "-", 18)}</td>
+          <td class="mono">${short(node.gateway_rpc_url || node.rpc_url || "-", 18)}</td>
           <td class="mono ${tone === "ok" ? "ok" : tone === "warn" ? "warn" : "bad"}">${status}</td>
+          <td class="mono">${gateway}</td>
           <td class="mono">${node.height ?? 0}</td>
           <td class="mono">${fmtBlocks(heightLag)}</td>
           <td class="mono">${fmtBlocks(finalityLag)}</td>

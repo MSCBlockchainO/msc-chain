@@ -199,6 +199,28 @@ func TestPublicNodesComputesHeightLag(t *testing.T) {
 	}
 }
 
+func TestPublicNodesActiveGatewayExcludesLaggingBackend(t *testing.T) {
+	fast := newPublicNodeProbeServer("full", 45680, 45680, "NORMAL", "abc")
+	slow := newPublicNodeProbeServer("full", 45677, 45677, "NORMAL", "abc")
+	defer fast.Close()
+	defer slow.Close()
+	withPublicNodeRegistryTestEnv(t, "F|"+slow.URL+"|full;G|"+fast.URL+"|full")
+
+	_ = publicNodesSnapshot(&Node{ID: "F", Role: "full"}, true)
+	payload := publicNodesSnapshot(&Node{ID: "F", Role: "full"}, true)
+	f := findPublicNodeByID(payload.Nodes, "F")
+	g := findPublicNodeByID(payload.Nodes, "G")
+	if f == nil || g == nil {
+		t.Fatalf("expected F/G nodes, got %+v", payload.Nodes)
+	}
+	if f.ActiveGateway || f.ExcludedReason != "height_lag" {
+		t.Fatalf("expected lagging F excluded from active gateway, got %+v", f)
+	}
+	if !g.ActiveGateway || g.SelectedReason == "" {
+		t.Fatalf("expected healthy G active gateway, got %+v", g)
+	}
+}
+
 func TestPublicNodeHealthHysteresisForHeightLag(t *testing.T) {
 	fast := newPublicNodeProbeServer("full", 100, 100, "NORMAL", "abc")
 	slowHeight := uint64(75)

@@ -39,8 +39,12 @@ type PublicNodesConfig struct {
 type publicNodeHealthView struct {
 	ID                  string `json:"id"`
 	RPCURL              string `json:"rpc_url"`
+	GatewayRPCURL       string `json:"gateway_rpc_url,omitempty"`
 	Role                string `json:"role"`
 	PublicGateway       bool   `json:"public_gateway"`
+	ActiveGateway       bool   `json:"active_gateway,omitempty"`
+	SelectedReason      string `json:"selected_reason,omitempty"`
+	ExcludedReason      string `json:"excluded_reason,omitempty"`
 	ChainID             string `json:"chain_id,omitempty"`
 	GenesisHash         string `json:"genesis_hash,omitempty"`
 	Version             string `json:"version,omitempty"`
@@ -56,6 +60,8 @@ type publicNodeHealthView struct {
 	PeerCount           int    `json:"peer_count"`
 	ConsensusMode       string `json:"consensus_mode,omitempty"`
 	NetworkHealth       string `json:"network_health,omitempty"`
+	Syncing             bool   `json:"syncing,omitempty"`
+	SyncComplete        bool   `json:"sync_complete,omitempty"`
 	LatencyMS           int64  `json:"latency_ms"`
 	Healthy             bool   `json:"healthy"`
 	HealthState         string `json:"health_state,omitempty"`
@@ -335,6 +341,7 @@ func publicNodesSnapshot(node *Node, force bool) publicNodesPayload {
 	}
 	annotatePublicNodeHeightLag(views)
 	best := publicNodeBest(views)
+	assignPublicNodeActiveGateway(views)
 	healthy := 0
 	for _, view := range views {
 		if view.Healthy {
@@ -561,6 +568,7 @@ func probePublicNode(cfg PublicNodeConfig) publicNodeHealthView {
 	view := publicNodeHealthView{
 		ID:            cfg.ID,
 		RPCURL:        cfg.RPCURL,
+		GatewayRPCURL: publicNodeGatewayRPCURL(cfg.ID),
 		Role:          cfg.Role,
 		PublicGateway: true,
 		ChainID:       ChainID,
@@ -597,6 +605,12 @@ func probePublicNode(cfg PublicNodeConfig) publicNodeHealthView {
 	view.LastBlockAgeSeconds = uint64FromAny(statusData["last_block_age_seconds"])
 	view.PeerCount = int(uint64FromAny(firstNonNil(statusData["peers"], statusData["peer_count"])))
 	view.NetworkHealth = stringFromAny(statusData["network_health"])
+	view.Syncing = boolFromAny(statusData["syncing"])
+	if _, ok := statusData["sync_complete"]; ok {
+		view.SyncComplete = boolFromAny(statusData["sync_complete"])
+	} else {
+		view.SyncComplete = !view.Syncing
+	}
 	if role := strings.ToLower(strings.TrimSpace(stringFromAny(statusData["role"]))); role != "" {
 		view.Role = role
 	}
@@ -636,6 +650,14 @@ func probePublicNode(cfg PublicNodeConfig) publicNodeHealthView {
 	view.Score = publicNodeScore(view)
 	view.Healthy = view.Score >= 60 && view.SuspiciousReason == ""
 	return view
+}
+
+func publicNodeGatewayRPCURL(id string) string {
+	id = strings.Trim(strings.TrimSpace(id), "/")
+	if id == "" {
+		return ""
+	}
+	return strings.TrimRight(defaultPublicNodeRPC, "/") + "/public-rpc/" + url.PathEscape(id)
 }
 
 func publicNodeFetchJSON(client *http.Client, rawURL string) (int, map[string]any, error) {
@@ -701,6 +723,9 @@ func publicNodeScore(view publicNodeHealthView) int {
 	} else if view.LatencyMS <= 2500 {
 		score += 2
 	}
+	if view.Syncing || !view.SyncComplete {
+		score -= 12
+	}
 	if score < 0 {
 		return 0
 	}
@@ -728,6 +753,71 @@ func publicNodeBest(nodes []publicNodeHealthView) *publicNodeHealthView {
 		return sorted[i].LatencyMS < sorted[j].LatencyMS
 	})
 	return &sorted[0]
+}
+
+func assignPublicNodeActiveGateway(nodes []publicNodeHealthView) {
+	bestIndex := -1
+	for i := range nodes {
+		reason := publicNodeActiveGatewayExcludedReason(nodes[i])
+		if reason != "" {
+			nodes[i].ActiveGateway = false
+			nodes[i].ExcludedReason = reason
+			continue
+		}
+		nodes[i].SelectedReason = "eligible"
+		if bestIndex < 0 ||
+			nodes[i].Score > nodes[bestIndex].Score ||
+			(nodes[i].Score == nodes[bestIndex].Score && nodes[i].HeightLagBlocks < nodes[bestIndex].HeightLagBlocks) ||
+			(nodes[i].Score == nodes[bestIndex].Score && nodes[i].HeightLagBlocks == nodes[bestIndex].HeightLagBlocks && nodes[i].LatencyMS < nodes[bestIndex].LatencyMS) {
+			bestIndex = i
+		}
+	}
+	if bestIndex >= 0 {
+		nodes[bestIndex].ActiveGateway = true
+		nodes[bestIndex].SelectedReason = "highest_score_lowest_lag"
+		return
+	}
+	fallback := publicNodeBest(nodes)
+	if fallback == nil {
+		return
+	}
+	for i := range nodes {
+		if nodes[i].ID == fallback.ID && nodes[i].RPCURL == fallback.RPCURL {
+			nodes[i].ActiveGateway = true
+			nodes[i].SelectedReason = "fallback_no_strict_backend"
+			nodes[i].ExcludedReason = ""
+			return
+		}
+	}
+}
+
+func publicNodeActiveGatewayExcludedReason(view publicNodeHealthView) string {
+	if !view.Healthy || strings.EqualFold(view.HealthState, "unhealthy") {
+		if view.HealthReason != "" {
+			return view.HealthReason
+		}
+		return "unhealthy"
+	}
+	if !strings.EqualFold(view.HealthState, "healthy") {
+		if view.HealthReason != "" {
+			return view.HealthReason
+		}
+		return "not_stably_healthy"
+	}
+	if view.HeightLagBlocks > 2 {
+		return "height_lag"
+	}
+	if view.FinalityLag > 2 {
+		return "finality_lag"
+	}
+	if view.Syncing || !view.SyncComplete {
+		return "syncing"
+	}
+	switch strings.ToUpper(strings.TrimSpace(view.ConsensusMode)) {
+	case "PARTITION", "HALTED", "ATTACK", "RECOVERY", "DEGRADED":
+		return strings.ToLower(strings.TrimSpace(view.ConsensusMode))
+	}
+	return ""
 }
 
 func expectedPublicNodeGenesisHash() string {
@@ -772,6 +862,25 @@ func uint64FromAny(value any) uint64 {
 		return n
 	}
 	return 0
+}
+
+func boolFromAny(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		v = strings.TrimSpace(strings.ToLower(v))
+		return v == "1" || v == "true" || v == "yes" || v == "y"
+	case float64:
+		return v != 0
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	case uint64:
+		return v != 0
+	}
+	return false
 }
 
 func stringFromAny(value any) string {

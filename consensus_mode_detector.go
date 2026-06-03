@@ -20,21 +20,24 @@ const (
 )
 
 type ConsensusDetectorMetrics struct {
-	Height            uint64
-	FinalizedHeight   uint64
-	TotalValidators   int
-	ActiveValidators  int
-	Quorum            int
-	MaxValidatorLag   uint64
-	PeerCount         int
-	MissedVotes       int
-	BlockTimeMS       int64
-	DoubleSign        bool
-	ForkDetected      bool
-	SyncingValidators int
-	LastFinalitySec   int64
-	PartitionRisk     bool
-	FinalityLagBlocks uint64
+	Height                uint64
+	FinalizedHeight       uint64
+	NodeRole              string
+	TotalValidators       int
+	ActiveValidators      int
+	Quorum                int
+	NetworkQuorumVotes    int
+	NetworkQuorumRequired int
+	MaxValidatorLag       uint64
+	PeerCount             int
+	MissedVotes           int
+	BlockTimeMS           int64
+	DoubleSign            bool
+	ForkDetected          bool
+	SyncingValidators     int
+	LastFinalitySec       int64
+	PartitionRisk         bool
+	FinalityLagBlocks     uint64
 
 	DegradedAfterSec           int64
 	HaltedAfterSec             int64
@@ -45,6 +48,10 @@ type ConsensusDetectorResult struct {
 	Mode              ConsensusDetectorMode
 	Code              int
 	Reason            string
+	CandidateMode     ConsensusDetectorMode
+	CandidateReason   string
+	CandidateSamples  int
+	StableModeReason  string
 	FinalityLagBlocks uint64
 	LastFinalitySec   int64
 	PartitionRisk     bool
@@ -67,6 +74,10 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 	result := ConsensusDetectorResult{
 		Mode:                       ConsensusDetectorNormal,
 		Reason:                     "healthy",
+		CandidateMode:              ConsensusDetectorNormal,
+		CandidateReason:            "healthy",
+		CandidateSamples:           1,
+		StableModeReason:           "healthy",
 		FinalityLagBlocks:          finalityLag,
 		LastFinalitySec:            m.LastFinalitySec,
 		PartitionRisk:              m.PartitionRisk,
@@ -75,6 +86,16 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 		HaltedAfterSec:             haltedAfterSec,
 		RecoveryValidatorLagBlocks: recoveryLagBlocks,
 	}
+
+	localCatchup := m.SyncingValidators > 0 && !strings.EqualFold(strings.TrimSpace(m.NodeRole), "validator")
+	quorumVotesOK := m.NetworkQuorumRequired == 0 || m.NetworkQuorumVotes >= m.NetworkQuorumRequired
+	networkQuorumLoss := m.NetworkQuorumRequired > 0 && m.NetworkQuorumVotes > 0 && m.NetworkQuorumVotes < m.NetworkQuorumRequired
+	softLocalPartition := m.PartitionRisk &&
+		localCatchup &&
+		finalityLag == 0 &&
+		m.Quorum > 0 &&
+		m.ActiveValidators >= m.Quorum &&
+		quorumVotesOK
 
 	switch {
 	case m.DoubleSign || m.ForkDetected:
@@ -86,9 +107,15 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 	case m.Quorum > 0 && m.ActiveValidators < m.Quorum:
 		result.Mode = ConsensusDetectorEmergency
 		result.Reason = fmt.Sprintf("active_validators_%d_below_quorum_%d", m.ActiveValidators, m.Quorum)
-	case m.PartitionRisk:
+	case networkQuorumLoss:
+		result.Mode = ConsensusDetectorPartition
+		result.Reason = "network_quorum_loss"
+	case m.PartitionRisk && !softLocalPartition:
 		result.Mode = ConsensusDetectorPartition
 		result.Reason = "partition_risk"
+	case localCatchup:
+		result.Mode = ConsensusDetectorRecovery
+		result.Reason = "local_sync_catchup"
 	case m.SyncingValidators > 0 || m.MaxValidatorLag > recoveryLagBlocks:
 		result.Mode = ConsensusDetectorRecovery
 		result.Reason = "validator_recovery"
@@ -114,6 +141,9 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 		result.Mode = ConsensusDetectorNormal
 		result.Reason = "healthy"
 	}
+	result.CandidateMode = result.Mode
+	result.CandidateReason = result.Reason
+	result.StableModeReason = result.Reason
 	result.Code = consensusDetectorModeCode(result.Mode)
 	return result
 }
@@ -227,20 +257,23 @@ func (n *Node) consensusDetectorMetricsFromRuntime(runtime RuntimeStatusSnapshot
 	}
 
 	return ConsensusDetectorMetrics{
-		Height:            runtime.Height,
-		FinalizedHeight:   runtime.FinalizedHeight,
-		TotalValidators:   total,
-		ActiveValidators:  runtime.LiveValidators,
-		Quorum:            quorum,
-		MaxValidatorLag:   runtime.NetworkLagBlocks,
-		PeerCount:         runtime.Peers,
-		MissedVotes:       runtime.LiveOutOfDriftCount,
-		BlockTimeMS:       int64(runtime.LastBlockAgeSeconds) * 1000,
-		ForkDetected:      runtime.ExecMismatchUniqueSignersCurrentEpoch > 0,
-		SyncingValidators: syncingValidators,
-		LastFinalitySec:   lastFinalitySec,
-		PartitionRisk:     partitionRisk,
-		FinalityLagBlocks: finalityLag,
+		Height:                runtime.Height,
+		FinalizedHeight:       runtime.FinalizedHeight,
+		NodeRole:              runtime.Role,
+		TotalValidators:       total,
+		ActiveValidators:      runtime.LiveValidators,
+		Quorum:                quorum,
+		NetworkQuorumVotes:    runtime.NetworkQuorumVotes,
+		NetworkQuorumRequired: runtime.NetworkQuorumRequired,
+		MaxValidatorLag:       runtime.NetworkLagBlocks,
+		PeerCount:             runtime.Peers,
+		MissedVotes:           runtime.LiveOutOfDriftCount,
+		BlockTimeMS:           int64(runtime.LastBlockAgeSeconds) * 1000,
+		ForkDetected:          runtime.ExecMismatchUniqueSignersCurrentEpoch > 0,
+		SyncingValidators:     syncingValidators,
+		LastFinalitySec:       lastFinalitySec,
+		PartitionRisk:         partitionRisk,
+		FinalityLagBlocks:     finalityLag,
 
 		DegradedAfterSec:           int64(ConsensusDetectorDegradedAfter / time.Second),
 		HaltedAfterSec:             int64(ConsensusDetectorHaltedAfter / time.Second),
@@ -252,12 +285,64 @@ func (n *Node) applyConsensusModeDetector(out *RuntimeStatusSnapshot) {
 	if n == nil || out == nil {
 		return
 	}
-	result := DetectConsensusMode(n.consensusDetectorMetricsFromRuntime(*out))
+	result := n.stabilizeConsensusDetectorResult(DetectConsensusMode(n.consensusDetectorMetricsFromRuntime(*out)))
 	out.ConsensusDetectorMode = string(result.Mode)
 	out.ConsensusDetectorCode = result.Code
 	out.ConsensusDetectorReason = result.Reason
+	out.ConsensusDetectorCandidateMode = string(result.CandidateMode)
+	out.ConsensusDetectorCandidateReason = result.CandidateReason
+	out.ConsensusDetectorCandidateSamples = result.CandidateSamples
+	out.ConsensusDetectorStableModeReason = result.StableModeReason
 	out.ConsensusDetectorFinalityLagBlocks = result.FinalityLagBlocks
 	out.ConsensusDetectorLastFinalitySec = result.LastFinalitySec
 	out.ConsensusDetectorPartitionRisk = result.PartitionRisk
 	out.ConsensusDetectorAttack = result.Attack
+}
+
+func (n *Node) stabilizeConsensusDetectorResult(candidate ConsensusDetectorResult) ConsensusDetectorResult {
+	candidate.CandidateMode = candidate.Mode
+	candidate.CandidateReason = candidate.Reason
+	if n == nil {
+		candidate.CandidateSamples = 1
+		candidate.StableModeReason = candidate.Reason
+		return candidate
+	}
+	n.consensusDetectorMu.Lock()
+	defer n.consensusDetectorMu.Unlock()
+
+	if string(candidate.Mode) == n.consensusDetectorCandidateMode &&
+		candidate.Reason == n.consensusDetectorCandidateReason {
+		n.consensusDetectorCandidateSamples++
+	} else {
+		n.consensusDetectorCandidateMode = string(candidate.Mode)
+		n.consensusDetectorCandidateReason = candidate.Reason
+		n.consensusDetectorCandidateSamples = 1
+	}
+	candidate.CandidateSamples = n.consensusDetectorCandidateSamples
+
+	if n.consensusDetectorStableMode == "" {
+		n.consensusDetectorStableMode = string(candidate.Mode)
+		n.consensusDetectorStableReason = candidate.Reason
+		candidate.StableModeReason = candidate.Reason
+		return candidate
+	}
+
+	if candidate.Mode == ConsensusDetectorAttack ||
+		candidate.Mode == ConsensusDetectorHalted ||
+		candidate.Mode == ConsensusDetectorEmergency ||
+		(candidate.Mode == ConsensusDetectorPartition && candidate.Reason == "network_quorum_loss") ||
+		n.consensusDetectorCandidateSamples >= 2 ||
+		string(candidate.Mode) == n.consensusDetectorStableMode {
+		n.consensusDetectorStableMode = string(candidate.Mode)
+		n.consensusDetectorStableReason = candidate.Reason
+		candidate.StableModeReason = candidate.Reason
+		return candidate
+	}
+
+	held := candidate
+	held.Mode = ConsensusDetectorMode(n.consensusDetectorStableMode)
+	held.Code = consensusDetectorModeCode(held.Mode)
+	held.Reason = n.consensusDetectorStableReason
+	held.StableModeReason = fmt.Sprintf("holding_%s_pending_%s", strings.ToLower(n.consensusDetectorStableMode), strings.ToLower(string(candidate.Mode)))
+	return held
 }

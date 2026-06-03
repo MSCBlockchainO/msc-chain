@@ -45,6 +45,37 @@ func TestDetectConsensusModePriorityAndModes(t *testing.T) {
 			want: ConsensusDetectorPartition,
 		},
 		{
+			name: "network quorum loss is partition",
+			in: ConsensusDetectorMetrics{
+				TotalValidators:       4,
+				ActiveValidators:      4,
+				Quorum:                3,
+				NetworkQuorumVotes:    2,
+				NetworkQuorumRequired: 3,
+				PartitionRisk:         true,
+			},
+			want: ConsensusDetectorPartition,
+		},
+		{
+			name: "full node local catchup is recovery not partition",
+			in: ConsensusDetectorMetrics{
+				NodeRole:              "full",
+				Height:                100,
+				FinalizedHeight:       100,
+				TotalValidators:       4,
+				ActiveValidators:      4,
+				Quorum:                3,
+				NetworkQuorumVotes:    4,
+				NetworkQuorumRequired: 3,
+				SyncingValidators:     1,
+				MaxValidatorLag:       20,
+				PartitionRisk:         true,
+				FinalityLagBlocks:     0,
+				LastFinalitySec:       3,
+			},
+			want: ConsensusDetectorRecovery,
+		},
+		{
 			name: "emergency below quorum",
 			in: ConsensusDetectorMetrics{
 				TotalValidators:  4,
@@ -155,6 +186,37 @@ func TestDetectConsensusModePriorityAndModes(t *testing.T) {
 				t.Fatalf("code mismatch: got=%d want=%d", got.Code, consensusDetectorModeCode(tt.want))
 			}
 		})
+	}
+}
+
+func TestConsensusModeDetectorStabilizesSoftModeChanges(t *testing.T) {
+	node := &Node{}
+	base := ConsensusDetectorResult{
+		Mode:             ConsensusDetectorNormal,
+		Code:             consensusDetectorModeCode(ConsensusDetectorNormal),
+		Reason:           "healthy",
+		CandidateMode:    ConsensusDetectorNormal,
+		CandidateReason:  "healthy",
+		CandidateSamples: 1,
+	}
+	got := node.stabilizeConsensusDetectorResult(base)
+	if got.Mode != ConsensusDetectorNormal {
+		t.Fatalf("expected initial normal, got=%+v", got)
+	}
+	candidate := ConsensusDetectorResult{
+		Mode:            ConsensusDetectorRecovery,
+		Code:            consensusDetectorModeCode(ConsensusDetectorRecovery),
+		Reason:          "local_sync_catchup",
+		CandidateMode:   ConsensusDetectorRecovery,
+		CandidateReason: "local_sync_catchup",
+	}
+	got = node.stabilizeConsensusDetectorResult(candidate)
+	if got.Mode != ConsensusDetectorNormal || got.CandidateMode != ConsensusDetectorRecovery || got.CandidateSamples != 1 {
+		t.Fatalf("expected one recovery sample to hold normal, got=%+v", got)
+	}
+	got = node.stabilizeConsensusDetectorResult(candidate)
+	if got.Mode != ConsensusDetectorRecovery || got.CandidateSamples != 2 {
+		t.Fatalf("expected second recovery sample to stabilize, got=%+v", got)
 	}
 }
 

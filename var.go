@@ -2060,6 +2060,13 @@ type Node struct {
 
 	observabilityMu sync.RWMutex
 	observability   observabilityStats
+
+	consensusDetectorMu               sync.Mutex
+	consensusDetectorCandidateMode    string
+	consensusDetectorCandidateReason  string
+	consensusDetectorCandidateSamples int
+	consensusDetectorStableMode       string
+	consensusDetectorStableReason     string
 }
 
 type MapStats struct {

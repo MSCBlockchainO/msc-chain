@@ -34426,6 +34426,10 @@ type RuntimeStatusSnapshot struct {
 	ConsensusDetectorMode                 string
 	ConsensusDetectorCode                 int
 	ConsensusDetectorReason               string
+	ConsensusDetectorCandidateMode        string
+	ConsensusDetectorCandidateReason      string
+	ConsensusDetectorCandidateSamples     int
+	ConsensusDetectorStableModeReason     string
 	ConsensusDetectorFinalityLagBlocks    uint64
 	ConsensusDetectorLastFinalitySec      int64
 	ConsensusDetectorPartitionRisk        bool
@@ -35599,6 +35603,10 @@ func (s *Server) handleStatus(
 			"consensus_detector_mode":                     runtime.ConsensusDetectorMode,
 			"consensus_detector_code":                     runtime.ConsensusDetectorCode,
 			"consensus_detector_reason":                   runtime.ConsensusDetectorReason,
+			"consensus_detector_candidate_mode":           runtime.ConsensusDetectorCandidateMode,
+			"consensus_detector_candidate_reason":         runtime.ConsensusDetectorCandidateReason,
+			"consensus_detector_candidate_samples":        runtime.ConsensusDetectorCandidateSamples,
+			"consensus_detector_stable_mode_reason":       runtime.ConsensusDetectorStableModeReason,
 			"consensus_detector_finality_lag_blocks":      runtime.ConsensusDetectorFinalityLagBlocks,
 			"consensus_detector_last_finality_seconds":    runtime.ConsensusDetectorLastFinalitySec,
 			"consensus_detector_partition_risk":           runtime.ConsensusDetectorPartitionRisk,
@@ -35972,6 +35980,10 @@ func (s *Server) handleStatus(
 		"consensus_detector_mode":                  runtime.ConsensusDetectorMode,
 		"consensus_detector_code":                  runtime.ConsensusDetectorCode,
 		"consensus_detector_reason":                runtime.ConsensusDetectorReason,
+		"consensus_detector_candidate_mode":        runtime.ConsensusDetectorCandidateMode,
+		"consensus_detector_candidate_reason":      runtime.ConsensusDetectorCandidateReason,
+		"consensus_detector_candidate_samples":     runtime.ConsensusDetectorCandidateSamples,
+		"consensus_detector_stable_mode_reason":    runtime.ConsensusDetectorStableModeReason,
 		"consensus_detector_finality_lag_blocks":   runtime.ConsensusDetectorFinalityLagBlocks,
 		"consensus_detector_last_finality_seconds": runtime.ConsensusDetectorLastFinalitySec,
 		"consensus_detector_partition_risk":        runtime.ConsensusDetectorPartitionRisk,
@@ -36246,6 +36258,10 @@ func consensusModeResponse(runtime RuntimeStatusSnapshot, metrics ConsensusDetec
 		"mode":                           runtime.ConsensusDetectorMode,
 		"code":                           runtime.ConsensusDetectorCode,
 		"reason":                         runtime.ConsensusDetectorReason,
+		"candidate_mode":                 runtime.ConsensusDetectorCandidateMode,
+		"candidate_reason":               runtime.ConsensusDetectorCandidateReason,
+		"candidate_samples":              runtime.ConsensusDetectorCandidateSamples,
+		"stable_mode_reason":             runtime.ConsensusDetectorStableModeReason,
 		"height":                         runtime.Height,
 		"finalized_height":               runtime.FinalizedHeight,
 		"active_validators":              metrics.ActiveValidators,
@@ -40797,6 +40813,10 @@ func (s *Server) handleV1Status(w http.ResponseWriter, r *http.Request) {
 		"consensus_detector_mode":                    runtime.ConsensusDetectorMode,
 		"consensus_detector_code":                    runtime.ConsensusDetectorCode,
 		"consensus_detector_reason":                  runtime.ConsensusDetectorReason,
+		"consensus_detector_candidate_mode":          runtime.ConsensusDetectorCandidateMode,
+		"consensus_detector_candidate_reason":        runtime.ConsensusDetectorCandidateReason,
+		"consensus_detector_candidate_samples":       runtime.ConsensusDetectorCandidateSamples,
+		"consensus_detector_stable_mode_reason":      runtime.ConsensusDetectorStableModeReason,
 		"consensus_detector_finality_lag_blocks":     runtime.ConsensusDetectorFinalityLagBlocks,
 		"consensus_detector_last_finality_seconds":   runtime.ConsensusDetectorLastFinalitySec,
 		"consensus_detector_partition_risk":          runtime.ConsensusDetectorPartitionRisk,
