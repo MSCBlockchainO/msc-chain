@@ -21,6 +21,7 @@ const CACHE_TTL = {
   bridge: 60000,
   lb: 10000,
   publicNodes: 15000,
+  publicStatus: 10000,
 };
 const POLL_FALLBACK_MIN_MS = 15000;
 const POLL_FALLBACK_MAX_MS = 60000;
@@ -255,7 +256,10 @@ function renderVerification(verification) {
   const mode = verification?.mode || "spv_pending";
   let text = "SPV pending";
   let tone = "";
-  if (mode === "quorum") {
+  if (mode === "light") {
+    text = `Light verified h${verification.height || "-"}`;
+    tone = "success";
+  } else if (mode === "quorum") {
     text = `Quorum verified ${verification.matches}/${verification.checked}`;
     tone = "success";
   } else if (mode === "unverified") {
@@ -419,6 +423,12 @@ function stripHTML(value) {
   return String(value || "").replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function unwrapV1(payload) {
+  return payload && typeof payload === "object" && Object.prototype.hasOwnProperty.call(payload, "success")
+    ? payload.data
+    : payload;
+}
+
 class WalletDataCache {
   constructor(storageKey) {
     this.storageKey = storageKey;
@@ -485,6 +495,65 @@ function quorumKey(path, data) {
     });
   }
   return stableStringify(data);
+}
+
+function normalizeHexHash(value) {
+  const clean = String(value || "").trim().toLowerCase();
+  return /^[0-9a-f]{64}$/.test(clean) ? clean : "";
+}
+
+async function lightHashString(value) {
+  return bytesToHex(await sha256(enc.encode(String(value ?? ""))));
+}
+
+async function verifyLightMerkleProof(proof) {
+  const root = normalizeHexHash(proof?.root);
+  let current = normalizeHexHash(proof?.leaf_hash);
+  const leafValue = proof?.leaf_value;
+  const totalLeaves = Number(proof?.total_leaves || 0);
+  const leafIndex = Number(proof?.leaf_index ?? -1);
+  if (!root || !current || totalLeaves <= 0 || leafIndex < 0 || leafIndex >= totalLeaves) return false;
+  if (leafValue !== undefined && leafValue !== null && String(leafValue) !== "") {
+    const expectedLeaf = await lightHashString(leafValue);
+    if (expectedLeaf !== current) return false;
+  }
+  for (const sibling of proof?.siblings || []) {
+    const siblingHash = normalizeHexHash(sibling?.hash);
+    const position = String(sibling?.position || "").toLowerCase();
+    if (!siblingHash || (position !== "left" && position !== "right")) return false;
+    current = position === "left"
+      ? await lightHashString(`${siblingHash}${current}`)
+      : await lightHashString(`${current}${siblingHash}`);
+  }
+  return current === root;
+}
+
+async function verifyLightProofResponse(response, expectedRootField) {
+  const payload = unwrapV1(response);
+  const proof = payload?.proof;
+  const header = payload?.header;
+  if (!proof || !header) return null;
+  const proofRoot = normalizeHexHash(proof.root);
+  const headerRoot = normalizeHexHash(header?.[expectedRootField]);
+  if (!proofRoot || !headerRoot || proofRoot !== headerRoot) return null;
+  if (!(await verifyLightMerkleProof(proof))) return null;
+  return {
+    mode: "light",
+    height: header.height || payload?.value?.height || 0,
+    proof_type: payload.proof_type || "proof",
+    trusted: !!payload.trusted,
+    trust_source: payload.trust_source || expectedRootField,
+  };
+}
+
+async function verifyBalanceLightProof(address) {
+  if (!address) return null;
+  try {
+    const response = await state.rpcManager.proof("balance", { address, coin: "MSC", state: "finalized" });
+    return verifyLightProofResponse(response, "state_merkle_root");
+  } catch (_) {
+    return null;
+  }
 }
 
 function isRetryableRPCError(err) {
@@ -1038,6 +1107,15 @@ function normalizeGatewayPublicNodes(payload) {
   };
 }
 
+function escapeHTML(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function mergePublicNodeRegistry(base, update) {
   const baseNodes = Array.isArray(base?.nodes) ? base.nodes : [];
   const updateNodes = Array.isArray(update?.nodes) ? update.nodes : [];
@@ -1079,10 +1157,6 @@ function applyPublicNodeRegistry(data) {
 }
 
 async function refreshPublicNodes(options = {}) {
-  const unwrapV1 = (payload) =>
-    payload && typeof payload === "object" && Object.prototype.hasOwnProperty.call(payload, "success")
-      ? payload.data
-      : payload;
   let result = state.dataCache?.get("public-nodes", CACHE_TTL.publicNodes);
   if (result && (options.cacheOnly || (!options.force && result.fresh))) {
     result = { data: result.data?.data || result.data, fromCache: true };
@@ -1117,6 +1191,79 @@ async function refreshPublicNodes(options = {}) {
   }
   if (result?.data) applyPublicNodeRegistry(result.data);
   else renderPublicNodesRegistry(state.publicNodesRegistry);
+}
+
+function renderInfraServiceList(id, services) {
+  const box = $(id);
+  if (!box) return;
+  const list = Array.isArray(services) ? services : [];
+  box.innerHTML = list.map((item) => {
+    const stateText = item.state || (item.healthy ? "healthy" : "unhealthy");
+    const tone = item.healthy ? "success" : stateText === "not_configured" || stateText === "warning" ? "warn" : "error";
+    return `<div class="health-row ${tone}">
+      <span class="mono">${escapeHTML(item.id || item.role || "-")}</span>
+      <span>${escapeHTML(stateText)}</span>
+      <span>${formatLatency(item.latency_ms)}</span>
+      <span>${escapeHTML(item.role || "-")}</span>
+      <span>${item.last_checked || "-"}</span>
+      <span>${escapeHTML(item.reason || item.url || "-")}</span>
+    </div>`;
+  }).join("") || `<div class="list-item">No services configured</div>`;
+}
+
+function renderPublicStatus(data) {
+  const payload = unwrapV1(data);
+  if (!payload || typeof payload !== "object") return;
+  const chain = payload.chain || {};
+  const validators = payload.validators || {};
+  const publicRPC = payload.public_rpc || {};
+  const storage = payload.storage || {};
+  const light = payload.light_client || {};
+  const gateway = payload.gateway || {};
+
+  setText("statusChainHeight", formatNumber(chain.height || 0));
+  setText("statusFinalized", formatNumber(chain.finalized_height || 0));
+  setText("statusFinalityLag", formatBlocks(chain.finality_lag || 0));
+  setText("statusLastBlockAge", formatAge(chain.last_block_age_seconds || 0));
+  setText("statusCMD", chain.cmd || "-");
+  setText("statusNetwork", chain.network_health || "-");
+  setText("statusValidators", `${validators.active_ready || 0}/${validators.strict_quorum || validators.required_quorum || 0} ready`);
+  setText("statusValidatorPolicy", validators.validator_rpc || "private_only");
+  setText("statusPublicRPC", `${publicRPC.healthy || 0}/${publicRPC.total || 0} healthy`);
+  setText("statusBestRPC", publicRPC.best || "-");
+  setText("statusArchiveMode", storage.archive_mode ? "Archive mode active" : storage.retention_summary || "archive node required");
+  setText("statusStorageProfile", storage.profile || "-");
+  setText("statusLightClient", light.ready ? "ready" : light.status || "warming");
+  setText("statusProofAPIs", [light.headers, light.checkpoint, light.balance_proof, light.tx_proof, light.receipt_proof].filter(Boolean).join(" | "));
+  setText("statusGatewayLayout", gateway.layout || "-");
+  setText("statusGatewayEvents", gateway.events || "-");
+  setText("statusMetricsPublic", gateway.metrics_public === false ? "blocked/private" : "check gateway policy");
+  renderInfraServiceList("statusArchiveServices", payload.archive);
+  renderInfraServiceList("statusIndexerServices", payload.indexer);
+  if (publicRPC.nodes) {
+    applyPublicNodeRegistry({
+      status: publicRPC.status,
+      healthy: publicRPC.healthy,
+      total: publicRPC.total,
+      best: publicRPC.best,
+      nodes: publicRPC.nodes,
+      ts: payload.ts,
+    });
+  }
+}
+
+async function refreshPublicStatus(options = {}) {
+  if (!$("statusChainHeight")) return;
+  try {
+    const result = await cachedAPI("public-status", "/v1/public/status", {
+      ttl: CACHE_TTL.publicStatus,
+      force: !!options.force,
+      cacheOnly: !!options.cacheOnly,
+    });
+    renderPublicStatus(result?.data);
+  } catch (err) {
+    setText("statusNetwork", err.message || "status unavailable");
+  }
 }
 
 function selectedRPCReason(active, items) {
@@ -1247,6 +1394,13 @@ async function refreshBalance(options = {}) {
       { ttl: CACHE_TTL.balance, force: !!options.force, cacheOnly: !!options.cacheOnly, quorum: true },
     );
     renderBalanceData(balResult?.data, balResult?.verification);
+    if (!options.cacheOnly) {
+      const lightVerification = await verifyBalanceLightProof(state.wallet.address);
+      if (lightVerification) {
+        state.balanceVerification = lightVerification;
+        renderVerification(lightVerification);
+      }
+    }
   } catch (err) {
     setText("walletBalance", "balance unavailable");
     renderVerification({ mode: "mismatch", checked: 0, matches: 0 });
@@ -1637,6 +1791,7 @@ function installShell() {
         <a href="governance.html" data-page="governance">Governance</a>
         <a href="bridge.html" data-page="bridge">Bridge</a>
         <a href="security.html" data-page="security">Security</a>
+        <a href="status.html" data-page="status">Status</a>
         <a href="settings.html" data-page="settings">Settings</a>
       </nav>
     </aside>
@@ -1888,6 +2043,7 @@ async function refreshAll(options = {}) {
   await refreshValidators(options);
   await refreshGovernance(options);
   await refreshBridge(options);
+  await refreshPublicStatus(options);
 }
 
 function initTheme() {

@@ -1192,6 +1192,7 @@ Node status commands:
 
 ```powershell
 Invoke-RestMethod https://mscblockexplorer.in/status
+Invoke-RestMethod https://mscblockexplorer.in/v1/public/status
 Invoke-RestMethod https://mscblockexplorer.in/consensus/mode
 Invoke-RestMethod https://mscblockexplorer.in/formal/verification
 Invoke-RestMethod https://mscblockexplorer.in/storage/policy
@@ -1228,9 +1229,21 @@ Validator RPC should stay private or bound to localhost. Public traffic should u
 ```text
 Explorer: https://mscblockexplorer.in/explorer.html
 Wallet:   https://mscblockexplorer.in/msc_wallet.html
+Status:   https://mscblockexplorer.in/status.html
 DTL IDE:  https://mscblockexplorer.in/dtl_ide.html
 RPC:      https://mscblockexplorer.in
 ```
+
+Prepare new validators `H/I/J/K` as synced full nodes first. Activate them one at a time only after sync completes and finality remains stable:
+
+```powershell
+.\scripts\ec2_prepare_new_validators.ps1 `
+  -KeyPath "C:\Users\Mohammad Talha\Downloads\msc-key.pem" `
+  -NodeTargets "H=ubuntu@<H_PUBLIC_IP>","I=ubuntu@<I_PUBLIC_IP>","J=ubuntu@<J_PUBLIC_IP>","K=ubuntu@<K_PUBLIC_IP>" `
+  -Peers "<trusted-p2p-peer-list>"
+```
+
+The script binds validator RPC to `127.0.0.1`, generates MPC-ready validator config, prints each MPC public key, and prints the exact stake command to run after the node is fully synced.
 
 ### Backup, Snapshot, And Recovery
 

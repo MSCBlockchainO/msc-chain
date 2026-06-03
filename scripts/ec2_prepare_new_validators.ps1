@@ -134,7 +134,10 @@ sleep 5
 PUBKEY="\$(awk -F= '/^mpc_public_key=/ {print \$2}' "runtime-data/distributed/\$NODE_ID/mpc-setup.out" | tail -1)"
 echo "[ready] node=\$NODE_ID mpc_public_key=\$PUBKEY"
 echo "[logs] tail -f ~/msc-chain/runtime-logs/distributed/\$NODE_ID.node.log"
-echo "[stake after synced] ./msc-node stake \$NODE_ID 100 \$PUBKEY"
+echo "[sync check] ./msc-node sync-status --rpc http://127.0.0.1:\$RPC_PORT"
+echo "[activate only after synced]"
+echo "  ./msc-node stake --wallet ~/.msc/secure_wallet.json --validator \$NODE_ID --validator-pubkey \$PUBKEY --amount 100 --rpc https://mscblockexplorer.in"
+echo "[activation order] H -> wait stable -> I -> wait stable -> J -> wait stable -> K"
 '@
 
   $remoteScript = $remoteScript.
@@ -161,4 +164,6 @@ echo "[stake after synced] ./msc-node stake \$NODE_ID 100 \$PUBKEY"
 }
 
 Write-Host ""
-Write-Host "H/I/J/K should stay full nodes until each is fully synced. Activate one at a time with the printed MPC public key, then wait for stable finality before the next validator."
+Write-Host "H/I/J/K should stay full nodes until each is fully synced."
+Write-Host "Activate one at a time with the printed MPC public key, using a funded operator wallet."
+Write-Host "Keep validator RPC private; the script binds RPC to 127.0.0.1 by default."

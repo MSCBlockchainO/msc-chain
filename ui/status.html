@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSC Public Status</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260603b" />
+</head>
+<body data-page="status">
+  <main class="content">
+    <section class="page-hero">
+      <div class="eyebrow">MSC Public Infrastructure</div>
+      <h1>Status</h1>
+      <p class="muted">Validators stay private. Wallets, explorer, archive, indexers, and APIs use public full-node infrastructure.</p>
+    </section>
+
+    <section class="grid">
+      <div class="card"><div class="label">Height</div><div id="statusChainHeight" class="value">-</div></div>
+      <div class="card"><div class="label">Finalized</div><div id="statusFinalized" class="value">-</div></div>
+      <div class="card"><div class="label">Finality Lag</div><div id="statusFinalityLag" class="value">-</div></div>
+      <div class="card"><div class="label">Last Block Age</div><div id="statusLastBlockAge" class="value">-</div></div>
+      <div class="card"><div class="label">CMD</div><div id="statusCMD" class="value">-</div></div>
+      <div class="card"><div class="label">Network</div><div id="statusNetwork" class="value">-</div></div>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <div class="label">Validator Layer</div>
+        <div id="statusValidators" class="value">-</div>
+        <div id="statusValidatorPolicy" class="mono">private_only</div>
+      </div>
+      <div class="card">
+        <div class="label">Public RPC Mesh</div>
+        <div id="statusPublicRPC" class="value">-</div>
+        <div id="statusBestRPC" class="mono">-</div>
+      </div>
+      <div class="card">
+        <div class="label">Archive Policy</div>
+        <div id="statusStorageProfile" class="value">-</div>
+        <div id="statusArchiveMode" class="mono">-</div>
+      </div>
+      <div class="card">
+        <div class="label">Light Client</div>
+        <div id="statusLightClient" class="value">-</div>
+        <div id="statusProofAPIs" class="mono">-</div>
+      </div>
+      <div class="card">
+        <div class="label">Gateway</div>
+        <div id="statusGatewayLayout" class="value">-</div>
+        <div id="statusGatewayEvents" class="mono">-</div>
+      </div>
+      <div class="card">
+        <div class="label">Metrics Exposure</div>
+        <div id="statusMetricsPublic" class="value">-</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label">Archive Services</div>
+      <div id="statusArchiveServices" class="health-list"></div>
+    </section>
+
+    <section class="card">
+      <div class="label">Indexer Services</div>
+      <div id="statusIndexerServices" class="health-list"></div>
+    </section>
+
+    <section class="card">
+      <div class="label">Public Full / Archive Nodes</div>
+      <div id="settingsPublicNodesHealth" class="health-list"></div>
+    </section>
+  </main>
+  <script src="vendor/nacl.min.js"></script>
+  <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
+  <script src="wallet_pages.js?v=20260603b"></script>
+</body>
+</html>
