@@ -82,3 +82,75 @@ func TestPublicInfraStatusKeepsValidatorRPCsPrivate(t *testing.T) {
 		t.Fatalf("validator RPC leaked into public status: %+v", node)
 	}
 }
+
+func TestPublicInfraStatusReportsArchiveAndIndexerHealth(t *testing.T) {
+	archive := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/status":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"node_id":          "ARCHIVE1",
+				"role":             "full",
+				"is_validator":     false,
+				"chain_id":         ChainID,
+				"genesis_hash":     expectedGenesisHash(),
+				"height":           100,
+				"finalized_height": 100,
+			})
+		case "/storage/policy":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"profile":      "archive",
+				"archive_mode": true,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer archive.Close()
+	indexer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/indexer/status" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"healthy":          true,
+			"state":            "healthy",
+			"source_rpc":       archive.URL,
+			"indexed_height":   100,
+			"archive_height":   100,
+			"finalized_height": 100,
+			"index_lag":        0,
+			"archive_mode":     true,
+		})
+	}))
+	defer indexer.Close()
+	t.Setenv("MSC_ARCHIVE_ENDPOINTS", archive.URL)
+	t.Setenv("MSC_INDEXER_ENDPOINTS", indexer.URL)
+
+	server := NewServer(&Node{ID: "F", Role: "full"})
+	req := httptest.NewRequest(http.MethodGet, "/v1/public/status", nil)
+	rr := httptest.NewRecorder()
+	server.handleV1PublicInfraStatus(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	payload := decodeInfraStatusTest(t, rr.Body.Bytes())
+	archives, ok := payload["archive"].([]any)
+	if !ok || len(archives) != 1 {
+		t.Fatalf("archive services missing: %+v", payload["archive"])
+	}
+	archiveStatus, _ := archives[0].(map[string]any)
+	if archiveStatus["healthy"] != true || archiveStatus["archive_mode"] != true {
+		t.Fatalf("archive not healthy/archive mode: %+v", archiveStatus)
+	}
+	indexers, ok := payload["indexer"].([]any)
+	if !ok || len(indexers) != 1 {
+		t.Fatalf("indexer services missing: %+v", payload["indexer"])
+	}
+	indexerStatus, _ := indexers[0].(map[string]any)
+	indexLag, _ := indexerStatus["index_lag"].(float64)
+	if indexerStatus["healthy"] != true || indexLag != 0 {
+		t.Fatalf("indexer not healthy: %+v", indexerStatus)
+	}
+}

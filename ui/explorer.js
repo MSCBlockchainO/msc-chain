@@ -581,6 +581,33 @@
     }
   };
 
+  const unwrapSuccessPayload = (payload) => {
+    if (payload && typeof payload === "object" && Object.prototype.hasOwnProperty.call(payload, "success")) {
+      if (!payload.success) {
+        const message = (payload.error && payload.error.message) || "request failed";
+        throw new Error(message);
+      }
+      return payload.data;
+    }
+    return payload;
+  };
+
+  const apiFirst = async (paths) => {
+    let lastErr = null;
+    for (const path of paths) {
+      try {
+        return unwrapSuccessPayload(await api(path));
+      } catch (err) {
+        lastErr = err;
+        const st = Number(err && err.status);
+        if (![0, 404, 405, 429, 500, 502, 503, 504].includes(st)) {
+          throw err;
+        }
+      }
+    }
+    throw lastErr || new Error("all explorer sources unavailable");
+  };
+
   const renderChipList = (container, values, variant = "") => {
     if (!values || values.length === 0) {
       container.innerHTML = "<span class=\"meta\">None</span>";
@@ -1032,7 +1059,13 @@
 
   const fetchStatusData = async () => apiV1("/v1/status", "/status");
 
-  const fetchBlocksData = async () => apiV1("/v1/blocks?limit=40", "/explorer/blocks?limit=40");
+  const fetchBlocksData = async () =>
+    apiFirst([
+      "/indexer/blocks?limit=40",
+      "/archive-rpc/explorer/blocks?limit=40",
+      "/v1/blocks?limit=40",
+      "/explorer/blocks?limit=40",
+    ]);
 
   const fetchPeersData = async () => apiV1("/v1/peers", "/explorer/peers");
 
@@ -1125,19 +1158,34 @@
   };
 
   const loadBlockByHeight = async (height) => {
-    const data = await api(`/explorer/block?height=${encodeURIComponent(height)}`);
+    const encoded = encodeURIComponent(height);
+    const data = await apiFirst([
+      `/indexer/block?height=${encoded}`,
+      `/archive-rpc/explorer/block?height=${encoded}`,
+      `/explorer/block?height=${encoded}`,
+    ]);
     renderBlockDetail(data);
   };
 
   const loadBlockByHash = async (hash) => {
-    const data = await api(`/explorer/block?hash=${encodeURIComponent(hash)}`);
+    const encoded = encodeURIComponent(hash);
+    const data = await apiFirst([
+      `/indexer/block?hash=${encoded}`,
+      `/archive-rpc/explorer/block?hash=${encoded}`,
+      `/explorer/block?hash=${encoded}`,
+    ]);
     state.selectedBlockHeight = Number(data.height) || 0;
     renderBlockDetail(data);
   };
 
   const loadTx = async (txId) => {
     const encoded = encodeURIComponent(txId);
-    const data = await apiV1(`/v1/tx/${encoded}`, `/explorer/tx?tx_id=${encoded}`);
+    const data = await apiFirst([
+      `/indexer/tx?tx_id=${encoded}`,
+      `/archive-rpc/explorer/tx?tx_id=${encoded}`,
+      `/v1/tx/${encoded}`,
+      `/explorer/tx?tx_id=${encoded}`,
+    ]);
     renderTxDetail(data);
   };
 
@@ -1291,6 +1339,26 @@
           state.selectedBlockHeight = h;
           await loadBlockByHeight(h);
           return;
+        }
+        try {
+          const search = await apiFirst([`/indexer/search?q=${encodeURIComponent(query)}`]);
+          if (search && search.type === "block" && search.result) {
+            const block = search.result;
+            state.selectedBlockHeight = Number(block.height || block.summary?.height) || 0;
+            renderBlockDetail(block);
+            return;
+          }
+          if (search && search.type === "tx" && search.result) {
+            renderTxDetail(search.result);
+            return;
+          }
+          if (search && search.type === "address" && search.result) {
+            els.txDetailMeta.textContent = `address=${query}`;
+            els.txDetail.textContent = JSON.stringify(search.result, null, 2);
+            return;
+          }
+        } catch (_) {
+          // Indexer search is preferred when available; legacy lookups remain below.
         }
         try {
           await loadTx(query);

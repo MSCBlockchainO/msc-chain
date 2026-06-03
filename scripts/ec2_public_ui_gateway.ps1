@@ -8,6 +8,8 @@ param(
     [string]$IdePassword = $env:MSC_IDE_PASSWORD,
     [string]$RpcTarget = "127.0.0.1:26665",
     [string[]]$RpcTargets = @(),
+    [string[]]$ArchiveTargets = @(),
+    [string[]]$IndexerTargets = @(),
     [string]$UiSource = (Join-Path (Split-Path -Parent $PSScriptRoot) "ui"),
     [switch]$AllowHttpOnlyUntilDNS
 )
@@ -51,6 +53,10 @@ if ($resolvedRpcTargets.Count -eq 0) {
 }
 $resolvedRpcTargets = @($resolvedRpcTargets | ForEach-Object { $_.Trim() } | Select-Object -Unique)
 $rpcTargetsCsv = $resolvedRpcTargets -join ","
+$resolvedArchiveTargets = @($ArchiveTargets | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() } | Select-Object -Unique)
+$resolvedIndexerTargets = @($IndexerTargets | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() } | Select-Object -Unique)
+$archiveTargetsCsv = $resolvedArchiveTargets -join ","
+$indexerTargetsCsv = $resolvedIndexerTargets -join ","
 
 $remote = @'
 set -euo pipefail
@@ -126,6 +132,31 @@ printf "%b" "$upstream_body" | sudo tee /etc/nginx/conf.d/msc_rpc_upstream.conf 
 printf "%b" "$active_upstream_body" | sudo tee /etc/nginx/conf.d/msc_rpc_active_upstream.conf >/dev/null
 sudo rm -f /etc/nginx/conf.d/msc_public_node_routes.conf
 printf "%b" "$public_routes_body" | sudo tee /etc/nginx/msc_public_node_routes.inc >/dev/null
+
+write_optional_upstream() {
+  local name="$1"
+  local raw_targets="$2"
+  local outfile="$3"
+  IFS=',' read -r -a items <<< "${raw_targets:-}"
+  local body="upstream ${name} {\n    least_conn;\n    keepalive 16;\n"
+  local count=0
+  for target in "${items[@]}"; do
+    clean="$(echo "$target" | xargs)"
+    [ -z "$clean" ] && continue
+    clean="${clean#http://}"
+    clean="${clean#https://}"
+    body="${body}    server ${clean} max_fails=2 fail_timeout=10s;\n"
+    count=$((count + 1))
+  done
+  if [ "$count" -eq 0 ]; then
+    body="${body}    server 127.0.0.1:9 max_fails=1 fail_timeout=5s;\n"
+  fi
+  body="${body}}\n"
+  printf "%b" "$body" | sudo tee "$outfile" >/dev/null
+}
+
+write_optional_upstream "msc_archive_backend" "${ARCHIVE_TARGETS:-}" /etc/nginx/conf.d/msc_archive_upstream.conf
+write_optional_upstream "msc_indexer_backend" "${INDEXER_TARGETS:-}" /etc/nginx/conf.d/msc_indexer_upstream.conf
 
 sudo tee /etc/nginx/conf.d/msc_public_gateway_limits.conf >/dev/null <<'NGINX'
 limit_req_zone $binary_remote_addr zone=msc_static:10m rate=600r/m;
@@ -203,6 +234,31 @@ server {
     }
 
     include /etc/nginx/msc_public_node_routes.inc;
+
+    # Archive and indexer are read-only explorer infrastructure. They are never
+    # injected into wallet RPC defaults and must not point at validator RPC.
+    location ~ ^/archive-rpc/(.*)$ {
+        limit_req zone=msc_read burst=40 nodelay;
+        rewrite ^/archive-rpc/(.*)$ /$1 break;
+        proxy_pass http://msc_archive_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        add_header Cache-Control "no-store" always;
+    }
+
+    location ^~ /indexer/ {
+        limit_req zone=msc_read burst=60 nodelay;
+        proxy_pass http://msc_indexer_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        add_header Cache-Control "no-store" always;
+    }
 
     # Public JSON-RPC is allowed only through this full-node gateway. Validator
     # RPC ports must remain private or loopback-only.
@@ -315,10 +371,12 @@ set -euo pipefail
 out="/var/www/msc-ui/gateway/lb-status.json"
 public_nodes_out="/var/www/msc-ui/gateway/public-nodes.json"
 targets="${RPC_TARGETS:-${RPC_TARGET:-127.0.0.1:26665}}"
+archive_targets="${ARCHIVE_TARGETS:-}"
+indexer_targets="${INDEXER_TARGETS:-}"
 mkdir -p "$(dirname "$out")"
 while true; do
   tmp="$(mktemp)"
-  if python3 - "$targets" "$tmp" <<'PY'
+  if python3 - "$targets" "$archive_targets" "$indexer_targets" "$tmp" <<'PY'
 import json
 import os
 import sys
@@ -327,7 +385,9 @@ import urllib.error
 import urllib.request
 
 targets = [item.strip() for item in sys.argv[1].split(",") if item.strip()]
-out = sys.argv[2]
+archive_targets = [item.strip() for item in sys.argv[2].split(",") if item.strip()]
+indexer_targets = [item.strip() for item in sys.argv[3].split(",") if item.strip()]
+out = sys.argv[4]
 domain = os.environ.get("DOMAIN", "").strip()
 state_path = "/tmp/msc-lb-health-state.json"
 try:
@@ -676,6 +736,98 @@ for target in active_targets:
 active_conf += "}\n"
 with open(out + ".active-upstream", "w", encoding="utf-8") as fh:
     fh.write(active_conf)
+
+def fetch_json(base, path, timeout=4):
+    base = base if base.startswith(("http://", "https://")) else "http://" + base
+    base = base.rstrip("/")
+    req = urllib.request.Request(base + path, headers={"User-Agent": "msc-lb-health/1"})
+    with urllib.request.urlopen(req, timeout=timeout) as res:
+        raw = res.read(65536).decode("utf-8", "replace")
+        data = json.loads(raw or "{}")
+        if isinstance(data, dict) and data.get("success") is True and isinstance(data.get("data"), dict):
+            data = data["data"]
+        return int(res.status), data
+
+def probe_archive(target, index):
+    base = target if target.startswith(("http://", "https://")) else "http://" + target
+    base = base.rstrip("/")
+    started = time.perf_counter()
+    item = {
+        "id": "ARCHIVE" + str(index + 1),
+        "url": base,
+        "role": "archive",
+        "healthy": False,
+        "state": "unhealthy",
+        "reason": "not_checked",
+        "latency_ms": 0,
+        "last_checked": int(time.time()),
+    }
+    try:
+        status_code, status = fetch_json(base, "/status")
+        _, policy = fetch_json(base, "/storage/policy")
+        latency = int((time.perf_counter() - started) * 1000)
+        height = int(status.get("height") or 0)
+        finalized = int(status.get("finalized_height") or 0)
+        lag = max(0, height - finalized)
+        archive_mode = bool(policy.get("archive_mode") or str(policy.get("profile") or "").lower() == "archive")
+        role = str(status.get("role") or "").lower()
+        healthy = status_code == 200 and archive_mode and role != "validator" and lag <= 2 and height > 0
+        item.update({
+            "healthy": healthy,
+            "state": "healthy" if healthy else "warning",
+            "reason": "archive_synced" if healthy else ("archive_mode_required" if not archive_mode else "archive_lag"),
+            "latency_ms": latency,
+            "height": height,
+            "finalized_height": finalized,
+            "finality_lag": lag,
+            "archive_mode": archive_mode,
+            "chain_id": str(status.get("chain_id") or ""),
+            "genesis_hash": str(status.get("genesis_hash") or status.get("expected_genesis_hash") or ""),
+        })
+    except Exception as exc:
+        item["reason"] = str(exc)
+        item["latency_ms"] = int((time.perf_counter() - started) * 1000)
+    return item
+
+def probe_indexer(target, index):
+    base = target if target.startswith(("http://", "https://")) else "http://" + target
+    base = base.rstrip("/")
+    started = time.perf_counter()
+    item = {
+        "id": "INDEXER" + str(index + 1),
+        "url": base,
+        "role": "indexer",
+        "healthy": False,
+        "state": "unhealthy",
+        "reason": "not_checked",
+        "latency_ms": 0,
+        "last_checked": int(time.time()),
+    }
+    try:
+        status_code, status = fetch_json(base, "/indexer/status")
+        latency = int((time.perf_counter() - started) * 1000)
+        lag = int(status.get("index_lag") or 0)
+        healthy = status_code == 200 and bool(status.get("healthy")) and lag <= 2
+        item.update({
+            "healthy": healthy,
+            "state": "healthy" if healthy else str(status.get("state") or "warning"),
+            "reason": str(status.get("reason") or ("indexed" if healthy else "index_lag")),
+            "latency_ms": latency,
+            "indexed_height": int(status.get("indexed_height") or 0),
+            "archive_height": int(status.get("archive_height") or 0),
+            "index_lag": lag,
+            "source_rpc": str(status.get("source_rpc") or ""),
+            "chain_id": str(status.get("chain_id") or ""),
+            "genesis_hash": str(status.get("genesis_hash") or ""),
+        })
+    except Exception as exc:
+        item["reason"] = str(exc)
+        item["latency_ms"] = int((time.perf_counter() - started) * 1000)
+    return item
+
+archive_services = [probe_archive(target, i) for i, target in enumerate(archive_targets)]
+indexer_services = [probe_indexer(target, i) for i, target in enumerate(indexer_targets)]
+
 payload = {
     "status": "healthy" if healthy_count == len(backends) and backends else ("degraded" if healthy_count else "down"),
     "healthy": healthy_count,
@@ -683,6 +835,8 @@ payload = {
     "failover_count": 0,
     "last_switch": "",
     "backends": backends,
+    "archive": archive_services,
+    "indexer": indexer_services,
     "active_targets": active_targets,
     "ts": int(time.time()),
 }
@@ -740,6 +894,8 @@ Type=simple
 Environment=DOMAIN=$DOMAIN
 Environment=RPC_TARGETS=$RPC_TARGETS
 Environment=RPC_TARGET=$RPC_TARGET
+Environment=ARCHIVE_TARGETS=$ARCHIVE_TARGETS
+Environment=INDEXER_TARGETS=$INDEXER_TARGETS
 ExecStart=/usr/local/bin/msc-lb-health.sh
 Restart=always
 RestartSec=2
@@ -802,6 +958,8 @@ $envPrefix = @(
     "PUBLIC_HOST=$(Quote-Sh $GatewayHost)",
     "RPC_TARGET=$(Quote-Sh $RpcTarget)",
     "RPC_TARGETS=$(Quote-Sh $rpcTargetsCsv)",
+    "ARCHIVE_TARGETS=$(Quote-Sh $archiveTargetsCsv)",
+    "INDEXER_TARGETS=$(Quote-Sh $indexerTargetsCsv)",
     "ENABLE_HTTPS=$(Quote-Sh ($(if ($enableHttps) { "1" } else { "0" })))",
     "LETSENCRYPT_EMAIL=$(Quote-Sh $LetsEncryptEmail)",
     "IDE_USER=$(Quote-Sh $IdeUser)",
@@ -811,6 +969,12 @@ $envPrefix = @(
 Write-Host "Deploying MSC public gateway on $target..."
 Write-Host "Domain: $Domain"
 Write-Host "RPC targets: $($resolvedRpcTargets -join ', ')"
+if ($resolvedArchiveTargets.Count -gt 0) {
+    Write-Host "Archive targets: $($resolvedArchiveTargets -join ', ')"
+}
+if ($resolvedIndexerTargets.Count -gt 0) {
+    Write-Host "Indexer targets: $($resolvedIndexerTargets -join ', ')"
+}
 if (-not $enableHttps) {
     Write-Warning "HTTP-only pre-DNS mode enabled. HTTPS is not complete until $Domain A record points to $GatewayHost."
 }
@@ -848,6 +1012,8 @@ Write-Host "Security rules:"
 Write-Host "  - Validator RPC stays private."
 Write-Host "  - Public RPC is proxied only through full node targets: $($resolvedRpcTargets -join ', ')."
 Write-Host "  - /gateway/lb-status.json exposes backend health for the wallet RPC manager."
+Write-Host "  - /archive-rpc/* proxies read-only archive node APIs when configured."
+Write-Host "  - /indexer/* proxies Explorer Core indexer APIs when configured."
 Write-Host "  - /wallet/events is proxied with websocket Upgrade headers."
 Write-Host "  - /metrics is not public through nginx."
 Write-Host "  - DTL IDE is protected by basic auth."

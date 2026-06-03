@@ -48,7 +48,7 @@ func runOperatorCLI(args []string) (bool, int) {
 
 func isOperatorCLICommand(cmd string) bool {
 	switch strings.ToLower(strings.TrimSpace(cmd)) {
-	case "wallet", "balance", "send", "validator-keygen", "validator-pubkey", "validator", "stake", "unstake", "claim-rewards", "status", "peers", "sync-status", "backup", "snapshot", "help":
+	case "wallet", "balance", "send", "validator-keygen", "validator-pubkey", "validator", "stake", "unstake", "claim-rewards", "status", "peers", "sync-status", "backup", "snapshot", "indexer", "help":
 		return true
 	default:
 		return false
@@ -88,6 +88,8 @@ func operatorRun(cmd string, args []string) error {
 		return operatorBackupCommand(args)
 	case "snapshot":
 		return operatorSnapshotCommand(args)
+	case "indexer":
+		return operatorIndexerCommand(args)
 	default:
 		return fmt.Errorf("unknown command %q", cmd)
 	}
@@ -130,6 +132,9 @@ func operatorPrintHelp() {
 	fmt.Println("  backup import --id RESTORE --datadir /tmp/restore --path /tmp/backup --apply")
 	fmt.Println("  backup recover --id A --datadir data/A --height 1000")
 	fmt.Println("  snapshot export|import|verify ...  (aliases for backup commands)")
+	fmt.Println()
+	fmt.Println("Archive / indexer:")
+	fmt.Println("  indexer run --source http://127.0.0.1:26667 --listen 127.0.0.1:26780 --datadir runtime-data/indexer/INDEXER1")
 }
 
 func operatorWalletCommand(args []string) error {

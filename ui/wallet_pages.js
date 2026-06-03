@@ -1200,13 +1200,21 @@ function renderInfraServiceList(id, services) {
   box.innerHTML = list.map((item) => {
     const stateText = item.state || (item.healthy ? "healthy" : "unhealthy");
     const tone = item.healthy ? "success" : stateText === "not_configured" || stateText === "warning" ? "warn" : "error";
+    const extra = [];
+    if (item.archive_mode !== undefined) extra.push(`archive=${item.archive_mode ? "yes" : "no"}`);
+    if (item.height !== undefined) extra.push(`h=${formatNumber(item.height)}`);
+    if (item.finality_lag !== undefined) extra.push(`finality_lag=${formatBlocks(item.finality_lag)}`);
+    if (item.indexed_height !== undefined) extra.push(`indexed=${formatNumber(item.indexed_height)}`);
+    if (item.archive_height !== undefined) extra.push(`archive_h=${formatNumber(item.archive_height)}`);
+    if (item.index_lag !== undefined) extra.push(`index_lag=${formatBlocks(item.index_lag)}`);
+    if (item.source_rpc) extra.push(`source=${item.source_rpc}`);
     return `<div class="health-row ${tone}">
       <span class="mono">${escapeHTML(item.id || item.role || "-")}</span>
       <span>${escapeHTML(stateText)}</span>
       <span>${formatLatency(item.latency_ms)}</span>
       <span>${escapeHTML(item.role || "-")}</span>
       <span>${item.last_checked || "-"}</span>
-      <span>${escapeHTML(item.reason || item.url || "-")}</span>
+      <span>${escapeHTML([item.reason || item.url || "-", ...extra].join(" | "))}</span>
     </div>`;
   }).join("") || `<div class="list-item">No services configured</div>`;
 }
@@ -1261,6 +1269,16 @@ async function refreshPublicStatus(options = {}) {
       cacheOnly: !!options.cacheOnly,
     });
     renderPublicStatus(result?.data);
+    if (!options.cacheOnly) {
+      try {
+        const rpc = state.rpcManager?.activeRPC() || window.location.origin;
+        const gateway = await state.rpcManager.fetchDedup(rpc, "/gateway/lb-status.json", { timeoutMs: 5000 });
+        if (Array.isArray(gateway?.archive)) renderInfraServiceList("statusArchiveServices", gateway.archive);
+        if (Array.isArray(gateway?.indexer)) renderInfraServiceList("statusIndexerServices", gateway.indexer);
+      } catch (_) {
+        // Public status remains useful even when gateway-local health is absent.
+      }
+    }
   } catch (err) {
     setText("statusNetwork", err.message || "status unavailable");
   }

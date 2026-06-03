@@ -9,14 +9,24 @@ import (
 )
 
 type infraServiceStatus struct {
-	ID          string `json:"id"`
-	URL         string `json:"url,omitempty"`
-	Role        string `json:"role"`
-	Healthy     bool   `json:"healthy"`
-	State       string `json:"state"`
-	Reason      string `json:"reason,omitempty"`
-	LatencyMS   int64  `json:"latency_ms,omitempty"`
-	LastChecked int64  `json:"last_checked"`
+	ID              string `json:"id"`
+	URL             string `json:"url,omitempty"`
+	Role            string `json:"role"`
+	Healthy         bool   `json:"healthy"`
+	State           string `json:"state"`
+	Reason          string `json:"reason,omitempty"`
+	LatencyMS       int64  `json:"latency_ms,omitempty"`
+	LastChecked     int64  `json:"last_checked"`
+	Height          uint64 `json:"height,omitempty"`
+	FinalizedHeight uint64 `json:"finalized_height,omitempty"`
+	FinalityLag     uint64 `json:"finality_lag,omitempty"`
+	ArchiveMode     bool   `json:"archive_mode,omitempty"`
+	IndexedHeight   uint64 `json:"indexed_height,omitempty"`
+	ArchiveHeight   uint64 `json:"archive_height,omitempty"`
+	IndexLag        uint64 `json:"index_lag,omitempty"`
+	SourceRPC       string `json:"source_rpc,omitempty"`
+	ChainID         string `json:"chain_id,omitempty"`
+	GenesisHash     string `json:"genesis_hash,omitempty"`
 }
 
 func splitInfraEndpoints(raw string) []string {
@@ -47,9 +57,19 @@ func probeInfraService(id, rawURL, role string) infraServiceStatus {
 	if status.URL == "" {
 		return status
 	}
-	target := status.URL + "/healthz"
 	client := &http.Client{Timeout: 1500 * time.Millisecond}
 	started := time.Now()
+	if strings.EqualFold(status.Role, "archive") {
+		probeArchiveInfraService(client, &status)
+		status.LatencyMS = time.Since(started).Milliseconds()
+		return status
+	}
+	if strings.EqualFold(status.Role, "indexer") {
+		probeIndexerInfraService(client, &status)
+		status.LatencyMS = time.Since(started).Milliseconds()
+		return status
+	}
+	target := status.URL + "/healthz"
 	resp, err := client.Get(target)
 	status.LatencyMS = time.Since(started).Milliseconds()
 	if err != nil {
@@ -72,6 +92,100 @@ func probeInfraService(id, rawURL, role string) infraServiceStatus {
 	status.State = "unhealthy"
 	status.Reason = resp.Status
 	return status
+}
+
+func probeInfraJSON(client *http.Client, target string) (map[string]any, int, error) {
+	resp, err := client.Get(target)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	var raw map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, resp.StatusCode, err
+	}
+	if ok, has := raw["success"].(bool); has {
+		if !ok {
+			return raw, resp.StatusCode, nil
+		}
+		if data, ok := raw["data"].(map[string]any); ok {
+			raw = data
+		}
+	}
+	return raw, resp.StatusCode, nil
+}
+
+func probeArchiveInfraService(client *http.Client, status *infraServiceStatus) {
+	runtime, code, err := probeInfraJSON(client, status.URL+"/status")
+	if err != nil {
+		status.State = "unhealthy"
+		status.Reason = err.Error()
+		return
+	}
+	if code != http.StatusOK {
+		status.State = "unhealthy"
+		status.Reason = http.StatusText(code)
+		return
+	}
+	policy, _, _ := probeInfraJSON(client, status.URL+"/storage/policy")
+	status.Height = mapUint(runtime, "height")
+	status.FinalizedHeight = mapUint(runtime, "finalized_height")
+	status.FinalityLag = safeHeightLag(status.Height, status.FinalizedHeight)
+	status.ChainID = mapString(runtime, "chain_id")
+	status.GenesisHash = firstNonEmpty(mapString(runtime, "genesis_hash"), mapString(runtime, "expected_genesis_hash"))
+	status.ArchiveMode = mapBool(policy, "archive_mode") || strings.EqualFold(mapString(policy, "profile"), storageProfileArchive)
+	if mapBool(runtime, "is_validator") || strings.EqualFold(mapString(runtime, "role"), "validator") {
+		status.State = "unhealthy"
+		status.Reason = "validator_rpc_not_allowed"
+		return
+	}
+	if !status.ArchiveMode {
+		status.State = "warning"
+		status.Reason = "archive_mode_required"
+		return
+	}
+	if status.Height == 0 || status.FinalityLag > 2 {
+		status.State = "warning"
+		status.Reason = "archive_syncing"
+		return
+	}
+	status.Healthy = true
+	status.State = "healthy"
+	status.Reason = "archive_synced"
+}
+
+func probeIndexerInfraService(client *http.Client, status *infraServiceStatus) {
+	data, code, err := probeInfraJSON(client, status.URL+"/indexer/status")
+	if err != nil {
+		status.State = "unhealthy"
+		status.Reason = err.Error()
+		return
+	}
+	if code != http.StatusOK {
+		status.State = "unhealthy"
+		status.Reason = http.StatusText(code)
+		return
+	}
+	status.Healthy = mapBool(data, "healthy")
+	status.State = firstNonEmpty(mapString(data, "state"), map[bool]string{true: "healthy", false: "warning"}[status.Healthy])
+	status.Reason = firstNonEmpty(mapString(data, "reason"), mapString(data, "last_error"))
+	status.IndexedHeight = mapUint(data, "indexed_height")
+	status.ArchiveHeight = mapUint(data, "archive_height")
+	status.FinalizedHeight = mapUint(data, "finalized_height")
+	status.IndexLag = mapUint(data, "index_lag")
+	status.ArchiveMode = mapBool(data, "archive_mode")
+	status.SourceRPC = mapString(data, "source_rpc")
+	status.ChainID = mapString(data, "chain_id")
+	status.GenesisHash = mapString(data, "genesis_hash")
+	if status.IndexLag > 2 {
+		status.Healthy = false
+		if status.State == "healthy" {
+			status.State = "warning"
+		}
+		if status.Reason == "" {
+			status.Reason = "index_lag"
+		}
+	}
 }
 
 func configuredInfraServiceStatuses(envName, role string) []infraServiceStatus {
