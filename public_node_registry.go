@@ -772,9 +772,10 @@ func assignPublicNodeActiveGateway(nodes []publicNodeHealthView) {
 		}
 		nodes[i].SelectedReason = "eligible"
 		if bestIndex < 0 ||
-			nodes[i].Score > nodes[bestIndex].Score ||
-			(nodes[i].Score == nodes[bestIndex].Score && nodes[i].HeightLagBlocks < nodes[bestIndex].HeightLagBlocks) ||
-			(nodes[i].Score == nodes[bestIndex].Score && nodes[i].HeightLagBlocks == nodes[bestIndex].HeightLagBlocks && nodes[i].LatencyMS < nodes[bestIndex].LatencyMS) {
+			nodes[i].HeightLagBlocks < nodes[bestIndex].HeightLagBlocks ||
+			(nodes[i].HeightLagBlocks == nodes[bestIndex].HeightLagBlocks && nodes[i].FinalityLag < nodes[bestIndex].FinalityLag) ||
+			(nodes[i].HeightLagBlocks == nodes[bestIndex].HeightLagBlocks && nodes[i].FinalityLag == nodes[bestIndex].FinalityLag && nodes[i].Score > nodes[bestIndex].Score) ||
+			(nodes[i].HeightLagBlocks == nodes[bestIndex].HeightLagBlocks && nodes[i].FinalityLag == nodes[bestIndex].FinalityLag && nodes[i].Score == nodes[bestIndex].Score && nodes[i].LatencyMS < nodes[bestIndex].LatencyMS) {
 			bestIndex = i
 		}
 	}

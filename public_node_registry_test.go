@@ -272,6 +272,46 @@ func TestPublicNodesActiveGatewaySelectsSingleBestStableBackend(t *testing.T) {
 	}
 }
 
+func TestPublicNodesActiveGatewayPrefersLowestHeightLagBeforeScore(t *testing.T) {
+	nodes := []publicNodeHealthView{
+		{
+			ID:                  "F",
+			RPCURL:              "https://example.test/public-rpc/F",
+			Role:                "full",
+			Healthy:             true,
+			HealthState:         "healthy",
+			HeightLagBlocks:     0,
+			FinalityLag:         0,
+			LastBlockAgeSeconds: 2,
+			LatencyMS:           1800,
+			ConsensusMode:       "NORMAL",
+			SyncComplete:        true,
+			Score:               97,
+		},
+		{
+			ID:                  "G",
+			RPCURL:              "https://example.test/public-rpc/G",
+			Role:                "full",
+			Healthy:             true,
+			HealthState:         "healthy",
+			HeightLagBlocks:     2,
+			FinalityLag:         0,
+			LastBlockAgeSeconds: 2,
+			LatencyMS:           450,
+			ConsensusMode:       "NORMAL",
+			SyncComplete:        true,
+			Score:               100,
+		},
+	}
+	assignPublicNodeActiveGateway(nodes)
+	if !nodes[0].ActiveGateway {
+		t.Fatalf("expected zero-lag F to stay active over higher-score lagging G: %+v", nodes)
+	}
+	if nodes[1].ActiveGateway || nodes[1].ExcludedReason != "standby_lower_score" {
+		t.Fatalf("expected G standby despite higher score because it lags: %+v", nodes[1])
+	}
+}
+
 func TestPublicNodesActiveGatewayExcludesSlowOrHighLatencyBackend(t *testing.T) {
 	slow := publicNodeHealthView{
 		ID:                  "F",

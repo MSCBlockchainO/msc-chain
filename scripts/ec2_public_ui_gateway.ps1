@@ -602,9 +602,9 @@ for item in backends:
 active_candidates = sorted(
     active_candidates,
     key=lambda item: (
-        -int(item.get("score") or 0),
         int(item.get("height_lag_blocks") or 0),
         int(item.get("finality_lag") or 0),
+        -int(item.get("score") or 0),
         int(item.get("latency_ms") or 0),
         str(item.get("id") or item.get("target") or ""),
     ),
