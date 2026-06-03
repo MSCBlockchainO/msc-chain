@@ -135,7 +135,7 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 	case m.MaxValidatorLag > consensusDetectorDegradedValidatorLagBlocks():
 		result.Mode = ConsensusDetectorDegraded
 		result.Reason = "validator_lag"
-	case m.PeerCount > 0 && m.PeerCount < 3:
+	case m.PeerCount > 0 && m.PeerCount < 3 && (strings.EqualFold(nodeRole, "validator") || finalityLag > 0):
 		result.Mode = ConsensusDetectorDegraded
 		result.Reason = "peer_instability"
 	case m.MissedVotes > 0 && m.Quorum > 0 && m.ActiveValidators-m.MissedVotes <= m.Quorum:

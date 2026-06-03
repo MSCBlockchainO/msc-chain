@@ -163,6 +163,30 @@ func TestDetectConsensusModePriorityAndModes(t *testing.T) {
 			want: ConsensusDetectorNormal,
 		},
 		{
+			name: "full node low peer count with finality is normal",
+			in: ConsensusDetectorMetrics{
+				NodeRole:          "full",
+				TotalValidators:   4,
+				ActiveValidators:  4,
+				Quorum:            3,
+				PeerCount:         2,
+				FinalityLagBlocks: 0,
+			},
+			want: ConsensusDetectorNormal,
+		},
+		{
+			name: "validator low peer count is degraded",
+			in: ConsensusDetectorMetrics{
+				NodeRole:          "validator",
+				TotalValidators:   4,
+				ActiveValidators:  4,
+				Quorum:            3,
+				PeerCount:         2,
+				FinalityLagBlocks: 0,
+			},
+			want: ConsensusDetectorDegraded,
+		},
+		{
 			name: "degraded above liveness drift",
 			in: ConsensusDetectorMetrics{
 				TotalValidators:  4,

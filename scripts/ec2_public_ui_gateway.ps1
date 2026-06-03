@@ -627,7 +627,15 @@ if active_candidates:
             item["excluded_reason"] = "standby_lower_score"
 else:
     fallback = None
+    if previous_active_target:
+        for candidate in backends:
+            if str(candidate.get("target") or "") == previous_active_target and str(candidate.get("health_state") or "").lower() != "unhealthy":
+                fallback = candidate
+                fallback["selected_reason"] = "sticky_warning_backend"
+                break
     for candidate in sorted(backends, key=lambda it: (-int(it.get("score") or 0), int(it.get("latency_ms") or 0), str(it.get("id") or it.get("target") or ""))):
+        if fallback is not None:
+            break
         if candidate.get("status_code") == 200:
             fallback = candidate
             break
@@ -635,7 +643,8 @@ else:
         fallback = backends[0]
     if fallback is not None:
         fallback["active_gateway"] = True
-        fallback["selected_reason"] = "fallback_no_strict_backend"
+        if not fallback.get("selected_reason"):
+            fallback["selected_reason"] = "fallback_no_strict_backend"
         fallback["excluded_reason"] = ""
 try:
     tmp_state = state_path + ".tmp"
