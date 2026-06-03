@@ -339,6 +339,10 @@ except Exception:
     health_memory = {}
 backends = []
 healthy_count = 0
+meta = health_memory.get("__meta__", {})
+if not isinstance(meta, dict):
+    meta = {}
+previous_active_target = str(meta.get("active_target") or "")
 def fallback_id_for_target(target, index):
     raw = str(target or "").strip()
     if raw.endswith(":26665"):
@@ -607,10 +611,15 @@ active_candidates = sorted(
 )
 if active_candidates:
     best_active = active_candidates[0]
+    if previous_active_target:
+        for candidate in active_candidates:
+            if str(candidate.get("target") or "") == previous_active_target:
+                best_active = candidate
+                break
     for item in backends:
         if item is best_active:
             item["active_gateway"] = True
-            item["selected_reason"] = "best_stable_healthy_backend"
+            item["selected_reason"] = "sticky_stable_healthy_backend" if str(item.get("target") or "") == previous_active_target else "best_stable_healthy_backend"
             item["excluded_reason"] = ""
         elif item in active_candidates:
             item["active_gateway"] = False
@@ -649,6 +658,7 @@ best_node = healthy_sorted[0] if healthy_sorted else (backends[0] if backends el
 active_targets = [str(item.get("target") or "") for item in backends if item.get("active_gateway") and item.get("target")]
 if not active_targets and backends:
     active_targets = [str(backends[0].get("target") or "")]
+health_memory["__meta__"] = {"active_target": active_targets[0] if active_targets else ""}
 active_conf = "upstream msc_rpc_active_backend {\n    least_conn;\n    keepalive 32;\n"
 for target in active_targets:
     clean = target.replace("http://", "").replace("https://", "").strip()

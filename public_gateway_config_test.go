@@ -29,6 +29,8 @@ func TestPublicGatewayProductionGuards(t *testing.T) {
 		`proof/receipt`,
 		`"consensus_mode": mode`,
 		`"last_block_age_seconds": block_age`,
+		`sticky_stable_healthy_backend`,
+		`standby_lower_score`,
 		`location = /metrics`,
 		`return 404;`,
 		`auth_basic "MSC DTL IDE"`,
