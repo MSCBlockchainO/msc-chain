@@ -35540,6 +35540,9 @@ func (s *Server) handleStatus(
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"node_id":                                     s.Node.ID,
 			"chain_id":                                    ChainID,
+			"genesis_hash":                                expectedGenesisHash(),
+			"expected_genesis_hash":                       expectedGenesisHash(),
+			"version":                                     Version,
 			"role":                                        runtime.Role,
 			"is_validator":                                runtime.IsValidator,
 			"validator_state":                             runtime.ValidatorState,
@@ -35882,7 +35885,10 @@ func (s *Server) handleStatus(
 
 		"node_id": s.Node.ID,
 
-		"chain_id": ChainID,
+		"chain_id":              ChainID,
+		"genesis_hash":          expectedGenesisHash(),
+		"expected_genesis_hash": expectedGenesisHash(),
+		"version":               Version,
 
 		"role": runtime.Role,
 
@@ -40718,6 +40724,9 @@ func (s *Server) handleV1Status(w http.ResponseWriter, r *http.Request) {
 	writeV1Data(w, http.StatusOK, map[string]any{
 		"node_id":                                    s.Node.ID,
 		"chain_id":                                   ChainID,
+		"genesis_hash":                               expectedGenesisHash(),
+		"expected_genesis_hash":                      expectedGenesisHash(),
+		"version":                                    Version,
 		"role":                                       runtime.Role,
 		"validator_state":                            runtime.ValidatorState,
 		"height":                                     runtime.Height,
