@@ -370,7 +370,7 @@ for index, target in enumerate(targets):
     cmd_data = {}
     try:
         req = urllib.request.Request(base + "/status", headers={"User-Agent": "msc-lb-health/1"})
-        with urllib.request.urlopen(req, timeout=3) as res:
+        with urllib.request.urlopen(req, timeout=8) as res:
             status_code = int(res.status)
             raw = res.read(65536).decode("utf-8", "replace")
             healthy = status_code == 200
@@ -386,7 +386,7 @@ for index, target in enumerate(targets):
     if healthy:
         try:
             req = urllib.request.Request(base + "/consensus/mode", headers={"User-Agent": "msc-lb-health/1"})
-            with urllib.request.urlopen(req, timeout=3) as res:
+            with urllib.request.urlopen(req, timeout=8) as res:
                 raw = res.read(32768).decode("utf-8", "replace")
                 try:
                     cmd_data = json.loads(raw or "{}")

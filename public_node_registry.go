@@ -584,7 +584,7 @@ func probePublicNode(cfg PublicNodeConfig) publicNodeHealthView {
 		LastChecked:   time.Now().Unix(),
 	}
 	started := time.Now()
-	client := &http.Client{Timeout: 3 * time.Second}
+	client := &http.Client{Timeout: 8 * time.Second}
 	statusCode, statusData, err := publicNodeFetchJSON(client, cfg.RPCURL+"/status")
 	view.StatusCode = statusCode
 	view.LatencyMS = int64(time.Since(started) / time.Millisecond)
