@@ -76,6 +76,24 @@ func TestDetectConsensusModePriorityAndModes(t *testing.T) {
 			want: ConsensusDetectorRecovery,
 		},
 		{
+			name: "full node near tip sync bit is still normal",
+			in: ConsensusDetectorMetrics{
+				NodeRole:              "full",
+				Height:                100,
+				FinalizedHeight:       100,
+				TotalValidators:       4,
+				ActiveValidators:      4,
+				Quorum:                3,
+				NetworkQuorumVotes:    4,
+				NetworkQuorumRequired: 3,
+				SyncingValidators:     1,
+				MaxValidatorLag:       0,
+				FinalityLagBlocks:     0,
+				LastFinalitySec:       3,
+			},
+			want: ConsensusDetectorNormal,
+		},
+		{
 			name: "emergency below quorum",
 			in: ConsensusDetectorMetrics{
 				TotalValidators:  4,

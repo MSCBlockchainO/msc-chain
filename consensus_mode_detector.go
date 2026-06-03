@@ -87,7 +87,14 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 		RecoveryValidatorLagBlocks: recoveryLagBlocks,
 	}
 
-	localCatchup := m.SyncingValidators > 0 && !strings.EqualFold(strings.TrimSpace(m.NodeRole), "validator")
+	nodeRole := strings.ToLower(strings.TrimSpace(m.NodeRole))
+	localCatchup := m.SyncingValidators > 0 && !strings.EqualFold(nodeRole, "validator")
+	materialLocalCatchup := localCatchup &&
+		(finalityLag > 0 ||
+			m.MaxValidatorLag > consensusDetectorDegradedValidatorLagBlocks() ||
+			m.LastFinalitySec >= degradedAfterSec)
+	syncingNeedsRecovery := m.SyncingValidators > 0 &&
+		(strings.EqualFold(nodeRole, "validator") || materialLocalCatchup)
 	quorumVotesOK := m.NetworkQuorumRequired == 0 || m.NetworkQuorumVotes >= m.NetworkQuorumRequired
 	networkQuorumLoss := m.NetworkQuorumRequired > 0 && m.NetworkQuorumVotes > 0 && m.NetworkQuorumVotes < m.NetworkQuorumRequired
 	softLocalPartition := m.PartitionRisk &&
@@ -113,10 +120,10 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 	case m.PartitionRisk && !softLocalPartition:
 		result.Mode = ConsensusDetectorPartition
 		result.Reason = "partition_risk"
-	case localCatchup:
+	case materialLocalCatchup:
 		result.Mode = ConsensusDetectorRecovery
 		result.Reason = "local_sync_catchup"
-	case m.SyncingValidators > 0 || m.MaxValidatorLag > recoveryLagBlocks:
+	case syncingNeedsRecovery || m.MaxValidatorLag > recoveryLagBlocks:
 		result.Mode = ConsensusDetectorRecovery
 		result.Reason = "validator_recovery"
 	case m.Quorum > 0 && m.ActiveValidators == m.Quorum:
