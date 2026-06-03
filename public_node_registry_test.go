@@ -221,6 +221,83 @@ func TestPublicNodesActiveGatewayExcludesLaggingBackend(t *testing.T) {
 	}
 }
 
+func TestPublicNodesActiveGatewaySelectsSingleBestStableBackend(t *testing.T) {
+	nodes := []publicNodeHealthView{
+		{
+			ID:                  "F",
+			RPCURL:              "https://example.test/public-rpc/F",
+			Role:                "full",
+			Healthy:             true,
+			HealthState:         "healthy",
+			Height:              100,
+			FinalizedHeight:     100,
+			FinalityLag:         0,
+			LastBlockAgeSeconds: 1,
+			LatencyMS:           900,
+			ConsensusMode:       "NORMAL",
+			SyncComplete:        true,
+			Score:               90,
+		},
+		{
+			ID:                  "G",
+			RPCURL:              "https://example.test/public-rpc/G",
+			Role:                "full",
+			Healthy:             true,
+			HealthState:         "healthy",
+			Height:              100,
+			FinalizedHeight:     100,
+			FinalityLag:         0,
+			LastBlockAgeSeconds: 1,
+			LatencyMS:           40,
+			ConsensusMode:       "NORMAL",
+			SyncComplete:        true,
+			Score:               98,
+		},
+	}
+	assignPublicNodeActiveGateway(nodes)
+	active := 0
+	for _, node := range nodes {
+		if node.ActiveGateway {
+			active++
+		}
+	}
+	if active != 1 {
+		t.Fatalf("expected exactly one active public backend, got %d nodes=%+v", active, nodes)
+	}
+	if !nodes[1].ActiveGateway || nodes[1].SelectedReason != "highest_score_lowest_lag" {
+		t.Fatalf("expected higher-scored G active, got %+v", nodes)
+	}
+	if nodes[0].ActiveGateway || nodes[0].ExcludedReason != "standby_lower_score" {
+		t.Fatalf("expected F standby lower score, got %+v", nodes[0])
+	}
+}
+
+func TestPublicNodesActiveGatewayExcludesSlowOrHighLatencyBackend(t *testing.T) {
+	slow := publicNodeHealthView{
+		ID:                  "F",
+		RPCURL:              "https://example.test/public-rpc/F",
+		Role:                "full",
+		Healthy:             true,
+		HealthState:         "healthy",
+		Height:              100,
+		FinalizedHeight:     100,
+		FinalityLag:         0,
+		LastBlockAgeSeconds: 14,
+		LatencyMS:           80,
+		ConsensusMode:       "NORMAL",
+		SyncComplete:        true,
+		Score:               96,
+	}
+	if got := publicNodeActiveGatewayExcludedReason(slow); got != "slow_block_age" {
+		t.Fatalf("expected slow block age exclusion, got %q", got)
+	}
+	slow.LastBlockAgeSeconds = 1
+	slow.LatencyMS = 2600
+	if got := publicNodeActiveGatewayExcludedReason(slow); got != "high_latency" {
+		t.Fatalf("expected high latency exclusion, got %q", got)
+	}
+}
+
 func TestPublicNodeHealthHysteresisForHeightLag(t *testing.T) {
 	fast := newPublicNodeProbeServer("full", 100, 100, "NORMAL", "abc")
 	slowHeight := uint64(75)

@@ -444,6 +444,9 @@ func publicNodeWarningReason(view publicNodeHealthView) string {
 	if view.LastBlockAgeSeconds >= 12 {
 		return "slow_block_age"
 	}
+	if view.LatencyMS > 2500 {
+		return "high_latency"
+	}
 	switch strings.ToUpper(strings.TrimSpace(view.ConsensusMode)) {
 	case "STRICT", "RECOVERY", "DEGRADED", "EMERGENCY":
 		return strings.ToLower(strings.TrimSpace(view.ConsensusMode))
@@ -726,6 +729,9 @@ func publicNodeScore(view publicNodeHealthView) int {
 	if view.Syncing || !view.SyncComplete {
 		score -= 12
 	}
+	if view.LatencyMS > 2500 {
+		score -= 12
+	}
 	if score < 0 {
 		return 0
 	}
@@ -773,8 +779,19 @@ func assignPublicNodeActiveGateway(nodes []publicNodeHealthView) {
 		}
 	}
 	if bestIndex >= 0 {
-		nodes[bestIndex].ActiveGateway = true
-		nodes[bestIndex].SelectedReason = "highest_score_lowest_lag"
+		for i := range nodes {
+			if i == bestIndex {
+				nodes[i].ActiveGateway = true
+				nodes[i].SelectedReason = "highest_score_lowest_lag"
+				nodes[i].ExcludedReason = ""
+				continue
+			}
+			if nodes[i].SelectedReason == "eligible" {
+				nodes[i].ActiveGateway = false
+				nodes[i].SelectedReason = ""
+				nodes[i].ExcludedReason = "standby_lower_score"
+			}
+		}
 		return
 	}
 	fallback := publicNodeBest(nodes)
@@ -809,6 +826,12 @@ func publicNodeActiveGatewayExcludedReason(view publicNodeHealthView) string {
 	}
 	if view.FinalityLag > 2 {
 		return "finality_lag"
+	}
+	if view.LastBlockAgeSeconds >= 12 {
+		return "slow_block_age"
+	}
+	if view.LatencyMS > 2500 {
+		return "high_latency"
 	}
 	if view.Syncing || !view.SyncComplete {
 		return "syncing"

@@ -481,6 +481,8 @@ def warning_reason(item):
         return "finality_lag"
     if int(item.get("last_block_age_seconds") or 0) >= 12:
         return "slow_block_age"
+    if int(item.get("latency_ms") or 0) > 2500:
+        return "high_latency"
     mode = str(item.get("consensus_mode") or "").upper()
     if mode in ("STRICT", "RECOVERY", "DEGRADED", "EMERGENCY"):
         return mode.lower()
@@ -502,6 +504,10 @@ def active_excluded_reason(item):
         return "height_lag"
     if int(item.get("finality_lag") or 0) > 2:
         return "finality_lag"
+    if int(item.get("last_block_age_seconds") or 0) >= 12:
+        return "slow_block_age"
+    if int(item.get("latency_ms") or 0) > 2500:
+        return "high_latency"
     if item.get("syncing") or not item.get("sync_complete"):
         return "syncing"
     mode = str(item.get("consensus_mode") or "").upper()
@@ -600,10 +606,16 @@ active_candidates = sorted(
     ),
 )
 if active_candidates:
-    for item in active_candidates:
-        item["active_gateway"] = True
-        item["selected_reason"] = "stable_healthy_backend"
-        item["excluded_reason"] = ""
+    best_active = active_candidates[0]
+    for item in backends:
+        if item is best_active:
+            item["active_gateway"] = True
+            item["selected_reason"] = "best_stable_healthy_backend"
+            item["excluded_reason"] = ""
+        elif item in active_candidates:
+            item["active_gateway"] = False
+            item["selected_reason"] = ""
+            item["excluded_reason"] = "standby_lower_score"
 else:
     fallback = None
     for candidate in sorted(backends, key=lambda it: (-int(it.get("score") or 0), int(it.get("latency_ms") or 0), str(it.get("id") or it.get("target") or ""))):
