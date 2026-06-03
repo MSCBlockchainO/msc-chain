@@ -339,7 +339,23 @@ except Exception:
     health_memory = {}
 backends = []
 healthy_count = 0
-for target in targets:
+def fallback_id_for_target(target, index):
+    raw = str(target or "").strip()
+    if raw.endswith(":26665"):
+        return "F"
+    if raw.endswith(":26666"):
+        return "G"
+    if raw.endswith(":26667"):
+        return "H"
+    if raw.endswith(":26668"):
+        return "I"
+    if raw.endswith(":26669"):
+        return "J"
+    if raw.endswith(":26670"):
+        return "K"
+    return "PUBLIC" + str(index + 1)
+
+for index, target in enumerate(targets):
     base = target if target.startswith(("http://", "https://")) else "http://" + target
     base = base.rstrip("/")
     started = time.perf_counter()
@@ -398,7 +414,7 @@ for target in targets:
         score += 9 if latency_ms <= 250 else (5 if latency_ms <= 1000 else (2 if latency_ms <= 2500 else 0))
         score = max(0, min(100, score))
     node_healthy = healthy and score >= 60 and not suspicious
-    raw_id = str(status_data.get("node_id") or target).strip()
+    raw_id = str(status_data.get("node_id") or fallback_id_for_target(target, index)).strip()
     safe_id = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in raw_id).strip("_") or "NODE"
     rpc_url = base
     gateway_rpc_url = ""
