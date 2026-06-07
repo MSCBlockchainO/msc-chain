@@ -23,6 +23,7 @@ OOM_SCORE_ADJ="${OOM_SCORE_ADJ:--500}"
 GOMAXPROCS="${GOMAXPROCS:-}"
 GOMEMLIMIT="${GOMEMLIMIT:-}"
 GOGC="${GOGC:-75}"
+EXECUTION_LEDGER_CACHE_DEPTH="${MSC_EXECUTION_LEDGER_CACHE_DEPTH:-}"
 HEALTHCHECK_SECONDS="${HEALTHCHECK_SECONDS:-0}"
 HEALTHCHECK_TIMEOUT_SECONDS="${HEALTHCHECK_TIMEOUT_SECONDS:-8}"
 FULLNODE_ACTIVITY_GRACE_SECONDS="${FULLNODE_ACTIVITY_GRACE_SECONDS:-300}"
@@ -121,6 +122,9 @@ start_node() {
   if [[ -n "$GOGC" ]]; then
     env_args+=("GOGC=$GOGC")
   fi
+  if [[ -n "$EXECUTION_LEDGER_CACHE_DEPTH" ]]; then
+    env_args+=("MSC_EXECUTION_LEDGER_CACHE_DEPTH=$EXECUTION_LEDGER_CACHE_DEPTH")
+  fi
   if [[ "$CONFIG" != "config.toml" ]]; then
     env_args+=("MSC_ALLOW_CONFIG_OVERRIDE=1")
   fi
@@ -143,7 +147,7 @@ start_node() {
   if [[ -w "/proc/$NODE_PID/oom_score_adj" ]]; then
     printf '%s' "$OOM_SCORE_ADJ" > "/proc/$NODE_PID/oom_score_adj" 2>/dev/null || true
   fi
-  log "node pid=$NODE_PID nice=$NODE_NICE oom_score_adj=$OOM_SCORE_ADJ gomaxprocs=${GOMAXPROCS:-auto} gomemlimit=${GOMEMLIMIT:-auto} gogc=${GOGC:-auto}"
+  log "node pid=$NODE_PID nice=$NODE_NICE oom_score_adj=$OOM_SCORE_ADJ gomaxprocs=${GOMAXPROCS:-auto} gomemlimit=${GOMEMLIMIT:-auto} gogc=${GOGC:-auto} ledger_cache_depth=${EXECUTION_LEDGER_CACHE_DEPTH:-binary_default}"
 }
 
 node_healthy() {
@@ -183,7 +187,18 @@ node_healthy() {
 }
 
 echo "$$" > "$SUPERVISOR_PID_FILE"
-trap 'log "stop requested"; stop_node; rm -f "$SUPERVISOR_PID_FILE"' EXIT INT TERM
+
+shutdown_supervisor() {
+  # INT/TERM traps return to the interrupted loop unless the handler exits.
+  # Remove the traps first so the explicit exit does not run cleanup twice.
+  trap - EXIT INT TERM
+  log "stop requested"
+  stop_node
+  rm -f "$SUPERVISOR_PID_FILE"
+}
+
+trap 'shutdown_supervisor; exit 0' INT TERM
+trap 'shutdown_supervisor' EXIT
 
 start_at="$SECONDS"
 deadline=$((SECONDS + DURATION_SECONDS))

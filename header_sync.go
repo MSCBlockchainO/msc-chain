@@ -32,6 +32,7 @@ func buildSyncBlockHeader(block Block) SyncBlockHeader {
 		PrevHash:             strings.TrimSpace(block.PrevHash),
 		StateRoot:            strings.TrimSpace(block.StateRoot),
 		ValidatorSetHash:     strings.TrimSpace(block.ValidatorSetHash),
+		PromotionWindowHash:  strings.TrimSpace(block.PromotionWindowHash),
 		NextValidatorSetHash: strings.TrimSpace(block.NextValidatorSetHash),
 		Timestamp:            block.Timestamp,
 	}

@@ -47,6 +47,7 @@ type longReplayResult struct {
 }
 
 func TestLongReplayFromGenesisDeterministicAndMeasured(t *testing.T) {
+	skipLongTestUnlessEnabled(t, "long replay from genesis scale measurement")
 	blocks := longReplayEnvUint("MSC_LONG_REPLAY_BLOCKS", 2048)
 	accounts := longReplayEnvUint("MSC_LONG_REPLAY_ACCOUNTS", 64)
 	txEvery := longReplayEnvUint("MSC_LONG_REPLAY_TX_EVERY", 1)
@@ -111,6 +112,7 @@ func TestLongReplayFromGenesisDeterministicAndMeasured(t *testing.T) {
 }
 
 func TestSnapshotRestoreAtScaleAndReplayRemaining(t *testing.T) {
+	skipLongTestUnlessEnabled(t, "snapshot restore at scale")
 	scales := longReplaySnapshotScales()
 	maxScale := uint64(0)
 	checkpoints := map[uint64]struct{}{0: {}}

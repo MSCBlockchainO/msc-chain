@@ -1855,6 +1855,32 @@ func snapshotValidatorRegistryHash(snapshot *StateSnapshot) string {
 	return ValidatorRegistrySnapshotHash(snapshot.ValidatorRegistry)
 }
 
+func snapshotPromotionWindowHash(snapshot *StateSnapshot) string {
+	if snapshot == nil {
+		return ""
+	}
+	if hash := strings.TrimSpace(snapshot.PromotionWindowHash); hash != "" {
+		return hash
+	}
+	return computedSnapshotPromotionWindowHash(snapshot)
+}
+
+func computedSnapshotPromotionWindowHash(snapshot *StateSnapshot) string {
+	if snapshot == nil {
+		return ""
+	}
+	if !promotionWindowRecordV1EnabledAt(snapshot.Height) {
+		return ""
+	}
+	window := validatorHybridPromotionWindowBucket(snapshot.Height)
+	record, ok := snapshot.PromotionWindowRecords[window]
+	if !ok {
+		return ""
+	}
+	replacements := snapshot.PromotionWindowReplacements[window]
+	return PromotionWindowStateHash(&record, replacements)
+}
+
 func (n *Node) chainParentCommittedValidatorRegistryHash(height uint64) (string, bool) {
 	if n == nil || n.Blockchain == nil || height <= 1 {
 		return "", false
@@ -1996,6 +2022,28 @@ func (n *Node) storeValidatorRegistrySnapshotRecord(height uint64, registry map[
 		return errors.New("meta db not initialized")
 	}
 	return storeValidatorRegistrySnapshotHeight(n.DB.Meta, height)
+}
+
+func (n *Node) shouldSkipCatchupRegistrySnapshotWrite(height uint64, expectedHash string) (bool, uint64) {
+	if n == nil || height <= 1 {
+		return false, 0
+	}
+	expectedHash = strings.TrimSpace(expectedHash)
+	if expectedHash == "" || !n.shouldDeferNonConsensusCommitMaintenance() {
+		return false, 0
+	}
+	if _, sourceHeight, ok := n.committedValidatorRegistryCarryForwardCandidate(height, expectedHash); ok && sourceHeight > 0 && sourceHeight < height {
+		return true, sourceHeight
+	}
+	return false, 0
+}
+
+func (n *Node) shouldPersistValidatorRegistryCarryForwardRepair(height, sourceHeight uint64, targetHash string) bool {
+	if n == nil || sourceHeight == 0 || sourceHeight >= height {
+		return true
+	}
+	skip, skipSource := n.shouldSkipCatchupRegistrySnapshotWrite(height, targetHash)
+	return !(skip && skipSource == sourceHeight)
 }
 
 func (n *Node) storeValidatorRegistrySnapshot(height uint64) error {
@@ -2142,6 +2190,52 @@ func (n *Node) ensureRegistrySnapshot(height uint64, reason string) {
 	}
 }
 
+func (n *Node) ensureGenesisCommittedValidatorRegistrySnapshot(reason string) {
+	if n == nil || n.DB == nil || n.DB.State == nil {
+		return
+	}
+	const genesisCommitHeight uint64 = 1
+	if existing, err := n.loadValidatorRegistrySnapshot(genesisCommitHeight); err == nil && len(existing) > 0 {
+		return
+	}
+	registry, hash, ok := n.genesisCommittedValidatorRegistryCandidate(GlobalValidatorRegistry.Snapshot())
+	if !ok || len(registry) == 0 || strings.TrimSpace(hash) == "" {
+		key := "genesis_registry_snapshot_unavailable:" + strings.TrimSpace(reason)
+		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+			log.Printf("[WARN] genesis registry snapshot skipped reason=%s validators=%d", strings.TrimSpace(reason), len(n.GenesisValidators))
+		}
+		return
+	}
+	if n.Blockchain != nil {
+		if block, ok := n.Blockchain.GetBlock(genesisCommitHeight); ok {
+			expected := strings.TrimSpace(block.ValidatorRegistryHash)
+			if expected != "" && !strings.EqualFold(expected, hash) {
+				key := "genesis_registry_snapshot_mismatch:" + strings.TrimSpace(reason)
+				if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+					log.Printf("[WARN] genesis registry snapshot mismatch reason=%s expected=%s got=%s", strings.TrimSpace(reason), ShortHash(expected), ShortHash(hash))
+				}
+				return
+			}
+		}
+	}
+	if err := n.storeValidatorRegistrySnapshotRecord(genesisCommitHeight, registry); err != nil {
+		key := "genesis_registry_snapshot_error:" + strings.TrimSpace(reason)
+		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+			log.Printf("[WARN] genesis registry snapshot failed reason=%s err=%v", strings.TrimSpace(reason), err)
+		}
+		return
+	}
+	key := "genesis_registry_snapshot_created:" + strings.TrimSpace(reason)
+	if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+		log.Printf("[REGISTRY] genesis committed snapshot created height=%d validators=%d hash=%s reason=%s",
+			genesisCommitHeight,
+			len(registry),
+			ShortHash(hash),
+			strings.TrimSpace(reason),
+		)
+	}
+}
+
 func (n *Node) loadValidatorRegistrySnapshot(height uint64) (map[string]ValidatorRecord, error) {
 	if n == nil || height == 0 || n.DB == nil || n.DB.State == nil {
 		return nil, errors.New("registry_snapshot_unavailable")
@@ -2208,6 +2302,31 @@ func (n *Node) findCommittedValidatorRegistrySnapshotByHashAtOrBelow(height uint
 		}
 		if h == 1 {
 			break
+		}
+	}
+	return nil, 0, false
+}
+
+func (n *Node) committedValidatorRegistryCarryForwardCandidate(height uint64, targetHash string) (map[string]ValidatorRecord, uint64, bool) {
+	if n == nil || n.DB == nil || n.DB.State == nil || height <= 1 {
+		return nil, 0, false
+	}
+	targetHash = strings.TrimSpace(targetHash)
+	if targetHash == "" {
+		return nil, 0, false
+	}
+	candidates := []uint64{height - 1}
+	if latest, ok := n.loadLatestValidatorRegistrySnapshotHeight(); ok && latest > 0 && latest < height && latest != height-1 {
+		candidates = append(candidates, latest)
+	}
+	for _, candidateHeight := range candidates {
+		snap, err := n.loadValidatorRegistrySnapshot(candidateHeight)
+		if err != nil || len(snap) == 0 {
+			continue
+		}
+		hash := strings.TrimSpace(ValidatorRegistrySnapshotHash(snap))
+		if hash != "" && strings.EqualFold(hash, targetHash) {
+			return snap, candidateHeight, true
 		}
 	}
 	return nil, 0, false
@@ -2364,6 +2483,37 @@ func (n *Node) resolveCommittedValidatorRegistrySnapshot(height uint64) (map[str
 		}
 		return nil, "", "none", false
 	}
+	if registry, sourceHeight, ok := n.committedValidatorRegistryCarryForwardCandidate(height, targetHash); ok && len(registry) > 0 {
+		persistRepair := n.shouldPersistValidatorRegistryCarryForwardRepair(height, sourceHeight, targetHash)
+		if persistRepair {
+			if err := n.storeValidatorRegistrySnapshotRecord(height, registry); err != nil {
+				key := fmt.Sprintf("registry_snapshot_repair_store:%d", height)
+				if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+					log.Printf("[WARN] registry repair store failed height=%d err=%v", height, err)
+				}
+			}
+		}
+		key := fmt.Sprintf("registry_repair_success:%d", height)
+		if !persistRepair {
+			key = "registry_repair_success:committed_carry_forward_fast_skip_store"
+		}
+		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+			if persistRepair {
+				log.Printf("[REGISTRY-REPAIR] height=%d source=committed_carry_forward_fast from=%d validators=%d",
+					height,
+					sourceHeight,
+					len(registry),
+				)
+			} else {
+				log.Printf("[REGISTRY-REPAIR] height=%d source=committed_carry_forward_fast_skip_store from=%d validators=%d",
+					height,
+					sourceHeight,
+					len(registry),
+				)
+			}
+		}
+		return registry, targetHash, "committed_carry_forward_repair", true
+	}
 	if registry, hash, ok := n.repairCommittedValidatorRegistrySnapshotFromCommittedSnapshot(height, targetHash); ok && len(registry) > 0 {
 		key := fmt.Sprintf("registry_repair_success:%d", height)
 		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
@@ -2414,19 +2564,33 @@ func (n *Node) resolveCommittedValidatorRegistrySnapshot(height uint64) (map[str
 		}
 	}
 	if registry, sourceHeight, ok := n.findCommittedValidatorRegistrySnapshotByHashAtOrBelow(height, targetHash); ok && len(registry) > 0 {
-		if err := n.storeValidatorRegistrySnapshotRecord(height, registry); err != nil {
-			key := fmt.Sprintf("registry_snapshot_repair_store:%d", height)
-			if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
-				log.Printf("[WARN] registry repair store failed height=%d err=%v", height, err)
+		persistRepair := n.shouldPersistValidatorRegistryCarryForwardRepair(height, sourceHeight, targetHash)
+		if persistRepair {
+			if err := n.storeValidatorRegistrySnapshotRecord(height, registry); err != nil {
+				key := fmt.Sprintf("registry_snapshot_repair_store:%d", height)
+				if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+					log.Printf("[WARN] registry repair store failed height=%d err=%v", height, err)
+				}
 			}
 		}
 		key := fmt.Sprintf("registry_repair_success:%d", height)
+		if !persistRepair {
+			key = "registry_repair_success:committed_carry_forward_skip_store"
+		}
 		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
-			log.Printf("[REGISTRY-REPAIR] height=%d source=committed_carry_forward from=%d validators=%d",
-				height,
-				sourceHeight,
-				len(registry),
-			)
+			if persistRepair {
+				log.Printf("[REGISTRY-REPAIR] height=%d source=committed_carry_forward from=%d validators=%d",
+					height,
+					sourceHeight,
+					len(registry),
+				)
+			} else {
+				log.Printf("[REGISTRY-REPAIR] height=%d source=committed_carry_forward_skip_store from=%d validators=%d",
+					height,
+					sourceHeight,
+					len(registry),
+				)
+			}
 		}
 		return registry, targetHash, "committed_carry_forward_repair", true
 	}
@@ -2821,11 +2985,17 @@ func (n *Node) fillBlockNextValidatorSetCommitment(block *Block) {
 		}
 	}
 	block.ValidatorRegistryHash = strings.TrimSpace(registryHash)
+	if promotionHash, _ := n.expectedPromotionWindowHashWithSource(block.ID); strings.TrimSpace(promotionHash) != "" {
+		block.PromotionWindowHash = strings.TrimSpace(promotionHash)
+	} else if !promotionWindowRecordV1EnabledAt(block.ID) {
+		block.PromotionWindowHash = ""
+	}
 	if DebugConsensus {
-		fmt.Printf("[REGISTRY-COMMIT] height=%d source=%s hash=%s\n",
+		fmt.Printf("[REGISTRY-COMMIT] height=%d source=%s hash=%s promotion=%s\n",
 			block.ID,
 			registrySource,
 			ShortHash(block.ValidatorRegistryHash),
+			ShortHash(block.PromotionWindowHash),
 		)
 	}
 }
@@ -3065,6 +3235,39 @@ func (n *Node) validateBlockValidatorRegistryCommitment(block Block) error {
 	}
 	if resolvedExpected != "" && !strings.EqualFold(resolvedExpected, got) {
 		return errors.New("validator_registry_hash_mismatch")
+	}
+	return nil
+}
+
+func (n *Node) validateBlockPromotionWindowCommitment(block Block) error {
+	if !promotionWindowRecordV1EnabledAt(block.ID) {
+		if strings.TrimSpace(block.PromotionWindowHash) != "" {
+			return errors.New("promotion_window_hash_before_activation")
+		}
+		return nil
+	}
+	expected, source := n.expectedPromotionWindowHashWithSource(block.ID)
+	got := strings.TrimSpace(block.PromotionWindowHash)
+	if strings.EqualFold(source, "not_required") || strings.EqualFold(source, "disabled") {
+		if got != "" {
+			return errors.New("unexpected_promotion_window_hash")
+		}
+		return nil
+	}
+	if strings.EqualFold(source, "missing_committed_record") {
+		return errors.New("promotion_window_record_missing")
+	}
+	if expected == "" {
+		if got == "" {
+			return nil
+		}
+		return errors.New("promotion_window_expected_missing")
+	}
+	if got == "" {
+		return errors.New("missing_promotion_window_hash")
+	}
+	if !strings.EqualFold(expected, got) {
+		return errors.New("promotion_window_hash_mismatch")
 	}
 	return nil
 }
@@ -5000,6 +5203,25 @@ func effectiveProposerRoundTimeout(roundTimeout time.Duration, minBlockInterval 
 	if roundTimeout <= 0 {
 		roundTimeout = 15 * time.Second
 	}
+	if ConsensusFastProposerFailoverEnabled {
+		minTimeout := ConsensusFastProposerFailoverMin
+		if minTimeout <= 0 {
+			minTimeout = time.Second
+		}
+		if realTick > 0 {
+			tickFloor := realTick / 2
+			if tickFloor <= 0 {
+				tickFloor = realTick
+			}
+			if minTimeout < tickFloor {
+				minTimeout = tickFloor
+			}
+		}
+		if roundTimeout < minTimeout {
+			roundTimeout = minTimeout
+		}
+		return roundTimeout
+	}
 	minTimeout := 2 * time.Second
 	if realTick > 0 {
 		if candidate := 2 * realTick; candidate > minTimeout {
@@ -5013,6 +5235,14 @@ func effectiveProposerRoundTimeout(roundTimeout time.Duration, minBlockInterval 
 		roundTimeout = minTimeout
 	}
 	return roundTimeout
+}
+
+func effectiveConfiguredProposerRoundTimeout() time.Duration {
+	realTick := GlobalConfig.RealTick
+	if realTick <= 0 {
+		realTick = 2 * time.Second
+	}
+	return effectiveProposerRoundTimeout(ProposerRoundTimeout, ConsensusMinBlockInterval, realTick)
 }
 
 func leaderProposalStabilizationWindow(roundTimeout time.Duration, minBlockInterval time.Duration, realTick time.Duration) time.Duration {
@@ -5029,9 +5259,6 @@ func leaderProposalStabilizationWindow(roundTimeout time.Duration, minBlockInter
 	}
 	if minBlockInterval > 0 && window < minBlockInterval {
 		window = minBlockInterval
-	}
-	if window > timeout {
-		window = timeout
 	}
 	return window
 }
@@ -5055,14 +5282,18 @@ func proposerRoundAdvanceFromAnchor(baseRound uint32, anchor time.Time, now time
 func computeConsensusRound(now time.Time, epochStartedAt time.Time, observedRound uint32, observedAt time.Time, minBlockInterval time.Duration, roundTimeout time.Duration, realTick time.Duration) uint32 {
 	timeout := effectiveProposerRoundTimeout(roundTimeout, minBlockInterval, realTick)
 	anchorAt := observedAt
-	if !epochStartedAt.IsZero() && minBlockInterval > 0 {
+	if !ConsensusFastProposerFailoverEnabled && !epochStartedAt.IsZero() && minBlockInterval > 0 {
 		proposalWindowStart := epochStartedAt.Add(minBlockInterval)
 		if anchorAt.IsZero() || anchorAt.Before(proposalWindowStart) {
 			anchorAt = proposalWindowStart
 		}
 	}
 	if anchorAt.IsZero() {
-		anchorAt = now
+		if !epochStartedAt.IsZero() {
+			anchorAt = epochStartedAt
+		} else {
+			anchorAt = now
+		}
 	}
 	return proposerRoundAdvanceFromAnchor(observedRound, anchorAt, now, timeout)
 }
@@ -5158,6 +5389,15 @@ func (n *Node) proposedRoundAnchorForHeight(height uint64) (uint32, time.Time) {
 }
 
 func (n *Node) recentLeaderProposalHoldState(epoch uint64, block Block, incomingRound uint32) (bool, string) {
+	if n == nil {
+		return false, ""
+	}
+	n.leaderMu.Lock()
+	defer n.leaderMu.Unlock()
+	return n.recentLeaderProposalHoldStateLocked(epoch, block, incomingRound)
+}
+
+func (n *Node) recentLeaderProposalHoldStateLocked(epoch uint64, block Block, incomingRound uint32) (bool, string) {
 	if n == nil || epoch == 0 || block.ID == 0 || incomingRound == 0 {
 		return false, ""
 	}
@@ -5167,8 +5407,6 @@ func (n *Node) recentLeaderProposalHoldState(epoch uint64, block Block, incoming
 	}
 	const leaderProposalStabilizationRoundGap = execProposalSwitchRoundGap * 2
 
-	n.leaderMu.Lock()
-	defer n.leaderMu.Unlock()
 	if n.leaderConflictReplaceCount == nil || n.leaderConflictReplaceCount[epoch] == 0 {
 		return false, ""
 	}
@@ -5308,6 +5546,20 @@ func (n *Node) storeLeaderBlock(block Block) bool {
 			stored = true
 		} else {
 			if block.Round > existing.Round {
+				if keepRecent, reason := n.recentLeaderProposalHoldStateLocked(block.ID, existing, block.Round); keepRecent {
+					if DebugConsensus {
+						fmt.Printf("[ROUND-FAILOVER] rejected rapid conflicting replacement height=%d held_round=%d held_block=%s incoming_round=%d incoming_block=%s reason=%s\n",
+							block.ID,
+							existing.Round,
+							ShortHash(existing.BlockHash),
+							block.Round,
+							ShortHash(block.BlockHash),
+							reason,
+						)
+					}
+					n.leaderMu.Unlock()
+					return false
+				}
 				if DebugConsensus {
 					fmt.Printf("[ROUND-FAILOVER] replacing leader block height=%d round=%d->%d have=%s got=%s\n",
 						block.ID, existing.Round, block.Round, ShortHash(existing.BlockHash), ShortHash(block.BlockHash))
@@ -5997,6 +6249,9 @@ func snapshotCanonicalPayload(snapshot *StateSnapshot) string {
 	if snapshotCheckpointV1EnabledAt(snapshot.Height) {
 		payload = fmt.Sprintf("%s|vrh=%s", payload, strings.TrimSpace(snapshotValidatorRegistryHash(snapshot)))
 	}
+	if hash := strings.TrimSpace(snapshotPromotionWindowHash(snapshot)); hash != "" {
+		payload = fmt.Sprintf("%s|pwh=%s", payload, hash)
+	}
 	if stage := strings.TrimSpace(snapshot.LedgerStage); stage != "" {
 		payload = fmt.Sprintf("%s|ls=%s", payload, stage)
 	}
@@ -6056,6 +6311,9 @@ func populateSnapshotDerivedFields(snapshot *StateSnapshot) {
 	}
 	if strings.TrimSpace(snapshot.ValidatorRegistryHash) == "" {
 		snapshot.ValidatorRegistryHash = ValidatorRegistrySnapshotHash(snapshot.ValidatorRegistry)
+	}
+	if strings.TrimSpace(snapshot.PromotionWindowHash) == "" {
+		snapshot.PromotionWindowHash = snapshotPromotionWindowHash(snapshot)
 	}
 	if strings.TrimSpace(snapshot.StateMerkleRoot) == "" {
 		snapshot.StateMerkleRoot = LedgerStateMerkleRoot(snapshot.Ledger)
@@ -6121,6 +6379,11 @@ func snapshotMetadataRejectReason(snapshot *StateSnapshot) string {
 	if hash := strings.TrimSpace(snapshot.ValidatorRegistryHash); hash != "" {
 		if !strings.EqualFold(hash, ValidatorRegistrySnapshotHash(snapshot.ValidatorRegistry)) {
 			return "registry_hash_mismatch"
+		}
+	}
+	if hash := strings.TrimSpace(snapshot.PromotionWindowHash); hash != "" {
+		if !strings.EqualFold(hash, computedSnapshotPromotionWindowHash(snapshot)) {
+			return "promotion_window_hash_mismatch"
 		}
 	}
 	if snapshot.NextValidatorSetHeight > 0 &&
@@ -6232,6 +6495,118 @@ func (n *Node) verifySnapshotCheckpointProofForValidator(snapshot *StateSnapshot
 		}
 	}
 	return false
+}
+
+func (n *Node) snapshotCheckpointProofCandidateIDs(snapshot *StateSnapshot) []string {
+	if snapshot == nil || len(snapshot.CheckpointProof) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(snapshot.CheckpointProof))
+	seen := make(map[string]struct{}, len(snapshot.CheckpointProof))
+	for id := range snapshot.CheckpointProof {
+		norm := normalizeValidatorID(id)
+		if norm == "" {
+			continue
+		}
+		if _, ok := seen[norm]; ok {
+			continue
+		}
+		seen[norm] = struct{}{}
+		ids = append(ids, norm)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func (n *Node) verifySnapshotCheckpointProofBatch(snapshot *StateSnapshot, validatorIDs []string, required int) int {
+	if snapshot == nil {
+		return 0
+	}
+	if !n.snapshotCheckpointProofRequired() {
+		if required > 0 {
+			return required
+		}
+		return len(validatorIDs)
+	}
+	if required <= 0 {
+		required = 1
+	}
+	if len(validatorIDs) == 0 {
+		validatorIDs = n.snapshotCheckpointProofCandidateIDs(snapshot)
+	}
+	if len(validatorIDs) == 0 {
+		return 0
+	}
+	unique := make([]string, 0, len(validatorIDs))
+	seen := make(map[string]struct{}, len(validatorIDs))
+	for _, id := range validatorIDs {
+		norm := normalizeValidatorID(id)
+		if norm == "" {
+			continue
+		}
+		if _, ok := seen[norm]; ok {
+			continue
+		}
+		seen[norm] = struct{}{}
+		unique = append(unique, norm)
+	}
+	if len(unique) == 0 {
+		return 0
+	}
+	workers := syncEd25519BatchVerifyWorkers()
+	if workers > len(unique) {
+		workers = len(unique)
+	}
+	if workers <= 0 {
+		workers = 1
+	}
+	jobs := make(chan string, len(unique))
+	results := make(chan bool, len(unique))
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for id := range jobs {
+				results <- n.verifySnapshotCheckpointProofForValidator(snapshot, id)
+			}
+		}()
+	}
+	for _, id := range unique {
+		jobs <- id
+	}
+	close(jobs)
+	wg.Wait()
+	close(results)
+	valid := 0
+	for ok := range results {
+		if ok {
+			valid++
+		}
+	}
+	return valid
+}
+
+func (n *Node) verifySnapshotCheckpointProofPolicy(snapshot *StateSnapshot) (int, int, bool) {
+	if snapshot == nil {
+		return 0, 0, false
+	}
+	if !n.snapshotCheckpointProofRequired() {
+		return 0, 0, true
+	}
+	candidates := n.snapshotCheckpointProofCandidateIDs(snapshot)
+	if len(candidates) == 0 {
+		return 0, 1, false
+	}
+	required := 1
+	ids := candidates
+	authorityIDs := n.validatorAuthorityIDsForQuorum(snapshot.Height)
+	if quorum := execQuorumRequired(len(authorityIDs)); quorum > 0 && len(candidates) >= quorum {
+		required = quorum
+		ids = authorityIDs
+	}
+	valid := n.verifySnapshotCheckpointProofBatch(snapshot, ids, required)
+	return valid, required, valid >= required
 }
 
 func snapshotTrustKey(snapshot *StateSnapshot) string {
@@ -6913,6 +7288,9 @@ func syncCatchupStage(localHeight, targetHeight uint64) string {
 	if stageMax := syncRangeFetchStageMaxBlocks(); stageMax > 0 && lag <= stageMax {
 		return "range_fetch"
 	}
+	if !syncDeltaStateSyncEnabled() {
+		return "state_bootstrap"
+	}
 	if lag < syncSnapshotCatchupThresholdBlocks() {
 		return "delta_replay"
 	}
@@ -6923,15 +7301,72 @@ func syncCatchupStage(localHeight, targetHeight uint64) string {
 }
 
 type syncCatchupPlan struct {
-	Stage          string
-	Mode           string
-	Action         string
-	Lag            uint64
-	BatchMax       uint64
-	BlockRange     bool
-	DeltaReplay    bool
-	Snapshot       bool
-	StateBootstrap bool
+	Stage                  string
+	Mode                   string
+	Action                 string
+	Lag                    uint64
+	BatchMax               uint64
+	BlockRange             bool
+	DeltaReplay            bool
+	Snapshot               bool
+	StateBootstrap         bool
+	UsableHead             bool
+	HeadStage              string
+	RequireCheckpointProof bool
+	BackgroundHistory      bool
+	RecentReplayWindow     uint64
+	TargetSeconds          uint64
+}
+
+func normalizeUsableHeadRole(role string) string {
+	role = strings.ToLower(strings.TrimSpace(role))
+	switch role {
+	case "archive", "archive_node", "archive-full", "archive_full":
+		return "archive"
+	default:
+		return normalizeNodeRole(role)
+	}
+}
+
+func syncUsableHeadRoleAllowed(role string, archiveMode bool) bool {
+	if archiveMode {
+		role = "archive"
+	}
+	role = normalizeUsableHeadRole(role)
+	for _, allowed := range SyncUsableHeadRoles {
+		if normalizeUsableHeadRole(allowed) == role {
+			return true
+		}
+	}
+	return false
+}
+
+func syncUsableHeadMinGapBlocks() uint64 {
+	if SyncUsableHeadMinGapBlocks == 0 {
+		return syncSnapshotCatchupThresholdBlocks()
+	}
+	return SyncUsableHeadMinGapBlocks
+}
+
+func syncUsableHeadTargetSeconds() uint64 {
+	if SyncUsableHeadTargetSeconds == 0 {
+		return 3
+	}
+	return SyncUsableHeadTargetSeconds
+}
+
+func syncUsableHeadRecentReplayWindowBlocks() uint64 {
+	if SyncUsableHeadRecentReplayWindowBlocks == 0 {
+		return 2048
+	}
+	return SyncUsableHeadRecentReplayWindowBlocks
+}
+
+func syncPlanAllowsUsableHead(stage string, lag uint64, role string, archiveMode bool) bool {
+	return SyncUsableHeadFastBootstrapEnabled &&
+		normalizeSyncStage(stage) == "state_bootstrap" &&
+		lag >= syncUsableHeadMinGapBlocks() &&
+		syncUsableHeadRoleAllowed(role, archiveMode)
 }
 
 func syncStageStatusAction(stage string) string {
@@ -6993,6 +7428,19 @@ func syncCatchupPlanForStage(stage string, localHeight, targetHeight uint64) syn
 
 func syncCatchupPlanForLag(localHeight, targetHeight uint64) syncCatchupPlan {
 	return syncCatchupPlanForStage(syncCatchupStage(localHeight, targetHeight), localHeight, targetHeight)
+}
+
+func syncCatchupPlanForRole(localHeight, targetHeight uint64, role string, archiveMode bool) syncCatchupPlan {
+	plan := syncCatchupPlanForLag(localHeight, targetHeight)
+	if syncPlanAllowsUsableHead(plan.Stage, plan.Lag, role, archiveMode) {
+		plan.UsableHead = true
+		plan.HeadStage = "checkpoint_verify"
+		plan.RequireCheckpointProof = SyncUsableHeadRequireCheckpointProof
+		plan.BackgroundHistory = SyncUsableHeadBackgroundHistory
+		plan.RecentReplayWindow = syncUsableHeadRecentReplayWindowBlocks()
+		plan.TargetSeconds = syncUsableHeadTargetSeconds()
+	}
+	return plan
 }
 
 func syncModeForStage(stage string) string {
@@ -7307,6 +7755,39 @@ func syncSnapshotParallelChunks() int {
 		return 8
 	}
 	return SyncSnapshotParallelChunks
+}
+
+func syncSnapshotDistributionEnabled() bool {
+	return SyncSnapshotDistributionEnabled
+}
+
+func syncSnapshotMultiPeerChunkFetchEnabled() bool {
+	return SyncSnapshotDistributionEnabled && SyncSnapshotMultiPeerChunkFetch
+}
+
+func syncSnapshotCompression() string {
+	mode := strings.ToLower(strings.TrimSpace(SyncSnapshotCompression))
+	switch mode {
+	case "", "zstd":
+		return "zstd"
+	default:
+		return "zstd"
+	}
+}
+
+func syncDeltaStateSyncEnabled() bool {
+	return SyncDeltaStateSyncEnabled
+}
+
+func syncEd25519BatchVerifyWorkers() int {
+	workers := SyncEd25519BatchVerifyWorkers
+	if workers <= 0 {
+		return 8
+	}
+	if workers > 32 {
+		return 32
+	}
+	return workers
 }
 
 func snapshotChunkWorkerCount(missingCount int) int {
@@ -8769,6 +9250,14 @@ func strictSnapshotMetaCandidateFromMeta(meta *SnapshotMetaResponse) *strictSnap
 	if manifest == nil {
 		return nil
 	}
+	return strictSnapshotMetaCandidateFromManifest(manifest)
+}
+
+func strictSnapshotMetaCandidateFromManifest(manifest *SnapshotManifest) *strictSnapshotMetaCandidate {
+	if manifest == nil {
+		return nil
+	}
+	normalizeSnapshotManifest(manifest)
 	checkpointHeight := snapshotCheckpointHeightFor(manifest.Height)
 	return &strictSnapshotMetaCandidate{
 		Height:                manifest.Height,
@@ -8782,10 +9271,66 @@ func strictSnapshotMetaCandidateFromMeta(meta *SnapshotMetaResponse) *strictSnap
 	}
 }
 
+func (n *Node) mergeSnapshotProofsFromManifest(snapshot *StateSnapshot, manifest *SnapshotManifest) {
+	if snapshot == nil || manifest == nil {
+		return
+	}
+	normalizeSnapshotManifest(manifest)
+	if snapshot.CheckpointProof == nil {
+		snapshot.CheckpointProof = make(map[string]string)
+	}
+	for id, sig := range manifest.CheckpointProof {
+		validatorID := normalizeValidatorID(id)
+		signatureHex := strings.TrimSpace(sig)
+		if validatorID == "" || signatureHex == "" {
+			continue
+		}
+		if strings.TrimSpace(snapshot.CheckpointProof[validatorID]) == "" {
+			snapshot.CheckpointProof[validatorID] = signatureHex
+		}
+	}
+	candidate := strictSnapshotMetaCandidateFromManifest(manifest)
+	if candidate != nil {
+		for validatorID, proof := range n.snapshotProofsForCandidate(candidate) {
+			normalized := normalizeValidatorID(validatorID)
+			signatureHex := strings.TrimSpace(proof.SignatureHex)
+			if normalized == "" || signatureHex == "" {
+				continue
+			}
+			if strings.TrimSpace(snapshot.CheckpointProof[normalized]) == "" {
+				snapshot.CheckpointProof[normalized] = signatureHex
+			}
+		}
+	}
+	if strings.TrimSpace(snapshot.ValidatorSetRoot) == "" {
+		snapshot.ValidatorSetRoot = strings.TrimSpace(manifest.ValidatorSetRoot)
+	}
+	if strings.TrimSpace(snapshot.ValidatorSetHash) == "" {
+		snapshot.ValidatorSetHash = strings.TrimSpace(manifest.ValidatorSetHash)
+	}
+	if strings.TrimSpace(snapshot.ValidatorRegistryHash) == "" {
+		snapshot.ValidatorRegistryHash = strings.TrimSpace(manifest.ValidatorRegistryHash)
+	}
+	if snapshot.CheckpointHeight == 0 {
+		snapshot.CheckpointHeight = snapshotCheckpointHeightFor(snapshot.Height)
+	}
+	if strings.TrimSpace(snapshot.CheckpointDomain) == "" {
+		snapshot.CheckpointDomain = syncSnapshotCheckpointDomain()
+	}
+}
+
 func snapshotStubFromMeta(meta *SnapshotMetaResponse) *StateSnapshot {
 	candidate := strictSnapshotMetaCandidateFromMeta(meta)
 	if candidate == nil {
 		return nil
+	}
+	checkpointProof := copyStringMap(meta.CheckpointProof)
+	if len(checkpointProof) == 0 && meta.Manifest != nil {
+		checkpointProof = copyStringMap(meta.Manifest.CheckpointProof)
+	}
+	validatorSetRoot := strings.TrimSpace(meta.ValidatorSetRoot)
+	if validatorSetRoot == "" && meta.Manifest != nil {
+		validatorSetRoot = strings.TrimSpace(meta.Manifest.ValidatorSetRoot)
 	}
 	return &StateSnapshot{
 		Version:               SnapshotVersion,
@@ -8794,10 +9339,11 @@ func snapshotStubFromMeta(meta *SnapshotMetaResponse) *StateSnapshot {
 		StateMerkleRoot:       candidate.StateMerkleRoot,
 		SnapshotHash:          candidate.SnapshotHash,
 		ValidatorSetHash:      candidate.ValidatorSetHash,
+		ValidatorSetRoot:      validatorSetRoot,
 		ValidatorRegistryHash: candidate.ValidatorRegistryHash,
 		CheckpointHeight:      candidate.CheckpointHeight,
 		CheckpointDomain:      syncSnapshotCheckpointDomain(),
-		CheckpointProof:       copyStringMap(meta.CheckpointProof),
+		CheckpointProof:       checkpointProof,
 	}
 }
 
@@ -8902,7 +9448,25 @@ func (n *Node) strictSnapshotMetaObservationForTarget(meta *SnapshotMetaResponse
 		return nil, "meta_conflict"
 	}
 	stub := snapshotStubFromMeta(meta)
-	if stub == nil || !n.verifySnapshotCheckpointProofForValidator(stub, validatorID) {
+	if stub == nil {
+		return nil, "checkpoint_proof_invalid"
+	}
+	if !n.verifySnapshotCheckpointProofForValidator(stub, validatorID) {
+		// Legacy peers may have signed the checkpoint with a validator_set_root
+		// that older metadata responses did not expose. Keep the metadata
+		// candidate alive, but the final downloaded payload must still verify
+		// the signature and quorum before it can be applied.
+		legacyMetadataIncomplete := !snapshotCheckpointV1EnabledAt(stub.Height) &&
+			(strings.TrimSpace(stub.BlockHash) == "" || strings.TrimSpace(stub.LedgerHash) == "")
+		if len(stub.CheckpointProof) > 0 &&
+			(strings.TrimSpace(stub.ValidatorSetRoot) == "" || legacyMetadataIncomplete) {
+			return &strictSnapshotMetaObservation{
+				Provider:    strings.TrimSpace(provider),
+				ValidatorID: strings.TrimSpace(validatorID),
+				Candidate:   strictSnapshotMetaCandidateFromMeta(meta),
+				Reason:      "checkpoint_proof_deferred",
+			}, ""
+		}
 		return nil, "checkpoint_proof_invalid"
 	}
 	return &strictSnapshotMetaObservation{
@@ -9468,7 +10032,9 @@ func normalizeSnapshotManifest(manifest *SnapshotManifest) {
 	manifest.StateRoot = strings.TrimSpace(manifest.StateRoot)
 	manifest.StateMerkleRoot = strings.TrimSpace(manifest.StateMerkleRoot)
 	manifest.ValidatorSetHash = strings.TrimSpace(manifest.ValidatorSetHash)
+	manifest.ValidatorSetRoot = strings.TrimSpace(manifest.ValidatorSetRoot)
 	manifest.ValidatorRegistryHash = strings.TrimSpace(manifest.ValidatorRegistryHash)
+	manifest.PromotionWindowHash = strings.TrimSpace(manifest.PromotionWindowHash)
 	manifest.FinalizedHash = strings.TrimSpace(manifest.FinalizedHash)
 	manifest.EpochAnchorHash = strings.TrimSpace(manifest.EpochAnchorHash)
 	manifest.FinalityRoot = strings.TrimSpace(manifest.FinalityRoot)
@@ -9507,7 +10073,11 @@ func snapshotManifestHash(manifest *SnapshotManifest) string {
 	b.WriteByte('|')
 	b.WriteString(clone.ValidatorSetHash)
 	b.WriteByte('|')
+	b.WriteString(clone.ValidatorSetRoot)
+	b.WriteByte('|')
 	b.WriteString(clone.ValidatorRegistryHash)
+	b.WriteByte('|')
+	b.WriteString(clone.PromotionWindowHash)
 	b.WriteByte('|')
 	b.WriteString(strconv.FormatUint(clone.FinalizedHeight, 10))
 	b.WriteByte('|')
@@ -9569,12 +10139,16 @@ func snapshotManifestFromSnapshot(snapshot *StateSnapshot) (*SnapshotManifest, [
 		StateRoot:             strings.TrimSpace(snapshot.StateRoot),
 		StateMerkleRoot:       strings.TrimSpace(snapshot.StateMerkleRoot),
 		ValidatorSetHash:      strings.TrimSpace(snapshotValidatorSetHash(snapshot)),
+		ValidatorSetRoot:      strings.TrimSpace(snapshotValidatorSetRoot(snapshot)),
 		ValidatorRegistryHash: strings.TrimSpace(snapshotValidatorRegistryHash(snapshot)),
+		PromotionWindowHash:   strings.TrimSpace(snapshotPromotionWindowHash(snapshot)),
 		FinalizedHeight:       snapshot.FinalizedHeight,
 		FinalizedHash:         strings.TrimSpace(snapshot.FinalizedHash),
 		EpochAnchorHash:       strings.TrimSpace(snapshot.EpochAnchorHash),
 		FinalityRoot:          strings.TrimSpace(snapshot.FinalityRoot),
 		SnapshotSizeBytes:     uint64(len(payload)),
+		Encoding:              "binary",
+		Compression:           syncSnapshotCompression(),
 		ChunkSize:             chunkSize,
 		ChunkCount:            totalChunks,
 		ChunkHashes:           chunkHashes,
@@ -9605,8 +10179,14 @@ func snapshotManifestFromMeta(meta *SnapshotMetaResponse) *SnapshotManifest {
 		if clone.ValidatorSetHash == "" {
 			clone.ValidatorSetHash = meta.ValidatorSetHash
 		}
+		if clone.ValidatorSetRoot == "" {
+			clone.ValidatorSetRoot = meta.ValidatorSetRoot
+		}
 		if clone.ValidatorRegistryHash == "" {
 			clone.ValidatorRegistryHash = meta.ValidatorRegistryHash
+		}
+		if clone.PromotionWindowHash == "" {
+			clone.PromotionWindowHash = meta.PromotionWindowHash
 		}
 		if clone.FinalizedHeight == 0 {
 			clone.FinalizedHeight = meta.FinalizedHeight
@@ -9619,6 +10199,12 @@ func snapshotManifestFromMeta(meta *SnapshotMetaResponse) *SnapshotManifest {
 		}
 		if clone.FinalityRoot == "" {
 			clone.FinalityRoot = meta.FinalityRoot
+		}
+		if clone.Encoding == "" {
+			clone.Encoding = meta.Encoding
+		}
+		if clone.Compression == "" {
+			clone.Compression = meta.Compression
 		}
 		if clone.ChunkSize == 0 {
 			clone.ChunkSize = meta.ChunkSize
@@ -9641,11 +10227,15 @@ func snapshotManifestFromMeta(meta *SnapshotMetaResponse) *SnapshotManifest {
 		StateRoot:             meta.StateRoot,
 		StateMerkleRoot:       meta.StateMerkleRoot,
 		ValidatorSetHash:      meta.ValidatorSetHash,
+		ValidatorSetRoot:      meta.ValidatorSetRoot,
 		ValidatorRegistryHash: meta.ValidatorRegistryHash,
+		PromotionWindowHash:   meta.PromotionWindowHash,
 		FinalizedHeight:       meta.FinalizedHeight,
 		FinalizedHash:         meta.FinalizedHash,
 		EpochAnchorHash:       meta.EpochAnchorHash,
 		FinalityRoot:          meta.FinalityRoot,
+		Encoding:              meta.Encoding,
+		Compression:           meta.Compression,
 		ChunkSize:             meta.ChunkSize,
 		ChunkCount:            meta.TotalChunks,
 		ChunkHashes:           append([]string{}, meta.ChunkHashes...),
@@ -10704,6 +11294,35 @@ func invalidProposerStrikeKey(proposer, expected, got string) string {
 	return proposer + "|" + expected + "|" + got
 }
 
+func decayInvalidProposerStrikeCount(count int, lastAt time.Time, now time.Time) int {
+	if count <= 0 || lastAt.IsZero() {
+		return 0
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if now.Before(lastAt) {
+		return count
+	}
+	decayEvery := invalidProposerStrikeDecayEvery
+	if decayEvery <= 0 {
+		decayEvery = time.Hour
+	}
+	decay := int(now.Sub(lastAt) / decayEvery)
+	if decay <= 0 {
+		return count
+	}
+	count -= decay
+	if count < 0 {
+		return 0
+	}
+	return count
+}
+
+func invalidProposerStrikeTrackerExpired(tracker ExecMismatchTracker, now time.Time) bool {
+	return decayInvalidProposerStrikeCount(tracker.Count, tracker.LastAt, now) <= 0
+}
+
 func (n *Node) recordInvalidProposerStrike(proposer string, height uint64, expected string, got string) int {
 	key := invalidProposerStrikeKey(proposer, expected, got)
 	if n == nil || key == "||" || height == 0 {
@@ -10716,20 +11335,14 @@ func (n *Node) recordInvalidProposerStrike(proposer string, height uint64, expec
 		n.invalidProposerStrikes = make(map[string]ExecMismatchTracker)
 	}
 	tracker := n.invalidProposerStrikes[key]
-	if tracker.LastAt.IsZero() || now.Sub(tracker.LastAt) > invalidProposerStrikeWindow {
-		tracker.Count = 0
-	}
-	if tracker.LastEpoch > 0 && height > tracker.LastEpoch+1 {
-		tracker.Count = 0
-	}
+	tracker.Count = decayInvalidProposerStrikeCount(tracker.Count, tracker.LastAt, now)
 	tracker.Count++
 	tracker.LastEpoch = height
 	tracker.LastAt = now
 	n.invalidProposerStrikes[key] = tracker
 	if len(n.invalidProposerStrikes) > ExecMismatchTrackMax {
-		cutoff := now.Add(-invalidProposerStrikeWindow)
 		for id, st := range n.invalidProposerStrikes {
-			if st.LastAt.Before(cutoff) {
+			if invalidProposerStrikeTrackerExpired(st, now) {
 				delete(n.invalidProposerStrikes, id)
 			}
 		}
@@ -10750,20 +11363,14 @@ func (n *Node) recordInvalidProposerPeerStrike(peerID string, height uint64, exp
 		n.invalidProposerPeerStrikes = make(map[string]ExecMismatchTracker)
 	}
 	tracker := n.invalidProposerPeerStrikes[peerID+"|"+tuple]
-	if tracker.LastAt.IsZero() || now.Sub(tracker.LastAt) > invalidProposerStrikeWindow {
-		tracker.Count = 0
-	}
-	if tracker.LastEpoch > 0 && height > tracker.LastEpoch+1 {
-		tracker.Count = 0
-	}
+	tracker.Count = decayInvalidProposerStrikeCount(tracker.Count, tracker.LastAt, now)
 	tracker.Count++
 	tracker.LastEpoch = height
 	tracker.LastAt = now
 	n.invalidProposerPeerStrikes[peerID+"|"+tuple] = tracker
 	if len(n.invalidProposerPeerStrikes) > ExecMismatchTrackMax {
-		cutoff := now.Add(-invalidProposerStrikeWindow)
 		for id, st := range n.invalidProposerPeerStrikes {
-			if st.LastAt.Before(cutoff) {
+			if invalidProposerStrikeTrackerExpired(st, now) {
 				delete(n.invalidProposerPeerStrikes, id)
 			}
 		}
@@ -11370,6 +11977,47 @@ func (n *Node) maybeRequestSyncFromHeartbeats() {
 	n.maybeSyncToBestObservedHeight("heartbeat")
 }
 
+func syncBlockRangeWarmupEligible(localHeight uint64, targetHeight uint64) bool {
+	return syncLagBlocks(localHeight, targetHeight) > validatorLivenessMaxHeightDriftBlocks()
+}
+
+func (n *Node) markSyncWarmupEligible(eligible bool) {
+	if n == nil || !eligible {
+		return
+	}
+	n.syncMu.Lock()
+	n.syncWarmupEligible = true
+	n.syncMu.Unlock()
+}
+
+func (n *Node) consumeSyncWarmupEligible() bool {
+	if n == nil {
+		return false
+	}
+	n.syncMu.Lock()
+	eligible := n.syncWarmupEligible
+	n.syncWarmupEligible = false
+	n.syncMu.Unlock()
+	return eligible
+}
+
+func (n *Node) armSyncWarmupAfterCatchup(reason string, localHeight uint64, targetHeight uint64) {
+	if n == nil || localHeight == 0 || targetHeight == 0 || !n.consumeSyncWarmupEligible() {
+		return
+	}
+	if n.snapshotWarmupActive(localHeight) {
+		return
+	}
+	n.setSnapshotWarmupJoinHeight(localHeight)
+	n.clearLateJoinAuthorityState()
+	if DebugSync || DebugConsensus {
+		if remaining := n.snapshotWarmupRemaining(localHeight); remaining > 0 {
+			fmt.Printf("[REJOIN-WARMUP] reason=%s local=%d target=%d warmup_seconds=%d\n",
+				strings.TrimSpace(reason), localHeight, targetHeight, remaining)
+		}
+	}
+}
+
 func (n *Node) maybeExitSyncMode(reason string) bool {
 	if n == nil || n.Consensus == nil {
 		return false
@@ -11398,21 +12046,14 @@ func (n *Node) maybeExitSyncMode(reason string) bool {
 		n.closeSnapshotSession(true, "sync_cleared")
 		n.syncMu.Lock()
 		n.syncStallSeconds = 0
-		armEligible := n.syncWarmupEligible
-		n.syncWarmupEligible = false
 		n.syncMu.Unlock()
 		if DebugConsensus {
 			fmt.Printf("[SYNC-CLEAR] reason=%s local=%d target=%d\n", reason, localHeight, target)
 		}
-		if armWarmup && armEligible && !n.snapshotWarmupActive(localHeight) {
-			n.setSnapshotWarmupJoinHeight(localHeight)
-			n.clearLateJoinAuthorityState()
-			if DebugSync || DebugConsensus {
-				if remaining := n.snapshotWarmupRemaining(localHeight); remaining > 0 {
-					fmt.Printf("[REJOIN-WARMUP] reason=%s local=%d target=%d warmup_seconds=%d\n",
-						strings.TrimSpace(reason), localHeight, target, remaining)
-				}
-			}
+		if armWarmup {
+			n.armSyncWarmupAfterCatchup(reason, localHeight, target)
+		} else {
+			n.consumeSyncWarmupEligible()
 		}
 		if n.consensusRecomputePauseActive() {
 			return true
@@ -11646,9 +12287,7 @@ func (n *Node) syncBlockRangeToHeight(targetHeight uint64, stage string, action 
 		}
 		n.Consensus.mu.Unlock()
 	}
-	n.syncMu.Lock()
-	n.syncWarmupEligible = syncLagBlocks(localHeight, targetHeight) >= 2
-	n.syncMu.Unlock()
+	n.markSyncWarmupEligible(syncBlockRangeWarmupEligible(localHeight, targetHeight))
 
 	n.syncMu.Lock()
 	if localHeight > n.syncLastObservedHeight {
@@ -11710,11 +12349,14 @@ func (n *Node) syncBlockRangeToHeight(targetHeight uint64, stage string, action 
 		n.setSyncAction("idle", 0, "up_to_date")
 		n.setSyncProvider("")
 		n.clearSyncResumeState()
+		n.armSyncWarmupAfterCatchup(reason, localAfter, targetHeight)
 		n.replayQueuedExecutionVotes()
 	} else if followupPending {
 		n.scheduleImmediateSyncResume("followup_sync_target", followupTarget)
 	} else if shouldScheduleImmediateSyncResume(localHeight, localAfter, targetHeight) {
 		n.scheduleImmediateSyncResume("partial_sync_resume", targetHeight)
+	} else {
+		n.consumeSyncWarmupEligible()
 	}
 }
 
@@ -12173,18 +12815,7 @@ func (n *Node) forceSnapshotSyncToHeight(targetHeight uint64, reason string) {
 	if localHeight == 0 || stage == "state_bootstrap" {
 		sourcePolicy = snapshotSyncSourceTrustedOnly
 	}
-	if strings.Contains(reasonLower, "validator-set-hash-mismatch") ||
-		strings.Contains(reasonLower, "peer-validator-set-mismatch") ||
-		strings.Contains(reasonLower, "validator_set_hash_mismatch") ||
-		strings.Contains(reasonLower, "validator-set-mismatch") ||
-		strings.Contains(reasonLower, "parent_mismatch") ||
-		strings.Contains(reasonLower, "prev_hash_mismatch") ||
-		strings.Contains(reasonLower, "queue_prevhash_mismatch") ||
-		strings.Contains(reasonLower, "state_root_mismatch") ||
-		strings.Contains(reasonLower, "startup_execution_snapshot") ||
-		strings.Contains(reasonLower, "execution_snapshot_ledger_unavailable") ||
-		strings.Contains(reasonLower, "large_lag_snapshot") ||
-		strings.Contains(reasonLower, "snapshot_quorum_apply_watchdog") {
+	if snapshotSyncReasonRequiresTrustedSource(reasonLower) {
 		sourcePolicy = snapshotSyncSourceTrustedOnly
 	}
 	minHeightOverride := snapshotSyncMinHeightOverrideForReason(reason, localHeight, targetHeight)
@@ -12220,8 +12851,26 @@ func (n *Node) forceSnapshotSyncToHeight(targetHeight uint64, reason string) {
 		n.setSyncAction("idle", 0, "up_to_date")
 		n.setSyncProvider("")
 		n.clearSyncResumeState()
+		n.armSyncWarmupAfterCatchup(reason, localAfter, targetHeight)
 		n.replayQueuedExecutionVotes()
 	}
+}
+
+func snapshotSyncReasonRequiresTrustedSource(reason string) bool {
+	reasonLower := strings.ToLower(strings.TrimSpace(reason))
+	return strings.Contains(reasonLower, "validator-set-hash-mismatch") ||
+		strings.Contains(reasonLower, "peer-validator-set-mismatch") ||
+		strings.Contains(reasonLower, "validator_set_hash_mismatch") ||
+		strings.Contains(reasonLower, "validator-set-mismatch") ||
+		strings.Contains(reasonLower, "parent_mismatch") ||
+		strings.Contains(reasonLower, "prev_hash_mismatch") ||
+		strings.Contains(reasonLower, "queue_prevhash_mismatch") ||
+		strings.Contains(reasonLower, "process_block_incomplete") ||
+		strings.Contains(reasonLower, "state_root_mismatch") ||
+		strings.Contains(reasonLower, "startup_execution_snapshot") ||
+		strings.Contains(reasonLower, "execution_snapshot_ledger_unavailable") ||
+		strings.Contains(reasonLower, "large_lag_snapshot") ||
+		strings.Contains(reasonLower, "snapshot_quorum_apply_watchdog")
 }
 
 func snapshotSyncMinHeightOverrideForReason(reason string, localHeight uint64, targetHeight uint64) uint64 {
@@ -12234,6 +12883,7 @@ func snapshotSyncMinHeightOverrideForReason(reason string, localHeight uint64, t
 		strings.Contains(reasonLower, "parent_mismatch") ||
 		strings.Contains(reasonLower, "prev_hash_mismatch") ||
 		strings.Contains(reasonLower, "queue_prevhash_mismatch") ||
+		strings.Contains(reasonLower, "process_block_incomplete") ||
 		strings.Contains(reasonLower, "execution_mismatch") ||
 		strings.Contains(reasonLower, "state_root_mismatch")) &&
 		targetHeight > localHeight {
@@ -12266,6 +12916,7 @@ func (n *Node) forceSnapshotResyncNow(targetHeight uint64, reason string) {
 		strings.Contains(reasonLower, "parent_mismatch") ||
 		strings.Contains(reasonLower, "prev_hash_mismatch") ||
 		strings.Contains(reasonLower, "queue_prevhash_mismatch") ||
+		strings.Contains(reasonLower, "process_block_incomplete") ||
 		strings.Contains(reasonLower, "execution_mismatch") ||
 		strings.Contains(reasonLower, "state_root_mismatch")
 	isStartupExecutionReason := strings.Contains(reasonLower, "startup_execution_snapshot") ||
@@ -12333,6 +12984,31 @@ func (n *Node) validatorAuthorityIDsForQuorum(height uint64) []string {
 		if hint := n.GetConsensusValidators(int(target)); len(hint) > 0 {
 			return canonicalValidatorIDs(hint)
 		}
+	}
+	return nil
+}
+
+func (n *Node) snapshotBootstrapAuthorityIDsForQuorum(targetHeight uint64) []string {
+	if n == nil || targetHeight == 0 {
+		return nil
+	}
+	localHeight := uint64(0)
+	if n.Blockchain != nil {
+		localHeight = n.Blockchain.Height()
+	}
+	if localHeight > 0 && targetHeight > localHeight {
+		if frozen := n.frozenValidatorsForHeight(localHeight); len(frozen) > 0 {
+			return canonicalValidatorIDs(frozen)
+		}
+		if committed := n.consensusValidatorsForHeight(localHeight); len(committed) > 0 {
+			return canonicalValidatorIDs(committed)
+		}
+		if current := n.GetConsensusValidators(int(localHeight)); len(current) > 0 {
+			return canonicalValidatorIDs(current)
+		}
+	}
+	if len(n.GenesisValidators) > 0 {
+		return canonicalValidatorIDs(n.GenesisValidators)
 	}
 	return nil
 }
@@ -13262,6 +13938,22 @@ func (n *Node) markExecutionSnapshotReadyHeight(height uint64) {
 	n.executionSnapshotRebuildMu.Unlock()
 }
 
+func (n *Node) markLiveCommittedExecutionSnapshotReadyHeight(height uint64) {
+	if n == nil || height == 0 {
+		return
+	}
+	n.executionSnapshotRebuildMu.Lock()
+	if height > n.executionSnapshotRebuildReadyHeight {
+		n.executionSnapshotRebuildReadyHeight = height
+	}
+	if height > n.executionSnapshotLiveCommitHeight {
+		n.executionSnapshotLiveCommitHeight = height
+	}
+	n.executionSnapshotRebuildFailedHeight = 0
+	n.executionSnapshotRebuildLastErr = ""
+	n.executionSnapshotRebuildMu.Unlock()
+}
+
 func (n *Node) startupExecutionSnapshotPeerCount() int {
 	if n == nil || n.Host == nil {
 		return 0
@@ -13326,7 +14018,10 @@ func (n *Node) startupExecutionSnapshotCanRebuildLocally(height uint64) bool {
 	if n == nil || height == 0 {
 		return false
 	}
-	if n.localCommittedHistoryHeight() < height {
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	if committedHeight < height {
 		return false
 	}
 	if _, baseHeight, ok := n.startupExecutionTrustedBaseSnapshot(height); ok {
@@ -13434,7 +14129,13 @@ func (n *Node) maybeScheduleRegistryHistoryRebuild(height uint64, reason string)
 	readyHeight := n.registryHistoryRebuildReadyHeight
 	targetHeight := n.registryHistoryRebuildTarget
 	lastScheduledAt := n.registryHistoryRebuildLastScheduleAt
+	lastScheduledHeight := n.registryHistoryRebuildLastScheduledHeight
+	failedHeight := n.registryHistoryRebuildFailedHeight
 	if readyHeight >= target || targetHeight >= target {
+		n.registryHistoryRebuildMu.Unlock()
+		return false
+	}
+	if lastScheduledHeight >= target && failedHeight != target {
 		n.registryHistoryRebuildMu.Unlock()
 		return false
 	}
@@ -13826,7 +14527,20 @@ func (n *Node) ensureStartupTrustedExecutionSnapshotsInternal(finalized uint64, 
 	n.executionSnapshotRebuildMu.Lock()
 	rebuildFailed := n.executionSnapshotRebuildFailedHeight == finalized && n.executionSnapshotRebuildLastErr != ""
 	rebuildReadyHeight := n.executionSnapshotRebuildReadyHeight
+	liveCommitHeight := n.executionSnapshotLiveCommitHeight
 	n.executionSnapshotRebuildMu.Unlock()
+
+	// A block verified and committed by this running process already crossed the
+	// execution-state validation barrier. Do not require a checkpoint snapshot
+	// for every subsequent live height; that turns the startup-only recovery
+	// path into an expensive per-block replay loop. The marker is memory-only,
+	// so a restarted process still has to recover from a trusted snapshot.
+	if liveCommitHeight >= finalized &&
+		n.Blockchain != nil &&
+		n.Blockchain.Height() >= finalized &&
+		n.localCommittedHistoryHeight() >= finalized {
+		return true, "ready"
+	}
 
 	if rebuildFailed && !canRebuildLocally {
 		if source, repaired := n.ensureCommittedTipStateSnapshot(finalized, "startup"); repaired {
@@ -14330,7 +15044,11 @@ func (n *Node) applySnapshotForSyncHeightInternal(targetHeight uint64, allowReap
 			n.retargetSnapshotSessionLowerAvailable(targetHeight, snap.Height, snapshotCheckpointHeightFor(snap.Height), "snapshot_lower_available_applied")
 		}
 		if allowReapply && snap.Height == localHeight {
-			n.ApplySnapshotForRecovery(*snap)
+			if !n.ApplySnapshotForRecovery(*snap) {
+				n.recordSnapshotSessionStrictResult("", "snapshot_apply_noop")
+				n.snapshotSessionMarkFailure("snapshot_apply_noop")
+				return false
+			}
 			n.noteSnapshotApplied(snap.Height)
 			n.markSnapshotSessionApplied(snap, 0)
 			setSnapshotProgress(snap.Height, "snapshot_applied")
@@ -14338,7 +15056,11 @@ func (n *Node) applySnapshotForSyncHeightInternal(targetHeight uint64, allowReap
 				fmt.Printf("RECOVERY local snapshot height=%d\n", snap.Height)
 			}
 		} else {
-			n.ApplySnapshotForSync(*snap)
+			if !n.ApplySnapshotForSync(*snap) {
+				n.recordSnapshotSessionStrictResult("", "snapshot_apply_noop")
+				n.snapshotSessionMarkFailure("snapshot_apply_noop")
+				return false
+			}
 			n.noteSnapshotApplied(snap.Height)
 			n.markSnapshotSessionApplied(snap, 0)
 			setSnapshotProgress(snap.Height, "snapshot_applied")
@@ -14431,6 +15153,7 @@ type snapshotChunkResumeState struct {
 	StateMerkleRoot       string          `json:"state_merkle_root,omitempty"`
 	ValidatorSetHash      string          `json:"validator_set_hash,omitempty"`
 	ValidatorRegistryHash string          `json:"validator_registry_hash,omitempty"`
+	PromotionWindowHash   string          `json:"promotion_window_hash,omitempty"`
 	ManifestHash          string          `json:"manifest_hash,omitempty"`
 	ChunkSize             uint64          `json:"chunk_size"`
 	TotalChunks           uint64          `json:"total_chunks"`
@@ -14525,6 +15248,12 @@ func (n *Node) snapshotProvidersForManifest(manifest *SnapshotManifest, primary 
 		return []peer.ID{primary}
 	}
 	normalizeSnapshotManifest(manifest)
+	if !syncSnapshotDistributionEnabled() {
+		if strings.TrimSpace(primary.String()) == "" {
+			return nil
+		}
+		return []peer.ID{primary}
+	}
 	unique := make(map[string]peer.ID, len(peers)+1)
 	if strings.TrimSpace(primary.String()) != "" {
 		unique[primary.String()] = primary
@@ -14622,6 +15351,7 @@ func (n *Node) fetchSnapshotFromManifestChunks(manifest *SnapshotManifest, provi
 			StateMerkleRoot:       manifest.StateMerkleRoot,
 			ValidatorSetHash:      manifest.ValidatorSetHash,
 			ValidatorRegistryHash: manifest.ValidatorRegistryHash,
+			PromotionWindowHash:   manifest.PromotionWindowHash,
 			ManifestHash:          manifestHash,
 			ChunkSize:             manifest.ChunkSize,
 			TotalChunks:           manifest.ChunkCount,
@@ -14638,6 +15368,7 @@ func (n *Node) fetchSnapshotFromManifestChunks(manifest *SnapshotManifest, provi
 		state.StateMerkleRoot = manifest.StateMerkleRoot
 		state.ValidatorSetHash = manifest.ValidatorSetHash
 		state.ValidatorRegistryHash = manifest.ValidatorRegistryHash
+		state.PromotionWindowHash = manifest.PromotionWindowHash
 		state.ManifestHash = manifestHash
 		state.VerifyStage = "manifest_verified"
 		state.ResumeState = resumeState
@@ -14791,6 +15522,10 @@ func (n *Node) fetchSnapshotFromManifestChunks(manifest *SnapshotManifest, provi
 	if err != nil {
 		return nil, err
 	}
+	n.mergeSnapshotProofsFromManifest(snap, manifest)
+	if valid, required, ok := n.verifySnapshotCheckpointProofPolicy(snap); !ok {
+		return nil, fmt.Errorf("snapshot checkpoint proof quorum unavailable valid=%d required=%d", valid, required)
+	}
 	state.VerifyStage = "verified"
 	state.ResumeState = "verified"
 	saveSnapshotChunkResumeState(manifestPath, state)
@@ -14838,20 +15573,22 @@ func (n *Node) fetchSnapshotFromPeerChunks(pid peer.ID, targetHeight uint64, min
 		!strings.EqualFold(state.SnapshotHash, meta.SnapshotHash) ||
 		state.TotalChunks != meta.TotalChunks {
 		state = &snapshotChunkResumeState{
-			Height:          meta.Height,
-			SnapshotHash:    meta.SnapshotHash,
-			StateMerkleRoot: strings.TrimSpace(meta.StateMerkleRoot),
-			ChunkSize:       meta.ChunkSize,
-			TotalChunks:     meta.TotalChunks,
-			Received:        make(map[uint64]bool),
-			ResumeState:     "legacy",
-			VerifyStage:     "download",
+			Height:              meta.Height,
+			SnapshotHash:        meta.SnapshotHash,
+			StateMerkleRoot:     strings.TrimSpace(meta.StateMerkleRoot),
+			PromotionWindowHash: strings.TrimSpace(meta.PromotionWindowHash),
+			ChunkSize:           meta.ChunkSize,
+			TotalChunks:         meta.TotalChunks,
+			Received:            make(map[uint64]bool),
+			ResumeState:         "legacy",
+			VerifyStage:         "download",
 		}
 	}
 	state.StateRoot = strings.TrimSpace(meta.StateRoot)
 	state.StateMerkleRoot = strings.TrimSpace(meta.StateMerkleRoot)
 	state.ValidatorSetHash = strings.TrimSpace(meta.ValidatorSetHash)
 	state.ValidatorRegistryHash = strings.TrimSpace(meta.ValidatorRegistryHash)
+	state.PromotionWindowHash = strings.TrimSpace(meta.PromotionWindowHash)
 	provider := strings.TrimSpace(pid.String())
 	if provider != "" {
 		seen := false
@@ -14882,6 +15619,7 @@ func (n *Node) fetchSnapshotFromPeerChunks(pid peer.ID, targetHeight uint64, min
 		StateMerkleRoot:       meta.StateMerkleRoot,
 		ValidatorSetHash:      meta.ValidatorSetHash,
 		ValidatorRegistryHash: meta.ValidatorRegistryHash,
+		PromotionWindowHash:   meta.PromotionWindowHash,
 		ChunkSize:             meta.ChunkSize,
 		ChunkCount:            meta.TotalChunks,
 	}, uint64(len(state.Received)), state.Providers, "legacy_download", "legacy")
@@ -15006,6 +15744,9 @@ func (n *Node) fetchSnapshotFromPeerChunks(pid peer.ID, targetHeight uint64, min
 			snap.CheckpointProof[id] = sig
 		}
 	}
+	if manifest != nil {
+		n.mergeSnapshotProofsFromManifest(&snap, manifest)
+	}
 	populateSnapshotDerivedFields(&snap)
 	if !strings.EqualFold(strings.TrimSpace(snap.SnapshotHash), strings.TrimSpace(meta.SnapshotHash)) {
 		return nil, fmt.Errorf("snapshot metadata hash mismatch")
@@ -15020,6 +15761,7 @@ func (n *Node) fetchSnapshotFromPeerChunks(pid peer.ID, targetHeight uint64, min
 		StateMerkleRoot:       strings.TrimSpace(snap.StateMerkleRoot),
 		ValidatorSetHash:      strings.TrimSpace(snapshotValidatorSetHash(&snap)),
 		ValidatorRegistryHash: strings.TrimSpace(snapshotValidatorRegistryHash(&snap)),
+		PromotionWindowHash:   strings.TrimSpace(snapshotPromotionWindowHash(&snap)),
 		ChunkSize:             meta.ChunkSize,
 		ChunkCount:            meta.TotalChunks,
 	}, meta.TotalChunks, state.Providers, "legacy_verified", "legacy_verified")
@@ -15040,6 +15782,12 @@ func (n *Node) fetchTrustedSnapshot(height uint64, minHeight uint64, strictCoreQ
 		return nil, nil, fmt.Errorf("no peers available")
 	}
 	authorityIDs := n.validatorAuthorityIDsForQuorum(height)
+	if len(authorityIDs) == 0 {
+		authorityIDs = n.snapshotBootstrapAuthorityIDsForQuorum(height)
+		if DebugConsensus && len(authorityIDs) > 0 {
+			fmt.Printf("[SNAPSHOT-BOOTSTRAP-AUTHORITY] target=%d validators=%v source=local_fallback\n", height, authorityIDs)
+		}
+	}
 	required := execQuorumRequired(len(n.GetConsensusValidators(int(height))))
 	if len(authorityIDs) > 0 {
 		required = execQuorumRequired(len(authorityIDs))
@@ -15148,8 +15896,14 @@ func (n *Node) fetchTrustedSnapshot(height uint64, minHeight uint64, strictCoreQ
 		}
 	}
 
+	trustConsidered := 0
+	trustSkippedQuarantined := 0
+	trustSkippedMissingValidator := 0
+	trustSkippedNotAllowed := 0
 	for _, pid := range peers {
+		trustConsidered++
 		if n.isPeerQuarantined(pid.String()) {
+			trustSkippedQuarantined++
 			continue
 		}
 		n.peerStateMu.Lock()
@@ -15157,6 +15911,7 @@ func (n *Node) fetchTrustedSnapshot(height uint64, minHeight uint64, strictCoreQ
 		n.peerStateMu.Unlock()
 		vid = strings.TrimSpace(vid)
 		if vid == "" {
+			trustSkippedMissingValidator++
 			continue
 		}
 
@@ -15171,6 +15926,7 @@ func (n *Node) fetchTrustedSnapshot(height uint64, minHeight uint64, strictCoreQ
 			}
 		}
 		if !allowed {
+			trustSkippedNotAllowed++
 			continue
 		}
 		trustedPeers = append(trustedPeers, trustedPeer{pid: pid, vid: vid})
@@ -15262,6 +16018,19 @@ func (n *Node) fetchTrustedSnapshot(height uint64, minHeight uint64, strictCoreQ
 	}
 	n.updateSnapshotSessionProviders(providers)
 	if len(trustedPeers) == 0 {
+		if requireMetadataQuorum {
+			fmt.Printf("[SNAPSHOT-TRUSTED-PEERS] unavailable target=%d checkpoint=%d peers=%d authority=%v considered=%d missing_validator=%d quarantined=%d not_allowed=%d enforce_authority=%t\n",
+				height,
+				checkpointHeight,
+				len(peers),
+				authorityIDs,
+				trustConsidered,
+				trustSkippedMissingValidator,
+				trustSkippedQuarantined,
+				trustSkippedNotAllowed,
+				enforceAuthoritySet,
+			)
+		}
 		if requireMetadataQuorum && bestVotes > 0 {
 			if DebugConsensus {
 				fmt.Printf("[SNAPSHOT-QUORUM] waiting checkpoint=%d votes=%d/%d reason=no_trusted_peers\n",
@@ -15347,6 +16116,23 @@ func (n *Node) fetchTrustedSnapshot(height uint64, minHeight uint64, strictCoreQ
 		}
 
 		candidateHeights := strictSnapshotCandidateHeights(latestAvailabilities)
+		if requestedHeight > 0 {
+			dedupHeights := make([]uint64, 0, len(candidateHeights)+1)
+			seenHeights := make(map[uint64]struct{}, len(candidateHeights)+1)
+			dedupHeights = append(dedupHeights, requestedHeight)
+			seenHeights[requestedHeight] = struct{}{}
+			for _, candidateHeight := range candidateHeights {
+				if _, seen := seenHeights[candidateHeight]; seen {
+					continue
+				}
+				if candidateHeight > requestedHeight {
+					continue
+				}
+				seenHeights[candidateHeight] = struct{}{}
+				dedupHeights = append(dedupHeights, candidateHeight)
+			}
+			candidateHeights = dedupHeights
+		}
 		var (
 			quorumCandidate *strictSnapshotMetaCandidate
 			bestCandidate   *strictSnapshotMetaCandidate
@@ -16171,7 +16957,8 @@ func shouldForceSnapshotResyncForSyncApplyFailure(reason string) bool {
 	if reason == "" {
 		return false
 	}
-	return strings.Contains(reason, "execution_mismatch") ||
+	return strings.Contains(reason, "process_block_incomplete") ||
+		strings.Contains(reason, "execution_mismatch") ||
 		strings.Contains(reason, "state_root_mismatch") ||
 		strings.Contains(reason, "parent_state_unavailable")
 }
@@ -16239,6 +17026,13 @@ func (n *Node) applySyncBlockWithRetry(block Block) syncApplyResult {
 				result.Reason = strings.TrimSpace(applyErr.Reason)
 			}
 		}
+		if strings.TrimSpace(result.Reason) == "" && afterHeight <= beforeHeight && block.ID == beforeHeight+1 {
+			result.Reason = "process_block_incomplete"
+			if seenKey := blockSeenKey(block); seenKey != "" {
+				n.unmarkBlockSeen(seenKey)
+			}
+			n.recordSyncApplyFailure(beforeHeight, block, result.Reason)
+		}
 		reason, failCount, ok := n.syncApplyFailure(block.ID, block.BlockHash)
 		if ok && strings.TrimSpace(reason) != "" {
 			result.Reason = reason
@@ -16262,6 +17056,12 @@ func (n *Node) applySyncBlockWithRetry(block Block) syncApplyResult {
 			if shouldForceSnapshotResyncForSyncApplyFailure(result.Reason) &&
 				(failCount == syncQueueApplyFailureEscalationThreshold || failCount%10 == 0) {
 				target := maxUint64(block.ID, beforeHeight+1)
+				if queueTip := n.maxQueuedFutureHeight(beforeHeight); queueTip > target {
+					target = queueTip
+				}
+				if followup := n.bestFollowupSyncTarget(beforeHeight); followup > target {
+					target = followup
+				}
 				go n.forceSnapshotResyncNow(target, "sync_apply_"+strings.TrimSpace(result.Reason))
 			}
 		}
@@ -17350,6 +18150,12 @@ func (n *Node) consensusValidatorsForHeight(height uint64) []string {
 	if GenesisValidatorSetFrozen && (height <= 1 || chainHeight == 0) {
 		if genesis := canonicalValidatorIDs(n.GenesisValidators); len(genesis) > 0 {
 			return finalize(genesis, "", "genesis_frozen", nil)
+		}
+	}
+
+	if expectedHash != "" {
+		if frozen, ok := n.committedFrozenValidatorSetCandidate(expectedHash, height, height-1); ok {
+			return finalize(frozen, expectedHash, "chain_parent_commitment", nil)
 		}
 	}
 
@@ -21493,6 +22299,14 @@ func (n *Node) ProcessQueuedBlocks() {
 				queueTip = validBlock.ID
 			}
 			rejectReason, failCount, haveRejectReason := n.syncApplyFailure(validBlock.ID, validBlock.BlockHash)
+			if !haveRejectReason {
+				rejectReason = "process_block_incomplete"
+				if seenKey := blockSeenKey(*validBlock); seenKey != "" {
+					n.unmarkBlockSeen(seenKey)
+				}
+				failCount = n.recordSyncApplyFailure(currentHeight, *validBlock, rejectReason)
+				haveRejectReason = true
+			}
 			extra := fmt.Sprintf("candidate_hash=%s candidate_prev=%s proposer=%s",
 				ShortHash(validBlock.BlockHash), ShortHash(validBlock.PrevHash), ShortID(validBlock.Proposer))
 			if haveRejectReason {
@@ -21513,7 +22327,11 @@ func (n *Node) ProcessQueuedBlocks() {
 					failCount,
 					rejectReason,
 				)
-				n.maybeForceQueueSnapshotSync(queueTip, "queue_apply_failed_"+rejectReason)
+				forceTarget := queueTip
+				if followup := n.bestFollowupSyncTarget(currentHeight); followup > forceTarget {
+					forceTarget = followup
+				}
+				n.maybeForceQueueSnapshotSync(forceTarget, "queue_apply_failed_"+rejectReason)
 			}
 			n.handleQueuedSyncStall("queue_apply_failed", currentHeight, queueTip)
 
@@ -23653,6 +24471,7 @@ func StartNode(
 	node.SetRootContext(rootCtx, rootCancel)
 	node.ensureDedicatedThreads()
 	node.loadPeerReputation()
+	node.loadPeerHelloNonces()
 
 	for _, addr := range peerMultiaddrs {
 
@@ -23715,10 +24534,10 @@ func StartNode(
 
 	startupChainTruncated := false
 	blocks := node.LoadBlocksFromDB()
-	if sanitized, tip, reason := sanitizeContiguousLoadedBlocks(blocks); reason != "" {
+	if sanitized, tip, err := sanitizeContiguousLoadedBlocks(blocks); err != nil {
 		blocks = sanitized
 		startupChainTruncated = true
-		log.Printf("[CHAIN-AUDIT] startup_truncate_sparse_blocks tip=%d reason=%s", tip, reason)
+		log.Printf("[CHAIN-AUDIT] startup_truncate_sparse_blocks tip=%d reason=%s", tip, err)
 		node.pruneBlocksAboveHeight(tip)
 		if err := node.pruneFinalizedHashInvariantsAboveHeight(tip); err != nil {
 			log.Printf("[WARN] finalized hash invariant prune failed height=%d err=%v", tip, err)
@@ -23821,7 +24640,9 @@ func StartNode(
 	}
 
 	applyGenesisRuntimePolicy(genesisDisk)
+	node.installGenesisValidatorIDs(genesisDisk)
 	node.bootstrapGenesisValidators(genesisDisk)
+	node.ensureGenesisCommittedValidatorRegistrySnapshot("startup")
 	if node.Role == "validator" && !ValidatorAllowIdentityRotationOnExistingChain && isValidatorKeyUsable(vKey) {
 		selfID := normalizeValidatorID(node.ID)
 		if genesisPK, ok := GenesisValidatorPubKeys[selfID]; ok && len(genesisPK) == ed25519.PublicKeySize && !bytes.Equal(genesisPK, vKey.PublicKey) {
@@ -23850,24 +24671,6 @@ func StartNode(
 				}
 			}
 		})
-	}
-
-	if genesisDisk != nil && len(genesisDisk.Validators) > 0 {
-
-		node.GenesisValidators = make([]string, 0, len(genesisDisk.Validators))
-
-		for vid := range genesisDisk.Validators {
-
-			norm := normalizeValidatorID(vid)
-			if norm == "" {
-				continue
-			}
-			node.GenesisValidators = append(node.GenesisValidators, norm)
-
-		}
-
-		node.GenesisValidators = canonicalValidatorIDs(node.GenesisValidators)
-
 	}
 
 	if len(node.GenesisValidators) > 0 {
@@ -24140,6 +24943,8 @@ func StartNode(
 
 		node.SafeGoLoop("monitor_peer_suspects", 3*time.Second, func() { node.monitorPeerSuspects() })
 
+		node.SafeGoLoop("peer_hello_nonce_sweeper", 3*time.Second, func() { node.startPeerHelloNonceSweeper(ctx) })
+
 		node.SafeGoLoop("monitor_goroutines", 3*time.Second, func() { monitorGoroutines(ctx, node) })
 
 		node.SafeGoLoop("self_heal", 3*time.Second, func() { node.startSelfHeal(ctx) })
@@ -24294,6 +25099,21 @@ func applyGenesisRuntimePolicy(g *Genesis) {
 		return
 	}
 	GenesisFrozenValidatorSetSize = len(ids)
+}
+
+func (n *Node) installGenesisValidatorIDs(g *Genesis) {
+	if n == nil || g == nil || len(g.Validators) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(g.Validators))
+	for vid := range g.Validators {
+		norm := normalizeValidatorID(vid)
+		if norm == "" {
+			continue
+		}
+		ids = append(ids, norm)
+	}
+	n.GenesisValidators = canonicalValidatorIDs(ids)
 }
 
 func normalizeGenesisAllocation(name string, allocation *GenesisAllocation, minLockEpochs uint64) error {
@@ -26246,6 +27066,7 @@ func (n *Node) enterPostBlockSafeMode(nextHeight uint64) {
 			snap.CommitteeSize,
 		)
 	}
+	n.persistConsensusSafetyStateAsync("post_block_safe_mode_started")
 }
 
 func (n *Node) enterPostBlockSafeModeAsync(nextHeight uint64) {
@@ -26344,6 +27165,7 @@ func (n *Node) finishPostBlockSafeMode(height uint64, reason string) {
 		required := safeModeLiveRequired(snap.CommitteeSize)
 		fmt.Printf("[SAFE-MODE] height=%d window=%s live=%d required=%d ended=%s\n", height, window, snap.Live, required, reason)
 	}
+	n.persistConsensusSafetyStateAsync("post_block_safe_mode_finished")
 }
 
 func (n *Node) effectiveSafeModeLiveCount(snap CommitteeLivenessSnapshot, required int) int {
@@ -27041,6 +27863,10 @@ type ConsensusConfig struct {
 
 	ProposerRoundTimeoutSeconds uint64 `toml:"proposer_round_timeout_seconds"`
 
+	FastProposerFailoverEnabled *bool `toml:"fast_proposer_failover_enabled"`
+
+	FastProposerFailoverMinSeconds uint64 `toml:"fast_proposer_failover_min_seconds"`
+
 	ProposerRoundMax uint32 `toml:"proposer_round_max"`
 
 	ProposerRoundMaxSkew uint32 `toml:"proposer_round_max_skew"`
@@ -27180,6 +28006,42 @@ type ValidatorEngineConfig struct {
 	ActiveSetMode string `toml:"active_set_mode"`
 
 	MaxActiveCommittee int `toml:"max_active_committee"`
+
+	MaxActiveValidators int `toml:"max_active_validators"`
+
+	PerformanceSlots int `toml:"performance_slots"`
+
+	RotationSlots int `toml:"rotation_slots"`
+
+	EffectiveStakeCap int64 `toml:"effective_stake_cap"`
+
+	ValidatorEpochBlocks uint64 `toml:"validator_epoch_blocks"`
+
+	ScoreWeightStake int `toml:"score_weight_stake"`
+
+	ScoreWeightUptime int `toml:"score_weight_uptime"`
+
+	ScoreWeightPerformance int `toml:"score_weight_performance"`
+
+	ScoreWeightDecentralization int `toml:"score_weight_decentralization"`
+
+	PerformanceMinSignedBPS int `toml:"performance_min_signed_bps"`
+
+	PromotionWindowEpochs uint64 `toml:"promotion_window_epochs"`
+
+	MinimumAgeForPerformanceSlotEpochs uint64 `toml:"minimum_age_for_performance_slot_epochs"`
+
+	PromotionWindowRecordV1Height uint64 `toml:"promotion_window_record_v1_height"`
+
+	MinimumOnlineValidatorsWhenFull int `toml:"minimum_online_validators_when_full"`
+
+	DiversityWeightASN int `toml:"diversity_weight_asn"`
+
+	DiversityWeightRegion int `toml:"diversity_weight_region"`
+
+	DiversityWeightProvider int `toml:"diversity_weight_provider"`
+
+	DiversityWeightHomePC int `toml:"diversity_weight_home_pc"`
 
 	AdaptiveCommitteeLogMultiplier int `toml:"adaptive_committee_log_multiplier"`
 
@@ -27339,39 +28201,51 @@ type NetworkConfig struct {
 }
 
 type SyncConfig struct {
-	DirectGossipMaxBlocks                 uint64 `toml:"direct_gossip_max_blocks"`
-	FastBlockSyncMaxBlocks                uint64 `toml:"fast_block_sync_max_blocks"`
-	RangeFetchMaxBlocks                   uint64 `toml:"range_fetch_max_blocks"`
-	BlockRangeReplicationFactor           int    `toml:"block_range_replication_factor"`
-	RestartSnapshotGraceBlocks            uint64 `toml:"restart_snapshot_grace_blocks"`
-	SnapshotDeltaMaxBlocks                uint64 `toml:"snapshot_delta_max_blocks"`
-	SnapshotThresholdBlocks               uint64 `toml:"snapshot_threshold_blocks"`
-	FreshJoinFallbackBlockReplayEnabled   bool   `toml:"fresh_join_fallback_block_replay_enabled"`
-	SnapshotPublishNewNodeThresholdBlocks uint64 `toml:"snapshot_publish_new_node_threshold_blocks"`
-	SnapshotPublishLagThresholdBlocks     uint64 `toml:"snapshot_publish_lag_threshold_blocks"`
-	SnapshotPublishReannounceCooldownSec  uint64 `toml:"snapshot_publish_reannounce_cooldown_seconds"`
-	SnapshotWarmupSeconds                 uint64 `toml:"snapshot_warmup_seconds"`
-	DeltaReplayMaxBlocks                  uint64 `toml:"delta_replay_max_blocks"`
-	DeltaReplayBatchBlocks                uint64 `toml:"delta_replay_batch_blocks"`
-	DeltaReplayVerifyWorkers              int    `toml:"delta_replay_verify_workers"`
-	SnapshotChunkSizeBytes                uint64 `toml:"snapshot_chunk_size_bytes"`
-	SnapshotParallelChunks                int    `toml:"snapshot_parallel_chunks"`
-	SnapshotChunkReplicationFactor        int    `toml:"snapshot_chunk_replication_factor"`
-	SyncStallSeconds                      uint64 `toml:"sync_stall_seconds"`
-	SyncPeerTimeoutSeconds                uint64 `toml:"sync_peer_timeout_seconds"`
-	HeaderBatchSize                       uint64 `toml:"header_batch_size"`
-	HeaderCommonAncestorDepth             uint64 `toml:"header_common_ancestor_depth"`
-	SnapshotAnchorTimeoutSeconds          uint64 `toml:"snapshot_anchor_timeout_seconds"`
-	SnapshotAnchorMaxRetries              uint64 `toml:"snapshot_anchor_max_retries"`
-	CheckpointIntervalBlocks              uint64 `toml:"checkpoint_interval_blocks"`
-	SnapshotCheckpointDomain              string `toml:"snapshot_checkpoint_domain"`
-	SnapshotCheckpointV2Height            uint64 `toml:"snapshot_checkpoint_v2_height"`
-	SnapshotSessionTTLSeconds             uint64 `toml:"snapshot_session_ttl_seconds"`
-	SnapshotQuorumApplyWatchdogSeconds    uint64 `toml:"snapshot_quorum_apply_watchdog_seconds"`
-	SnapshotSessionResetWatchdogSeconds   uint64 `toml:"snapshot_session_reset_watchdog_seconds"`
-	SnapshotInvalidProofQuarantineAfter   uint64 `toml:"snapshot_invalid_proof_quarantine_after"`
-	HistoryMode                           string `toml:"history_mode"`
-	TrustedSnapshotRequireCheckpointProof *bool  `toml:"trusted_snapshot_require_checkpoint_proof"`
+	DirectGossipMaxBlocks                 uint64   `toml:"direct_gossip_max_blocks"`
+	FastBlockSyncMaxBlocks                uint64   `toml:"fast_block_sync_max_blocks"`
+	RangeFetchMaxBlocks                   uint64   `toml:"range_fetch_max_blocks"`
+	BlockRangeReplicationFactor           int      `toml:"block_range_replication_factor"`
+	RestartSnapshotGraceBlocks            uint64   `toml:"restart_snapshot_grace_blocks"`
+	SnapshotDeltaMaxBlocks                uint64   `toml:"snapshot_delta_max_blocks"`
+	SnapshotThresholdBlocks               uint64   `toml:"snapshot_threshold_blocks"`
+	FreshJoinFallbackBlockReplayEnabled   bool     `toml:"fresh_join_fallback_block_replay_enabled"`
+	SnapshotPublishNewNodeThresholdBlocks uint64   `toml:"snapshot_publish_new_node_threshold_blocks"`
+	SnapshotPublishLagThresholdBlocks     uint64   `toml:"snapshot_publish_lag_threshold_blocks"`
+	SnapshotPublishReannounceCooldownSec  uint64   `toml:"snapshot_publish_reannounce_cooldown_seconds"`
+	SnapshotWarmupSeconds                 uint64   `toml:"snapshot_warmup_seconds"`
+	DeltaReplayMaxBlocks                  uint64   `toml:"delta_replay_max_blocks"`
+	DeltaReplayBatchBlocks                uint64   `toml:"delta_replay_batch_blocks"`
+	DeltaReplayVerifyWorkers              int      `toml:"delta_replay_verify_workers"`
+	DeltaStateSyncEnabled                 bool     `toml:"delta_state_sync_enabled"`
+	Ed25519BatchVerifyWorkers             int      `toml:"ed25519_batch_verify_workers"`
+	SnapshotDistributionEnabled           bool     `toml:"snapshot_distribution_enabled"`
+	SnapshotMultiPeerChunkFetch           bool     `toml:"snapshot_multi_peer_chunk_fetch"`
+	SnapshotCompression                   string   `toml:"snapshot_compression"`
+	SnapshotChunkSizeBytes                uint64   `toml:"snapshot_chunk_size_bytes"`
+	SnapshotParallelChunks                int      `toml:"snapshot_parallel_chunks"`
+	SnapshotChunkReplicationFactor        int      `toml:"snapshot_chunk_replication_factor"`
+	SyncStallSeconds                      uint64   `toml:"sync_stall_seconds"`
+	SyncPeerTimeoutSeconds                uint64   `toml:"sync_peer_timeout_seconds"`
+	HeaderBatchSize                       uint64   `toml:"header_batch_size"`
+	HeaderCommonAncestorDepth             uint64   `toml:"header_common_ancestor_depth"`
+	SnapshotAnchorTimeoutSeconds          uint64   `toml:"snapshot_anchor_timeout_seconds"`
+	SnapshotAnchorMaxRetries              uint64   `toml:"snapshot_anchor_max_retries"`
+	CheckpointIntervalBlocks              uint64   `toml:"checkpoint_interval_blocks"`
+	SnapshotCheckpointDomain              string   `toml:"snapshot_checkpoint_domain"`
+	SnapshotCheckpointV2Height            uint64   `toml:"snapshot_checkpoint_v2_height"`
+	SnapshotSessionTTLSeconds             uint64   `toml:"snapshot_session_ttl_seconds"`
+	SnapshotQuorumApplyWatchdogSeconds    uint64   `toml:"snapshot_quorum_apply_watchdog_seconds"`
+	SnapshotSessionResetWatchdogSeconds   uint64   `toml:"snapshot_session_reset_watchdog_seconds"`
+	SnapshotInvalidProofQuarantineAfter   uint64   `toml:"snapshot_invalid_proof_quarantine_after"`
+	HistoryMode                           string   `toml:"history_mode"`
+	TrustedSnapshotRequireCheckpointProof *bool    `toml:"trusted_snapshot_require_checkpoint_proof"`
+	UsableHeadFastBootstrapEnabled        bool     `toml:"usable_head_fast_bootstrap_enabled"`
+	UsableHeadRoles                       []string `toml:"usable_head_roles"`
+	UsableHeadMinGapBlocks                uint64   `toml:"usable_head_min_gap_blocks"`
+	UsableHeadTargetSeconds               uint64   `toml:"usable_head_target_seconds"`
+	UsableHeadRequireCheckpointProof      *bool    `toml:"usable_head_require_checkpoint_proof"`
+	UsableHeadBackgroundHistory           *bool    `toml:"usable_head_background_history"`
+	UsableHeadRecentReplayWindowBlocks    uint64   `toml:"usable_head_recent_replay_window_blocks"`
 }
 
 type TokenomicsConfig struct {
@@ -27528,6 +28402,18 @@ type CoreConfig struct {
 	RegistryReloadSeconds uint64 `toml:"registry_reload_seconds"`
 }
 
+type FounderConfig struct {
+	ValidatorBadgeEnabled bool `toml:"validator_badge_enabled"`
+
+	ValidatorCutoffHeight uint64 `toml:"validator_cutoff_height"`
+
+	ValidatorMaxCount int `toml:"validator_max_count"`
+
+	ValidatorMinSignedBPS int `toml:"validator_min_signed_bps"`
+
+	ValidatorNFTCollection string `toml:"validator_nft_collection"`
+}
+
 type StorageConfig struct {
 	EncryptionKeyEnv string `toml:"encryption_key_env"`
 
@@ -27608,6 +28494,10 @@ type ConfigFile struct {
 	Core CoreConfig `toml:"core"`
 
 	PublicNodes PublicNodesConfig `toml:"public_nodes"`
+
+	Founder FounderConfig `toml:"founder"`
+
+	TestnetCampaign TestnetCampaignConfig `toml:"testnet_campaign"`
 
 	Storage StorageConfig `toml:"storage"`
 }
@@ -28327,31 +29217,8 @@ func applyConsensusConfig(cc ConsensusConfig) bool {
 
 	parse("recompute_pause", cc.RecomputePause, &ConsensusRecomputePause)
 
-	if cc.DetectorDegradedAfterSeconds > 0 {
-
-		ConsensusDetectorDegradedAfter = time.Duration(cc.DetectorDegradedAfterSeconds) * time.Second
-		if ConsensusDetectorDegradedAfter < 30*time.Second {
-			ConsensusDetectorDegradedAfter = 30 * time.Second
-		}
-
+	if applyConsensusDetectorConfig(cc) {
 		changed = true
-
-	}
-
-	if cc.DetectorHaltedAfterSeconds > 0 {
-
-		ConsensusDetectorHaltedAfter = time.Duration(cc.DetectorHaltedAfterSeconds) * time.Second
-
-		changed = true
-
-	}
-
-	if cc.DetectorRecoveryValidatorLagBlocks > 0 {
-
-		ConsensusDetectorRecoveryValidatorLagBlocks = cc.DetectorRecoveryValidatorLagBlocks
-
-		changed = true
-
 	}
 
 	if cc.WeakSubjectivityDepth > 0 {
@@ -28389,6 +29256,22 @@ func applyConsensusConfig(cc ConsensusConfig) bool {
 	if cc.ProposerRoundTimeoutSeconds > 0 {
 
 		ProposerRoundTimeout = time.Duration(cc.ProposerRoundTimeoutSeconds) * time.Second
+
+		changed = true
+
+	}
+
+	if cc.FastProposerFailoverEnabled != nil {
+
+		ConsensusFastProposerFailoverEnabled = *cc.FastProposerFailoverEnabled
+
+		changed = true
+
+	}
+
+	if cc.FastProposerFailoverMinSeconds > 0 {
+
+		ConsensusFastProposerFailoverMin = time.Duration(cc.FastProposerFailoverMinSeconds) * time.Second
 
 		changed = true
 
@@ -28566,6 +29449,26 @@ func applyConsensusConfig(cc ConsensusConfig) bool {
 
 	return changed
 
+}
+
+func applyConsensusDetectorConfig(cc ConsensusConfig) bool {
+	changed := false
+	if cc.DetectorDegradedAfterSeconds > 0 {
+		ConsensusDetectorDegradedAfter = time.Duration(cc.DetectorDegradedAfterSeconds) * time.Second
+		if ConsensusDetectorDegradedAfter < 30*time.Second {
+			ConsensusDetectorDegradedAfter = 30 * time.Second
+		}
+		changed = true
+	}
+	if cc.DetectorHaltedAfterSeconds > 0 {
+		ConsensusDetectorHaltedAfter = time.Duration(cc.DetectorHaltedAfterSeconds) * time.Second
+		changed = true
+	}
+	if cc.DetectorRecoveryValidatorLagBlocks > 0 {
+		ConsensusDetectorRecoveryValidatorLagBlocks = cc.DetectorRecoveryValidatorLagBlocks
+		changed = true
+	}
+	return changed
 }
 
 func applyRPCConfig(rc RPCConfig) bool {
@@ -29154,6 +30057,91 @@ func applyValidatorEngineConfig(vc ValidatorEngineConfig) bool {
 
 		changed = true
 
+	}
+
+	if vc.MaxActiveValidators > 0 {
+		ValidatorHybridMaxActiveValidators = vc.MaxActiveValidators
+		changed = true
+	}
+
+	if vc.PerformanceSlots > 0 {
+		ValidatorHybridPerformanceSlots = vc.PerformanceSlots
+		changed = true
+	}
+
+	if vc.RotationSlots > 0 {
+		ValidatorHybridRotationSlots = vc.RotationSlots
+		changed = true
+	}
+
+	if vc.EffectiveStakeCap > 0 {
+		ValidatorHybridEffectiveStakeCap = vc.EffectiveStakeCap
+		changed = true
+	}
+
+	if vc.ValidatorEpochBlocks > 0 {
+		ValidatorHybridEpochBlocks = vc.ValidatorEpochBlocks
+		changed = true
+	}
+
+	if vc.ScoreWeightStake > 0 {
+		ValidatorHybridStakeWeight = vc.ScoreWeightStake
+		changed = true
+	}
+
+	if vc.ScoreWeightUptime > 0 {
+		ValidatorHybridUptimeWeight = vc.ScoreWeightUptime
+		changed = true
+	}
+
+	if vc.ScoreWeightPerformance > 0 {
+		ValidatorHybridPerformanceWeight = vc.ScoreWeightPerformance
+		changed = true
+	}
+
+	if vc.ScoreWeightDecentralization > 0 {
+		ValidatorHybridDecentralizationWeight = vc.ScoreWeightDecentralization
+		changed = true
+	}
+
+	if vc.PerformanceMinSignedBPS > 0 {
+		ValidatorHybridPerformanceMinSignedBPS = vc.PerformanceMinSignedBPS
+		changed = true
+	}
+
+	if vc.PromotionWindowEpochs > 0 {
+		ValidatorHybridPromotionWindowEpochs = vc.PromotionWindowEpochs
+		changed = true
+	}
+
+	if vc.MinimumAgeForPerformanceSlotEpochs > 0 {
+		ValidatorHybridMinimumPerformanceAgeEpochs = vc.MinimumAgeForPerformanceSlotEpochs
+		changed = true
+	}
+
+	if vc.MinimumOnlineValidatorsWhenFull > 0 {
+		ValidatorHybridMinimumOnlineWhenFull = vc.MinimumOnlineValidatorsWhenFull
+		changed = true
+	}
+
+	if vc.DiversityWeightASN > 0 {
+		ValidatorHybridDiversityASNWeight = vc.DiversityWeightASN
+		changed = true
+	}
+
+	if vc.DiversityWeightRegion > 0 {
+		ValidatorHybridDiversityRegionWeight = vc.DiversityWeightRegion
+		changed = true
+	}
+
+	if vc.DiversityWeightProvider > 0 {
+		ValidatorHybridDiversityProviderWeight = vc.DiversityWeightProvider
+		changed = true
+	}
+
+	if vc.DiversityWeightHomePC > 0 {
+		ValidatorHybridDiversityHomePCWeight = vc.DiversityWeightHomePC
+		changed = true
 	}
 
 	if vc.AdaptiveCommitteeLogMultiplier > 0 {
@@ -30399,6 +31387,11 @@ func loadConfigOverrides(path string) error {
 	cfg.Sync.DeltaReplayMaxBlocks = syncDeltaReplayMaxBlocks()
 	cfg.Sync.DeltaReplayBatchBlocks = syncDeltaReplayBatchBlocks()
 	cfg.Sync.DeltaReplayVerifyWorkers = syncDeltaReplayVerifyWorkers()
+	cfg.Sync.DeltaStateSyncEnabled = syncDeltaStateSyncEnabled()
+	cfg.Sync.Ed25519BatchVerifyWorkers = syncEd25519BatchVerifyWorkers()
+	cfg.Sync.SnapshotDistributionEnabled = syncSnapshotDistributionEnabled()
+	cfg.Sync.SnapshotMultiPeerChunkFetch = syncSnapshotMultiPeerChunkFetchEnabled()
+	cfg.Sync.SnapshotCompression = syncSnapshotCompression()
 	cfg.Sync.SnapshotChunkSizeBytes = syncSnapshotChunkSizeBytes()
 	cfg.Sync.SnapshotParallelChunks = syncSnapshotParallelChunks()
 	cfg.Sync.SyncStallSeconds = syncStallThresholdSeconds()
@@ -30413,6 +31406,15 @@ func loadConfigOverrides(path string) error {
 	cfg.Sync.SnapshotSessionResetWatchdogSeconds = syncSnapshotSessionResetWatchdogSeconds()
 	cfg.Sync.SnapshotInvalidProofQuarantineAfter = syncSnapshotInvalidProofQuarantineAfter()
 	cfg.Sync.HistoryMode = normalizeSyncHistoryMode(SyncHistoryMode)
+	cfg.Sync.UsableHeadFastBootstrapEnabled = SyncUsableHeadFastBootstrapEnabled
+	cfg.Sync.UsableHeadRoles = append([]string{}, SyncUsableHeadRoles...)
+	cfg.Sync.UsableHeadMinGapBlocks = syncUsableHeadMinGapBlocks()
+	cfg.Sync.UsableHeadTargetSeconds = syncUsableHeadTargetSeconds()
+	usableHeadRequireCheckpointProofDefault := SyncUsableHeadRequireCheckpointProof
+	usableHeadBackgroundHistoryDefault := SyncUsableHeadBackgroundHistory
+	cfg.Sync.UsableHeadRequireCheckpointProof = &usableHeadRequireCheckpointProofDefault
+	cfg.Sync.UsableHeadBackgroundHistory = &usableHeadBackgroundHistoryDefault
+	cfg.Sync.UsableHeadRecentReplayWindowBlocks = syncUsableHeadRecentReplayWindowBlocks()
 
 	meta, err := toml.DecodeFile(path, &cfg)
 
@@ -30494,7 +31496,7 @@ func loadConfigOverrides(path string) error {
 
 	if applyConsensusConfig(cfg.Consensus) {
 
-		fmt.Printf("CONSENSUS config loaded: propose=%s prevote=%s precommit=%s commit=%s min_block_interval=%s recompute_pause=%s weak_subjectivity_depth=%d max_future_gap=%d validator_set_commitment_v2_height=%d validator_set_hash_v3_height=%d deterministic_tx_order=%t round_timeout=%s round_max=%d round_skew=%d barrier_relax=%s barrier_drop=%d barrier_retry_mode=%s exec_quorum_emergency=%t exec_quorum_emergency_stall=%s penalty_mode=%s invalid_proposer_q=%d exec_mismatch_q=%d exec_mismatch_slash=%d propose_requires_sync_ready=%t post_block_safe_mode=%t safe_mode_min=%s safe_mode_max=%s safe_mode_history=%d safe_mode_live_quorum_bps=%d detector_degraded_after=%s detector_halted_after=%s detector_recovery_validator_lag_blocks=%d\n",
+		fmt.Printf("CONSENSUS config loaded: propose=%s prevote=%s precommit=%s commit=%s min_block_interval=%s recompute_pause=%s weak_subjectivity_depth=%d max_future_gap=%d validator_set_commitment_v2_height=%d validator_set_hash_v3_height=%d deterministic_tx_order=%t round_timeout=%s fast_failover=%t fast_failover_min=%s round_max=%d round_skew=%d barrier_relax=%s barrier_drop=%d barrier_retry_mode=%s exec_quorum_emergency=%t exec_quorum_emergency_stall=%s penalty_mode=%s invalid_proposer_q=%d exec_mismatch_q=%d exec_mismatch_slash=%d propose_requires_sync_ready=%t post_block_safe_mode=%t safe_mode_min=%s safe_mode_max=%s safe_mode_history=%d safe_mode_live_quorum_bps=%d detector_degraded_after=%s detector_halted_after=%s detector_recovery_validator_lag_blocks=%d\n",
 
 			ConsensusTimeoutPropose,
 
@@ -30519,6 +31521,10 @@ func loadConfigOverrides(path string) error {
 			EnforceDeterministicTxOrder,
 
 			ProposerRoundTimeout,
+
+			ConsensusFastProposerFailoverEnabled,
+
+			ConsensusFastProposerFailoverMin,
 
 			ProposerRoundMax,
 
@@ -30608,6 +31614,22 @@ func loadConfigOverrides(path string) error {
 		ProposerRoundTimeout = time.Duration(cfg.Consensus.ProposerRoundTimeoutSeconds) * time.Second
 
 		fmt.Printf("CONSENSUS config loaded: proposer_round_timeout_seconds=%d (explicit)\n", cfg.Consensus.ProposerRoundTimeoutSeconds)
+
+	}
+
+	if meta.IsDefined("consensus", "fast_proposer_failover_enabled") && cfg.Consensus.FastProposerFailoverEnabled != nil {
+
+		ConsensusFastProposerFailoverEnabled = *cfg.Consensus.FastProposerFailoverEnabled
+
+		fmt.Printf("CONSENSUS config loaded: fast_proposer_failover_enabled=%t (explicit)\n", ConsensusFastProposerFailoverEnabled)
+
+	}
+
+	if meta.IsDefined("consensus", "fast_proposer_failover_min_seconds") && cfg.Consensus.FastProposerFailoverMinSeconds > 0 {
+
+		ConsensusFastProposerFailoverMin = time.Duration(cfg.Consensus.FastProposerFailoverMinSeconds) * time.Second
+
+		fmt.Printf("CONSENSUS config loaded: fast_proposer_failover_min_seconds=%d (explicit)\n", cfg.Consensus.FastProposerFailoverMinSeconds)
 
 	}
 
@@ -31085,6 +32107,96 @@ func loadConfigOverrides(path string) error {
 
 		fmt.Printf("VALIDATOR config loaded: max_active_committee=%d (explicit)\n", ValidatorMaxActiveCommittee)
 
+	}
+
+	if meta.IsDefined("validators", "max_active_validators") && cfg.Validators.MaxActiveValidators > 0 {
+		ValidatorHybridMaxActiveValidators = cfg.Validators.MaxActiveValidators
+		fmt.Printf("VALIDATOR config loaded: max_active_validators=%d (explicit)\n", ValidatorHybridMaxActiveValidators)
+	}
+
+	if meta.IsDefined("validators", "performance_slots") && cfg.Validators.PerformanceSlots > 0 {
+		ValidatorHybridPerformanceSlots = cfg.Validators.PerformanceSlots
+		fmt.Printf("VALIDATOR config loaded: performance_slots=%d (explicit)\n", ValidatorHybridPerformanceSlots)
+	}
+
+	if meta.IsDefined("validators", "rotation_slots") && cfg.Validators.RotationSlots > 0 {
+		ValidatorHybridRotationSlots = cfg.Validators.RotationSlots
+		fmt.Printf("VALIDATOR config loaded: rotation_slots=%d (explicit)\n", ValidatorHybridRotationSlots)
+	}
+
+	if meta.IsDefined("validators", "effective_stake_cap") && cfg.Validators.EffectiveStakeCap > 0 {
+		ValidatorHybridEffectiveStakeCap = cfg.Validators.EffectiveStakeCap
+		fmt.Printf("VALIDATOR config loaded: effective_stake_cap=%d (explicit)\n", ValidatorHybridEffectiveStakeCap)
+	}
+
+	if meta.IsDefined("validators", "validator_epoch_blocks") && cfg.Validators.ValidatorEpochBlocks > 0 {
+		ValidatorHybridEpochBlocks = cfg.Validators.ValidatorEpochBlocks
+		fmt.Printf("VALIDATOR config loaded: validator_epoch_blocks=%d (explicit)\n", ValidatorHybridEpochBlocks)
+	}
+
+	if meta.IsDefined("validators", "score_weight_stake") && cfg.Validators.ScoreWeightStake > 0 {
+		ValidatorHybridStakeWeight = cfg.Validators.ScoreWeightStake
+		fmt.Printf("VALIDATOR config loaded: score_weight_stake=%d (explicit)\n", ValidatorHybridStakeWeight)
+	}
+
+	if meta.IsDefined("validators", "score_weight_uptime") && cfg.Validators.ScoreWeightUptime > 0 {
+		ValidatorHybridUptimeWeight = cfg.Validators.ScoreWeightUptime
+		fmt.Printf("VALIDATOR config loaded: score_weight_uptime=%d (explicit)\n", ValidatorHybridUptimeWeight)
+	}
+
+	if meta.IsDefined("validators", "score_weight_performance") && cfg.Validators.ScoreWeightPerformance > 0 {
+		ValidatorHybridPerformanceWeight = cfg.Validators.ScoreWeightPerformance
+		fmt.Printf("VALIDATOR config loaded: score_weight_performance=%d (explicit)\n", ValidatorHybridPerformanceWeight)
+	}
+
+	if meta.IsDefined("validators", "score_weight_decentralization") && cfg.Validators.ScoreWeightDecentralization > 0 {
+		ValidatorHybridDecentralizationWeight = cfg.Validators.ScoreWeightDecentralization
+		fmt.Printf("VALIDATOR config loaded: score_weight_decentralization=%d (explicit)\n", ValidatorHybridDecentralizationWeight)
+	}
+
+	if meta.IsDefined("validators", "performance_min_signed_bps") && cfg.Validators.PerformanceMinSignedBPS > 0 {
+		ValidatorHybridPerformanceMinSignedBPS = cfg.Validators.PerformanceMinSignedBPS
+		fmt.Printf("VALIDATOR config loaded: performance_min_signed_bps=%d (explicit)\n", ValidatorHybridPerformanceMinSignedBPS)
+	}
+
+	if meta.IsDefined("validators", "promotion_window_epochs") && cfg.Validators.PromotionWindowEpochs > 0 {
+		ValidatorHybridPromotionWindowEpochs = cfg.Validators.PromotionWindowEpochs
+		fmt.Printf("VALIDATOR config loaded: promotion_window_epochs=%d (explicit)\n", ValidatorHybridPromotionWindowEpochs)
+	}
+
+	if meta.IsDefined("validators", "minimum_age_for_performance_slot_epochs") {
+		ValidatorHybridMinimumPerformanceAgeEpochs = cfg.Validators.MinimumAgeForPerformanceSlotEpochs
+		fmt.Printf("VALIDATOR config loaded: minimum_age_for_performance_slot_epochs=%d (explicit)\n", ValidatorHybridMinimumPerformanceAgeEpochs)
+	}
+
+	if meta.IsDefined("validators", "promotion_window_record_v1_height") {
+		PromotionWindowRecordV1Height = cfg.Validators.PromotionWindowRecordV1Height
+		fmt.Printf("VALIDATOR config loaded: promotion_window_record_v1_height=%d (explicit)\n", PromotionWindowRecordV1Height)
+	}
+
+	if meta.IsDefined("validators", "minimum_online_validators_when_full") && cfg.Validators.MinimumOnlineValidatorsWhenFull > 0 {
+		ValidatorHybridMinimumOnlineWhenFull = cfg.Validators.MinimumOnlineValidatorsWhenFull
+		fmt.Printf("VALIDATOR config loaded: minimum_online_validators_when_full=%d (explicit)\n", ValidatorHybridMinimumOnlineWhenFull)
+	}
+
+	if meta.IsDefined("validators", "diversity_weight_asn") && cfg.Validators.DiversityWeightASN > 0 {
+		ValidatorHybridDiversityASNWeight = cfg.Validators.DiversityWeightASN
+		fmt.Printf("VALIDATOR config loaded: diversity_weight_asn=%d (explicit)\n", ValidatorHybridDiversityASNWeight)
+	}
+
+	if meta.IsDefined("validators", "diversity_weight_region") && cfg.Validators.DiversityWeightRegion > 0 {
+		ValidatorHybridDiversityRegionWeight = cfg.Validators.DiversityWeightRegion
+		fmt.Printf("VALIDATOR config loaded: diversity_weight_region=%d (explicit)\n", ValidatorHybridDiversityRegionWeight)
+	}
+
+	if meta.IsDefined("validators", "diversity_weight_provider") && cfg.Validators.DiversityWeightProvider > 0 {
+		ValidatorHybridDiversityProviderWeight = cfg.Validators.DiversityWeightProvider
+		fmt.Printf("VALIDATOR config loaded: diversity_weight_provider=%d (explicit)\n", ValidatorHybridDiversityProviderWeight)
+	}
+
+	if meta.IsDefined("validators", "diversity_weight_home_pc") && cfg.Validators.DiversityWeightHomePC > 0 {
+		ValidatorHybridDiversityHomePCWeight = cfg.Validators.DiversityWeightHomePC
+		fmt.Printf("VALIDATOR config loaded: diversity_weight_home_pc=%d (explicit)\n", ValidatorHybridDiversityHomePCWeight)
 	}
 
 	if meta.IsDefined("validators", "adaptive_committee_log_multiplier") && cfg.Validators.AdaptiveCommitteeLogMultiplier > 0 {
@@ -31735,6 +32847,19 @@ func loadConfigOverrides(path string) error {
 		fmt.Printf("SYNC config loaded: delta_replay_verify_workers=%d (explicit)\n", SyncDeltaReplayVerifyWorkers)
 	}
 
+	if meta.IsDefined("sync", "delta_state_sync_enabled") {
+		SyncDeltaStateSyncEnabled = cfg.Sync.DeltaStateSyncEnabled
+		fmt.Printf("SYNC config loaded: delta_state_sync_enabled=%t (explicit)\n", SyncDeltaStateSyncEnabled)
+	}
+
+	if meta.IsDefined("sync", "ed25519_batch_verify_workers") {
+		SyncEd25519BatchVerifyWorkers = cfg.Sync.Ed25519BatchVerifyWorkers
+		if SyncEd25519BatchVerifyWorkers <= 0 {
+			SyncEd25519BatchVerifyWorkers = 8
+		}
+		fmt.Printf("SYNC config loaded: ed25519_batch_verify_workers=%d (explicit)\n", SyncEd25519BatchVerifyWorkers)
+	}
+
 	if meta.IsDefined("sync", "direct_gossip_max_blocks") {
 		SyncDirectGossipMaxBlocks = cfg.Sync.DirectGossipMaxBlocks
 		if SyncDirectGossipMaxBlocks == 0 {
@@ -31785,6 +32910,24 @@ func loadConfigOverrides(path string) error {
 			SyncSnapshotChunkSizeBytes = 1024 * 1024
 		}
 		fmt.Printf("SYNC config loaded: snapshot_chunk_size_bytes=%d (explicit)\n", SyncSnapshotChunkSizeBytes)
+	}
+
+	if meta.IsDefined("sync", "snapshot_distribution_enabled") {
+		SyncSnapshotDistributionEnabled = cfg.Sync.SnapshotDistributionEnabled
+		fmt.Printf("SYNC config loaded: snapshot_distribution_enabled=%t (explicit)\n", SyncSnapshotDistributionEnabled)
+	}
+
+	if meta.IsDefined("sync", "snapshot_multi_peer_chunk_fetch") {
+		SyncSnapshotMultiPeerChunkFetch = cfg.Sync.SnapshotMultiPeerChunkFetch
+		fmt.Printf("SYNC config loaded: snapshot_multi_peer_chunk_fetch=%t (explicit)\n", SyncSnapshotMultiPeerChunkFetch)
+	}
+
+	if meta.IsDefined("sync", "snapshot_compression") {
+		SyncSnapshotCompression = strings.TrimSpace(cfg.Sync.SnapshotCompression)
+		if syncSnapshotCompression() == "zstd" {
+			SyncSnapshotCompression = "zstd"
+		}
+		fmt.Printf("SYNC config loaded: snapshot_compression=%s (explicit)\n", syncSnapshotCompression())
 	}
 
 	if meta.IsDefined("sync", "snapshot_parallel_chunks") {
@@ -31918,6 +33061,60 @@ func loadConfigOverrides(path string) error {
 	if meta.IsDefined("sync", "trusted_snapshot_require_checkpoint_proof") && cfg.Sync.TrustedSnapshotRequireCheckpointProof != nil {
 		SyncTrustedSnapshotRequireCheckpointProof = *cfg.Sync.TrustedSnapshotRequireCheckpointProof
 		fmt.Printf("SYNC config loaded: trusted_snapshot_require_checkpoint_proof=%t (explicit)\n", SyncTrustedSnapshotRequireCheckpointProof)
+	}
+
+	if meta.IsDefined("sync", "usable_head_fast_bootstrap_enabled") {
+		SyncUsableHeadFastBootstrapEnabled = cfg.Sync.UsableHeadFastBootstrapEnabled
+		fmt.Printf("SYNC config loaded: usable_head_fast_bootstrap_enabled=%t (explicit)\n", SyncUsableHeadFastBootstrapEnabled)
+	}
+
+	if meta.IsDefined("sync", "usable_head_roles") {
+		roles := make([]string, 0, len(cfg.Sync.UsableHeadRoles))
+		for _, role := range cfg.Sync.UsableHeadRoles {
+			normalized := normalizeUsableHeadRole(role)
+			if normalized == "full" || normalized == "archive" {
+				roles = append(roles, normalized)
+			}
+		}
+		if len(roles) == 0 {
+			roles = []string{"full", "archive"}
+		}
+		SyncUsableHeadRoles = roles
+		fmt.Printf("SYNC config loaded: usable_head_roles=%s (explicit)\n", strings.Join(SyncUsableHeadRoles, ","))
+	}
+
+	if meta.IsDefined("sync", "usable_head_min_gap_blocks") {
+		SyncUsableHeadMinGapBlocks = cfg.Sync.UsableHeadMinGapBlocks
+		if SyncUsableHeadMinGapBlocks == 0 {
+			SyncUsableHeadMinGapBlocks = syncSnapshotCatchupThresholdBlocks()
+		}
+		fmt.Printf("SYNC config loaded: usable_head_min_gap_blocks=%d (explicit)\n", SyncUsableHeadMinGapBlocks)
+	}
+
+	if meta.IsDefined("sync", "usable_head_target_seconds") {
+		SyncUsableHeadTargetSeconds = cfg.Sync.UsableHeadTargetSeconds
+		if SyncUsableHeadTargetSeconds == 0 {
+			SyncUsableHeadTargetSeconds = 3
+		}
+		fmt.Printf("SYNC config loaded: usable_head_target_seconds=%d (explicit)\n", SyncUsableHeadTargetSeconds)
+	}
+
+	if meta.IsDefined("sync", "usable_head_require_checkpoint_proof") && cfg.Sync.UsableHeadRequireCheckpointProof != nil {
+		SyncUsableHeadRequireCheckpointProof = *cfg.Sync.UsableHeadRequireCheckpointProof
+		fmt.Printf("SYNC config loaded: usable_head_require_checkpoint_proof=%t (explicit)\n", SyncUsableHeadRequireCheckpointProof)
+	}
+
+	if meta.IsDefined("sync", "usable_head_background_history") && cfg.Sync.UsableHeadBackgroundHistory != nil {
+		SyncUsableHeadBackgroundHistory = *cfg.Sync.UsableHeadBackgroundHistory
+		fmt.Printf("SYNC config loaded: usable_head_background_history=%t (explicit)\n", SyncUsableHeadBackgroundHistory)
+	}
+
+	if meta.IsDefined("sync", "usable_head_recent_replay_window_blocks") {
+		SyncUsableHeadRecentReplayWindowBlocks = cfg.Sync.UsableHeadRecentReplayWindowBlocks
+		if SyncUsableHeadRecentReplayWindowBlocks == 0 {
+			SyncUsableHeadRecentReplayWindowBlocks = 2048
+		}
+		fmt.Printf("SYNC config loaded: usable_head_recent_replay_window_blocks=%d (explicit)\n", SyncUsableHeadRecentReplayWindowBlocks)
 	}
 
 	if applyEVMConfig(cfg.EVM) {
@@ -32598,6 +33795,46 @@ func loadConfigOverrides(path string) error {
 
 	}
 
+	if meta.IsDefined("founder", "validator_badge_enabled") {
+		FounderValidatorBadgeEnabled = cfg.Founder.ValidatorBadgeEnabled
+		fmt.Printf("FOUNDER config loaded: validator_badge_enabled=%t (explicit)\n", FounderValidatorBadgeEnabled)
+	}
+	if meta.IsDefined("founder", "validator_cutoff_height") {
+		FounderValidatorCutoffHeight = cfg.Founder.ValidatorCutoffHeight
+		fmt.Printf("FOUNDER config loaded: validator_cutoff_height=%d (explicit)\n", FounderValidatorCutoffHeight)
+	}
+	if meta.IsDefined("founder", "validator_max_count") {
+		FounderValidatorMaxCount = cfg.Founder.ValidatorMaxCount
+		fmt.Printf("FOUNDER config loaded: validator_max_count=%d (explicit)\n", FounderValidatorMaxCount)
+	}
+	if meta.IsDefined("founder", "validator_min_signed_bps") && cfg.Founder.ValidatorMinSignedBPS > 0 {
+		FounderValidatorMinSignedBPS = cfg.Founder.ValidatorMinSignedBPS
+		fmt.Printf("FOUNDER config loaded: validator_min_signed_bps=%d (explicit)\n", FounderValidatorMinSignedBPS)
+	}
+	if meta.IsDefined("founder", "validator_nft_collection") {
+		FounderValidatorNFTCollection = strings.TrimSpace(cfg.Founder.ValidatorNFTCollection)
+		fmt.Printf("FOUNDER config loaded: validator_nft_collection_configured=%t (explicit)\n", founderCollectionConfigured())
+	}
+	if applyFounderConfig(cfg.Founder) {
+		fmt.Printf("FOUNDER config loaded: badge_enabled=%t cutoff=%d max=%d min_signed_bps=%d collection=%t\n",
+			FounderValidatorBadgeEnabled,
+			FounderValidatorCutoffHeight,
+			FounderValidatorMaxCount,
+			FounderValidatorMinSignedBPS,
+			founderCollectionConfigured(),
+		)
+	}
+
+	if applyTestnetCampaignConfig(cfg.TestnetCampaign) {
+		fmt.Printf("TESTNET_CAMPAIGN config loaded: enabled=%t season=%s discord=%t telegram=%t bug_report=%t\n",
+			TestnetCampaignEnabled,
+			TestnetCampaignSeasonID,
+			strings.TrimSpace(TestnetCampaignDiscordURL) != "",
+			strings.TrimSpace(TestnetCampaignTelegramURL) != "",
+			strings.TrimSpace(TestnetCampaignBugReportURL) != "",
+		)
+	}
+
 	if applyPublicNodesConfig(cfg.PublicNodes) {
 
 		fmt.Printf("PUBLIC_NODES config loaded: nodes=%d\n", len(ConfigPublicNodes))
@@ -32862,6 +34099,15 @@ func main() {
 
 	if err := os.MkdirAll(*dataDir, 0700); err != nil {
 
+	}
+
+	processLock, processLockErr := acquireNodeProcessLock(*dataDir, *nodeID)
+	if processLockErr != nil {
+		log.Fatalf("[FATAL] %v", processLockErr)
+	}
+	if processLock != nil {
+		defer processLock.Release()
+		log.Printf("[NODE-LOCK] acquired id=%s path=%s", strings.TrimSpace(*nodeID), processLock.path)
 	}
 
 	// =====================================================
@@ -34158,6 +35404,8 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/governance/finalize", s.handleGovernanceFinalize)
 	mux.HandleFunc("/governance/apply", s.handleGovernanceApply)
 	mux.HandleFunc("/upgrade/status", s.handleUpgradeStatus)
+	mux.HandleFunc("/testnet/campaign", s.handleV1TestnetCampaign)
+	mux.HandleFunc("/testnet/campaign/export", s.handleV1TestnetCampaignExport)
 
 	mux.HandleFunc("/metrics", s.handleMetrics)
 
@@ -34183,7 +35431,10 @@ func (s *Server) Start(addr string) {
 
 	mux.HandleFunc("/validators/pending", s.handleValidatorsPending)
 
+	mux.HandleFunc("/validators/leaderboard", s.handleValidatorsLeaderboard)
+
 	mux.HandleFunc("/validators/diversity", s.handleValidatorsDiversity)
+	mux.HandleFunc("/validators/promotion-window", s.handleValidatorsPromotionWindow)
 
 	mux.HandleFunc("/tx/status", s.handleTxStatus)
 
@@ -34239,6 +35490,8 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/v1/governance/finalize", s.handleV1GovernanceFinalize)
 	mux.HandleFunc("/v1/governance/apply", s.handleV1GovernanceApply)
 	mux.HandleFunc("/v1/upgrade/status", s.handleV1UpgradeStatus)
+	mux.HandleFunc("/v1/testnet/campaign", s.handleV1TestnetCampaign)
+	mux.HandleFunc("/v1/testnet/campaign/export", s.handleV1TestnetCampaignExport)
 	mux.HandleFunc("/v1/balance", s.handleV1Balance)
 	mux.HandleFunc("/v1/wallet/events", s.handleWalletEvents)
 	mux.HandleFunc("/v1/nonce", s.handleV1Nonce)
@@ -34253,7 +35506,9 @@ func (s *Server) Start(addr string) {
 	mux.HandleFunc("/v1/peers", s.handleV1Peers)
 	mux.HandleFunc("/v1/validators", s.handleV1Validators)
 	mux.HandleFunc("/v1/validators/pending", s.handleV1ValidatorsPending)
+	mux.HandleFunc("/v1/validators/leaderboard", s.handleV1ValidatorsLeaderboard)
 	mux.HandleFunc("/v1/validators/diversity", s.handleValidatorsDiversity)
+	mux.HandleFunc("/v1/validators/promotion-window", s.handleV1ValidatorsPromotionWindow)
 	mux.HandleFunc("/v1/misbehavior", s.handleV1Misbehavior)
 	mux.HandleFunc("/v1/tx/", s.handleV1TxByID)
 	mux.HandleFunc("/v1/tx/status", s.handleV1TxStatus)
@@ -34371,6 +35626,17 @@ type RuntimeStatusSnapshot struct {
 	SyncProviderClass                     string
 	SyncProgressRate                      float64
 	SyncStallSeconds                      uint64
+	UsableHead                            bool
+	HeadSynced                            bool
+	HistorySynced                         bool
+	HistoryBackfillPending                bool
+	BackfillLagBlocks                     uint64
+	FastBootstrapStage                    string
+	FastBootstrapTargetSeconds            uint64
+	FastBootstrapRequireCheckpointProof   bool
+	FastBootstrapRecentReplayWindowBlocks uint64
+	CheckpointHeight                      uint64
+	SnapshotApplySeconds                  uint64
 	SnapshotHeight                        uint64
 	SnapshotHash                          string
 	SnapshotDownloadedChunks              uint64
@@ -34443,6 +35709,10 @@ type RuntimeStatusSnapshot struct {
 	ProposeEnabled                        bool
 	ConsensusReady                        bool
 	Ready                                 bool
+	RuntimePressureMode                   string
+	GoroutineCount                        int
+	GoroutineWarnThreshold                int
+	GossipQuiet                           bool
 	LiveValidators                        int
 	RequiredQuorum                        int
 	StrictQuorum                          int
@@ -34580,9 +35850,14 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 		ActivationDelayModel:         validatorSetActivationDelayModelAtHeight(0),
 		BarrierRetryMode:             normalizeTransitionBarrierRetryMode(TransitionBarrierRetryMode),
 	}
+	out.GoroutineCount = runtime.NumGoroutine()
+	out.GoroutineWarnThreshold = GoroutineWarnThreshold
+	out.RuntimePressureMode = runtimePressureModeFor(out.GoroutineCount, GoroutineWarnThreshold, false)
 	if n == nil {
 		return out
 	}
+	out.GossipQuiet = n.isGossipQuiet()
+	out.RuntimePressureMode = runtimePressureModeFor(out.GoroutineCount, GoroutineWarnThreshold, out.GossipQuiet)
 	role := normalizeNodeRole(n.Role)
 	configuredValidator := role == "validator"
 	out.Role = role
@@ -34622,7 +35897,9 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 	out.SnapshotProviders = copyStringSlice(n.syncChunkProviders)
 	out.SnapshotVerifyStage = strings.TrimSpace(n.syncVerifyStage)
 	out.SnapshotResumeState = strings.TrimSpace(n.syncResumeState)
-	out.SnapshotHeightApplied = n.syncSnapshotHeight
+	if n.syncSnapshotHeight > 0 && n.syncSnapshotHeight <= out.Height {
+		out.SnapshotHeightApplied = n.syncSnapshotHeight
+	}
 	n.syncMu.Unlock()
 	out.SnapshotProviderReputations = n.snapshotProviderReputations(out.SnapshotProviders)
 	out.SnapshotProviderClasses = n.snapshotProviderReputationClasses(out.SnapshotProviders)
@@ -34750,8 +36027,70 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 		out.NetworkLagBlocks = out.NetworkBestHeight - out.Height
 	}
 	n.populateNetworkHealthSnapshot(&out)
+	n.applyUsableHeadRuntimeStatus(&out, role, out.SyncTarget)
 	n.applyConsensusModeDetector(&out)
 	return out
+}
+
+func (n *Node) applyUsableHeadRuntimeStatus(out *RuntimeStatusSnapshot, role string, targetHeight uint64) {
+	if out == nil {
+		return
+	}
+	out.HeadSynced = out.SyncComplete
+	out.HistorySynced = out.SyncComplete
+	out.HistoryBackfillPending = false
+	out.BackfillLagBlocks = syncLagBlocks(out.Height, targetHeight)
+	if out.FastBootstrapStage == "" {
+		out.FastBootstrapStage = normalizeSyncStage(out.SyncStage)
+	}
+	if n == nil {
+		return
+	}
+	archiveMode := n.statePruningArchiveMode() || storageProfileForNode(n) == storageProfileArchive
+	plan := syncCatchupPlanForRole(out.Height, targetHeight, role, archiveMode)
+	stateBootstrapObserved := normalizeSyncStage(out.SyncStage) == "state_bootstrap" || strings.HasPrefix(strings.TrimSpace(out.SyncAction), "state_snapshot")
+	if !plan.UsableHead && !(SyncUsableHeadFastBootstrapEnabled && stateBootstrapObserved && syncUsableHeadRoleAllowed(role, archiveMode)) {
+		return
+	}
+	if !plan.UsableHead {
+		plan.UsableHead = true
+		plan.HeadStage = "checkpoint_verify"
+		plan.RequireCheckpointProof = SyncUsableHeadRequireCheckpointProof
+		plan.BackgroundHistory = SyncUsableHeadBackgroundHistory
+		plan.RecentReplayWindow = syncUsableHeadRecentReplayWindowBlocks()
+		plan.TargetSeconds = syncUsableHeadTargetSeconds()
+	}
+	out.FastBootstrapTargetSeconds = plan.TargetSeconds
+	out.FastBootstrapRequireCheckpointProof = plan.RequireCheckpointProof
+	out.FastBootstrapRecentReplayWindowBlocks = plan.RecentReplayWindow
+	out.FastBootstrapStage = plan.HeadStage
+	if out.SyncAnchorStage != "" {
+		out.FastBootstrapStage = strings.ToLower(string(out.SyncAnchorStage))
+	}
+	if out.SnapshotHeightApplied > 0 {
+		out.FastBootstrapStage = "snapshot_apply"
+	}
+	if out.SyncComplete || (targetHeight > 0 && out.SnapshotHeightApplied >= targetHeight) {
+		out.UsableHead = true
+		out.HeadSynced = true
+		out.FastBootstrapStage = "background_history"
+	}
+	if out.SyncAnchorCheckpointHeight > 0 {
+		out.CheckpointHeight = out.SyncAnchorCheckpointHeight
+	} else if out.SyncAnchorCandidateCheckpointHeight > 0 {
+		out.CheckpointHeight = out.SyncAnchorCandidateCheckpointHeight
+	} else if out.SnapshotCatalogHeight > 0 {
+		out.CheckpointHeight = out.SnapshotCatalogHeight
+	} else if out.SnapshotHeightApplied > 0 {
+		out.CheckpointHeight = out.SnapshotHeightApplied
+	}
+	out.BackfillLagBlocks = syncLagBlocks(out.Height, targetHeight)
+	if out.UsableHead && plan.BackgroundHistory && normalizeSyncHistoryMode(SyncHistoryMode) == SyncHistoryModeBackground && out.BackfillLagBlocks > 0 {
+		out.HistoryBackfillPending = true
+		out.HistorySynced = false
+	} else if out.UsableHead {
+		out.HistorySynced = !out.HistoryBackfillPending
+	}
 }
 
 func (n *Node) shouldPromptWalletAuthAtStartup() bool {
@@ -34915,6 +36254,10 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 	if n == nil {
 		return out
 	}
+	out.GoroutineCount = runtime.NumGoroutine()
+	out.GoroutineWarnThreshold = GoroutineWarnThreshold
+	out.GossipQuiet = n.isGossipQuiet()
+	out.RuntimePressureMode = runtimePressureModeFor(out.GoroutineCount, GoroutineWarnThreshold, out.GossipQuiet)
 
 	role := normalizeNodeRole(n.Role)
 	configuredValidator := role == "validator"
@@ -34957,7 +36300,7 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 		}
 	}
 	preliminaryNearTipComplete := statusNearTipSyncCompleteAllowedForRole(out.Height, preliminarySyncTarget, preliminarySnapshotActive, role)
-	if out.Syncing && preliminaryNearTipComplete {
+	if out.Syncing && !preliminarySnapshotActive && (preliminarySyncTarget == 0 || preliminarySyncTarget <= out.Height || preliminaryNearTipComplete) {
 		out.Syncing = false
 	}
 	preliminaryLagging := preliminarySyncTarget > out.Height && !preliminaryNearTipComplete
@@ -35091,7 +36434,7 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 	nearTipComplete := statusNearTipSyncCompleteAllowedForRole(out.Height, bestTarget, snapshotSessionActive, role)
 	if bestTarget > out.Height && !nearTipComplete {
 		out.Syncing = true
-	} else if nearTipComplete {
+	} else if !snapshotSessionActive && (bestTarget == 0 || bestTarget <= out.Height || nearTipComplete) {
 		out.Syncing = false
 	}
 	out.SyncStage, out.SyncMode, out.SyncLagBlocks, out.SyncAction = n.syncActionSnapshot(out.Height, bestTarget, out.Syncing)
@@ -35111,7 +36454,9 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 	out.SnapshotProviderClasses = n.snapshotProviderReputationClasses(out.SnapshotProviders)
 	out.SnapshotVerifyStage = strings.TrimSpace(n.syncVerifyStage)
 	out.SnapshotResumeState = strings.TrimSpace(n.syncResumeState)
-	out.SnapshotHeightApplied = n.syncSnapshotHeight
+	if n.syncSnapshotHeight > 0 && n.syncSnapshotHeight <= out.Height {
+		out.SnapshotHeightApplied = n.syncSnapshotHeight
+	}
 	n.syncMu.Unlock()
 	if out.SyncStrategy == "" {
 		out.SyncStrategy = syncStrategyForStage(out.SyncStage)
@@ -35137,6 +36482,7 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 	out.SyncComplete = !out.Syncing && (bestTarget == 0 || out.Height >= bestTarget || nearTipComplete)
 	out.SyncPipelineStage = n.syncPipelineStageForStatus(out.Height, bestTarget, out.Peers, snapshotSessionActive, out.Syncing, out.SyncComplete)
 	n.noteSyncPipelineStage(out.SyncPipelineStage)
+	n.applyUsableHeadRuntimeStatus(&out, role, bestTarget)
 
 	nextHeight = out.Height + 1
 	var committee []string
@@ -35538,170 +36884,203 @@ func (s *Server) handleStatus(
 		signerStatusLite := validatorSignerStatus(s.Node.ID, s.Node.ValidatorKey)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"node_id":                                     s.Node.ID,
-			"chain_id":                                    ChainID,
-			"genesis_hash":                                expectedGenesisHash(),
-			"expected_genesis_hash":                       expectedGenesisHash(),
-			"version":                                     Version,
-			"role":                                        runtime.Role,
-			"is_validator":                                runtime.IsValidator,
-			"validator_state":                             runtime.ValidatorState,
-			"height":                                      runtime.Height,
-			"finalized_height":                            runtime.FinalizedHeight,
-			"peers":                                       runtime.Peers,
-			"syncing":                                     runtime.Syncing,
-			"sync_target":                                 runtime.SyncTarget,
-			"sync_stage":                                  runtime.SyncStage,
-			"sync_pipeline_stage":                         runtime.SyncPipelineStage,
-			"sync_mode":                                   runtime.SyncMode,
-			"sync_lag_blocks":                             runtime.SyncLagBlocks,
-			"sync_action":                                 runtime.SyncAction,
-			"sync_provider":                               runtime.SyncProvider,
-			"sync_provider_reputation":                    runtime.SyncProviderReputation,
-			"sync_provider_class":                         runtime.SyncProviderClass,
-			"sync_stall_seconds":                          runtime.SyncStallSeconds,
-			"snapshot_height":                             runtime.SnapshotHeight,
-			"snapshot_hash":                               runtime.SnapshotHash,
-			"snapshot_downloaded_chunks":                  runtime.SnapshotDownloadedChunks,
-			"snapshot_total_chunks":                       runtime.SnapshotTotalChunks,
-			"snapshot_providers":                          runtime.SnapshotProviders,
-			"snapshot_provider_reputations":               runtime.SnapshotProviderReputations,
-			"snapshot_provider_classes":                   runtime.SnapshotProviderClasses,
-			"snapshot_verify_stage":                       runtime.SnapshotVerifyStage,
-			"snapshot_resume_state":                       runtime.SnapshotResumeState,
-			"snapshot_height_applied":                     runtime.SnapshotHeightApplied,
-			"snapshot_warmup_remaining_blocks":            runtime.SnapshotWarmupRemainingBlocks,
-			"validator_snapshot_required":                 runtime.ValidatorSnapshotRequired,
-			"validator_snapshot_published_height":         runtime.ValidatorSnapshotPublishedHeight,
-			"validator_snapshot_published_hash":           runtime.ValidatorSnapshotPublishedHash,
-			"validator_snapshot_publish_healthy":          runtime.ValidatorSnapshotPublishHealthy,
-			"validator_snapshot_last_error":               runtime.ValidatorSnapshotLastError,
-			"sync_anchor_active":                          runtime.SyncAnchorActive,
-			"sync_anchor_stage":                           runtime.SyncAnchorStage,
-			"sync_anchor_height":                          runtime.SyncAnchorHeight,
-			"sync_anchor_checkpoint_height":               runtime.SyncAnchorCheckpointHeight,
-			"sync_anchor_votes":                           runtime.SyncAnchorVotes,
-			"sync_anchor_required":                        runtime.SyncAnchorRequired,
-			"sync_anchor_provider":                        runtime.SyncAnchorProvider,
-			"sync_anchor_provider_reputation":             runtime.SyncAnchorProviderReputation,
-			"sync_anchor_provider_class":                  runtime.SyncAnchorProviderClass,
-			"sync_anchor_last_error":                      runtime.SyncAnchorLastError,
-			"sync_anchor_last_reject_reason":              runtime.SyncAnchorLastRejectReason,
-			"sync_anchor_unreachable_retries":             runtime.SyncAnchorUnreachableRetries,
-			"sync_anchor_fallback_ready":                  runtime.SyncAnchorFallbackReady,
-			"exec_mismatch_unique_signers_current_epoch":  runtime.ExecMismatchUniqueSignersCurrentEpoch,
-			"delta_remaining_blocks":                      runtime.DeltaRemainingBlocks,
-			"mesh_mode":                                   runtime.MeshMode,
-			"mesh_reconcile_interval_seconds":             runtime.MeshReconcileIntervalSeconds,
-			"core_registry_gate":                          runtime.CoreRegistryGate,
-			"core_authority_source":                       runtime.CoreAuthoritySource,
-			"core_membership":                             runtime.CoreMembership,
-			"validator_consensus_pubkey_anchored":         runtime.ValidatorConsensusPubKeyAnchored,
-			"validator_consensus_pubkey_source":           runtime.ValidatorConsensusPubKeySource,
-			"sync_complete":                               runtime.SyncComplete,
-			"execution_ready":                             runtime.ExecutionReady,
-			"execution_wait_reason":                       runtime.ExecutionWaitReason,
-			"gossip_realtime":                             runtime.GossipRealtime,
-			"gossip_pipeline":                             runtime.GossipPipeline,
-			"block_gossip_active":                         runtime.BlockGossipActive,
-			"tx_gossip_active":                            runtime.TxGossipActive,
-			"validator_gossip_active":                     runtime.ValidatorGossipActive,
-			"consensus_running":                           runtime.ConsensusRunning,
-			"consensus_mode":                              runtime.ConsensusMode,
-			"consensus_detector_mode":                     runtime.ConsensusDetectorMode,
-			"consensus_detector_code":                     runtime.ConsensusDetectorCode,
-			"consensus_detector_reason":                   runtime.ConsensusDetectorReason,
-			"consensus_detector_candidate_mode":           runtime.ConsensusDetectorCandidateMode,
-			"consensus_detector_candidate_reason":         runtime.ConsensusDetectorCandidateReason,
-			"consensus_detector_candidate_samples":        runtime.ConsensusDetectorCandidateSamples,
-			"consensus_detector_stable_mode_reason":       runtime.ConsensusDetectorStableModeReason,
-			"consensus_detector_finality_lag_blocks":      runtime.ConsensusDetectorFinalityLagBlocks,
-			"consensus_detector_last_finality_seconds":    runtime.ConsensusDetectorLastFinalitySec,
-			"consensus_detector_partition_risk":           runtime.ConsensusDetectorPartitionRisk,
-			"consensus_detector_attack":                   runtime.ConsensusDetectorAttack,
-			"vote_enabled":                                runtime.VoteEnabled,
-			"propose_enabled":                             runtime.ProposeEnabled,
-			"consensus_ready":                             runtime.ConsensusReady,
-			"ready":                                       runtime.Ready,
-			"live_validators":                             runtime.LiveValidators,
-			"required_quorum":                             runtime.RequiredQuorum,
-			"strict_quorum":                               runtime.StrictQuorum,
-			"active_ready_count":                          runtime.ActiveReadyCount,
-			"quorum_policy_mode":                          runtime.QuorumPolicyMode,
-			"quorum_policy_version":                       runtime.QuorumPolicyVersion,
-			"validator_liveness_mode":                     runtime.LivenessMode,
-			"validator_liveness_max_height_drift_blocks":  runtime.LivenessMaxHeightDriftBlocks,
-			"validator_live_strict_count":                 runtime.LiveStrictCount,
-			"validator_live_heartbeat_count":              runtime.LiveHeartbeatCount,
-			"validator_live_out_of_drift_count":           runtime.LiveOutOfDriftCount,
-			"network_health":                              runtime.NetworkHealth,
-			"network_health_summary":                      runtime.NetworkHealthSummary,
-			"network_best_height":                         runtime.NetworkBestHeight,
-			"network_best_height_votes":                   runtime.NetworkBestHeightVotes,
-			"network_quorum_height":                       runtime.NetworkQuorumHeight,
-			"network_quorum_votes":                        runtime.NetworkQuorumVotes,
-			"network_quorum_required":                     runtime.NetworkQuorumRequired,
-			"network_lag_blocks":                          runtime.NetworkLagBlocks,
-			"block_production_status":                     runtime.BlockProductionStatus,
-			"block_production_reason":                     runtime.BlockProductionReason,
-			"last_block_age_seconds":                      runtime.LastBlockAgeSeconds,
-			"last_commit_height":                          runtime.LastCommitHeight,
-			"tx_lane_status":                              runtime.TxLaneStatus,
-			"tx_lane_reason":                              runtime.TxLaneReason,
-			"mempool_depth":                               runtime.MempoolDepth,
-			"self_in_frozen_set_next":                     selfInFrozenSetNextLite,
-			"self_active_reason_next":                     runtime.SelfActiveReasonNext,
-			"self_pending_add_height":                     runtime.SelfPendingAddHeight,
-			"onboarding_state":                            onboardingStateLite,
-			"scheduled_height":                            runtime.ScheduledHeight,
-			"effective_height":                            runtime.EffectiveHeight,
-			"activation_blocker_reason":                   activationBlockerLite,
-			"activation_delay_model":                      runtime.ActivationDelayModel,
-			"activation_delay_model_switch_height":        runtime.ActivationDelayModelSwitchHeight,
-			"barrier_retry_mode":                          runtime.BarrierRetryMode,
-			"transition_height":                           runtime.TransitionHeight,
-			"expected_vset_hash":                          runtime.ExpectedVsetHash,
-			"expected_vset_source":                        runtime.ExpectedVsetSource,
-			"validator_authority_source":                  runtime.ValidatorAuthoritySource,
-			"validator_set_hash_mode":                     runtime.ValidatorSetHashMode,
-			"expected_next_vset_hash":                     runtime.ExpectedNextVsetHash,
-			"expected_next_vset_source":                   runtime.ExpectedNextVsetSource,
-			"got_vset_hash":                               runtime.GotVsetHash,
-			"barrier_votes":                               runtime.BarrierVotes,
-			"barrier_votes_required":                      runtime.BarrierVotesRequired,
-			"genesis_locked":                              GenesisRuntimeLocked,
-			"genesis_validator_set_frozen":                GenesisValidatorSetFrozen,
-			"genesis_frozen_validator_set_size":           GenesisFrozenValidatorSetSize,
-			"wait_reason":                                 runtime.WaitReason,
-			"validator_signer_mode":                       signerStatusLite.Mode,
-			"validator_signer_ready":                      signerStatusLite.Ready,
-			"validator_signer_provider":                   signerStatusLite.Provider,
-			"validator_signer_key_id":                     signerStatusLite.KeyID,
-			"validator_signer_fingerprint":                signerStatusLite.Fingerprint,
-			"validator_signer_external_signer_configured": signerStatusLite.ExternalSignerConfigured,
-			"validator_signer_reason":                     signerStatusLite.Reason,
-			"validator_hsm_enabled":                       hsmStatusLite.Enabled,
-			"validator_hsm_ready":                         hsmStatusLite.Ready,
-			"validator_hsm_provider":                      hsmStatusLite.Provider,
-			"validator_hsm_key_id":                        hsmStatusLite.KeyID,
-			"validator_hsm_reason":                        hsmStatusLite.Reason,
-			"validator_mpc_enabled":                       mpcStatusLite.Enabled,
-			"validator_mpc_ready":                         mpcStatusLite.Ready,
-			"validator_mpc_provider":                      mpcStatusLite.Provider,
-			"validator_mpc_key_id":                        mpcStatusLite.KeyID,
-			"validator_mpc_threshold":                     mpcStatusLite.Threshold,
-			"validator_mpc_participants":                  mpcStatusLite.Participants,
-			"validator_mpc_reason":                        mpcStatusLite.Reason,
-			"active_set_mode":                             displayActiveSetMode(),
-			"committee_size":                              committeeSizeLite,
-			"committee_target":                            committeeTargetLite,
-			"committee_height":                            runtime.Height + 1,
-			"committee_live_count":                        runtime.LiveValidators,
-			"committee_offline_count":                     0,
-			"validator_autoheal_state":                    "syncing_deferred",
-			"validator_startup_self_check_reason":         "syncing_deferred",
-			"safe_mode_active":                            false,
-			"current_supply":                              uint64(0),
+			"node_id":                       s.Node.ID,
+			"chain_id":                      ChainID,
+			"genesis_hash":                  expectedGenesisHash(),
+			"expected_genesis_hash":         expectedGenesisHash(),
+			"version":                       Version,
+			"role":                          runtime.Role,
+			"is_validator":                  runtime.IsValidator,
+			"validator_state":               runtime.ValidatorState,
+			"height":                        runtime.Height,
+			"finalized_height":              runtime.FinalizedHeight,
+			"peers":                         runtime.Peers,
+			"syncing":                       runtime.Syncing,
+			"sync_target":                   runtime.SyncTarget,
+			"sync_stage":                    runtime.SyncStage,
+			"sync_pipeline_stage":           runtime.SyncPipelineStage,
+			"sync_mode":                     runtime.SyncMode,
+			"sync_lag_blocks":               runtime.SyncLagBlocks,
+			"sync_action":                   runtime.SyncAction,
+			"sync_provider":                 runtime.SyncProvider,
+			"sync_provider_reputation":      runtime.SyncProviderReputation,
+			"sync_provider_class":           runtime.SyncProviderClass,
+			"sync_stall_seconds":            runtime.SyncStallSeconds,
+			"usable_head":                   runtime.UsableHead,
+			"head_synced":                   runtime.HeadSynced,
+			"history_synced":                runtime.HistorySynced,
+			"history_backfill_pending":      runtime.HistoryBackfillPending,
+			"backfill_lag_blocks":           runtime.BackfillLagBlocks,
+			"fast_bootstrap_stage":          runtime.FastBootstrapStage,
+			"fast_bootstrap_target_seconds": runtime.FastBootstrapTargetSeconds,
+			"fast_bootstrap_require_checkpoint_proof":    runtime.FastBootstrapRequireCheckpointProof,
+			"fast_bootstrap_recent_replay_window_blocks": runtime.FastBootstrapRecentReplayWindowBlocks,
+			"checkpoint_height":                          runtime.CheckpointHeight,
+			"snapshot_apply_seconds":                     runtime.SnapshotApplySeconds,
+			"snapshot_height":                            runtime.SnapshotHeight,
+			"snapshot_hash":                              runtime.SnapshotHash,
+			"snapshot_downloaded_chunks":                 runtime.SnapshotDownloadedChunks,
+			"snapshot_total_chunks":                      runtime.SnapshotTotalChunks,
+			"snapshot_providers":                         runtime.SnapshotProviders,
+			"snapshot_provider_reputations":              runtime.SnapshotProviderReputations,
+			"snapshot_provider_classes":                  runtime.SnapshotProviderClasses,
+			"snapshot_verify_stage":                      runtime.SnapshotVerifyStage,
+			"snapshot_resume_state":                      runtime.SnapshotResumeState,
+			"snapshot_height_applied":                    runtime.SnapshotHeightApplied,
+			"snapshot_warmup_remaining_blocks":           runtime.SnapshotWarmupRemainingBlocks,
+			"validator_snapshot_required":                runtime.ValidatorSnapshotRequired,
+			"validator_snapshot_published_height":        runtime.ValidatorSnapshotPublishedHeight,
+			"validator_snapshot_published_hash":          runtime.ValidatorSnapshotPublishedHash,
+			"validator_snapshot_publish_healthy":         runtime.ValidatorSnapshotPublishHealthy,
+			"validator_snapshot_last_error":              runtime.ValidatorSnapshotLastError,
+			"sync_anchor_active":                         runtime.SyncAnchorActive,
+			"sync_anchor_stage":                          runtime.SyncAnchorStage,
+			"sync_anchor_height":                         runtime.SyncAnchorHeight,
+			"sync_anchor_checkpoint_height":              runtime.SyncAnchorCheckpointHeight,
+			"sync_anchor_votes":                          runtime.SyncAnchorVotes,
+			"sync_anchor_required":                       runtime.SyncAnchorRequired,
+			"sync_anchor_provider":                       runtime.SyncAnchorProvider,
+			"sync_anchor_provider_reputation":            runtime.SyncAnchorProviderReputation,
+			"sync_anchor_provider_class":                 runtime.SyncAnchorProviderClass,
+			"sync_anchor_last_error":                     runtime.SyncAnchorLastError,
+			"sync_anchor_last_reject_reason":             runtime.SyncAnchorLastRejectReason,
+			"sync_anchor_unreachable_retries":            runtime.SyncAnchorUnreachableRetries,
+			"sync_anchor_fallback_ready":                 runtime.SyncAnchorFallbackReady,
+			"exec_mismatch_unique_signers_current_epoch": runtime.ExecMismatchUniqueSignersCurrentEpoch,
+			"delta_remaining_blocks":                     runtime.DeltaRemainingBlocks,
+			"mesh_mode":                                  runtime.MeshMode,
+			"mesh_reconcile_interval_seconds":            runtime.MeshReconcileIntervalSeconds,
+			"core_registry_gate":                         runtime.CoreRegistryGate,
+			"core_authority_source":                      runtime.CoreAuthoritySource,
+			"core_membership":                            runtime.CoreMembership,
+			"validator_consensus_pubkey_anchored":        runtime.ValidatorConsensusPubKeyAnchored,
+			"validator_consensus_pubkey_source":          runtime.ValidatorConsensusPubKeySource,
+			"sync_complete":                              runtime.SyncComplete,
+			"execution_ready":                            runtime.ExecutionReady,
+			"execution_wait_reason":                      runtime.ExecutionWaitReason,
+			"gossip_realtime":                            runtime.GossipRealtime,
+			"gossip_pipeline":                            runtime.GossipPipeline,
+			"block_gossip_active":                        runtime.BlockGossipActive,
+			"tx_gossip_active":                           runtime.TxGossipActive,
+			"validator_gossip_active":                    runtime.ValidatorGossipActive,
+			"consensus_running":                          runtime.ConsensusRunning,
+			"consensus_mode":                             runtime.ConsensusMode,
+			"consensus_detector_mode":                    runtime.ConsensusDetectorMode,
+			"consensus_detector_code":                    runtime.ConsensusDetectorCode,
+			"consensus_detector_reason":                  runtime.ConsensusDetectorReason,
+			"consensus_detector_candidate_mode":          runtime.ConsensusDetectorCandidateMode,
+			"consensus_detector_candidate_reason":        runtime.ConsensusDetectorCandidateReason,
+			"consensus_detector_candidate_samples":       runtime.ConsensusDetectorCandidateSamples,
+			"consensus_detector_stable_mode_reason":      runtime.ConsensusDetectorStableModeReason,
+			"consensus_detector_finality_lag_blocks":     runtime.ConsensusDetectorFinalityLagBlocks,
+			"consensus_detector_last_finality_seconds":   runtime.ConsensusDetectorLastFinalitySec,
+			"consensus_detector_partition_risk":          runtime.ConsensusDetectorPartitionRisk,
+			"consensus_detector_attack":                  runtime.ConsensusDetectorAttack,
+			"vote_enabled":                               runtime.VoteEnabled,
+			"propose_enabled":                            runtime.ProposeEnabled,
+			"consensus_ready":                            runtime.ConsensusReady,
+			"fast_proposer_failover_enabled":             ConsensusFastProposerFailoverEnabled,
+			"effective_proposer_round_timeout_seconds":   uint64(effectiveConfiguredProposerRoundTimeout() / time.Second),
+			"ready":                                                  runtime.Ready,
+			"runtime_pressure_mode":                                  runtime.RuntimePressureMode,
+			"goroutine_count":                                        runtime.GoroutineCount,
+			"goroutine_warn_threshold":                               runtime.GoroutineWarnThreshold,
+			"node_profile":                                           homeNodeStatusFields(s.Node.Role)["node_profile"],
+			"low_ram_mode":                                           homeNodeStatusFields(s.Node.Role)["low_ram_mode"],
+			"memory_limit_bytes":                                     homeNodeStatusFields(s.Node.Role)["memory_limit_bytes"],
+			"home_validator_supported":                               homeNodeStatusFields(s.Node.Role)["home_validator_supported"],
+			"validator_min_recommended_ram_gb":                       homeNodeStatusFields(s.Node.Role)["validator_min_recommended_ram_gb"],
+			"gossip_quiet":                                           runtime.GossipQuiet,
+			"live_validators":                                        runtime.LiveValidators,
+			"required_quorum":                                        runtime.RequiredQuorum,
+			"strict_quorum":                                          runtime.StrictQuorum,
+			"active_ready_count":                                     runtime.ActiveReadyCount,
+			"quorum_policy_mode":                                     runtime.QuorumPolicyMode,
+			"quorum_policy_version":                                  runtime.QuorumPolicyVersion,
+			"validator_liveness_mode":                                runtime.LivenessMode,
+			"validator_liveness_max_height_drift_blocks":             runtime.LivenessMaxHeightDriftBlocks,
+			"validator_live_strict_count":                            runtime.LiveStrictCount,
+			"validator_live_heartbeat_count":                         runtime.LiveHeartbeatCount,
+			"validator_live_out_of_drift_count":                      runtime.LiveOutOfDriftCount,
+			"network_health":                                         runtime.NetworkHealth,
+			"network_health_summary":                                 runtime.NetworkHealthSummary,
+			"network_best_height":                                    runtime.NetworkBestHeight,
+			"network_best_height_votes":                              runtime.NetworkBestHeightVotes,
+			"network_quorum_height":                                  runtime.NetworkQuorumHeight,
+			"network_quorum_votes":                                   runtime.NetworkQuorumVotes,
+			"network_quorum_required":                                runtime.NetworkQuorumRequired,
+			"network_lag_blocks":                                     runtime.NetworkLagBlocks,
+			"block_production_status":                                runtime.BlockProductionStatus,
+			"block_production_reason":                                runtime.BlockProductionReason,
+			"last_block_age_seconds":                                 runtime.LastBlockAgeSeconds,
+			"last_commit_height":                                     runtime.LastCommitHeight,
+			"tx_lane_status":                                         runtime.TxLaneStatus,
+			"tx_lane_reason":                                         runtime.TxLaneReason,
+			"mempool_depth":                                          runtime.MempoolDepth,
+			"self_in_frozen_set_next":                                selfInFrozenSetNextLite,
+			"self_active_reason_next":                                runtime.SelfActiveReasonNext,
+			"self_pending_add_height":                                runtime.SelfPendingAddHeight,
+			"onboarding_state":                                       onboardingStateLite,
+			"scheduled_height":                                       runtime.ScheduledHeight,
+			"effective_height":                                       runtime.EffectiveHeight,
+			"activation_blocker_reason":                              activationBlockerLite,
+			"activation_delay_model":                                 runtime.ActivationDelayModel,
+			"activation_delay_model_switch_height":                   runtime.ActivationDelayModelSwitchHeight,
+			"barrier_retry_mode":                                     runtime.BarrierRetryMode,
+			"transition_height":                                      runtime.TransitionHeight,
+			"expected_vset_hash":                                     runtime.ExpectedVsetHash,
+			"expected_vset_source":                                   runtime.ExpectedVsetSource,
+			"validator_authority_source":                             runtime.ValidatorAuthoritySource,
+			"validator_set_hash_mode":                                runtime.ValidatorSetHashMode,
+			"expected_next_vset_hash":                                runtime.ExpectedNextVsetHash,
+			"expected_next_vset_source":                              runtime.ExpectedNextVsetSource,
+			"got_vset_hash":                                          runtime.GotVsetHash,
+			"barrier_votes":                                          runtime.BarrierVotes,
+			"barrier_votes_required":                                 runtime.BarrierVotesRequired,
+			"genesis_locked":                                         GenesisRuntimeLocked,
+			"genesis_validator_set_frozen":                           GenesisValidatorSetFrozen,
+			"genesis_frozen_validator_set_size":                      GenesisFrozenValidatorSetSize,
+			"wait_reason":                                            runtime.WaitReason,
+			"validator_signer_mode":                                  signerStatusLite.Mode,
+			"validator_signer_ready":                                 signerStatusLite.Ready,
+			"validator_signer_provider":                              signerStatusLite.Provider,
+			"validator_signer_key_id":                                signerStatusLite.KeyID,
+			"validator_signer_fingerprint":                           signerStatusLite.Fingerprint,
+			"validator_signer_external_signer_configured":            signerStatusLite.ExternalSignerConfigured,
+			"validator_signer_reason":                                signerStatusLite.Reason,
+			"validator_hsm_enabled":                                  hsmStatusLite.Enabled,
+			"validator_hsm_ready":                                    hsmStatusLite.Ready,
+			"validator_hsm_provider":                                 hsmStatusLite.Provider,
+			"validator_hsm_key_id":                                   hsmStatusLite.KeyID,
+			"validator_hsm_reason":                                   hsmStatusLite.Reason,
+			"validator_mpc_enabled":                                  mpcStatusLite.Enabled,
+			"validator_mpc_ready":                                    mpcStatusLite.Ready,
+			"validator_mpc_provider":                                 mpcStatusLite.Provider,
+			"validator_mpc_key_id":                                   mpcStatusLite.KeyID,
+			"validator_mpc_threshold":                                mpcStatusLite.Threshold,
+			"validator_mpc_participants":                             mpcStatusLite.Participants,
+			"validator_mpc_reason":                                   mpcStatusLite.Reason,
+			"active_set_mode":                                        displayActiveSetMode(),
+			"validator_pool_mode":                                    normalizeActiveSetMode(ValidatorActiveSetMode),
+			"validator_pool_max_active":                              validatorHybridMaxActiveValidators(),
+			"validator_pool_performance_slots":                       validatorHybridPerformanceSlots(),
+			"validator_pool_rotation_slots":                          validatorHybridRotationSlots(),
+			"validator_pool_effective_stake_cap":                     validatorHybridEffectiveStakeCap(),
+			"validator_pool_epoch_blocks":                            validatorHybridEpochBlocks(),
+			"validator_pool_promotion_window_epochs":                 validatorHybridPromotionWindowEpochs(),
+			"validator_pool_minimum_age_for_performance_slot_epochs": validatorHybridMinimumPerformanceAgeEpochs(),
+			"promotion_window_record_v1_height":                      PromotionWindowRecordV1Height,
+			"validator_pool_performance_min_signed_bps":              validatorHybridPerformanceMinSignedBPS(),
+			"validator_pool_minimum_online_required":                 validatorHybridMinimumOnlineForActiveCount(committeeSizeLite),
+			"committee_size":                                         committeeSizeLite,
+			"committee_target":                                       committeeTargetLite,
+			"committee_height":                                       runtime.Height + 1,
+			"committee_live_count":                                   runtime.LiveValidators,
+			"committee_offline_count":                                0,
+			"validator_autoheal_state":                               "syncing_deferred",
+			"validator_startup_self_check_reason":                    "syncing_deferred",
+			"safe_mode_active":                                       false,
+			"current_supply":                                         uint64(0),
 		})
 		return
 	}
@@ -35780,6 +37159,8 @@ func (s *Server) handleStatus(
 		committeeHash, committeeHashSource, committeeRuntimeHash = s.Node.authoritativeCommitteeHashesForHeight(committeeHeight)
 	}
 	committeeTarget := committeeSize
+	validatorPool := s.Node.validatorPoolSnapshotForHeight(committeeHeight, registrySnap)
+	promotionWindowStatus := s.Node.currentPromotionWindowStatus(committeeHeight)
 	onboardingCandidates := []string{}
 	onboardingSlotsUsed := 0
 	bootstrapLaneCandidates := []string{}
@@ -35914,9 +37295,20 @@ func (s *Server) handleStatus(
 
 		"sync_action": runtime.SyncAction,
 
-		"sync_provider":            runtime.SyncProvider,
-		"sync_provider_reputation": runtime.SyncProviderReputation,
-		"sync_provider_class":      runtime.SyncProviderClass,
+		"sync_provider":                              runtime.SyncProvider,
+		"sync_provider_reputation":                   runtime.SyncProviderReputation,
+		"sync_provider_class":                        runtime.SyncProviderClass,
+		"usable_head":                                runtime.UsableHead,
+		"head_synced":                                runtime.HeadSynced,
+		"history_synced":                             runtime.HistorySynced,
+		"history_backfill_pending":                   runtime.HistoryBackfillPending,
+		"backfill_lag_blocks":                        runtime.BackfillLagBlocks,
+		"fast_bootstrap_stage":                       runtime.FastBootstrapStage,
+		"fast_bootstrap_target_seconds":              runtime.FastBootstrapTargetSeconds,
+		"fast_bootstrap_require_checkpoint_proof":    runtime.FastBootstrapRequireCheckpointProof,
+		"fast_bootstrap_recent_replay_window_blocks": runtime.FastBootstrapRecentReplayWindowBlocks,
+		"checkpoint_height":                          runtime.CheckpointHeight,
+		"snapshot_apply_seconds":                     runtime.SnapshotApplySeconds,
 
 		"sync_stall_seconds": runtime.SyncStallSeconds,
 
@@ -36004,7 +37396,15 @@ func (s *Server) handleStatus(
 
 		"consensus_ready": runtime.ConsensusReady,
 
+		"fast_proposer_failover_enabled":           ConsensusFastProposerFailoverEnabled,
+		"effective_proposer_round_timeout_seconds": uint64(effectiveConfiguredProposerRoundTimeout() / time.Second),
+
 		"ready": runtime.Ready,
+
+		"runtime_pressure_mode":    runtime.RuntimePressureMode,
+		"goroutine_count":          runtime.GoroutineCount,
+		"goroutine_warn_threshold": runtime.GoroutineWarnThreshold,
+		"gossip_quiet":             runtime.GossipQuiet,
 
 		"live_validators": runtime.LiveValidators,
 
@@ -36059,134 +37459,160 @@ func (s *Server) handleStatus(
 		"genesis_validator_set_frozen":               GenesisValidatorSetFrozen,
 		"genesis_frozen_validator_set_size":          GenesisFrozenValidatorSetSize,
 
-		"wait_reason":                                  runtime.WaitReason,
-		"validator_key_loaded":                         validatorKeyLoaded,
-		"validator_key_fingerprint":                    validatorKeyFingerprint,
-		"validator_key_expected_fingerprint":           keyHealth.Expected,
-		"validator_key_fingerprint_match":              keyHealth.Match,
-		"validator_key_integrity_ok":                   keyHealth.IntegrityOK,
-		"validator_key_backup_present":                 keyHealth.BackupPresent,
-		"validator_key_backup_age_seconds":             keyHealth.BackupAgeSeconds,
-		"validator_key_source":                         keyHealth.Source,
-		"validator_key_mode":                           keyHealth.Mode,
-		"validator_signer":                             signerStatus,
-		"validator_signer_mode":                        signerStatus.Mode,
-		"validator_signer_ready":                       signerStatus.Ready,
-		"validator_signer_provider":                    signerStatus.Provider,
-		"validator_signer_key_id":                      signerStatus.KeyID,
-		"validator_signer_fingerprint":                 signerStatus.Fingerprint,
-		"validator_signer_external_signer_configured":  signerStatus.ExternalSignerConfigured,
-		"validator_signer_threshold":                   signerStatus.Threshold,
-		"validator_signer_participants":                signerStatus.Participants,
-		"validator_signer_reason":                      signerStatus.Reason,
-		"validator_hsm":                                hsmStatus,
-		"validator_hsm_enabled":                        hsmStatus.Enabled,
-		"validator_hsm_ready":                          hsmStatus.Ready,
-		"validator_hsm_provider":                       hsmStatus.Provider,
-		"validator_hsm_key_id":                         hsmStatus.KeyID,
-		"validator_hsm_fingerprint":                    hsmStatus.Fingerprint,
-		"validator_hsm_external_signer_configured":     hsmStatus.ExternalSignerConfigured,
-		"validator_hsm_require_user_presence":          hsmStatus.RequireUserPresence,
-		"validator_hsm_reason":                         hsmStatus.Reason,
-		"validator_mpc":                                mpcStatus,
-		"validator_mpc_enabled":                        mpcStatus.Enabled,
-		"validator_mpc_ready":                          mpcStatus.Ready,
-		"validator_mpc_provider":                       mpcStatus.Provider,
-		"validator_mpc_key_id":                         mpcStatus.KeyID,
-		"validator_mpc_fingerprint":                    mpcStatus.Fingerprint,
-		"validator_mpc_external_signer_configured":     mpcStatus.ExternalSignerConfigured,
-		"validator_mpc_threshold":                      mpcStatus.Threshold,
-		"validator_mpc_participants":                   mpcStatus.Participants,
-		"validator_mpc_reason":                         mpcStatus.Reason,
-		"validator_password_mode":                      validatorPasswordMode,
-		"validator_secret_source":                      validatorSecretSource,
-		"exec_current_round":                           execCurrentRound,
-		"exec_current_block_hash":                      execCurrentBlockHash,
-		"exec_current_vote_key":                        execCurrentVoteKey,
-		"exec_vote_mode":                               execVoteModeDual,
-		"core_registry_loaded":                         coreRegistryLoaded,
-		"core_registry_verified":                       coreRegistryState.Verified,
-		"core_registry_hash":                           coreRegistryState.Hash,
-		"core_registry_epoch":                          coreRegistryState.Epoch,
-		"core_registry_effective_height":               coreRegistryState.EffectiveHeight,
-		"core_activation_status":                       coreActivation,
-		"core_env_password_blocked":                    coreEnvBlocked,
-		"core_required_fingerprint_match":              coreRequiredFingerprintMatch,
-		"penalty_enforce_mode":                         normalizeConsensusPenaltyEnforceMode(ConsensusPenaltyEnforceMode),
-		"consensus_set_frozen":                         consensusSetFrozen,
-		"consensus_set_hash_height":                    consensusSetHashHeight,
-		"startup_recovery_applied":                     startupRecoveryApplied,
-		"active_set_mode":                              displayActiveSetMode(),
-		"committee_size":                               committeeSize,
-		"committee_target":                             committeeTarget,
-		"committee_rotation_blocks":                    committeeRotationBlocks(),
-		"committee_height":                             committeeHeight,
-		"committee_hash":                               committeeHash,
-		"committee_hash_source":                        committeeHashSource,
-		"committee_runtime_hash":                       committeeRuntimeHash,
-		"committee_live_count":                         committeeSnap.Live,
-		"committee_offline_count":                      committeeSnap.Offline,
-		"validator_onboarding_candidates":              onboardingCandidates,
-		"validator_onboarding_slots_used":              onboardingSlotsUsed,
-		"validator_onboarding_grace_blocks":            validatorOnboardingGraceBlocks(),
-		"validator_onboarding_max_new_slots":           validatorOnboardingMaxNewSlots(),
-		"validator_onboarding_strict_activation":       validatorOnboardingStrictActivationEnabled(),
-		"validator_bootstrap_lane_candidates":          bootstrapLaneCandidates,
-		"validator_bootstrap_lane_slots_used":          bootstrapLaneSlotsUsed,
-		"self_onboarding_admitted_next":                selfOnboardingAdmittedNext,
-		"self_bootstrap_lane_admitted_next":            selfBootstrapLaneAdmittedNext,
-		"validator_onboarding_bootstrap_lane_enabled":  validatorOnboardingBootstrapLaneEnabled(),
-		"validator_onboarding_bootstrap_max_new_slots": validatorOnboardingBootstrapMaxNewSlots(),
-		"validator_lifecycle_pending":                  lifecycleAliases.Pending,
-		"validator_lifecycle_active":                   lifecycleAliases.Active,
-		"validator_lifecycle_inactive":                 lifecycleAliases.Inactive,
-		"validator_lifecycle_slashed":                  lifecycleAliases.Slashed,
-		"validator_lifecycle_removed":                  lifecycleAliases.Removed,
-		"validator_lifecycle_model":                    "dual_state_alias_v1",
-		"validator_set_commitment_mode":                "v2_strict_parent_commitment",
-		"validator_autoheal_state":                     autohealState,
-		"validator_autoheal_last_reason":               autohealReason,
-		"validator_autoheal_last_mismatch_height":      autohealMismatchHeight,
-		"validator_autoheal_expected_hash":             autohealExpected,
-		"validator_autoheal_got_hash":                  autohealGot,
-		"validator_autoheal_last_success_height":       autohealLastSuccessHeight,
-		"validator_autoheal_mode":                      normalizeValidatorSetAutohealMode(ValidatorSetAutohealMode),
-		"validator_autoheal_trusted_only_on_mismatch":  validatorSetAutohealTrustedOnlyOnMismatchEnabled(),
-		"validator_autoheal_near_tip_force_after":      validatorSetAutohealNearTipForceAfter(),
-		"validator_autoheal_pause_seconds":             ValidatorSetAutohealPauseSeconds,
-		"validator_startup_self_check_ok":              startupCheckOK,
-		"validator_startup_self_check_height":          startupCheckHeight,
-		"validator_startup_self_check_expected_hash":   startupCheckExpected,
-		"validator_startup_self_check_got_hash":        startupCheckGot,
-		"validator_startup_self_check_reason":          startupCheckReason,
-		"safe_mode_active":                             safeModeActive,
-		"safe_mode_until_unix":                         safeModeUntilUnix,
-		"safe_mode_window_ms":                          safeModeWindowMs,
-		"offline_since":                                offlineSince,
-		"rejoin_pending":                               rejoinPending,
-		"rejoin_heartbeats":                            rejoinHeartbeats,
-		"rejoin_last_signed_height":                    rejoinLastSignedHeight,
-		"dtl_contract_runtime_removed":                 dtlContractRuntimeRemoved(),
-		"dtl_logic_pack_runtime_enabled":               false,
-		"dtl_logic_pack_runtime_active":                false,
-		"dtl_contracts_v2_enabled":                     ConfigDTLContractsV2Enabled,
-		"dtl_v2_activation_height":                     ConfigDTLV2ActivationHeight,
-		"dtl_bytecode_runtime_enabled":                 false,
-		"dtl_bytecode_activation_height":               uint64(0),
-		"dtl_bytecode_runtime_active":                  false,
-		"dtl_hybrid_runtime_active":                    false,
-		"dtl_bytecode_max_size":                        uint64(0),
-		"dtl_bytecode_require_canonical":               false,
-		"dtl_router_enabled":                           ConfigDTLRouterEnabled,
-		"dtl_router_max_hops":                          ConfigDTLRouterMaxHops,
-		"dtl_router_deadline_max_blocks":               ConfigDTLRouterDeadlineMaxBlocks,
-		"dtl_router_max_price_impact_bps":              ConfigDTLRouterMaxPriceImpactBPS,
-		"dtl_router_quote_max_paths":                   ConfigDTLRouterQuoteMaxPaths,
-		"dtl_defi_farm_enabled":                        ConfigDTLDeFiFarmEnabled,
-		"dtl_gamefi_enabled":                           ConfigDTLGameFiSeasonEnabled,
-		"dtl_active_season_id":                         dtlActiveSeasonID,
-		"dtl_active_season_end_height":                 dtlActiveSeasonEndHeight,
-		"dtl_gamefi_reward_token":                      ConfigDTLGameFiRewardToken,
+		"wait_reason":                                            runtime.WaitReason,
+		"validator_key_loaded":                                   validatorKeyLoaded,
+		"validator_key_fingerprint":                              validatorKeyFingerprint,
+		"validator_key_expected_fingerprint":                     keyHealth.Expected,
+		"validator_key_fingerprint_match":                        keyHealth.Match,
+		"validator_key_integrity_ok":                             keyHealth.IntegrityOK,
+		"validator_key_backup_present":                           keyHealth.BackupPresent,
+		"validator_key_backup_age_seconds":                       keyHealth.BackupAgeSeconds,
+		"validator_key_source":                                   keyHealth.Source,
+		"validator_key_mode":                                     keyHealth.Mode,
+		"validator_signer":                                       signerStatus,
+		"validator_signer_mode":                                  signerStatus.Mode,
+		"validator_signer_ready":                                 signerStatus.Ready,
+		"validator_signer_provider":                              signerStatus.Provider,
+		"validator_signer_key_id":                                signerStatus.KeyID,
+		"validator_signer_fingerprint":                           signerStatus.Fingerprint,
+		"validator_signer_external_signer_configured":            signerStatus.ExternalSignerConfigured,
+		"validator_signer_threshold":                             signerStatus.Threshold,
+		"validator_signer_participants":                          signerStatus.Participants,
+		"validator_signer_reason":                                signerStatus.Reason,
+		"validator_hsm":                                          hsmStatus,
+		"validator_hsm_enabled":                                  hsmStatus.Enabled,
+		"validator_hsm_ready":                                    hsmStatus.Ready,
+		"validator_hsm_provider":                                 hsmStatus.Provider,
+		"validator_hsm_key_id":                                   hsmStatus.KeyID,
+		"validator_hsm_fingerprint":                              hsmStatus.Fingerprint,
+		"validator_hsm_external_signer_configured":               hsmStatus.ExternalSignerConfigured,
+		"validator_hsm_require_user_presence":                    hsmStatus.RequireUserPresence,
+		"validator_hsm_reason":                                   hsmStatus.Reason,
+		"validator_mpc":                                          mpcStatus,
+		"validator_mpc_enabled":                                  mpcStatus.Enabled,
+		"validator_mpc_ready":                                    mpcStatus.Ready,
+		"validator_mpc_provider":                                 mpcStatus.Provider,
+		"validator_mpc_key_id":                                   mpcStatus.KeyID,
+		"validator_mpc_fingerprint":                              mpcStatus.Fingerprint,
+		"validator_mpc_external_signer_configured":               mpcStatus.ExternalSignerConfigured,
+		"validator_mpc_threshold":                                mpcStatus.Threshold,
+		"validator_mpc_participants":                             mpcStatus.Participants,
+		"validator_mpc_reason":                                   mpcStatus.Reason,
+		"validator_password_mode":                                validatorPasswordMode,
+		"validator_secret_source":                                validatorSecretSource,
+		"exec_current_round":                                     execCurrentRound,
+		"exec_current_block_hash":                                execCurrentBlockHash,
+		"exec_current_vote_key":                                  execCurrentVoteKey,
+		"exec_vote_mode":                                         execVoteModeDual,
+		"core_registry_loaded":                                   coreRegistryLoaded,
+		"core_registry_verified":                                 coreRegistryState.Verified,
+		"core_registry_hash":                                     coreRegistryState.Hash,
+		"core_registry_epoch":                                    coreRegistryState.Epoch,
+		"core_registry_effective_height":                         coreRegistryState.EffectiveHeight,
+		"core_activation_status":                                 coreActivation,
+		"core_env_password_blocked":                              coreEnvBlocked,
+		"core_required_fingerprint_match":                        coreRequiredFingerprintMatch,
+		"penalty_enforce_mode":                                   normalizeConsensusPenaltyEnforceMode(ConsensusPenaltyEnforceMode),
+		"consensus_set_frozen":                                   consensusSetFrozen,
+		"consensus_set_hash_height":                              consensusSetHashHeight,
+		"startup_recovery_applied":                               startupRecoveryApplied,
+		"active_set_mode":                                        displayActiveSetMode(),
+		"validator_pool":                                         validatorPool,
+		"validator_pool_mode":                                    validatorPool.Mode,
+		"validator_pool_epoch_bucket":                            validatorPool.EpochBucket,
+		"validator_pool_max_active":                              validatorPool.MaxActiveValidators,
+		"validator_pool_active_count":                            validatorPool.ActiveCount,
+		"validator_pool_standby_count":                           validatorPool.StandbyCount,
+		"validator_pool_performance_slots":                       validatorPool.PerformanceSlots,
+		"validator_pool_rotation_slots":                          validatorPool.RotationSlots,
+		"validator_pool_performance_active_count":                validatorPool.PerformanceActiveCount,
+		"validator_pool_rotation_active_count":                   validatorPool.RotationActiveCount,
+		"validator_pool_effective_stake_cap":                     validatorHybridEffectiveStakeCap(),
+		"validator_pool_epoch_blocks":                            validatorHybridEpochBlocks(),
+		"validator_pool_promotion_window_epochs":                 validatorHybridPromotionWindowEpochs(),
+		"validator_pool_minimum_age_for_performance_slot_epochs": validatorHybridMinimumPerformanceAgeEpochs(),
+		"validator_pool_promotion_window_bucket":                 validatorHybridPromotionWindowBucket(committeeHeight),
+		"validator_pool_promotion_window_hash":                   validatorPool.PromotionWindowHash,
+		"validator_pool_promotion_window_source":                 validatorPool.PromotionWindowSource,
+		"validator_pool_promotion_window_frozen":                 validatorPool.PromotionWindowFrozen,
+		"validator_pool_promotion_window_validators":             validatorPool.PromotionWindowValidators,
+		"validator_pool_promotion_window_replacements":           validatorPool.PromotionWindowReplacements,
+		"promotion_window_record_v1_height":                      PromotionWindowRecordV1Height,
+		"promotion_window":                                       promotionWindowStatus,
+		"validator_pool_performance_min_signed_bps":              validatorHybridPerformanceMinSignedBPS(),
+		"validator_pool_minimum_online_required":                 validatorPool.MinimumOnlineValidators,
+		"validator_pool_minimum_online_ok":                       validatorHybridMinimumOnlineOK(validatorPool.ActiveCount, committeeSnap.Live),
+		"validator_pool_emergency_replacement_count":             validatorPool.EmergencyReplacementCount,
+		"committee_size":                                         committeeSize,
+		"committee_target":                                       committeeTarget,
+		"committee_rotation_blocks":                              committeeRotationBlocks(),
+		"committee_height":                                       committeeHeight,
+		"committee_hash":                                         committeeHash,
+		"committee_hash_source":                                  committeeHashSource,
+		"committee_runtime_hash":                                 committeeRuntimeHash,
+		"committee_live_count":                                   committeeSnap.Live,
+		"committee_offline_count":                                committeeSnap.Offline,
+		"validator_onboarding_candidates":                        onboardingCandidates,
+		"validator_onboarding_slots_used":                        onboardingSlotsUsed,
+		"validator_onboarding_grace_blocks":                      validatorOnboardingGraceBlocks(),
+		"validator_onboarding_max_new_slots":                     validatorOnboardingMaxNewSlots(),
+		"validator_onboarding_strict_activation":                 validatorOnboardingStrictActivationEnabled(),
+		"validator_bootstrap_lane_candidates":                    bootstrapLaneCandidates,
+		"validator_bootstrap_lane_slots_used":                    bootstrapLaneSlotsUsed,
+		"self_onboarding_admitted_next":                          selfOnboardingAdmittedNext,
+		"self_bootstrap_lane_admitted_next":                      selfBootstrapLaneAdmittedNext,
+		"validator_onboarding_bootstrap_lane_enabled":            validatorOnboardingBootstrapLaneEnabled(),
+		"validator_onboarding_bootstrap_max_new_slots":           validatorOnboardingBootstrapMaxNewSlots(),
+		"validator_lifecycle_pending":                            lifecycleAliases.Pending,
+		"validator_lifecycle_active":                             lifecycleAliases.Active,
+		"validator_lifecycle_inactive":                           lifecycleAliases.Inactive,
+		"validator_lifecycle_slashed":                            lifecycleAliases.Slashed,
+		"validator_lifecycle_removed":                            lifecycleAliases.Removed,
+		"validator_lifecycle_model":                              "dual_state_alias_v1",
+		"validator_set_commitment_mode":                          "v2_strict_parent_commitment",
+		"validator_autoheal_state":                               autohealState,
+		"validator_autoheal_last_reason":                         autohealReason,
+		"validator_autoheal_last_mismatch_height":                autohealMismatchHeight,
+		"validator_autoheal_expected_hash":                       autohealExpected,
+		"validator_autoheal_got_hash":                            autohealGot,
+		"validator_autoheal_last_success_height":                 autohealLastSuccessHeight,
+		"validator_autoheal_mode":                                normalizeValidatorSetAutohealMode(ValidatorSetAutohealMode),
+		"validator_autoheal_trusted_only_on_mismatch":            validatorSetAutohealTrustedOnlyOnMismatchEnabled(),
+		"validator_autoheal_near_tip_force_after":                validatorSetAutohealNearTipForceAfter(),
+		"validator_autoheal_pause_seconds":                       ValidatorSetAutohealPauseSeconds,
+		"validator_startup_self_check_ok":                        startupCheckOK,
+		"validator_startup_self_check_height":                    startupCheckHeight,
+		"validator_startup_self_check_expected_hash":             startupCheckExpected,
+		"validator_startup_self_check_got_hash":                  startupCheckGot,
+		"validator_startup_self_check_reason":                    startupCheckReason,
+		"safe_mode_active":                                       safeModeActive,
+		"safe_mode_until_unix":                                   safeModeUntilUnix,
+		"safe_mode_window_ms":                                    safeModeWindowMs,
+		"offline_since":                                          offlineSince,
+		"rejoin_pending":                                         rejoinPending,
+		"rejoin_heartbeats":                                      rejoinHeartbeats,
+		"rejoin_last_signed_height":                              rejoinLastSignedHeight,
+		"dtl_contract_runtime_removed":                           dtlContractRuntimeRemoved(),
+		"dtl_logic_pack_runtime_enabled":                         false,
+		"dtl_logic_pack_runtime_active":                          false,
+		"dtl_contracts_v2_enabled":                               ConfigDTLContractsV2Enabled,
+		"dtl_v2_activation_height":                               ConfigDTLV2ActivationHeight,
+		"dtl_bytecode_runtime_enabled":                           false,
+		"dtl_bytecode_activation_height":                         uint64(0),
+		"dtl_bytecode_runtime_active":                            false,
+		"dtl_hybrid_runtime_active":                              false,
+		"dtl_bytecode_max_size":                                  uint64(0),
+		"dtl_bytecode_require_canonical":                         false,
+		"dtl_router_enabled":                                     ConfigDTLRouterEnabled,
+		"dtl_router_max_hops":                                    ConfigDTLRouterMaxHops,
+		"dtl_router_deadline_max_blocks":                         ConfigDTLRouterDeadlineMaxBlocks,
+		"dtl_router_max_price_impact_bps":                        ConfigDTLRouterMaxPriceImpactBPS,
+		"dtl_router_quote_max_paths":                             ConfigDTLRouterQuoteMaxPaths,
+		"dtl_defi_farm_enabled":                                  ConfigDTLDeFiFarmEnabled,
+		"dtl_gamefi_enabled":                                     ConfigDTLGameFiSeasonEnabled,
+		"dtl_active_season_id":                                   dtlActiveSeasonID,
+		"dtl_active_season_end_height":                           dtlActiveSeasonEndHeight,
+		"dtl_gamefi_reward_token":                                ConfigDTLGameFiRewardToken,
 
 		"misbehavior_validators": stats.MisbehaviorValidators,
 
@@ -36275,6 +37701,7 @@ func consensusModeResponse(runtime RuntimeStatusSnapshot, metrics ConsensusDetec
 		"stable_mode_reason":             runtime.ConsensusDetectorStableModeReason,
 		"height":                         runtime.Height,
 		"finalized_height":               runtime.FinalizedHeight,
+		"validator_metric_height":        metrics.ValidatorMetricHeight,
 		"active_validators":              metrics.ActiveValidators,
 		"total_validators":               metrics.TotalValidators,
 		"quorum":                         metrics.Quorum,
@@ -36373,8 +37800,10 @@ func snapshotMetaResponse(snapshot *StateSnapshot, meta *SnapshotMetaRecord, sou
 		resp["state_merkle_root"] = strings.TrimSpace(snapshot.StateMerkleRoot)
 		resp["ledger_hash"] = strings.TrimSpace(snapshot.LedgerHash)
 		resp["validator_set_hash"] = strings.TrimSpace(snapshotValidatorSetHash(snapshot))
+		resp["validator_set_root"] = strings.TrimSpace(snapshotValidatorSetRoot(snapshot))
 		resp["validator_set_source"] = displayCommittedValidatorAuthoritySource(snapshot.ValidatorSetSource)
 		resp["validator_registry_hash"] = strings.TrimSpace(snapshotValidatorRegistryHash(snapshot))
+		resp["promotion_window_hash"] = strings.TrimSpace(snapshotPromotionWindowHash(snapshot))
 		resp["next_validator_set_hash"] = strings.TrimSpace(snapshot.NextValidatorSetHash)
 		resp["next_validator_set_source"] = displayCommittedValidatorAuthoritySource(snapshot.NextValidatorSetSource)
 		resp["next_validator_set_height"] = snapshot.NextValidatorSetHeight
@@ -36384,6 +37813,9 @@ func snapshotMetaResponse(snapshot *StateSnapshot, meta *SnapshotMetaRecord, sou
 		resp["finalized_hash"] = strings.TrimSpace(snapshot.FinalizedHash)
 		resp["epoch_anchor_hash"] = strings.TrimSpace(snapshot.EpochAnchorHash)
 		resp["finality_root"] = strings.TrimSpace(snapshot.FinalityRoot)
+		if len(snapshot.CheckpointProof) > 0 {
+			resp["checkpoint_proof"] = copyStringMap(snapshot.CheckpointProof)
+		}
 	}
 	if meta != nil {
 		resp["height"] = meta.Height
@@ -36392,6 +37824,7 @@ func snapshotMetaResponse(snapshot *StateSnapshot, meta *SnapshotMetaRecord, sou
 		resp["validator_set_hash"] = strings.TrimSpace(meta.ValidatorSetHash)
 		resp["validator_set_source"] = displayCommittedValidatorAuthoritySource(meta.ValidatorSetSource)
 		resp["validator_registry_hash"] = strings.TrimSpace(meta.ValidatorRegistryHash)
+		resp["promotion_window_hash"] = strings.TrimSpace(meta.PromotionWindowHash)
 		resp["next_validator_set_hash"] = strings.TrimSpace(meta.NextValidatorSetHash)
 		resp["next_validator_set_source"] = displayCommittedValidatorAuthoritySource(meta.NextValidatorSetSource)
 		resp["next_validator_set_height"] = meta.NextValidatorSetHeight
@@ -36441,6 +37874,8 @@ func snapshotManifestResponse(snapshot *StateSnapshot, manifest *SnapshotManifes
 	if manifest != nil {
 		resp["chunk_count"] = manifest.ChunkCount
 		resp["chunk_size"] = manifest.ChunkSize
+		resp["encoding"] = manifest.Encoding
+		resp["compression"] = manifest.Compression
 	}
 	if exportDir != "" {
 		resp["export_dir"] = exportDir
@@ -36459,6 +37894,8 @@ func snapshotDownloadResponse(result *SnapshotDownloadResult) map[string]any {
 		resp["manifest"] = result.Manifest
 		resp["chunk_count"] = result.Manifest.ChunkCount
 		resp["chunk_size"] = result.Manifest.ChunkSize
+		resp["encoding"] = result.Manifest.Encoding
+		resp["compression"] = result.Manifest.Compression
 	}
 	if result.ExportDir != "" {
 		resp["export_dir"] = result.ExportDir
@@ -36708,8 +38145,19 @@ func (s *Server) handleSnapshotDownload(w http.ResponseWriter, r *http.Request) 
 	}
 	allowReapply := snapshotQueryBool(r, "reapply")
 	strictCore := snapshotQueryBool(r, "strict_core")
-	result, err := s.Node.downloadTrustedSnapshotAndStore(height, minHeight, strictCore, apply, allowReapply)
+	result, err := s.Node.downloadTrustedSnapshotAndStore(height, minHeight, strictCore, apply, allowReapply, true)
 	if err != nil || result == nil {
+		reason := "nil_result"
+		if err != nil {
+			reason = err.Error()
+		}
+		fmt.Printf("[SNAPSHOT-DOWNLOAD-FAIL] path=/snapshot/download height=%d min=%d apply=%t strict_core=%t reason=%s\n",
+			height,
+			minHeight,
+			apply,
+			strictCore,
+			reason,
+		)
 		http.Error(w, "snapshot download failed", http.StatusServiceUnavailable)
 		return
 	}
@@ -36900,8 +38348,19 @@ func (s *Server) handleV1SnapshotDownload(w http.ResponseWriter, r *http.Request
 	}
 	allowReapply := snapshotQueryBool(r, "reapply")
 	strictCore := snapshotQueryBool(r, "strict_core")
-	result, err := s.Node.downloadTrustedSnapshotAndStore(height, minHeight, strictCore, apply, allowReapply)
+	result, err := s.Node.downloadTrustedSnapshotAndStore(height, minHeight, strictCore, apply, allowReapply, true)
 	if err != nil || result == nil {
+		reason := "nil_result"
+		if err != nil {
+			reason = err.Error()
+		}
+		fmt.Printf("[SNAPSHOT-DOWNLOAD-FAIL] path=/v1/snapshot/download height=%d min=%d apply=%t strict_core=%t reason=%s\n",
+			height,
+			minHeight,
+			apply,
+			strictCore,
+			reason,
+		)
 		writeV1Error(w, http.StatusServiceUnavailable, "", "snapshot download failed")
 		return
 	}
@@ -37185,6 +38644,7 @@ func (s *Server) handleMetrics(
 	validatorDiversityReport := EvaluateValidatorGeographicDiversity(nextValidators)
 	currentSupply := currentCoinSupply(&s.Node.Ledger, CoinSymbol)
 	registrySnap := s.Node.validatorRegistrySnapshotForHeight(runtime.Height + 1)
+	validatorPool := s.Node.validatorPoolSnapshotForHeight(runtime.Height+1, registrySnap)
 	pendingRemovalSnap := s.Node.pendingValidatorRemovalsSnapshot()
 	lifecycleAliases := computeValidatorLifecycleAliasCounts(runtime.Height, registrySnap, pendingRemovalSnap)
 	replaySeconds := float64(obs.ReplayDurationMs) / 1000
@@ -37419,6 +38879,11 @@ func (s *Server) handleMetrics(
 	appendPromGauge(&out, "msc_node_sync_target", "Current sync target height.", baseLabels, float64(runtime.SyncTarget))
 	appendPromGauge(&out, "msc_node_syncing", "Node syncing state (1/0).", baseLabels, boolToPromFloat(runtime.Syncing))
 	appendPromGauge(&out, "msc_node_sync_complete", "Node sync completion state (1/0).", baseLabels, boolToPromFloat(runtime.SyncComplete))
+	appendPromGauge(&out, "msc_node_usable_head", "Node has a verified usable latest head even if historical backfill is pending (1/0).", baseLabels, boolToPromFloat(runtime.UsableHead))
+	appendPromGauge(&out, "msc_node_head_synced", "Node latest head sync state (1/0).", baseLabels, boolToPromFloat(runtime.HeadSynced))
+	appendPromGauge(&out, "msc_node_history_synced", "Node historical backfill completion state (1/0).", baseLabels, boolToPromFloat(runtime.HistorySynced))
+	appendPromGauge(&out, "msc_node_history_backfill_pending", "Node historical backfill pending state after usable-head attach (1/0).", baseLabels, boolToPromFloat(runtime.HistoryBackfillPending))
+	appendPromGauge(&out, "msc_node_backfill_lag_blocks", "Historical/head backfill lag in blocks.", baseLabels, float64(runtime.BackfillLagBlocks))
 	appendPromGauge(&out, "msc_node_execution_ready", "Node execution readiness state (1/0).", baseLabels, boolToPromFloat(runtime.ExecutionReady))
 	appendPromGauge(&out, "msc_node_sync_lag_blocks", "Current sync lag in blocks.", baseLabels, float64(runtime.SyncLagBlocks))
 	appendPromGauge(&out, "msc_node_sync_progress_rate", "Observed sync progress rate in blocks per second.", baseLabels, runtime.SyncProgressRate)
@@ -37520,9 +38985,42 @@ func (s *Server) handleMetrics(
 	appendPromGauge(&out, "msc_node_validator_snapshot_publish_healthy", "Whether the validator has published the current committed tip snapshot (1/0).", baseLabels, boolToPromFloat(runtime.ValidatorSnapshotPublishHealthy))
 	appendPromGauge(&out, "msc_node_consensus_running", "Consensus loop running state (1/0).", baseLabels, boolToPromFloat(runtime.ConsensusRunning))
 	appendPromGauge(&out, "msc_node_consensus_ready", "Consensus readiness state (1/0).", baseLabels, boolToPromFloat(runtime.ConsensusReady))
+	appendPromGauge(&out, "msc_consensus_fast_proposer_failover_enabled", "Fast proposer failover mode enabled state (1/0).", baseLabels, boolToPromFloat(ConsensusFastProposerFailoverEnabled))
+	appendPromGauge(&out, "msc_consensus_effective_proposer_round_timeout_seconds", "Effective proposer failover timeout after runtime floors.", baseLabels, float64(effectiveConfiguredProposerRoundTimeout()/time.Second))
 	appendPromGauge(&out, "msc_node_ready", "Overall node readiness state (1/0).", baseLabels, boolToPromFloat(runtime.Ready))
+	appendPromGauge(&out, "msc_node_runtime_pressure_mode", "Runtime pressure mode code: 0 normal, 1 warming, 2 pressure, 3 quiet backpressure.", baseLabels, runtimePressureModeCode(runtime.RuntimePressureMode))
+	appendPromGauge(&out, "msc_node_goroutine_count", "Current Go goroutine count.", baseLabels, float64(runtime.GoroutineCount))
+	appendPromGauge(&out, "msc_node_goroutine_warn_threshold", "Configured goroutine warning threshold.", baseLabels, float64(runtime.GoroutineWarnThreshold))
+	appendPromGauge(&out, "msc_node_gossip_quiet", "Whether gossip quiet/backpressure mode is active (1/0).", baseLabels, boolToPromFloat(runtime.GossipQuiet))
 	appendPromGauge(&out, "msc_node_live_validators", "Live validators seen by this node.", baseLabels, float64(runtime.LiveValidators))
 	appendPromGauge(&out, "msc_node_required_quorum", "Required validator quorum for readiness.", baseLabels, float64(runtime.RequiredQuorum))
+	poolPerformanceEligible := 0
+	poolDecentralizationTotal := float64(0)
+	for _, entry := range validatorPool.Entries {
+		if entry.PerformanceEligible {
+			poolPerformanceEligible++
+		}
+		poolDecentralizationTotal += entry.DecentralizationScore
+	}
+	poolDecentralizationAverage := float64(0)
+	if len(validatorPool.Entries) > 0 {
+		poolDecentralizationAverage = poolDecentralizationTotal / float64(len(validatorPool.Entries))
+	}
+	appendPromGauge(&out, "msc_validator_pool_active", "Hybrid validator pool active validator count.", baseLabels, float64(validatorPool.ActiveCount))
+	appendPromGauge(&out, "msc_validator_pool_standby", "Hybrid validator pool standby validator count.", baseLabels, float64(validatorPool.StandbyCount))
+	appendPromGauge(&out, "msc_validator_pool_performance_slots", "Hybrid validator pool configured performance slots.", baseLabels, float64(validatorPool.PerformanceSlots))
+	appendPromGauge(&out, "msc_validator_pool_rotation_slots", "Hybrid validator pool configured rotation slots.", baseLabels, float64(validatorPool.RotationSlots))
+	appendPromGauge(&out, "msc_validator_pool_performance_active", "Hybrid validator pool active validators in performance slots.", baseLabels, float64(validatorPool.PerformanceActiveCount))
+	appendPromGauge(&out, "msc_validator_pool_rotation_active", "Hybrid validator pool active validators in rotation slots.", baseLabels, float64(validatorPool.RotationActiveCount))
+	appendPromGauge(&out, "msc_validator_pool_performance_eligible", "Hybrid validator pool validators eligible for performance slots.", baseLabels, float64(poolPerformanceEligible))
+	appendPromGauge(&out, "msc_validator_pool_decentralization_score", "Average hybrid validator pool decentralization score.", baseLabels, poolDecentralizationAverage)
+	appendPromGauge(&out, "msc_validator_pool_promotion_window", "Hybrid validator pool promotion window bucket.", baseLabels, float64(validatorHybridPromotionWindowBucket(runtime.Height+1)))
+	appendPromGauge(&out, "msc_validator_pool_minimum_age_for_performance_slot_epochs", "Minimum validator age in epochs before hybrid performance-slot eligibility.", baseLabels, float64(validatorHybridMinimumPerformanceAgeEpochs()))
+	appendPromGauge(&out, "msc_validator_pool_promotion_window_record_v1_height", "Activation height for chain-committed promotion window records.", baseLabels, float64(PromotionWindowRecordV1Height))
+	appendPromGauge(&out, "msc_validator_pool_promotion_window_frozen", "Whether current hybrid validator performance slots are frozen by a chain-committed promotion window record.", baseLabels, boolToPromFloat(validatorPool.PromotionWindowFrozen))
+	appendPromGauge(&out, "msc_validator_pool_minimum_online_required", "Minimum online validators required once the hybrid active set is full.", baseLabels, float64(validatorPool.MinimumOnlineValidators))
+	appendPromGauge(&out, "msc_validator_pool_minimum_online_ok", "Whether live validators satisfy the full-set minimum-online target.", baseLabels, boolToPromFloat(validatorHybridMinimumOnlineOK(validatorPool.ActiveCount, runtime.LiveValidators)))
+	appendPromGauge(&out, "msc_validator_pool_emergency_replacements_total", "Hybrid validator pool emergency replacements observed.", baseLabels, float64(validatorPool.EmergencyReplacementCount))
 	appendPromGauge(&out, "msc_validator_health_live", "Live validators seen by this node.", baseLabels, float64(runtime.LiveValidators))
 	appendPromGauge(&out, "msc_validator_health_offline", "Validators in the next set not currently live.", baseLabels, float64(validatorOffline))
 	appendPromGauge(&out, "msc_validator_health_ratio", "Live validator ratio for the next consensus set.", baseLabels, validatorHealthRatio)
@@ -40721,149 +42219,201 @@ func (s *Server) handleV1Status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtime := s.Node.runtimeStatusSnapshot()
+	v1CommitteeHeight := runtime.Height + 1
+	v1ValidatorPool := s.Node.validatorPoolSnapshotForHeight(v1CommitteeHeight, s.Node.validatorRegistrySnapshotForHeight(v1CommitteeHeight))
+	v1PromotionWindowStatus := s.Node.currentPromotionWindowStatus(v1CommitteeHeight)
 	writeV1Data(w, http.StatusOK, map[string]any{
-		"node_id":                                    s.Node.ID,
-		"chain_id":                                   ChainID,
-		"genesis_hash":                               expectedGenesisHash(),
-		"expected_genesis_hash":                      expectedGenesisHash(),
-		"version":                                    Version,
-		"role":                                       runtime.Role,
-		"validator_state":                            runtime.ValidatorState,
-		"height":                                     runtime.Height,
-		"finalized_height":                           runtime.FinalizedHeight,
-		"peers":                                      runtime.Peers,
-		"syncing":                                    runtime.Syncing,
-		"sync_target":                                runtime.SyncTarget,
-		"sync_stage":                                 runtime.SyncStage,
-		"sync_pipeline_stage":                        runtime.SyncPipelineStage,
-		"sync_mode":                                  runtime.SyncMode,
-		"sync_lag_blocks":                            runtime.SyncLagBlocks,
-		"sync_action":                                runtime.SyncAction,
-		"gossip_realtime":                            runtime.GossipRealtime,
-		"gossip_pipeline":                            runtime.GossipPipeline,
-		"block_gossip_active":                        runtime.BlockGossipActive,
-		"tx_gossip_active":                           runtime.TxGossipActive,
-		"validator_gossip_active":                    runtime.ValidatorGossipActive,
-		"sync_provider":                              runtime.SyncProvider,
-		"sync_provider_reputation":                   runtime.SyncProviderReputation,
-		"sync_provider_class":                        runtime.SyncProviderClass,
-		"sync_stall_seconds":                         runtime.SyncStallSeconds,
-		"snapshot_height":                            runtime.SnapshotHeight,
-		"snapshot_hash":                              runtime.SnapshotHash,
-		"snapshot_downloaded_chunks":                 runtime.SnapshotDownloadedChunks,
-		"snapshot_total_chunks":                      runtime.SnapshotTotalChunks,
-		"snapshot_providers":                         runtime.SnapshotProviders,
-		"snapshot_provider_reputations":              runtime.SnapshotProviderReputations,
-		"snapshot_provider_classes":                  runtime.SnapshotProviderClasses,
-		"snapshot_verify_stage":                      runtime.SnapshotVerifyStage,
-		"snapshot_resume_state":                      runtime.SnapshotResumeState,
-		"snapshot_height_applied":                    runtime.SnapshotHeightApplied,
-		"snapshot_warmup_remaining_blocks":           runtime.SnapshotWarmupRemainingBlocks,
-		"snapshot_catalog_height":                    runtime.SnapshotCatalogHeight,
-		"snapshot_catalog_state_root":                runtime.SnapshotCatalogStateRoot,
-		"snapshot_catalog_chunk_count":               runtime.SnapshotCatalogChunkCount,
-		"snapshot_catalog_provider_set":              runtime.SnapshotCatalogProviderSet,
-		"snapshot_catalog_proof_set":                 runtime.SnapshotCatalogProofSet,
-		"snapshot_catalog_availability_ratio":        runtime.SnapshotCatalogAvailabilityRatio,
-		"validator_snapshot_required":                runtime.ValidatorSnapshotRequired,
-		"validator_snapshot_published_height":        runtime.ValidatorSnapshotPublishedHeight,
-		"validator_snapshot_published_hash":          runtime.ValidatorSnapshotPublishedHash,
-		"validator_snapshot_published_at_unix":       runtime.ValidatorSnapshotPublishedAtUnix,
-		"validator_snapshot_publish_healthy":         runtime.ValidatorSnapshotPublishHealthy,
-		"validator_snapshot_last_error":              runtime.ValidatorSnapshotLastError,
-		"sync_anchor_active":                         runtime.SyncAnchorActive,
-		"sync_anchor_stage":                          runtime.SyncAnchorStage,
-		"sync_anchor_height":                         runtime.SyncAnchorHeight,
-		"sync_anchor_checkpoint_height":              runtime.SyncAnchorCheckpointHeight,
-		"sync_anchor_candidate_height":               runtime.SyncAnchorCandidateHeight,
-		"sync_anchor_candidate_checkpoint_height":    runtime.SyncAnchorCandidateCheckpointHeight,
-		"sync_anchor_votes":                          runtime.SyncAnchorVotes,
-		"sync_anchor_required":                       runtime.SyncAnchorRequired,
-		"sync_anchor_deadline_unix":                  runtime.SyncAnchorDeadlineUnix,
-		"sync_anchor_retry_count":                    runtime.SyncAnchorRetryCount,
-		"sync_anchor_provider":                       runtime.SyncAnchorProvider,
-		"sync_anchor_provider_reputation":            runtime.SyncAnchorProviderReputation,
-		"sync_anchor_provider_class":                 runtime.SyncAnchorProviderClass,
-		"sync_anchor_last_error":                     runtime.SyncAnchorLastError,
-		"sync_anchor_last_reject_reason":             runtime.SyncAnchorLastRejectReason,
-		"sync_anchor_fingerprint":                    runtime.SyncAnchorFingerprint,
-		"sync_anchor_strict_reason_counts":           runtime.SyncAnchorStrictReasonCounts,
-		"sync_anchor_strict_provider_results":        runtime.SyncAnchorStrictProviderResults,
-		"sync_anchor_unreachable_retries":            runtime.SyncAnchorUnreachableRetries,
-		"sync_anchor_relaxed_proof":                  runtime.SyncAnchorRelaxedProof,
-		"sync_anchor_fallback_ready":                 runtime.SyncAnchorFallbackReady,
-		"sync_anchor_age_seconds":                    runtime.SyncAnchorAgeSeconds,
-		"sync_anchor_last_vote_age_seconds":          runtime.SyncAnchorLastVoteAgeSeconds,
-		"exec_mismatch_unique_signers_current_epoch": runtime.ExecMismatchUniqueSignersCurrentEpoch,
-		"delta_remaining_blocks":                     runtime.DeltaRemainingBlocks,
-		"mesh_mode":                                  runtime.MeshMode,
-		"mesh_reconcile_interval_seconds":            runtime.MeshReconcileIntervalSeconds,
-		"core_registry_gate":                         runtime.CoreRegistryGate,
-		"core_authority_source":                      runtime.CoreAuthoritySource,
-		"core_membership":                            runtime.CoreMembership,
-		"validator_consensus_pubkey_anchored":        runtime.ValidatorConsensusPubKeyAnchored,
-		"validator_consensus_pubkey_source":          runtime.ValidatorConsensusPubKeySource,
-		"onboarding_state":                           runtime.OnboardingState,
-		"scheduled_height":                           runtime.ScheduledHeight,
-		"effective_height":                           runtime.EffectiveHeight,
-		"activation_blocker_reason":                  runtime.ActivationBlockerReason,
-		"activation_delay_model":                     runtime.ActivationDelayModel,
-		"activation_delay_model_switch_height":       runtime.ActivationDelayModelSwitchHeight,
-		"barrier_retry_mode":                         runtime.BarrierRetryMode,
-		"transition_height":                          runtime.TransitionHeight,
-		"expected_vset_hash":                         runtime.ExpectedVsetHash,
-		"expected_vset_source":                       runtime.ExpectedVsetSource,
-		"validator_authority_source":                 runtime.ValidatorAuthoritySource,
-		"validator_set_hash_mode":                    runtime.ValidatorSetHashMode,
-		"expected_next_vset_hash":                    runtime.ExpectedNextVsetHash,
-		"expected_next_vset_source":                  runtime.ExpectedNextVsetSource,
-		"got_vset_hash":                              runtime.GotVsetHash,
-		"barrier_votes":                              runtime.BarrierVotes,
-		"barrier_votes_required":                     runtime.BarrierVotesRequired,
-		"ready":                                      runtime.Ready,
-		"wait_reason":                                runtime.WaitReason,
-		"consensus_running":                          runtime.ConsensusRunning,
-		"consensus_mode":                             runtime.ConsensusMode,
-		"consensus_detector_mode":                    runtime.ConsensusDetectorMode,
-		"consensus_detector_code":                    runtime.ConsensusDetectorCode,
-		"consensus_detector_reason":                  runtime.ConsensusDetectorReason,
-		"consensus_detector_candidate_mode":          runtime.ConsensusDetectorCandidateMode,
-		"consensus_detector_candidate_reason":        runtime.ConsensusDetectorCandidateReason,
-		"consensus_detector_candidate_samples":       runtime.ConsensusDetectorCandidateSamples,
-		"consensus_detector_stable_mode_reason":      runtime.ConsensusDetectorStableModeReason,
-		"consensus_detector_finality_lag_blocks":     runtime.ConsensusDetectorFinalityLagBlocks,
-		"consensus_detector_last_finality_seconds":   runtime.ConsensusDetectorLastFinalitySec,
-		"consensus_detector_partition_risk":          runtime.ConsensusDetectorPartitionRisk,
-		"consensus_detector_attack":                  runtime.ConsensusDetectorAttack,
-		"vote_enabled":                               runtime.VoteEnabled,
-		"propose_enabled":                            runtime.ProposeEnabled,
-		"consensus_ready":                            runtime.ConsensusReady,
-		"live_validators":                            runtime.LiveValidators,
-		"required_quorum":                            runtime.RequiredQuorum,
-		"strict_quorum":                              runtime.StrictQuorum,
-		"active_ready_count":                         runtime.ActiveReadyCount,
-		"quorum_policy_mode":                         runtime.QuorumPolicyMode,
-		"quorum_policy_version":                      runtime.QuorumPolicyVersion,
-		"validator_liveness_mode":                    runtime.LivenessMode,
-		"validator_liveness_max_height_drift_blocks": runtime.LivenessMaxHeightDriftBlocks,
-		"validator_live_strict_count":                runtime.LiveStrictCount,
-		"validator_live_heartbeat_count":             runtime.LiveHeartbeatCount,
-		"validator_live_out_of_drift_count":          runtime.LiveOutOfDriftCount,
-		"network_health":                             runtime.NetworkHealth,
-		"network_health_summary":                     runtime.NetworkHealthSummary,
-		"network_best_height":                        runtime.NetworkBestHeight,
-		"network_best_height_votes":                  runtime.NetworkBestHeightVotes,
-		"network_quorum_height":                      runtime.NetworkQuorumHeight,
-		"network_quorum_votes":                       runtime.NetworkQuorumVotes,
-		"network_quorum_required":                    runtime.NetworkQuorumRequired,
-		"network_lag_blocks":                         runtime.NetworkLagBlocks,
-		"block_production_status":                    runtime.BlockProductionStatus,
-		"block_production_reason":                    runtime.BlockProductionReason,
-		"last_block_age_seconds":                     runtime.LastBlockAgeSeconds,
-		"last_commit_height":                         runtime.LastCommitHeight,
-		"tx_lane_status":                             runtime.TxLaneStatus,
-		"tx_lane_reason":                             runtime.TxLaneReason,
-		"mempool_depth":                              runtime.MempoolDepth,
+		"node_id":                       s.Node.ID,
+		"chain_id":                      ChainID,
+		"genesis_hash":                  expectedGenesisHash(),
+		"expected_genesis_hash":         expectedGenesisHash(),
+		"version":                       Version,
+		"role":                          runtime.Role,
+		"validator_state":               runtime.ValidatorState,
+		"height":                        runtime.Height,
+		"finalized_height":              runtime.FinalizedHeight,
+		"peers":                         runtime.Peers,
+		"syncing":                       runtime.Syncing,
+		"sync_target":                   runtime.SyncTarget,
+		"sync_stage":                    runtime.SyncStage,
+		"sync_pipeline_stage":           runtime.SyncPipelineStage,
+		"sync_mode":                     runtime.SyncMode,
+		"sync_lag_blocks":               runtime.SyncLagBlocks,
+		"sync_action":                   runtime.SyncAction,
+		"gossip_realtime":               runtime.GossipRealtime,
+		"gossip_pipeline":               runtime.GossipPipeline,
+		"block_gossip_active":           runtime.BlockGossipActive,
+		"tx_gossip_active":              runtime.TxGossipActive,
+		"validator_gossip_active":       runtime.ValidatorGossipActive,
+		"sync_provider":                 runtime.SyncProvider,
+		"sync_provider_reputation":      runtime.SyncProviderReputation,
+		"sync_provider_class":           runtime.SyncProviderClass,
+		"sync_stall_seconds":            runtime.SyncStallSeconds,
+		"usable_head":                   runtime.UsableHead,
+		"head_synced":                   runtime.HeadSynced,
+		"history_synced":                runtime.HistorySynced,
+		"history_backfill_pending":      runtime.HistoryBackfillPending,
+		"backfill_lag_blocks":           runtime.BackfillLagBlocks,
+		"fast_bootstrap_stage":          runtime.FastBootstrapStage,
+		"fast_bootstrap_target_seconds": runtime.FastBootstrapTargetSeconds,
+		"fast_bootstrap_require_checkpoint_proof":                runtime.FastBootstrapRequireCheckpointProof,
+		"fast_bootstrap_recent_replay_window_blocks":             runtime.FastBootstrapRecentReplayWindowBlocks,
+		"checkpoint_height":                                      runtime.CheckpointHeight,
+		"snapshot_apply_seconds":                                 runtime.SnapshotApplySeconds,
+		"snapshot_height":                                        runtime.SnapshotHeight,
+		"snapshot_hash":                                          runtime.SnapshotHash,
+		"snapshot_downloaded_chunks":                             runtime.SnapshotDownloadedChunks,
+		"snapshot_total_chunks":                                  runtime.SnapshotTotalChunks,
+		"snapshot_providers":                                     runtime.SnapshotProviders,
+		"snapshot_provider_reputations":                          runtime.SnapshotProviderReputations,
+		"snapshot_provider_classes":                              runtime.SnapshotProviderClasses,
+		"snapshot_verify_stage":                                  runtime.SnapshotVerifyStage,
+		"snapshot_resume_state":                                  runtime.SnapshotResumeState,
+		"snapshot_height_applied":                                runtime.SnapshotHeightApplied,
+		"snapshot_warmup_remaining_blocks":                       runtime.SnapshotWarmupRemainingBlocks,
+		"snapshot_catalog_height":                                runtime.SnapshotCatalogHeight,
+		"snapshot_catalog_state_root":                            runtime.SnapshotCatalogStateRoot,
+		"snapshot_catalog_chunk_count":                           runtime.SnapshotCatalogChunkCount,
+		"snapshot_catalog_provider_set":                          runtime.SnapshotCatalogProviderSet,
+		"snapshot_catalog_proof_set":                             runtime.SnapshotCatalogProofSet,
+		"snapshot_catalog_availability_ratio":                    runtime.SnapshotCatalogAvailabilityRatio,
+		"validator_snapshot_required":                            runtime.ValidatorSnapshotRequired,
+		"validator_snapshot_published_height":                    runtime.ValidatorSnapshotPublishedHeight,
+		"validator_snapshot_published_hash":                      runtime.ValidatorSnapshotPublishedHash,
+		"validator_snapshot_published_at_unix":                   runtime.ValidatorSnapshotPublishedAtUnix,
+		"validator_snapshot_publish_healthy":                     runtime.ValidatorSnapshotPublishHealthy,
+		"validator_snapshot_last_error":                          runtime.ValidatorSnapshotLastError,
+		"sync_anchor_active":                                     runtime.SyncAnchorActive,
+		"sync_anchor_stage":                                      runtime.SyncAnchorStage,
+		"sync_anchor_height":                                     runtime.SyncAnchorHeight,
+		"sync_anchor_checkpoint_height":                          runtime.SyncAnchorCheckpointHeight,
+		"sync_anchor_candidate_height":                           runtime.SyncAnchorCandidateHeight,
+		"sync_anchor_candidate_checkpoint_height":                runtime.SyncAnchorCandidateCheckpointHeight,
+		"sync_anchor_votes":                                      runtime.SyncAnchorVotes,
+		"sync_anchor_required":                                   runtime.SyncAnchorRequired,
+		"sync_anchor_deadline_unix":                              runtime.SyncAnchorDeadlineUnix,
+		"sync_anchor_retry_count":                                runtime.SyncAnchorRetryCount,
+		"sync_anchor_provider":                                   runtime.SyncAnchorProvider,
+		"sync_anchor_provider_reputation":                        runtime.SyncAnchorProviderReputation,
+		"sync_anchor_provider_class":                             runtime.SyncAnchorProviderClass,
+		"sync_anchor_last_error":                                 runtime.SyncAnchorLastError,
+		"sync_anchor_last_reject_reason":                         runtime.SyncAnchorLastRejectReason,
+		"sync_anchor_fingerprint":                                runtime.SyncAnchorFingerprint,
+		"sync_anchor_strict_reason_counts":                       runtime.SyncAnchorStrictReasonCounts,
+		"sync_anchor_strict_provider_results":                    runtime.SyncAnchorStrictProviderResults,
+		"sync_anchor_unreachable_retries":                        runtime.SyncAnchorUnreachableRetries,
+		"sync_anchor_relaxed_proof":                              runtime.SyncAnchorRelaxedProof,
+		"sync_anchor_fallback_ready":                             runtime.SyncAnchorFallbackReady,
+		"sync_anchor_age_seconds":                                runtime.SyncAnchorAgeSeconds,
+		"sync_anchor_last_vote_age_seconds":                      runtime.SyncAnchorLastVoteAgeSeconds,
+		"exec_mismatch_unique_signers_current_epoch":             runtime.ExecMismatchUniqueSignersCurrentEpoch,
+		"delta_remaining_blocks":                                 runtime.DeltaRemainingBlocks,
+		"mesh_mode":                                              runtime.MeshMode,
+		"mesh_reconcile_interval_seconds":                        runtime.MeshReconcileIntervalSeconds,
+		"core_registry_gate":                                     runtime.CoreRegistryGate,
+		"core_authority_source":                                  runtime.CoreAuthoritySource,
+		"core_membership":                                        runtime.CoreMembership,
+		"validator_consensus_pubkey_anchored":                    runtime.ValidatorConsensusPubKeyAnchored,
+		"validator_consensus_pubkey_source":                      runtime.ValidatorConsensusPubKeySource,
+		"onboarding_state":                                       runtime.OnboardingState,
+		"scheduled_height":                                       runtime.ScheduledHeight,
+		"effective_height":                                       runtime.EffectiveHeight,
+		"activation_blocker_reason":                              runtime.ActivationBlockerReason,
+		"activation_delay_model":                                 runtime.ActivationDelayModel,
+		"activation_delay_model_switch_height":                   runtime.ActivationDelayModelSwitchHeight,
+		"barrier_retry_mode":                                     runtime.BarrierRetryMode,
+		"transition_height":                                      runtime.TransitionHeight,
+		"expected_vset_hash":                                     runtime.ExpectedVsetHash,
+		"expected_vset_source":                                   runtime.ExpectedVsetSource,
+		"validator_authority_source":                             runtime.ValidatorAuthoritySource,
+		"validator_set_hash_mode":                                runtime.ValidatorSetHashMode,
+		"expected_next_vset_hash":                                runtime.ExpectedNextVsetHash,
+		"expected_next_vset_source":                              runtime.ExpectedNextVsetSource,
+		"got_vset_hash":                                          runtime.GotVsetHash,
+		"barrier_votes":                                          runtime.BarrierVotes,
+		"barrier_votes_required":                                 runtime.BarrierVotesRequired,
+		"ready":                                                  runtime.Ready,
+		"wait_reason":                                            runtime.WaitReason,
+		"consensus_running":                                      runtime.ConsensusRunning,
+		"consensus_mode":                                         runtime.ConsensusMode,
+		"consensus_detector_mode":                                runtime.ConsensusDetectorMode,
+		"consensus_detector_code":                                runtime.ConsensusDetectorCode,
+		"consensus_detector_reason":                              runtime.ConsensusDetectorReason,
+		"consensus_detector_candidate_mode":                      runtime.ConsensusDetectorCandidateMode,
+		"consensus_detector_candidate_reason":                    runtime.ConsensusDetectorCandidateReason,
+		"consensus_detector_candidate_samples":                   runtime.ConsensusDetectorCandidateSamples,
+		"consensus_detector_stable_mode_reason":                  runtime.ConsensusDetectorStableModeReason,
+		"consensus_detector_finality_lag_blocks":                 runtime.ConsensusDetectorFinalityLagBlocks,
+		"consensus_detector_last_finality_seconds":               runtime.ConsensusDetectorLastFinalitySec,
+		"consensus_detector_partition_risk":                      runtime.ConsensusDetectorPartitionRisk,
+		"consensus_detector_attack":                              runtime.ConsensusDetectorAttack,
+		"vote_enabled":                                           runtime.VoteEnabled,
+		"propose_enabled":                                        runtime.ProposeEnabled,
+		"consensus_ready":                                        runtime.ConsensusReady,
+		"fast_proposer_failover_enabled":                         ConsensusFastProposerFailoverEnabled,
+		"effective_proposer_round_timeout_seconds":               uint64(effectiveConfiguredProposerRoundTimeout() / time.Second),
+		"runtime_pressure_mode":                                  runtime.RuntimePressureMode,
+		"goroutine_count":                                        runtime.GoroutineCount,
+		"goroutine_warn_threshold":                               runtime.GoroutineWarnThreshold,
+		"node_profile":                                           homeNodeStatusFields(s.Node.Role)["node_profile"],
+		"low_ram_mode":                                           homeNodeStatusFields(s.Node.Role)["low_ram_mode"],
+		"memory_limit_bytes":                                     homeNodeStatusFields(s.Node.Role)["memory_limit_bytes"],
+		"home_validator_supported":                               homeNodeStatusFields(s.Node.Role)["home_validator_supported"],
+		"validator_min_recommended_ram_gb":                       homeNodeStatusFields(s.Node.Role)["validator_min_recommended_ram_gb"],
+		"gossip_quiet":                                           runtime.GossipQuiet,
+		"active_set_mode":                                        displayActiveSetMode(),
+		"validator_pool":                                         v1ValidatorPool,
+		"validator_pool_mode":                                    v1ValidatorPool.Mode,
+		"validator_pool_epoch_bucket":                            v1ValidatorPool.EpochBucket,
+		"validator_pool_max_active":                              v1ValidatorPool.MaxActiveValidators,
+		"validator_pool_active_count":                            v1ValidatorPool.ActiveCount,
+		"validator_pool_standby_count":                           v1ValidatorPool.StandbyCount,
+		"validator_pool_performance_slots":                       v1ValidatorPool.PerformanceSlots,
+		"validator_pool_rotation_slots":                          v1ValidatorPool.RotationSlots,
+		"validator_pool_performance_active_count":                v1ValidatorPool.PerformanceActiveCount,
+		"validator_pool_rotation_active_count":                   v1ValidatorPool.RotationActiveCount,
+		"validator_pool_effective_stake_cap":                     validatorHybridEffectiveStakeCap(),
+		"validator_pool_epoch_blocks":                            validatorHybridEpochBlocks(),
+		"validator_pool_promotion_window_epochs":                 validatorHybridPromotionWindowEpochs(),
+		"validator_pool_minimum_age_for_performance_slot_epochs": validatorHybridMinimumPerformanceAgeEpochs(),
+		"validator_pool_promotion_window_bucket":                 validatorHybridPromotionWindowBucket(v1CommitteeHeight),
+		"validator_pool_promotion_window_hash":                   v1ValidatorPool.PromotionWindowHash,
+		"validator_pool_promotion_window_source":                 v1ValidatorPool.PromotionWindowSource,
+		"validator_pool_promotion_window_frozen":                 v1ValidatorPool.PromotionWindowFrozen,
+		"validator_pool_promotion_window_validators":             v1ValidatorPool.PromotionWindowValidators,
+		"validator_pool_promotion_window_replacements":           v1ValidatorPool.PromotionWindowReplacements,
+		"promotion_window_record_v1_height":                      PromotionWindowRecordV1Height,
+		"promotion_window":                                       v1PromotionWindowStatus,
+		"validator_pool_performance_min_signed_bps":              validatorHybridPerformanceMinSignedBPS(),
+		"validator_pool_minimum_online_required":                 v1ValidatorPool.MinimumOnlineValidators,
+		"validator_pool_minimum_online_ok":                       validatorHybridMinimumOnlineOK(v1ValidatorPool.ActiveCount, runtime.LiveValidators),
+		"validator_pool_emergency_replacement_count":             v1ValidatorPool.EmergencyReplacementCount,
+		"live_validators":                                        runtime.LiveValidators,
+		"required_quorum":                                        runtime.RequiredQuorum,
+		"strict_quorum":                                          runtime.StrictQuorum,
+		"active_ready_count":                                     runtime.ActiveReadyCount,
+		"quorum_policy_mode":                                     runtime.QuorumPolicyMode,
+		"quorum_policy_version":                                  runtime.QuorumPolicyVersion,
+		"validator_liveness_mode":                                runtime.LivenessMode,
+		"validator_liveness_max_height_drift_blocks":             runtime.LivenessMaxHeightDriftBlocks,
+		"validator_live_strict_count":                            runtime.LiveStrictCount,
+		"validator_live_heartbeat_count":                         runtime.LiveHeartbeatCount,
+		"validator_live_out_of_drift_count":                      runtime.LiveOutOfDriftCount,
+		"network_health":                                         runtime.NetworkHealth,
+		"network_health_summary":                                 runtime.NetworkHealthSummary,
+		"network_best_height":                                    runtime.NetworkBestHeight,
+		"network_best_height_votes":                              runtime.NetworkBestHeightVotes,
+		"network_quorum_height":                                  runtime.NetworkQuorumHeight,
+		"network_quorum_votes":                                   runtime.NetworkQuorumVotes,
+		"network_quorum_required":                                runtime.NetworkQuorumRequired,
+		"network_lag_blocks":                                     runtime.NetworkLagBlocks,
+		"block_production_status":                                runtime.BlockProductionStatus,
+		"block_production_reason":                                runtime.BlockProductionReason,
+		"last_block_age_seconds":                                 runtime.LastBlockAgeSeconds,
+		"last_commit_height":                                     runtime.LastCommitHeight,
+		"tx_lane_status":                                         runtime.TxLaneStatus,
+		"tx_lane_reason":                                         runtime.TxLaneReason,
+		"mempool_depth":                                          runtime.MempoolDepth,
 	})
 }
 
@@ -42612,7 +44162,7 @@ func authorized(r *http.Request) bool {
 
 		switch path {
 
-		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/validators/diversity", "/public-nodes", "/public/status", "/consensus/mode", "/formal/verification", "/storage/policy", "/bridge/status", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/wallet/events", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/public-nodes", "/v1/public/status", "/v1/consensus/mode", "/v1/formal/verification", "/v1/storage/policy", "/v1/bridge/status", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/wallet/events", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/validators/diversity", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
+		case "/status", "/healthz", "/metrics", "/misbehavior", "/validators", "/validatorset/hash", "/validatorset/audit", "/validators/pending", "/validators/leaderboard", "/validators/diversity", "/validators/promotion-window", "/public-nodes", "/public/status", "/consensus/mode", "/formal/verification", "/storage/policy", "/bridge/status", "/snapshot/latest", "/snapshot/manifest", "/snapshot/chunk", "/tx/status", "/txs", "/coins", "/tokenomics", "/balance", "/wallet/status", "/wallet/events", "/explorer/blocks", "/explorer/block", "/explorer/tx", "/explorer/peers", "/evm/state", "/governance/status", "/governance/proposals", "/upgrade/status", "/testnet/campaign", "/testnet/campaign/export", "/dtl/quote", "/dtl/route_quote", "/dtl/farm_info", "/dtl/season_info", "/dtl/leaderboard", "/v1/status", "/v1/public-nodes", "/v1/public/status", "/v1/consensus/mode", "/v1/formal/verification", "/v1/storage/policy", "/v1/bridge/status", "/v1/snapshot/latest", "/v1/snapshot/manifest", "/v1/snapshot/chunk", "/v1/balance", "/v1/wallet/events", "/v1/nonce", "/v1/governance/status", "/v1/governance/proposals", "/v1/upgrade/status", "/v1/testnet/campaign", "/v1/testnet/campaign/export", "/v1/dtl/quote", "/v1/dtl/route_quote", "/v1/dtl/farm_info", "/v1/dtl/season_info", "/v1/dtl/leaderboard", "/v1/blocks", "/v1/peers", "/v1/validators", "/v1/validators/pending", "/v1/validators/leaderboard", "/v1/validators/diversity", "/v1/validators/promotion-window", "/v1/misbehavior", "/v1/tx/status", "/v1/evm/state":
 
 			return true
 
@@ -44048,13 +45598,13 @@ func (n *Node) MapStats() MapStats {
 
 	stats.PeerConnectingCount = len(n.connectingPeers)
 
-	stats.PeerSuspectCount = len(n.validatorSuspect)
-
 	stats.PeerQuarantinedCount = len(n.quarantineUntil)
 
 	stats.AllowedPeerCount = len(n.allowedPeerIDs)
 
 	n.peerStateMu.Unlock()
+
+	stats.PeerSuspectCount = n.validatorSuspectCount()
 
 	n.validatorSetMu.RLock()
 
@@ -45424,6 +46974,9 @@ func (n *Node) VerifyBlock(
 	if err := n.validateBlockValidatorRegistryCommitment(block); err != nil {
 		return err
 	}
+	if err := n.validateBlockPromotionWindowCommitment(block); err != nil {
+		return err
+	}
 	if err := n.validateCommittedBlockQuorumEvidence(block); err != nil {
 		return err
 	}
@@ -45492,63 +47045,73 @@ func (n *Node) VerifyBlock(
 
 		}
 
-		parentLedger, parentCtx, ok := n.executionParentLedgerForBlock(block)
-		if !ok && block.ID > 1 && n.restoreLedgersFromAuthoritativeExecution(block.ID-1, "verify_work_parent_unavailable") {
-			parentLedger, parentCtx, ok = n.executionParentLedgerForBlock(block)
-		}
-		if !ok {
-			return errors.New("parent_state_unavailable")
-		}
-		if !VerifyWorkBlockExecutionWithNode(n, block, parentLedger) {
-			repaired := false
-			repairedParentLedgerHash := HashLedger(parentLedger)
-			if block.ID > 1 && n.restoreLedgersFromAuthoritativeExecution(block.ID-1, "verify_work_execution_mismatch") {
-				if repairedLedger, repairedCtx, repairedOK := n.executionParentLedgerForBlock(block); repairedOK &&
-					VerifyWorkBlockExecutionWithNode(n, block, repairedLedger) {
-					repaired = true
-					parentCtx = repairedCtx
-					repairedParentLedgerHash = HashLedger(repairedLedger)
-				}
+		if len(block.Transactions) > 0 && len(block.Receipts) == 0 {
+			if n.shouldLogLivenessReason(fmt.Sprintf("verify_work_missing_receipts:%d:%s", block.ID, strings.TrimSpace(block.BlockHash)), livenessReasonLogCooldown) {
+				log.Printf("[VERIFY-WORK-SKIP] height=%d reason=missing_receipts_using_state_root block=%s tx_count=%d",
+					block.ID,
+					ShortHash(block.BlockHash),
+					len(block.Transactions),
+				)
 			}
-			if !repaired && block.ID > 1 {
-				if legacyLedger, legacySource, legacyOK := n.authoritativeExecutionSnapshotLedger(block.ID - 1); legacyOK &&
-					VerifyWorkBlockExecutionWithNode(n, block, legacyLedger) {
-					n.cachePostCommitLedger(block.ID-1, legacyLedger)
-					n.setExecutionLedger(legacyLedger)
-					repaired = true
-					parentCtx.ParentHeight = block.ID - 1
-					parentCtx.ParentSource = legacySource + "_legacy_parent"
-					repairedParentLedgerHash = HashLedger(legacyLedger)
-					parentCtx.RuntimeLedgerHash = HashLedger(n.Ledger.Clone())
-					parentCtx.ExecutionLedgerHash = HashLedger(n.currentExecutionLedgerClone())
-				}
+		} else {
+			parentLedger, parentCtx, ok := n.executionParentLedgerForBlock(block)
+			if !ok && block.ID > 1 && n.restoreLedgersFromAuthoritativeExecution(block.ID-1, "verify_work_parent_unavailable") {
+				parentLedger, parentCtx, ok = n.executionParentLedgerForBlock(block)
 			}
-			if repaired {
-				if n.shouldLogLivenessReason(fmt.Sprintf("verify_work_execution_repair:%d:%s", block.ID, strings.TrimSpace(block.BlockHash)), livenessReasonLogCooldown) {
-					log.Printf("[VERIFY-WORK-REPAIR] height=%d reason=execution_mismatch block=%s parent_height=%d parent_source=%s parent_ledger=%s",
-						block.ID,
-						ShortHash(block.BlockHash),
-						parentCtx.ParentHeight,
-						parentCtx.ParentSource,
-						ShortHash(repairedParentLedgerHash),
-					)
+			if !ok {
+				return errors.New("parent_state_unavailable")
+			}
+			if !VerifyWorkBlockExecutionWithNode(n, block, parentLedger) {
+				repaired := false
+				repairedParentLedgerHash := HashLedger(parentLedger)
+				if block.ID > 1 && n.restoreLedgersFromAuthoritativeExecution(block.ID-1, "verify_work_execution_mismatch") {
+					if repairedLedger, repairedCtx, repairedOK := n.executionParentLedgerForBlock(block); repairedOK &&
+						VerifyWorkBlockExecutionWithNode(n, block, repairedLedger) {
+						repaired = true
+						parentCtx = repairedCtx
+						repairedParentLedgerHash = HashLedger(repairedLedger)
+					}
 				}
-			} else {
-				if n.shouldLogLivenessReason(fmt.Sprintf("verify_work_execution_mismatch:%d:%s", block.ID, strings.TrimSpace(block.BlockHash)), livenessReasonLogCooldown) {
-					log.Printf("[VERIFY-WORK-REJECT] height=%d reason=execution_mismatch block=%s parent_height=%d parent_source=%s parent_ledger=%s runtime_ledger=%s execution_ledger=%s",
-						block.ID,
-						ShortHash(block.BlockHash),
-						parentCtx.ParentHeight,
-						parentCtx.ParentSource,
-						ShortHash(HashLedger(parentLedger)),
-						ShortHash(parentCtx.RuntimeLedgerHash),
-						ShortHash(parentCtx.ExecutionLedgerHash),
-					)
+				if !repaired && block.ID > 1 {
+					if legacyLedger, legacySource, legacyOK := n.authoritativeExecutionSnapshotLedger(block.ID - 1); legacyOK &&
+						VerifyWorkBlockExecutionWithNode(n, block, legacyLedger) {
+						n.cachePostCommitLedger(block.ID-1, legacyLedger)
+						n.setExecutionLedger(legacyLedger)
+						repaired = true
+						parentCtx.ParentHeight = block.ID - 1
+						parentCtx.ParentSource = legacySource + "_legacy_parent"
+						repairedParentLedgerHash = HashLedger(legacyLedger)
+						parentCtx.RuntimeLedgerHash = HashLedger(n.Ledger.Clone())
+						parentCtx.ExecutionLedgerHash = HashLedger(n.currentExecutionLedgerClone())
+					}
+				}
+				if repaired {
+					if n.shouldLogLivenessReason(fmt.Sprintf("verify_work_execution_repair:%d:%s", block.ID, strings.TrimSpace(block.BlockHash)), livenessReasonLogCooldown) {
+						log.Printf("[VERIFY-WORK-REPAIR] height=%d reason=execution_mismatch block=%s parent_height=%d parent_source=%s parent_ledger=%s",
+							block.ID,
+							ShortHash(block.BlockHash),
+							parentCtx.ParentHeight,
+							parentCtx.ParentSource,
+							ShortHash(repairedParentLedgerHash),
+						)
+					}
+				} else {
+					if n.shouldLogLivenessReason(fmt.Sprintf("verify_work_execution_mismatch:%d:%s", block.ID, strings.TrimSpace(block.BlockHash)), livenessReasonLogCooldown) {
+						log.Printf("[VERIFY-WORK-REJECT] height=%d reason=execution_mismatch block=%s parent_height=%d parent_source=%s parent_ledger=%s runtime_ledger=%s execution_ledger=%s",
+							block.ID,
+							ShortHash(block.BlockHash),
+							parentCtx.ParentHeight,
+							parentCtx.ParentSource,
+							ShortHash(HashLedger(parentLedger)),
+							ShortHash(parentCtx.RuntimeLedgerHash),
+							ShortHash(parentCtx.ExecutionLedgerHash),
+						)
+					}
+
+					return errors.New("execution_mismatch")
 				}
 
-				return errors.New("execution_mismatch")
 			}
-
 		}
 
 	}
@@ -46367,6 +47930,10 @@ func (n *Node) expectedValidatorSetHashWithSource(height uint64) (string, string
 	if chainHash, ok := n.chainValidatorSetHash(height); ok {
 		return strings.TrimSpace(chainHash), "chain"
 	}
+	postForkChainCommitment := height > 1 && validatorSetCommitmentV2EnabledAt(height-1)
+	if committed, ok := n.chainParentCommittedValidatorSetHash(height); ok {
+		return strings.TrimSpace(committed), "chain_parent_commitment"
+	}
 	parentHeight := height - 1
 	if parentHeight > 0 && n.DB != nil && n.DB.State != nil {
 		if snap, err := n.GetSnapshot(parentHeight); err == nil && snap != nil {
@@ -46378,20 +47945,13 @@ func (n *Node) expectedValidatorSetHashWithSource(height uint64) (string, string
 			}
 		}
 	}
-	postForkChainCommitment := height > 1 && validatorSetCommitmentV2EnabledAt(height-1)
 	if postForkChainCommitment {
-		if committed, ok := n.chainParentCommittedValidatorSetHash(height); ok {
-			return strings.TrimSpace(committed), "chain_parent_commitment"
-		}
 		if fallback, ok := n.bootstrapParentValidatorSetHashFallback(height); ok {
 			return strings.TrimSpace(fallback), "bootstrap_parent_fallback"
 		}
 		// V2 strict rule: validator_set(H) MUST come from finalized parent
 		// next-validator-set commitment. No runtime/frozen fallback.
 		return "", "chain_parent_commitment"
-	}
-	if committed, ok := n.chainParentCommittedValidatorSetHash(height); ok {
-		return strings.TrimSpace(committed), "chain_parent_commitment"
 	}
 	if _, frozenHash, frozenSource, ok := n.legacyFrozenValidatorAuthorityForHeight(height); ok && strings.TrimSpace(frozenHash) != "" {
 		return strings.TrimSpace(frozenHash), frozenSource
@@ -46790,7 +48350,11 @@ func (n *Node) tryRepairValidatorSetHash(height uint64, gotHash string) bool {
 		minHeight = 1
 	}
 	if snap, execPool, err := n.fetchTrustedSnapshot(target, minHeight, strictCoreMode); err == nil && snap != nil && snap.Height > 0 {
-		n.ApplySnapshotForRecovery(*snap)
+		if !n.ApplySnapshotForRecovery(*snap) {
+			n.recordSnapshotSessionStrictResult("", "snapshot_apply_noop")
+			n.snapshotSessionMarkFailure("snapshot_apply_noop")
+			return false
+		}
 		n.noteSnapshotApplied(snap.Height)
 		n.markSnapshotSessionApplied(snap, 0)
 		n.snapshotEpochValidators(snap.Height + 1)
@@ -47056,13 +48620,9 @@ func (n *Node) IsValidatorActive(addr string, height int) bool {
 
 	// =============================
 
-	n.validatorMu.RLock()
+	status, ok := n.validatorStatusSnapshot(addr)
 
-	status, ok := n.validatorStatus[addr]
-
-	n.validatorMu.RUnlock()
-
-	if !ok || status == nil {
+	if !ok {
 
 		return false
 

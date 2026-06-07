@@ -103,3 +103,10 @@ func TestQuarantineDurationForPeerInfoProtocolMismatch(t *testing.T) {
 		t.Fatalf("unexpected quarantine duration: got=%s want=%s", got, peerQuarantineForPeerInfoStream)
 	}
 }
+
+func TestQuarantineDurationForPeerFlapIsShort(t *testing.T) {
+	got := quarantineDurationFor("peer_flap")
+	if got != peerQuarantineForFlap {
+		t.Fatalf("unexpected peer flap quarantine duration: got=%s want=%s", got, peerQuarantineForFlap)
+	}
+}

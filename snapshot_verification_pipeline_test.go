@@ -212,10 +212,25 @@ func TestSnapshotVerifierRejectsSnapshotBelowLocalFinalizedHeight(t *testing.T) 
 	node.committedHeight = 10
 	node.finalizedHeight = 10
 	node.commitMu.Unlock()
+	node.Blockchain.Blocks = []Block{{ID: 10, Height: 10, BlockHash: "h10"}}
 
 	err := (SnapshotVerifier{Node: node}).Verify(&snap)
 	if err == nil || err.Error() != "snapshot_below_finalized_height" {
 		t.Fatalf("expected below-finalized snapshot rejection, got %v", err)
+	}
+}
+
+func TestSnapshotVerifierIgnoresRemoteFinalityAheadOfLocalAnchor(t *testing.T) {
+	_, snap := makeAnchoredSnapshotFixture(25, "34a93d19feedbeef")
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.commitMu.Lock()
+	node.committedHeight = 10
+	node.finalizedHeight = 30
+	node.commitMu.Unlock()
+	node.Blockchain.Blocks = []Block{{ID: 10, Height: 10, BlockHash: "h10"}}
+
+	if reason := node.snapshotLocalFinalityRejectReason(&snap); reason != "" {
+		t.Fatalf("remote-observed finality ahead of local chain rejected catch-up snapshot: %s", reason)
 	}
 }
 

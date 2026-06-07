@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 type SnapshotDownloadResult struct {
@@ -46,6 +47,7 @@ func (n *Node) snapshotManifestForTransfer(height uint64) (*StateSnapshot, *Snap
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
+	n.attachPromotionWindowStateToSnapshot(snapshot)
 	manifest, _, err := snapshotManifestFromSnapshot(snapshot)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -53,20 +55,15 @@ func (n *Node) snapshotManifestForTransfer(height uint64) (*StateSnapshot, *Snap
 	return snapshot, manifest, meta, source, nil
 }
 
-func (n *Node) snapshotChunkForTransfer(height uint64, index uint64) (*SnapshotChunkResponse, *SnapshotManifest, *SnapshotMetaRecord, string, error) {
-	snapshot, manifest, meta, source, err := n.snapshotManifestForTransfer(height)
-	if err != nil {
-		return nil, nil, nil, "", err
-	}
-	_, payload, err := snapshotManifestFromSnapshot(snapshot)
-	if err != nil {
-		return nil, nil, nil, "", err
+func snapshotChunkResponseFromPayload(snapshot *StateSnapshot, manifest *SnapshotManifest, payload []byte, index uint64) (*SnapshotChunkResponse, error) {
+	if snapshot == nil {
+		return nil, fmt.Errorf("snapshot unavailable")
 	}
 	if manifest == nil || manifest.ChunkCount == 0 {
-		return nil, nil, nil, "", fmt.Errorf("snapshot manifest unavailable")
+		return nil, fmt.Errorf("snapshot manifest unavailable")
 	}
 	if index >= manifest.ChunkCount {
-		return nil, nil, nil, "", fmt.Errorf("snapshot chunk unavailable")
+		return nil, fmt.Errorf("snapshot chunk unavailable")
 	}
 	chunkSize := manifest.ChunkSize
 	if chunkSize == 0 {
@@ -83,8 +80,26 @@ func (n *Node) snapshotChunkForTransfer(height uint64, index uint64) (*SnapshotC
 		Index:        index,
 		ChunkHash:    snapshotChunkHash(chunk),
 		SnapshotHash: strings.TrimSpace(snapshot.SnapshotHash),
+		Encoding:     manifest.Encoding,
+		Compression:  manifest.Compression,
 		Data:         chunk,
-	}, manifest, meta, source, nil
+	}, nil
+}
+
+func (n *Node) snapshotChunkForTransfer(height uint64, index uint64) (*SnapshotChunkResponse, *SnapshotManifest, *SnapshotMetaRecord, string, error) {
+	snapshot, manifest, meta, source, err := n.snapshotManifestForTransfer(height)
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+	_, payload, err := snapshotManifestFromSnapshot(snapshot)
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+	resp, err := snapshotChunkResponseFromPayload(snapshot, manifest, payload, index)
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+	return resp, manifest, meta, source, nil
 }
 
 func (n *Node) defaultSnapshotDownloadTargetHeight() uint64 {
@@ -126,7 +141,18 @@ func (n *Node) applyDownloadedSnapshot(snapshot *StateSnapshot, allowReapply boo
 		localHeight = n.Blockchain.Height()
 	}
 	if snapshot.Height > localHeight {
-		n.ApplySnapshotForSync(*snapshot)
+		if !n.ApplySnapshotForSync(*snapshot) {
+			if session := n.snapshotSessionSnapshot(); session.Active {
+				n.recordSnapshotSessionStrictResult("", "snapshot_apply_noop")
+				n.snapshotSessionMarkFailure("snapshot_apply_noop")
+			}
+			fmt.Printf("[SNAPSHOT-REJECT] reason=apply_noop local=%d snapshot=%d hash=%s\n",
+				localHeight,
+				snapshot.Height,
+				ShortHash(snapshot.BlockHash),
+			)
+			return false
+		}
 		n.noteSnapshotApplied(snapshot.Height)
 		if session := n.snapshotSessionSnapshot(); session.Active {
 			n.markSnapshotSessionApplied(snapshot, 0)
@@ -146,7 +172,18 @@ func (n *Node) applyDownloadedSnapshot(snapshot *StateSnapshot, allowReapply boo
 		return false
 	}
 	if allowReapply && snapshot.Height == localHeight {
-		n.ApplySnapshotForRecovery(*snapshot)
+		if !n.ApplySnapshotForRecovery(*snapshot) {
+			if session := n.snapshotSessionSnapshot(); session.Active {
+				n.recordSnapshotSessionStrictResult("", "snapshot_apply_noop")
+				n.snapshotSessionMarkFailure("snapshot_apply_noop")
+			}
+			fmt.Printf("[SNAPSHOT-REJECT] reason=recovery_apply_noop local=%d snapshot=%d hash=%s\n",
+				localHeight,
+				snapshot.Height,
+				ShortHash(snapshot.BlockHash),
+			)
+			return false
+		}
 		n.noteSnapshotApplied(snapshot.Height)
 		if session := n.snapshotSessionSnapshot(); session.Active {
 			n.markSnapshotSessionApplied(snapshot, 0)
@@ -156,7 +193,59 @@ func (n *Node) applyDownloadedSnapshot(snapshot *StateSnapshot, allowReapply boo
 	return false
 }
 
-func (n *Node) downloadTrustedSnapshotAndStore(targetHeight uint64, minHeight uint64, strictCoreQuorum bool, apply bool, allowReapply bool) (*SnapshotDownloadResult, error) {
+func (n *Node) resetActiveSnapshotSessionForManualDownload(targetHeight uint64, minHeight uint64) {
+	if n == nil || targetHeight == 0 {
+		return
+	}
+	session := n.snapshotSessionSnapshot()
+	if !session.Active {
+		return
+	}
+	if session.FreezeHeight == targetHeight || session.CandidateHeight == targetHeight {
+		required := session.Required
+		votes := len(session.Votes)
+		if votes > 0 && (required <= 0 || votes >= required) {
+			fmt.Printf("[SNAPSHOT-SESSION] manual_reuse target=%d min=%d votes=%d/%d stage=%s\n",
+				targetHeight,
+				minHeight,
+				votes,
+				required,
+				session.Stage,
+			)
+			return
+		}
+	}
+	n.snapshotSessionMu.Lock()
+	if !n.snapshotSession.Active {
+		n.snapshotSessionMu.Unlock()
+		return
+	}
+	oldFreeze := n.snapshotSession.FreezeHeight
+	oldCheckpoint := n.snapshotSession.CheckpointHeight
+	oldRetries := n.snapshotSession.RetryCount
+	oldProvider := strings.TrimSpace(n.snapshotSession.CurrentProvider)
+	n.snapshotSession = SnapshotSession{}
+	n.snapshotSessionMu.Unlock()
+
+	n.resetSnapshotDownloadStatus()
+	n.clearLateJoinAuthorityState()
+	n.clearSnapshotSessionState()
+	n.syncMu.Lock()
+	n.syncSnapshotSessionFailures = 0
+	n.syncSnapshotSessionLastFailAt = time.Time{}
+	n.syncSnapshotSessionDegradedUntil = time.Time{}
+	n.syncMu.Unlock()
+	fmt.Printf("[SNAPSHOT-SESSION] manual_reset target=%d min=%d old_target=%d old_checkpoint=%d retries=%d provider=%s\n",
+		targetHeight,
+		minHeight,
+		oldFreeze,
+		oldCheckpoint,
+		oldRetries,
+		oldProvider,
+	)
+}
+
+func (n *Node) downloadTrustedSnapshotAndStore(targetHeight uint64, minHeight uint64, strictCoreQuorum bool, apply bool, allowReapply bool, resetActiveSession bool) (*SnapshotDownloadResult, error) {
 	if n == nil {
 		return nil, fmt.Errorf("node unavailable")
 	}
@@ -169,8 +258,11 @@ func (n *Node) downloadTrustedSnapshotAndStore(targetHeight uint64, minHeight ui
 	if minHeight > 0 && minHeight > targetHeight {
 		return nil, fmt.Errorf("snapshot min height %d above target %d", minHeight, targetHeight)
 	}
+	if resetActiveSession {
+		n.resetActiveSnapshotSessionForManualDownload(targetHeight, minHeight)
+	}
 	if existing, err := n.verifiedStoredSnapshotAtOrBelow(targetHeight); err == nil && existing != nil {
-		if minHeight == 0 || existing.Height >= minHeight {
+		if snapshotDownloadExistingSnapshotAcceptable(existing.Height, targetHeight, minHeight) {
 			meta, metaErr := n.loadSnapshotMetaRecord(existing.Height)
 			if metaErr != nil || meta == nil {
 				_ = n.ensureSnapshotMetaRecord(existing, "existing_verified_store")
@@ -236,4 +328,24 @@ func (n *Node) downloadTrustedSnapshotAndStore(targetHeight uint64, minHeight ui
 		result.Applied = true
 	}
 	return result, nil
+}
+
+func snapshotDownloadExistingSnapshotAcceptable(existingHeight uint64, targetHeight uint64, minHeight uint64) bool {
+	if existingHeight == 0 || targetHeight == 0 || existingHeight > targetHeight {
+		return false
+	}
+	if existingHeight == targetHeight {
+		return true
+	}
+	if minHeight > 0 {
+		return existingHeight >= minHeight
+	}
+	recentWindow := SyncUsableHeadRecentReplayWindowBlocks
+	if recentWindow == 0 {
+		recentWindow = syncDirectGossipMaxBlocks()
+	}
+	if recentWindow == 0 {
+		recentWindow = 128
+	}
+	return targetHeight-existingHeight <= recentWindow
 }

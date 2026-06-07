@@ -81,6 +81,10 @@ type publicNodesPayload struct {
 	ChainID     string                 `json:"chain_id"`
 	GenesisHash string                 `json:"genesis_hash,omitempty"`
 	Healthy     int                    `json:"healthy"`
+	Stable      int                    `json:"stable_healthy,omitempty"`
+	Warning     int                    `json:"warning,omitempty"`
+	Unhealthy   int                    `json:"unhealthy,omitempty"`
+	Active      int                    `json:"active,omitempty"`
 	Total       int                    `json:"total"`
 	Best        string                 `json:"best,omitempty"`
 	BestNode    *publicNodeHealthView  `json:"best_node,omitempty"`
@@ -340,18 +344,37 @@ func publicNodesSnapshot(node *Node, force bool) publicNodesPayload {
 		views = append(views, view)
 	}
 	annotatePublicNodeHeightLag(views)
-	best := publicNodeBest(views)
 	assignPublicNodeActiveGateway(views)
-	healthy := 0
+	healthy, stable, warning, unhealthy, active := 0, 0, 0, 0, 0
+	var activeBest *publicNodeHealthView
 	for _, view := range views {
 		if view.Healthy {
 			healthy++
 		}
+		switch strings.ToLower(strings.TrimSpace(view.HealthState)) {
+		case "healthy":
+			stable++
+		case "warning":
+			warning++
+		case "unhealthy":
+			unhealthy++
+		default:
+			if view.Healthy {
+				warning++
+			} else {
+				unhealthy++
+			}
+		}
+		if view.ActiveGateway {
+			active++
+			copyView := view
+			activeBest = &copyView
+		}
 	}
 	status := "down"
-	if healthy == len(views) && healthy > 0 {
+	if stable == len(views) && stable > 0 {
 		status = "healthy"
-	} else if healthy > 0 {
+	} else if healthy > 0 || warning > 0 {
 		status = "degraded"
 	}
 	payload := publicNodesPayload{
@@ -359,9 +382,17 @@ func publicNodesSnapshot(node *Node, force bool) publicNodesPayload {
 		ChainID:     ChainID,
 		GenesisHash: expectedPublicNodeGenesisHash(),
 		Healthy:     healthy,
+		Stable:      stable,
+		Warning:     warning,
+		Unhealthy:   unhealthy,
+		Active:      active,
 		Total:       len(views),
 		Nodes:       views,
 		TS:          time.Now().Unix(),
+	}
+	best := activeBest
+	if best == nil {
+		best = publicNodeBest(views)
 	}
 	if best != nil {
 		payload.Best = best.RPCURL

@@ -30,6 +30,8 @@ type ValidatorDiversityInfo struct {
 	ASN         string `json:"asn,omitempty"`
 	Cloud       string `json:"cloud,omitempty"`
 	Region      string `json:"region,omitempty"`
+	OperatorID  string `json:"operator_id,omitempty"`
+	HomePC      bool   `json:"home_pc,omitempty"`
 	Source      string `json:"source,omitempty"`
 }
 
@@ -108,6 +110,26 @@ func normalizeValidatorDiversityRegion(region string) string {
 	return region
 }
 
+func normalizeValidatorDiversityOperator(operator string) string {
+	operator = strings.ToUpper(strings.TrimSpace(operator))
+	operator = strings.ReplaceAll(operator, " ", "")
+	operator = strings.ReplaceAll(operator, "_", "")
+	operator = strings.ReplaceAll(operator, "-", "")
+	if operator == "UNKNOWN" || operator == "N/A" || operator == "NA" {
+		return ""
+	}
+	return operator
+}
+
+func parseValidatorDiversityBool(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "y", "home", "homepc", "home_pc", "residential", "consumer", "isp":
+		return true
+	default:
+		return false
+	}
+}
+
 func validatorDiversityEntryParts(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -165,6 +187,10 @@ func parseValidatorDiversityEntry(raw string) (ValidatorDiversityInfo, bool) {
 			info.Cloud = normalizeValidatorDiversityCloud(value)
 		case "region", "zone":
 			info.Region = normalizeValidatorDiversityRegion(value)
+		case "operator", "operator_id", "owner":
+			info.OperatorID = normalizeValidatorDiversityOperator(value)
+		case "home", "home_pc", "homepc", "residential":
+			info.HomePC = parseValidatorDiversityBool(value)
 		case "":
 			switch positional {
 			case 0:
@@ -175,6 +201,10 @@ func parseValidatorDiversityEntry(raw string) (ValidatorDiversityInfo, bool) {
 				info.Cloud = normalizeValidatorDiversityCloud(value)
 			case 3:
 				info.Region = normalizeValidatorDiversityRegion(value)
+			case 4:
+				info.OperatorID = normalizeValidatorDiversityOperator(value)
+			case 5:
+				info.HomePC = parseValidatorDiversityBool(value)
 			}
 			positional++
 		}
@@ -206,6 +236,59 @@ func SetValidatorDiversityMetadata(entries []string) {
 	validatorDiversityMu.Lock()
 	validatorDiversityMetadata = next
 	validatorDiversityMu.Unlock()
+}
+
+func validatorDiversityCanonicalInfo(info ValidatorDiversityInfo) string {
+	homePC := "0"
+	if info.HomePC {
+		homePC = "1"
+	}
+	return strings.Join([]string{
+		normalizeValidatorID(info.ValidatorID),
+		info.Country,
+		info.ASN,
+		info.Cloud,
+		info.Region,
+		info.OperatorID,
+		homePC,
+	}, "|")
+}
+
+func ValidatorDiversityMetadataHash() string {
+	effective := make(map[string]ValidatorDiversityInfo)
+	validatorDiversityMu.RLock()
+	for id, info := range validatorDiversityMetadata {
+		effective[id] = info
+	}
+	validatorDiversityMu.RUnlock()
+	for _, envName := range []string{"MSC_VALIDATOR_DIVERSITY_MAP", "MSC_VALIDATOR_DIVERSITY"} {
+		raw := strings.TrimSpace(os.Getenv(envName))
+		if raw == "" {
+			continue
+		}
+		for _, entry := range splitValidatorDiversityEnv(raw) {
+			info, ok := parseValidatorDiversityEntry(entry)
+			if !ok {
+				continue
+			}
+			if _, exists := effective[info.ValidatorID]; !exists {
+				effective[info.ValidatorID] = info
+			}
+		}
+	}
+	if len(effective) == 0 {
+		return ""
+	}
+	ids := make([]string, 0, len(effective))
+	for id := range effective {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	canonical := make([]string, 0, len(ids))
+	for _, id := range ids {
+		canonical = append(canonical, validatorDiversityCanonicalInfo(effective[id]))
+	}
+	return HashStrings(canonical)
 }
 
 func validatorDiversityMetadataForID(id string) (ValidatorDiversityInfo, bool) {

@@ -245,6 +245,7 @@ func buildBlockFileHeader(block Block, height uint64) BlockHeader {
 		ValidatorSetHash:          block.ValidatorSetHash,
 		ValidatorSetRoot:          block.ValidatorSetRoot,
 		ValidatorRegistryHash:     block.ValidatorRegistryHash,
+		PromotionWindowHash:       block.PromotionWindowHash,
 		NextValidatorSetHash:      block.NextValidatorSetHash,
 		NextValidatorSetRoot:      block.NextValidatorSetRoot,
 		FinalityRoot:              block.FinalityRoot,

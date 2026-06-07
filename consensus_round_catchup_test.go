@@ -171,6 +171,44 @@ func TestLocalExecutionVoteGuardReleasesStaleMinorityRoundMarker(t *testing.T) {
 	}
 }
 
+func TestLocalExecutionVoteGuardReleasesNearbyNonQuorumMarkerAfterCommitStall(t *testing.T) {
+	resetExecPoolForTest(t)
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.ID = "A"
+	node.localExecVoteByRound = make(map[uint64]map[uint32]string)
+
+	epoch := uint64(179)
+	stale := proposalVoteKey(epoch, 0, "stale-block", "", "stale-root")
+	fresh := proposalVoteKey(epoch, 2, "fresh-block", "", "fresh-root")
+	node.localExecVoteByRound[epoch] = map[uint32]string{0: stale}
+	for _, signer := range []string{"A", "B"} {
+		count, ok, equivocation := recordExecResultGlobal(epoch, stale, "stale-root", "", ExecutionResult{
+			Height:     epoch,
+			Round:      0,
+			BlockHash:  "stale-block",
+			Signer:     signer,
+			ResultHash: "stale-root",
+			TxMerkle:   "",
+		})
+		if !ok || equivocation || count <= 0 {
+			t.Fatalf("seed stale minority vote signer=%s count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
+		}
+	}
+	node.commitMu.Lock()
+	node.lastCommitAt = time.Now().Add(-2 * execQuorumEmergencyStallTimeout)
+	node.commitMu.Unlock()
+
+	if !node.allowLocalExecutionVoteRound(epoch, 2, fresh) {
+		t.Fatalf("expected stalled non-quorum marker to release for nearby higher-round recovery")
+	}
+	if got := node.localExecVoteByRound[epoch][2]; got != fresh {
+		t.Fatalf("fresh marker not stored after stalled non-quorum release: got=%q", got)
+	}
+	if _, ok := node.localExecVoteByRound[epoch][0]; ok {
+		t.Fatalf("stale marker should be deleted after stalled non-quorum release")
+	}
+}
+
 func TestLocalExecutionVoteGuardReleasesNonQuorumMarkerForNearQuorumProposal(t *testing.T) {
 	resetExecPoolForTest(t)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
@@ -238,6 +276,45 @@ func TestLocalExecutionVoteGuardKeepsStaleQuorumRoundMarker(t *testing.T) {
 	}
 	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != "" {
 		t.Fatalf("fresh higher-round marker should not be stored, got=%q", got)
+	}
+}
+
+func TestLocalExecutionVoteGuardReleasesQuorumMarkerAfterCommitStall(t *testing.T) {
+	resetExecPoolForTest(t)
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.ID = "A"
+	node.localExecVoteByRound = make(map[uint64]map[uint32]string)
+
+	epoch := uint64(1)
+	stale := proposalVoteKey(epoch, 0, "stale-block", "", "stale-root")
+	fresh := proposalVoteKey(epoch, localExecVoteStaleRoundReleaseGap+1, "fresh-block", "", "fresh-root")
+	node.localExecVoteByRound[epoch] = map[uint32]string{0: stale}
+	for _, signer := range []string{"A", "B", "C"} {
+		count, ok, equivocation := recordExecResultGlobal(epoch, stale, "stale-root", "", ExecutionResult{
+			Height:     epoch,
+			Round:      0,
+			BlockHash:  "stale-block",
+			Signer:     signer,
+			ResultHash: "stale-root",
+			TxMerkle:   "",
+		})
+		if !ok || equivocation || count <= 0 {
+			t.Fatalf("seed stale quorum vote signer=%s count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
+		}
+	}
+
+	node.commitMu.Lock()
+	node.lastCommitAt = time.Now().Add(-2 * execQuorumEmergencyStallTimeout)
+	node.commitMu.Unlock()
+
+	if !node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
+		t.Fatalf("expected stalled quorum-backed marker to release for higher-round recovery")
+	}
+	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != fresh {
+		t.Fatalf("fresh marker not stored after stalled quorum release: got=%q", got)
+	}
+	if _, ok := node.localExecVoteByRound[epoch][0]; ok {
+		t.Fatalf("stale marker should be deleted after stalled quorum release")
 	}
 }
 
@@ -992,12 +1069,45 @@ func TestEffectiveProposerRoundTimeoutUsesProposalWindowFloor(t *testing.T) {
 	}
 }
 
+func TestEffectiveProposerRoundTimeoutFastFailoverHonorsConfiguredTimeout(t *testing.T) {
+	oldFast := ConsensusFastProposerFailoverEnabled
+	oldMin := ConsensusFastProposerFailoverMin
+	t.Cleanup(func() {
+		ConsensusFastProposerFailoverEnabled = oldFast
+		ConsensusFastProposerFailoverMin = oldMin
+	})
+	ConsensusFastProposerFailoverEnabled = true
+	ConsensusFastProposerFailoverMin = time.Second
+
+	got := effectiveProposerRoundTimeout(2*time.Second, 4*time.Second, 2*time.Second)
+	if got != 2*time.Second {
+		t.Fatalf("expected fast failover to honor configured timeout: got=%s want=%s", got, 2*time.Second)
+	}
+}
+
 func TestComputeConsensusRoundStartsAtZeroWhenProposalWindowOpens(t *testing.T) {
 	epochStartedAt := time.Unix(100, 0)
 	now := epochStartedAt.Add(4 * time.Second)
 	got := computeConsensusRound(now, epochStartedAt, 0, time.Time{}, 4*time.Second, 1*time.Second, 500*time.Millisecond)
 	if got != 0 {
 		t.Fatalf("expected first proposal window to remain on round 0: got=%d want=0", got)
+	}
+}
+
+func TestComputeConsensusRoundFastFailoverDoesNotWaitForMinBlockWindow(t *testing.T) {
+	oldFast := ConsensusFastProposerFailoverEnabled
+	oldMin := ConsensusFastProposerFailoverMin
+	t.Cleanup(func() {
+		ConsensusFastProposerFailoverEnabled = oldFast
+		ConsensusFastProposerFailoverMin = oldMin
+	})
+	ConsensusFastProposerFailoverEnabled = true
+	ConsensusFastProposerFailoverMin = time.Second
+
+	epochStartedAt := time.Unix(100, 0)
+	got := computeConsensusRound(epochStartedAt.Add(2*time.Second), epochStartedAt, 0, time.Time{}, 4*time.Second, 2*time.Second, 2*time.Second)
+	if got != 1 {
+		t.Fatalf("expected fast failover to advance after configured timeout: got=%d want=1", got)
 	}
 }
 

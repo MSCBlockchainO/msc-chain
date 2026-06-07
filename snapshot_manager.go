@@ -180,10 +180,16 @@ func (m *SnapshotManager) ApplySnapshot(allowReapply bool) error {
 		m.Node.snapshotSessionMarkFailure("snapshot_height_regression")
 		return fmt.Errorf("snapshot height regression rejected: local=%d snapshot=%d target=%d", localHeight, m.Snapshot.Height, m.TargetHeight)
 	}
+	applied := false
 	if allowReapply && m.Snapshot.Height == localHeight {
-		m.Node.ApplySnapshotForRecovery(*m.Snapshot)
+		applied = m.Node.ApplySnapshotForRecovery(*m.Snapshot)
 	} else {
-		m.Node.ApplySnapshotForSync(*m.Snapshot)
+		applied = m.Node.ApplySnapshotForSync(*m.Snapshot)
+	}
+	if !applied {
+		m.Node.recordSnapshotSessionStrictResult("", "snapshot_apply_noop")
+		m.Node.snapshotSessionMarkFailure("snapshot_apply_noop")
+		return fmt.Errorf("snapshot apply did not anchor chain: local=%d snapshot=%d target=%d", localHeight, m.Snapshot.Height, m.TargetHeight)
 	}
 	m.Node.noteSnapshotApplied(m.Snapshot.Height)
 	m.Node.markSnapshotSessionApplied(m.Snapshot, m.RequiredProofs)

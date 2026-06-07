@@ -162,27 +162,72 @@ func NewStorageManager(n *Node) *StorageManager {
 	return &StorageManager{Node: n, Policy: defaultStoragePolicyForNode(n)}
 }
 
+func storageManagerFinalizedEpochBoundary(height uint64, policy StoragePolicy) bool {
+	if height == 0 {
+		return false
+	}
+	interval := policy.EpochLengthBlocks
+	if interval == 0 {
+		interval = 100
+	}
+	return height%interval == 0
+}
+
+func (n *Node) beginStorageManagerRun(height uint64) bool {
+	if n == nil || height == 0 {
+		return false
+	}
+	n.storageManagerMu.Lock()
+	defer n.storageManagerMu.Unlock()
+	if n.storageManagerRunning || height <= n.storageManagerLastScheduledHeight {
+		return false
+	}
+	n.storageManagerRunning = true
+	n.storageManagerLastScheduledHeight = height
+	return true
+}
+
+func (n *Node) finishStorageManagerRun() {
+	if n == nil {
+		return
+	}
+	n.storageManagerMu.Lock()
+	n.storageManagerRunning = false
+	n.storageManagerMu.Unlock()
+}
+
 func (n *Node) runStorageManagerAfterFinalizedEpoch(block Block, reason string) {
 	if n == nil || !blockFinalityCommitmentsPresent(block) {
 		return
 	}
-	report, err := NewStorageManager(n).RunOnce(reason)
-	if err != nil {
-		log.Printf("[STORAGE-MANAGER] height=%d status=failed err=%v", block.ID, err)
+	manager := NewStorageManager(n)
+	manager.Policy = manager.normalizePolicy()
+	if !storageManagerFinalizedEpochBoundary(block.ID, manager.Policy) {
 		return
 	}
-	log.Printf("[STORAGE-MANAGER] height=%d profile=%s retain_from=%d snapshots_pruned=%d blocks_pruned=%d cold_exports=%d checkpoint=%d archive_skip=%t gc_workers=%d layout=%s",
-		block.ID,
-		report.Profile,
-		report.RetainFromHeight,
-		report.SnapshotsPruned,
-		report.BlockFilesPruned,
-		report.ColdStorageExported,
-		report.StateCheckpointHeight,
-		report.ArchiveModeSkipped,
-		report.ParallelGCWorkers,
-		report.StateLayoutMode,
-	)
+	if !n.beginStorageManagerRun(block.ID) {
+		return
+	}
+	n.SafeGo(fmt.Sprintf("storage_manager_%d", block.ID), func() {
+		defer n.finishStorageManagerRun()
+		report, err := manager.RunOnce(reason)
+		if err != nil {
+			log.Printf("[STORAGE-MANAGER] height=%d status=failed err=%v", block.ID, err)
+			return
+		}
+		log.Printf("[STORAGE-MANAGER] height=%d profile=%s retain_from=%d snapshots_pruned=%d blocks_pruned=%d cold_exports=%d checkpoint=%d archive_skip=%t gc_workers=%d layout=%s",
+			block.ID,
+			report.Profile,
+			report.RetainFromHeight,
+			report.SnapshotsPruned,
+			report.BlockFilesPruned,
+			report.ColdStorageExported,
+			report.StateCheckpointHeight,
+			report.ArchiveModeSkipped,
+			report.ParallelGCWorkers,
+			report.StateLayoutMode,
+		)
+	})
 }
 
 func (m *StorageManager) normalizePolicy() StoragePolicy {

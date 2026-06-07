@@ -264,6 +264,25 @@ func (n *Node) setSnapshotWarmupJoinHeight(appliedHeight uint64) {
 	n.syncMu.Unlock()
 }
 
+func (n *Node) clearSnapshotWarmupStateIfCurrent(startAt time.Time) bool {
+	if n == nil || startAt.IsZero() {
+		return false
+	}
+	n.syncMu.Lock()
+	defer n.syncMu.Unlock()
+	if !n.syncWarmupStartAt.Equal(startAt) {
+		return false
+	}
+	n.syncWarmupJoinHeight = 0
+	n.syncWarmupStartAt = time.Time{}
+	n.syncWarmupLastHeight = 0
+	n.syncWarmupLastHeightAt = time.Time{}
+	n.syncWarmupQuorumHash = ""
+	n.syncWarmupQuorumVotes = 0
+	n.syncWarmupQuorumSince = time.Time{}
+	return true
+}
+
 func (n *Node) snapshotWarmupRemaining(currentHeight uint64) uint64 {
 	if n == nil {
 		return 0
@@ -415,30 +434,35 @@ func (n *Node) snapshotWarmupState(currentHeight uint64) (bool, time.Duration) {
 		currentHeight = n.Blockchain.Height()
 	}
 	warmupDuration := syncSnapshotWarmupDuration()
+	now := time.Now()
 	n.syncMu.Lock()
 	startAt := n.syncWarmupStartAt
-	lastHeight := n.syncWarmupLastHeight
-	lastHeightAt := n.syncWarmupLastHeightAt
-	lastHash := n.syncWarmupQuorumHash
-	lastVotes := n.syncWarmupQuorumVotes
-	lastQuorumSince := n.syncWarmupQuorumSince
-	n.syncMu.Unlock()
 	if startAt.IsZero() {
+		n.syncMu.Unlock()
 		return false, 0
 	}
-	now := time.Now()
+	if currentHeight != 0 && (n.syncWarmupLastHeight == 0 || currentHeight > n.syncWarmupLastHeight) {
+		n.syncWarmupLastHeight = currentHeight
+		n.syncWarmupLastHeightAt = now
+	} else if n.syncWarmupLastHeightAt.IsZero() {
+		n.syncWarmupLastHeightAt = now
+	}
+	n.syncMu.Unlock()
+
 	warmupElapsed := now.Sub(startAt)
-	if currentHeight != 0 && currentHeight != lastHeight {
-		lastHeight = currentHeight
-		lastHeightAt = now
-	}
-	if lastHeightAt.IsZero() {
-		lastHeightAt = now
-	}
 	votes, required, hash, single, total := n.snapshotWarmupQuorumState(currentHeight)
 	quorumStable := time.Duration(0)
 	stableHash := single && hash != ""
+	lastQuorumSince := time.Time{}
+	n.syncMu.Lock()
+	if !n.syncWarmupStartAt.Equal(startAt) {
+		n.syncMu.Unlock()
+		return false, 0
+	}
 	if stableHash {
+		lastHash := n.syncWarmupQuorumHash
+		lastVotes := n.syncWarmupQuorumVotes
+		lastQuorumSince = n.syncWarmupQuorumSince
 		if hash != lastHash || votes != lastVotes {
 			lastQuorumSince = now
 		}
@@ -449,10 +473,6 @@ func (n *Node) snapshotWarmupState(currentHeight uint64) (bool, time.Duration) {
 	} else {
 		lastQuorumSince = now
 	}
-
-	n.syncMu.Lock()
-	n.syncWarmupLastHeight = lastHeight
-	n.syncWarmupLastHeightAt = lastHeightAt
 	n.syncWarmupQuorumHash = hash
 	n.syncWarmupQuorumVotes = votes
 	n.syncWarmupQuorumSince = lastQuorumSince
@@ -472,9 +492,11 @@ func (n *Node) snapshotWarmupState(currentHeight uint64) (bool, time.Duration) {
 		return true, warmupDuration
 	}
 	if votes >= required && quorumStable >= warmupDuration && warmupElapsed >= warmupDuration {
+		n.clearSnapshotWarmupStateIfCurrent(startAt)
 		return false, 0
 	}
 	if localTrusted && quorumStable >= warmupDuration && warmupElapsed >= warmupDuration {
+		n.clearSnapshotWarmupStateIfCurrent(startAt)
 		return false, 0
 	}
 	remaining := warmupDuration

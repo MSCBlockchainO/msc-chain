@@ -748,6 +748,8 @@
 
     const parts = [];
     parts.push(status.ready ? "READY" : "NOT_READY");
+    if (status.head_synced) parts.push("HEAD_SYNCED");
+    if (status.history_backfill_pending) parts.push("HISTORY_BACKFILL");
     if (status.syncing) parts.push("SYNCING");
     if (status.consensus_running) parts.push("CONSENSUS");
     if (status.consensus_ready) parts.push("CONSENSUS_OK");

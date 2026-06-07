@@ -221,6 +221,15 @@ server {
         try_files $uri =404;
     }
 
+    location = /portal {
+        return 302 /portal/index.html;
+    }
+
+    location ^~ /portal/ {
+        limit_req zone=msc_static burst=120 nodelay;
+        try_files $uri $uri/ =404;
+    }
+
     location ^~ /vendor/ {
         limit_req zone=msc_static burst=60 nodelay;
         try_files $uri =404;
@@ -930,6 +939,7 @@ if [ "$ENABLE_HTTPS" = "1" ]; then
   curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/msc_wallet.html" >/dev/null || echo "WARN msc_wallet.html check failed"
   curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/dashboard.html" >/dev/null || echo "WARN dashboard.html check failed"
   curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/wallet.html" >/dev/null || echo "WARN wallet.html check failed"
+  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/portal/index.html" >/dev/null || echo "WARN portal/index.html check failed"
   curl --resolve "$DOMAIN:443:127.0.0.1" -fsS "https://$DOMAIN/gateway/lb-status.json" >/dev/null || echo "WARN lb-status check failed"
   status_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/status")
   metrics_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/metrics")
@@ -939,6 +949,7 @@ else
   curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/msc_wallet.html >/dev/null || echo "WARN msc_wallet.html check failed"
   curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/dashboard.html >/dev/null || echo "WARN dashboard.html check failed"
   curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/wallet.html >/dev/null || echo "WARN wallet.html check failed"
+  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/portal/index.html >/dev/null || echo "WARN portal/index.html check failed"
   curl -fsS -H "Host: $DOMAIN" http://127.0.0.1/gateway/lb-status.json >/dev/null || echo "WARN lb-status check failed"
   status_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/status)
   metrics_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/metrics)
@@ -1002,9 +1013,11 @@ if ($enableHttps) {
     Write-Host "  Explorer: https://$Domain/explorer.html"
     Write-Host "  Wallet  : https://$Domain/msc_wallet.html"
     Write-Host "  Dashboard: https://$Domain/dashboard.html"
+    Write-Host "  Portal  : https://$Domain/portal/index.html"
 } else {
     Write-Host "  Temporary Explorer: http://$GatewayHost/explorer.html"
     Write-Host "  Temporary Wallet  : http://$GatewayHost/msc_wallet.html"
+    Write-Host "  Temporary Portal  : http://$GatewayHost/portal/index.html"
     Write-Host "  Production URL pending DNS: https://$Domain/explorer.html"
 }
 Write-Host ""

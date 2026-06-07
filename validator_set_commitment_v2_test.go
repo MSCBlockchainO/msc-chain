@@ -69,8 +69,13 @@ func TestHashBlockPreForkCompatibility(t *testing.T) {
 
 func TestHashBlockPostForkIncludesNextCommitment(t *testing.T) {
 	prev := ValidatorSetCommitmentV2Height
+	prevPromotion := PromotionWindowRecordV1Height
 	ValidatorSetCommitmentV2Height = 100
-	defer func() { ValidatorSetCommitmentV2Height = prev }()
+	PromotionWindowRecordV1Height = 100
+	defer func() {
+		ValidatorSetCommitmentV2Height = prev
+		PromotionWindowRecordV1Height = prevPromotion
+	}()
 
 	postFork := Block{
 		ID:                     100,
@@ -142,6 +147,15 @@ func TestHashBlockPostForkIncludesNextCommitment(t *testing.T) {
 		t.Fatalf("post-fork hash must include next_validator_set_root commitment")
 	}
 
+	postFork.NextValidatorSetRoot = "next-root-a"
+	postFork.PromotionWindowHash = "promotion-a"
+	hashPromotionA := HashBlock(postFork)
+	postFork.PromotionWindowHash = "promotion-b"
+	hashPromotionB := HashBlock(postFork)
+	if hashPromotionA == hashPromotionB {
+		t.Fatalf("post-activation hash must include promotion_window_hash")
+	}
+
 	preForkWithRoot := postFork
 	preForkWithRoot.ID = 99
 	preForkWithRoot.ValidatorSetRoot = "root-a"
@@ -158,6 +172,14 @@ func TestHashBlockPostForkIncludesNextCommitment(t *testing.T) {
 	hashPreNextRootB := HashBlock(preForkWithRoot)
 	if hashPreNextRootA != hashPreNextRootB {
 		t.Fatalf("pre-fork hash must ignore next_validator_set_root field")
+	}
+
+	preForkWithRoot.PromotionWindowHash = "promotion-a"
+	hashPrePromotionA := HashBlock(preForkWithRoot)
+	preForkWithRoot.PromotionWindowHash = "promotion-b"
+	hashPrePromotionB := HashBlock(preForkWithRoot)
+	if hashPrePromotionA != hashPrePromotionB {
+		t.Fatalf("pre-activation hash must ignore promotion_window_hash")
 	}
 }
 

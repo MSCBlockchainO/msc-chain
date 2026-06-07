@@ -22,6 +22,7 @@ const (
 type ConsensusDetectorMetrics struct {
 	Height                uint64
 	FinalizedHeight       uint64
+	ValidatorMetricHeight uint64
 	NodeRole              string
 	TotalValidators       int
 	ActiveValidators      int
@@ -94,7 +95,7 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 			m.MaxValidatorLag > consensusDetectorDegradedValidatorLagBlocks() ||
 			m.LastFinalitySec >= degradedAfterSec)
 	syncingNeedsRecovery := m.SyncingValidators > 0 &&
-		(strings.EqualFold(nodeRole, "validator") || materialLocalCatchup)
+		(nodeRole == "" || strings.EqualFold(nodeRole, "validator") || materialLocalCatchup)
 	quorumVotesOK := m.NetworkQuorumRequired == 0 || m.NetworkQuorumVotes >= m.NetworkQuorumRequired
 	networkQuorumLoss := m.NetworkQuorumRequired > 0 && m.NetworkQuorumVotes > 0 && m.NetworkQuorumVotes < m.NetworkQuorumRequired
 	softLocalPartition := m.PartitionRisk &&
@@ -108,6 +109,9 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 	case m.DoubleSign || m.ForkDetected:
 		result.Mode = ConsensusDetectorAttack
 		result.Reason = "attack_signal"
+	case materialLocalCatchup:
+		result.Mode = ConsensusDetectorRecovery
+		result.Reason = "local_sync_catchup"
 	case m.LastFinalitySec > haltedAfterSec:
 		result.Mode = ConsensusDetectorHalted
 		result.Reason = "finality_timeout"
@@ -120,9 +124,6 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 	case m.PartitionRisk && !softLocalPartition:
 		result.Mode = ConsensusDetectorPartition
 		result.Reason = "partition_risk"
-	case materialLocalCatchup:
-		result.Mode = ConsensusDetectorRecovery
-		result.Reason = "local_sync_catchup"
 	case syncingNeedsRecovery || m.MaxValidatorLag > recoveryLagBlocks:
 		result.Mode = ConsensusDetectorRecovery
 		result.Reason = "validator_recovery"
@@ -135,7 +136,7 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 	case m.MaxValidatorLag > consensusDetectorDegradedValidatorLagBlocks():
 		result.Mode = ConsensusDetectorDegraded
 		result.Reason = "validator_lag"
-	case m.PeerCount > 0 && m.PeerCount < 3 && (strings.EqualFold(nodeRole, "validator") || finalityLag > 0):
+	case m.PeerCount > 0 && m.PeerCount < 3 && finalityLag > 0:
 		result.Mode = ConsensusDetectorDegraded
 		result.Reason = "peer_instability"
 	case m.MissedVotes > 0 && m.Quorum > 0 && m.ActiveValidators-m.MissedVotes <= m.Quorum:
@@ -218,8 +219,20 @@ func consensusDetectorModeCode(mode ConsensusDetectorMode) int {
 	}
 }
 
+func consensusDetectorValidatorMetricHeight(runtime RuntimeStatusSnapshot) uint64 {
+	// RuntimeStatusSnapshot.Height is the committed chain tip, while
+	// LiveValidators, RequiredQuorum, and StrictQuorum are computed for the next
+	// proposal height in runtimeStatusSnapshot. Keep TotalValidators on that
+	// same height so detector metrics do not mix epoch views at transitions.
+	if runtime.Height == ^uint64(0) {
+		return runtime.Height
+	}
+	return runtime.Height + 1
+}
+
 func (n *Node) consensusDetectorMetricsFromRuntime(runtime RuntimeStatusSnapshot) ConsensusDetectorMetrics {
-	total := len(n.GetConsensusValidators(int(runtime.Height + 1)))
+	validatorMetricHeight := consensusDetectorValidatorMetricHeight(runtime)
+	total := len(n.GetConsensusValidators(int(validatorMetricHeight)))
 	if total == 0 {
 		total = GenesisFrozenValidatorSetSize
 	}
@@ -266,6 +279,7 @@ func (n *Node) consensusDetectorMetricsFromRuntime(runtime RuntimeStatusSnapshot
 	return ConsensusDetectorMetrics{
 		Height:                runtime.Height,
 		FinalizedHeight:       runtime.FinalizedHeight,
+		ValidatorMetricHeight: validatorMetricHeight,
 		NodeRole:              runtime.Role,
 		TotalValidators:       total,
 		ActiveValidators:      runtime.LiveValidators,

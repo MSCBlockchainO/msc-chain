@@ -73,6 +73,12 @@ type StateSnapshot struct {
 	// Key is normalized validator ID/address.
 	StateValidators       map[string]Validator `json:"state_validators,omitempty"`
 	ValidatorRegistryHash string               `json:"validator_registry_hash,omitempty"`
+	// PromotionWindowRecords carries chain-committed hybrid validator-pool
+	// performance-slot freezes. Local caches may mirror these records, but this
+	// snapshot field is part of the replayable consensus state.
+	PromotionWindowRecords      map[uint64]PromotionWindowRecord              `json:"promotion_window_records,omitempty"`
+	PromotionWindowReplacements map[uint64][]PromotionWindowReplacementRecord `json:"promotion_window_replacements,omitempty"`
+	PromotionWindowHash         string                                        `json:"promotion_window_hash,omitempty"`
 	// CheckpointProof stores validator signatures over deterministic snapshot checkpoint bytes.
 	CheckpointProof map[string]string `json:"checkpoint_proof,omitempty"`
 	// CheckpointHeight pins deterministic proof anchor (for quorum accumulation).
@@ -180,6 +186,7 @@ const (
 var ValidatorSetActivationDelay uint64 = 5
 var ValidatorSetActivationModelV2Height uint64 = 0
 var ValidatorSetCommitmentV2Height uint64 = 0
+var PromotionWindowRecordV1Height uint64 = 0
 var ValidatorSetHashV3Height uint64 = 0
 
 const (
@@ -207,6 +214,13 @@ func validatorSetCommitmentV2EnabledAt(height uint64) bool {
 		return false
 	}
 	return height >= ValidatorSetCommitmentV2Height
+}
+
+func promotionWindowRecordV1EnabledAt(height uint64) bool {
+	if height == 0 || PromotionWindowRecordV1Height == 0 || PromotionWindowRecordV1Height == ^uint64(0) {
+		return false
+	}
+	return height >= PromotionWindowRecordV1Height
 }
 
 func validatorSetHashV3EnabledAt(height uint64) bool {
@@ -417,6 +431,11 @@ var SyncSnapshotDeltaMaxBlocks uint64 = 10000000
 var SyncDeltaReplayMaxBlocks uint64 = 50000
 var SyncDeltaReplayBatchBlocks uint64 = 1024
 var SyncDeltaReplayVerifyWorkers = 8
+var SyncDeltaStateSyncEnabled = true
+var SyncEd25519BatchVerifyWorkers = 8
+var SyncSnapshotDistributionEnabled = true
+var SyncSnapshotMultiPeerChunkFetch = true
+var SyncSnapshotCompression = "zstd"
 var SyncSnapshotChunkSizeBytes uint64 = 1024 * 1024
 var SyncSnapshotParallelChunks = 8
 var SyncSnapshotChunkReplicationFactor = 2
@@ -439,6 +458,13 @@ var SyncSnapshotSessionTTLSeconds uint64 = 0
 var SyncSnapshotQuorumApplyWatchdogSeconds uint64 = 20
 var SyncSnapshotSessionResetWatchdogSeconds uint64 = 60
 var SyncSnapshotInvalidProofQuarantineAfter uint64 = 3
+var SyncUsableHeadFastBootstrapEnabled = true
+var SyncUsableHeadRoles = []string{"full", "archive"}
+var SyncUsableHeadMinGapBlocks uint64 = 2000
+var SyncUsableHeadTargetSeconds uint64 = 3
+var SyncUsableHeadRequireCheckpointProof = true
+var SyncUsableHeadBackgroundHistory = true
+var SyncUsableHeadRecentReplayWindowBlocks uint64 = 2048
 var SyncSnapshotReplicationMinCopies = 3
 var SyncSnapshotWarmupBlocks uint64 = 5
 var SyncSnapshotWarmupSeconds uint64 = 10
@@ -501,6 +527,12 @@ var GenesisFrozenValidatorSetSize = 0
 
 // Round-based proposer failover controls.
 var ProposerRoundTimeout = 15 * time.Second
+
+// ConsensusFastProposerFailoverEnabled lets a healthy network replace a stalled
+// proposer using proposer_round_timeout_seconds without silently flooring it to
+// min_block_interval. It does not change quorum/finality requirements.
+var ConsensusFastProposerFailoverEnabled = false
+var ConsensusFastProposerFailoverMin = 1 * time.Second
 
 // Zero keeps round recovery uncapped unless an operator explicitly sets a limit.
 var ProposerRoundMax uint32 = 0
@@ -772,6 +804,24 @@ type consensusParamsSnapshot struct {
 	ActiveSetSize                         int      `json:"active_set_size"`
 	ActiveSetMode                         string   `json:"active_set_mode"`
 	MaxActiveCommittee                    int      `json:"max_active_committee"`
+	MaxActiveValidators                   int      `json:"max_active_validators"`
+	PerformanceSlots                      int      `json:"performance_slots"`
+	RotationSlots                         int      `json:"rotation_slots"`
+	EffectiveStakeCap                     int64    `json:"effective_stake_cap"`
+	ValidatorEpochBlocks                  uint64   `json:"validator_epoch_blocks"`
+	ScoreWeightStake                      int      `json:"score_weight_stake"`
+	ScoreWeightUptime                     int      `json:"score_weight_uptime"`
+	ScoreWeightPerformance                int      `json:"score_weight_performance"`
+	ScoreWeightDecentralization           int      `json:"score_weight_decentralization"`
+	PerformanceMinSignedBPS               int      `json:"performance_min_signed_bps"`
+	PromotionWindowEpochs                 uint64   `json:"promotion_window_epochs"`
+	MinimumAgeForPerformanceSlotEpochs    uint64   `json:"minimum_age_for_performance_slot_epochs"`
+	MinimumOnlineValidatorsWhenFull       int      `json:"minimum_online_validators_when_full"`
+	DiversityWeightASN                    int      `json:"diversity_weight_asn"`
+	DiversityWeightRegion                 int      `json:"diversity_weight_region"`
+	DiversityWeightProvider               int      `json:"diversity_weight_provider"`
+	DiversityWeightHomePC                 int      `json:"diversity_weight_home_pc"`
+	ValidatorDiversityMetadataHash        string   `json:"validator_diversity_metadata_hash"`
 	AdaptiveCommitteeLogMultiplier        int      `json:"adaptive_committee_log_multiplier"`
 	CommitteeRotationBlocks               uint64   `json:"committee_rotation_blocks"`
 	SelectionActivityWindowBlocks         uint64   `json:"selection_activity_window_blocks"`
@@ -810,6 +860,7 @@ type consensusParamsSnapshot struct {
 	ValidatorSetActivationDelay           uint64   `json:"validator_set_activation_delay"`
 	ValidatorSetActivationModelV2Height   uint64   `json:"validator_set_activation_model_v2_height"`
 	ValidatorSetCommitmentV2Height        uint64   `json:"validator_set_commitment_v2_height"`
+	PromotionWindowRecordV1Height         uint64   `json:"promotion_window_record_v1_height"`
 	ValidatorSetHashV3Height              uint64   `json:"validator_set_hash_v3_height"`
 	ValidatorInactiveBlocks               uint64   `json:"validator_inactive_blocks"`
 	ValidatorSetRotationWindow            uint64   `json:"validator_set_rotation_window"`
@@ -838,6 +889,24 @@ func consensusParamsHash() string {
 		ActiveSetSize:                         ValidatorActiveSetSize,
 		ActiveSetMode:                         normalizeActiveSetMode(ValidatorActiveSetMode),
 		MaxActiveCommittee:                    ValidatorMaxActiveCommittee,
+		MaxActiveValidators:                   validatorHybridMaxActiveValidators(),
+		PerformanceSlots:                      validatorHybridPerformanceSlots(),
+		RotationSlots:                         validatorHybridRotationSlots(),
+		EffectiveStakeCap:                     validatorHybridEffectiveStakeCap(),
+		ValidatorEpochBlocks:                  validatorHybridEpochBlocks(),
+		ScoreWeightStake:                      ValidatorHybridStakeWeight,
+		ScoreWeightUptime:                     ValidatorHybridUptimeWeight,
+		ScoreWeightPerformance:                ValidatorHybridPerformanceWeight,
+		ScoreWeightDecentralization:           ValidatorHybridDecentralizationWeight,
+		PerformanceMinSignedBPS:               validatorHybridPerformanceMinSignedBPS(),
+		PromotionWindowEpochs:                 validatorHybridPromotionWindowEpochs(),
+		MinimumAgeForPerformanceSlotEpochs:    validatorHybridMinimumPerformanceAgeEpochs(),
+		MinimumOnlineValidatorsWhenFull:       ValidatorHybridMinimumOnlineWhenFull,
+		DiversityWeightASN:                    ValidatorHybridDiversityASNWeight,
+		DiversityWeightRegion:                 ValidatorHybridDiversityRegionWeight,
+		DiversityWeightProvider:               ValidatorHybridDiversityProviderWeight,
+		DiversityWeightHomePC:                 ValidatorHybridDiversityHomePCWeight,
+		ValidatorDiversityMetadataHash:        ValidatorDiversityMetadataHash(),
 		AdaptiveCommitteeLogMultiplier:        ValidatorAdaptiveCommitteeLogMult,
 		CommitteeRotationBlocks:               committeeRotationBlocks(),
 		SelectionActivityWindowBlocks:         validatorSelectionActivityWindowBlocks(),
@@ -876,6 +945,7 @@ func consensusParamsHash() string {
 		ValidatorSetActivationDelay:           ValidatorSetActivationDelay,
 		ValidatorSetActivationModelV2Height:   ValidatorSetActivationModelV2Height,
 		ValidatorSetCommitmentV2Height:        ValidatorSetCommitmentV2Height,
+		PromotionWindowRecordV1Height:         PromotionWindowRecordV1Height,
 		ValidatorSetHashV3Height:              ValidatorSetHashV3Height,
 		ValidatorInactiveBlocks:               ValidatorInactiveBlocks,
 		ValidatorSetRotationWindow:            ValidatorSetRotationWindow,
@@ -1320,6 +1390,7 @@ type BlockHeader struct {
 	ValidatorSetHash          string
 	ValidatorSetRoot          string
 	ValidatorRegistryHash     string
+	PromotionWindowHash       string
 	NextValidatorSetHash      string
 	NextValidatorSetRoot      string
 	FinalityRoot              string
@@ -1840,6 +1911,7 @@ type Node struct {
 	postCommitEffectsMu                       sync.Mutex
 	executionSnapshotRebuildMu                sync.Mutex
 	executionSnapshotRebuildReadyHeight       uint64
+	executionSnapshotLiveCommitHeight         uint64
 	executionSnapshotRebuildLastErr           string
 	executionSnapshotRebuildFailedHeight      uint64
 	executionSnapshotRebuildTarget            uint64
@@ -2026,10 +2098,18 @@ type Node struct {
 	snapshotOfferSent   map[string]uint64    // validator -> last offered height
 	snapshotOfferSentAt map[string]time.Time // validator -> last offer wall time
 
-	snapshotExecutionLedgerMu       sync.Mutex
-	snapshotExecutionLedgerByHeight map[uint64]Ledger
-	postCommitLedgerMu              sync.Mutex
-	postCommitLedgerByHeight        map[uint64]Ledger
+	snapshotExecutionLedgerMu                    sync.Mutex
+	snapshotExecutionLedgerByHeight              map[uint64]Ledger
+	postCommitLedgerMu                           sync.Mutex
+	postCommitLedgerByHeight                     map[uint64]Ledger
+	executionLedgerConsistencyMu                 sync.Mutex
+	executionLedgerGeneration                    uint64
+	executionLedgerConsistencyHeight             uint64
+	executionLedgerConsistencyGeneration         uint64
+	executionLedgerConsistencyCheckingHeight     uint64
+	executionLedgerConsistencyCheckingGeneration uint64
+	executionLedgerConsistencyChecks             uint64
+	executionLedgerRepairBlockedHeight           uint64
 
 	snapshotGossipMu               sync.RWMutex
 	snapshotMetaGossipCache        map[string]SnapshotMetaGossip
@@ -2040,6 +2120,7 @@ type Node struct {
 	snapshotChunkLastPublishedAt   time.Time
 	snapshotBoostUntil             time.Time
 	snapshotProofMu                sync.RWMutex
+	validatorSnapshotPublishMu     sync.Mutex
 	snapshotProofs                 map[string]map[string]SnapshotProof // candidateKey -> validator -> proof
 	snapshotProofProviders         map[string]map[string]string        // candidateKey -> validator -> peerID that supplied proof
 	snapshotAnchorCache            map[uint64]SnapshotAnchorCache      // checkpointHeight -> best cached anchor
@@ -2058,8 +2139,11 @@ type Node struct {
 	snapshotVotes   map[string]map[string]struct{} // trustKey -> validator IDs
 	snapshotCache   map[string]*StateSnapshot      // trustKey -> snapshot
 
-	observabilityMu sync.RWMutex
-	observability   observabilityStats
+	observabilityMu                   sync.RWMutex
+	observability                     observabilityStats
+	storageManagerMu                  sync.Mutex
+	storageManagerRunning             bool
+	storageManagerLastScheduledHeight uint64
 
 	consensusDetectorMu               sync.Mutex
 	consensusDetectorCandidateMode    string
@@ -2670,6 +2754,7 @@ type SyncBlockHeader struct {
 	PrevHash             string `json:"prev_hash"`
 	StateRoot            string `json:"state_root,omitempty"`
 	ValidatorSetHash     string `json:"validator_set_hash,omitempty"`
+	PromotionWindowHash  string `json:"promotion_window_hash,omitempty"`
 	NextValidatorSetHash string `json:"next_validator_set_hash,omitempty"`
 	Timestamp            int64  `json:"timestamp,omitempty"`
 }
@@ -2701,12 +2786,16 @@ type SnapshotManifest struct {
 	StateRoot             string            `json:"state_root"`
 	StateMerkleRoot       string            `json:"state_merkle_root,omitempty"`
 	ValidatorSetHash      string            `json:"validator_set_hash"`
+	ValidatorSetRoot      string            `json:"validator_set_root,omitempty"`
 	ValidatorRegistryHash string            `json:"validator_registry_hash"`
+	PromotionWindowHash   string            `json:"promotion_window_hash,omitempty"`
 	FinalizedHeight       uint64            `json:"finalized_height,omitempty"`
 	FinalizedHash         string            `json:"finalized_hash,omitempty"`
 	EpochAnchorHash       string            `json:"epoch_anchor_hash,omitempty"`
 	FinalityRoot          string            `json:"finality_root,omitempty"`
 	SnapshotSizeBytes     uint64            `json:"snapshot_size_bytes,omitempty"`
+	Encoding              string            `json:"encoding,omitempty"`
+	Compression           string            `json:"compression,omitempty"`
 	ChunkSize             uint64            `json:"chunk_size"`
 	ChunkCount            uint64            `json:"chunk_count"`
 	ChunkHashes           []string          `json:"chunk_hashes,omitempty"`
@@ -2719,11 +2808,15 @@ type SnapshotMetaResponse struct {
 	StateRoot             string            `json:"state_root,omitempty"`
 	StateMerkleRoot       string            `json:"state_merkle_root,omitempty"`
 	ValidatorSetHash      string            `json:"validator_set_hash,omitempty"`
+	ValidatorSetRoot      string            `json:"validator_set_root,omitempty"`
 	ValidatorRegistryHash string            `json:"validator_registry_hash,omitempty"`
+	PromotionWindowHash   string            `json:"promotion_window_hash,omitempty"`
 	FinalizedHeight       uint64            `json:"finalized_height,omitempty"`
 	FinalizedHash         string            `json:"finalized_hash,omitempty"`
 	EpochAnchorHash       string            `json:"epoch_anchor_hash,omitempty"`
 	FinalityRoot          string            `json:"finality_root,omitempty"`
+	Encoding              string            `json:"encoding,omitempty"`
+	Compression           string            `json:"compression,omitempty"`
 	ChunkSize             uint64            `json:"chunk_size"`
 	TotalChunks           uint64            `json:"total_chunks"`
 	ChunkHashes           []string          `json:"chunk_hashes,omitempty"`
@@ -2742,6 +2835,8 @@ type SnapshotChunkResponse struct {
 	Index        uint64 `json:"index"`
 	ChunkHash    string `json:"chunk_hash"`
 	SnapshotHash string `json:"snapshot_hash"`
+	Encoding     string `json:"encoding,omitempty"`
+	Compression  string `json:"compression,omitempty"`
 	Data         []byte `json:"data"`
 }
 
@@ -2981,6 +3076,7 @@ type Block struct {
 	ValidatorSetHash      string `json:"validator_set_hash"`
 	ValidatorSetRoot      string `json:"validator_set_root,omitempty"`
 	ValidatorRegistryHash string `json:"validator_registry_hash,omitempty"`
+	PromotionWindowHash   string `json:"promotion_window_hash,omitempty"`
 	// NextValidatorSetHash commits deterministic validator set for ID+1.
 	NextValidatorSetHash string `json:"next_validator_set_hash,omitempty"`
 	// NextValidatorSetRoot commits ordered validator leaves for ID+1 set.

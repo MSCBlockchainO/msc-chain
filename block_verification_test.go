@@ -119,6 +119,34 @@ func TestVerifyBlockRejectsWeakNormalQuorumMetadata(t *testing.T) {
 	}
 }
 
+func TestVerifyBlockQuorumMetadataAllowsLegacyRecoveryWithoutCounts(t *testing.T) {
+	block := Block{
+		ConsensusMode:       "RECOVERY",
+		QuorumPolicyVersion: quorumPolicyVersionV1,
+	}
+	if err := verifyBlockQuorumMetadata(block, 4); err != nil {
+		t.Fatalf("expected legacy recovery metadata without counts to pass, got %v", err)
+	}
+}
+
+func TestVerifyBlockQuorumMetadataRejectsPartialRecoveryCounts(t *testing.T) {
+	block := Block{
+		ConsensusMode:       "RECOVERY",
+		QuorumPolicyVersion: quorumPolicyVersionV1,
+		StrictQuorum:        3,
+	}
+	err := verifyBlockQuorumMetadata(block, 4)
+	if err == nil || err.Error() != "required_quorum_missing" {
+		t.Fatalf("expected partial recovery metadata rejection, got %v", err)
+	}
+
+	block.RequiredQuorum = 1
+	err = verifyBlockQuorumMetadata(block, 4)
+	if err == nil || !strings.Contains(err.Error(), "quorum_metadata_below_strict") {
+		t.Fatalf("expected weak recovery metadata rejection, got %v", err)
+	}
+}
+
 func TestVerifyBlockRejectsFakeFinalizedProofWithoutExecutionQuorum(t *testing.T) {
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	block := verificationTestFinalBlock(t, node)
@@ -570,6 +598,14 @@ func FuzzVerifyBlockQuorumMetadata(f *testing.F) {
 			}
 			if normalized != "NORMAL" && normalized != "DEGRADED" && normalized != "RECOVERY" {
 				t.Fatalf("unknown mode passed: %q", mode)
+			}
+			legacyRecoveryCountsOmitted := normalized == "RECOVERY" &&
+				strings.TrimSpace(version) != "" &&
+				activeReady == 0 &&
+				required == 0 &&
+				strict == 0
+			if legacyRecoveryCountsOmitted {
+				return
 			}
 			if strings.TrimSpace(version) == "" || required <= 0 || strict <= 0 {
 				t.Fatalf("incomplete quorum metadata passed: mode=%q version=%q required=%d strict=%d", mode, version, required, strict)

@@ -57,6 +57,7 @@ type testStream struct {
 	writeFn  func([]byte) (int, error)
 	resetMu  sync.Mutex
 	reset    bool
+	closed   bool
 	resetCh  chan struct{}
 	writeBuf bytes.Buffer
 	protocol protocol.ID
@@ -111,10 +112,44 @@ func newBlockingReadStream(pid peer.ID) *testStream {
 	return s
 }
 
+func newFailingWriteStream(pid peer.ID) *testStream {
+	s := &testStream{
+		conn:    &testConn{remote: pid},
+		resetCh: make(chan struct{}),
+	}
+	s.readFn = func(p []byte) (int, error) {
+		return 0, io.EOF
+	}
+	s.writeFn = func(p []byte) (int, error) {
+		return 0, io.ErrClosedPipe
+	}
+	return s
+}
+
+func newFailingReadStream(pid peer.ID) *testStream {
+	s := &testStream{
+		conn:    &testConn{remote: pid},
+		resetCh: make(chan struct{}),
+	}
+	s.readFn = func(p []byte) (int, error) {
+		return 0, io.ErrUnexpectedEOF
+	}
+	s.writeFn = func(p []byte) (int, error) {
+		return s.writeBuf.Write(p)
+	}
+	return s
+}
+
 func (s *testStream) wasReset() bool {
 	s.resetMu.Lock()
 	defer s.resetMu.Unlock()
 	return s.reset
+}
+
+func (s *testStream) wasClosed() bool {
+	s.resetMu.Lock()
+	defer s.resetMu.Unlock()
+	return s.closed
 }
 
 func (s *testStream) markReset() {
@@ -127,7 +162,13 @@ func (s *testStream) markReset() {
 	close(s.resetCh)
 }
 
-func (s *testStream) Close() error                                 { s.markReset(); return nil }
+func (s *testStream) Close() error {
+	s.resetMu.Lock()
+	s.closed = true
+	s.resetMu.Unlock()
+	s.markReset()
+	return nil
+}
 func (s *testStream) CloseRead() error                             { return nil }
 func (s *testStream) CloseWrite() error                            { return nil }
 func (s *testStream) Conn() network.Conn                           { return s.conn }
@@ -354,6 +395,22 @@ func TestHandleBlockStreamDoesNotWidenAckedSnapshotRange(t *testing.T) {
 	}
 }
 
+func TestBlockRequestServeConcurrencyScalesWithMaxPeers(t *testing.T) {
+	want := MaxPeers * blockRequestServeSlotsPerPeer
+	if want < blockRequestServeMinConcurrency {
+		want = blockRequestServeMinConcurrency
+	}
+	if got := blockRequestServeConcurrencyLimit(MaxPeers); got != want {
+		t.Fatalf("expected concurrency limit %d for MaxPeers=%d, got %d", want, MaxPeers, got)
+	}
+	if got := cap(blockRequestServeSem); got != want {
+		t.Fatalf("expected semaphore capacity %d, got %d", want, got)
+	}
+	if got := blockRequestServeConcurrencyLimit(1); got != blockRequestServeMinConcurrency {
+		t.Fatalf("expected small peer counts to keep floor %d, got %d", blockRequestServeMinConcurrency, got)
+	}
+}
+
 func TestRequestBlocksFromPeerOpenTimeout(t *testing.T) {
 	withSyncPeerTimeoutOverride(t, 20*time.Millisecond)
 	node, _ := newRequestTestNode(t)
@@ -446,6 +503,74 @@ func TestRequestBlocksFromPeerDecodeTimeout(t *testing.T) {
 	}
 	if !stream.wasReset() {
 		t.Fatalf("expected decode timeout to reset stream")
+	}
+}
+
+func TestRequestBlocksFromPeerEncodeFailureDoesNotCloseAfterReset(t *testing.T) {
+	node, _ := newRequestTestNode(t)
+	remote, err := libp2p.New()
+	if err != nil {
+		t.Fatalf("remote host: %v", err)
+	}
+	defer remote.Close()
+
+	stream := newFailingWriteStream(remote.ID())
+	node.streamManager = testStreamOpener{
+		openFn: func(ctx context.Context, pid peer.ID, proto protocol.ID) (network.Stream, error) {
+			return stream, nil
+		},
+	}
+
+	_, _, _, err = node.requestBlocksFromPeerDirect(remote.ID(), 1, 2, false, 0)
+	if err == nil {
+		t.Fatalf("expected encode error")
+	}
+	var phaseErr *blockRequestPhaseError
+	if !errors.As(err, &phaseErr) {
+		t.Fatalf("expected blockRequestPhaseError, got %T", err)
+	}
+	if phaseErr.Stage != "encode" {
+		t.Fatalf("unexpected phase error: %+v", phaseErr)
+	}
+	if !stream.wasReset() {
+		t.Fatalf("expected encode failure to reset stream")
+	}
+	if stream.wasClosed() {
+		t.Fatalf("encode failure should not close stream after reset")
+	}
+}
+
+func TestRequestBlocksFromPeerDecodeFailureDoesNotCloseAfterReset(t *testing.T) {
+	node, _ := newRequestTestNode(t)
+	remote, err := libp2p.New()
+	if err != nil {
+		t.Fatalf("remote host: %v", err)
+	}
+	defer remote.Close()
+
+	stream := newFailingReadStream(remote.ID())
+	node.streamManager = testStreamOpener{
+		openFn: func(ctx context.Context, pid peer.ID, proto protocol.ID) (network.Stream, error) {
+			return stream, nil
+		},
+	}
+
+	_, _, _, err = node.requestBlocksFromPeerDirect(remote.ID(), 1, 2, false, 0)
+	if err == nil {
+		t.Fatalf("expected decode error")
+	}
+	var phaseErr *blockRequestPhaseError
+	if !errors.As(err, &phaseErr) {
+		t.Fatalf("expected blockRequestPhaseError, got %T", err)
+	}
+	if phaseErr.Stage != "decode" {
+		t.Fatalf("unexpected phase error: %+v", phaseErr)
+	}
+	if !stream.wasReset() {
+		t.Fatalf("expected decode failure to reset stream")
+	}
+	if stream.wasClosed() {
+		t.Fatalf("decode failure should not close stream after reset")
 	}
 }
 
@@ -638,6 +763,39 @@ func TestApplySyncBlockWithRetryReturnsFailureReason(t *testing.T) {
 	}
 }
 
+func TestApplySyncBlockWithRetryClearsSeenNoProgressAndRetries(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	block := node.BuildLeaderBlock(node.currentEpoch())
+	block.BlockTime = LogicalTimeForEpochTick(block.ID, TickFinalize)
+	block.Timestamp = int64(SystemTimeUnits(block.BlockTime))
+	block.BlockHash = HashBlock(block)
+
+	node.markBlockSeen(blockSeenKey(block))
+
+	result := node.applySyncBlockWithRetry(block)
+	if !result.Applied {
+		t.Fatalf("expected already-seen sync block to clear seen marker and retry, got reason %q", result.Reason)
+	}
+	if result.Retries == 0 {
+		t.Fatal("expected apply to require at least one retry after clearing seen marker")
+	}
+	if _, _, ok := node.syncApplyFailure(block.ID, block.BlockHash); ok {
+		t.Fatal("expected no-progress apply failure to clear after retry commit")
+	}
+	if got := node.Blockchain.Height(); got != block.ID {
+		t.Fatalf("expected blockchain height %d, got %d", block.ID, got)
+	}
+}
+
+func TestSnapshotSyncProcessBlockIncompleteUsesTrustedBoundaryCrossing(t *testing.T) {
+	if !snapshotSyncReasonRequiresTrustedSource("queue_apply_failed_process_block_incomplete") {
+		t.Fatal("expected process_block_incomplete to require trusted snapshot source")
+	}
+	if got := snapshotSyncMinHeightOverrideForReason("queue_apply_failed_process_block_incomplete", 100, 200); got != 101 {
+		t.Fatalf("expected min height override 101, got %d", got)
+	}
+}
+
 func TestReceiveBlockReturnsStructuredApplyError(t *testing.T) {
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	block := node.BuildLeaderBlock(node.currentEpoch())
@@ -778,6 +936,12 @@ func TestRewindLocalChainToCommonAncestorPrunesForkTip(t *testing.T) {
 	if got := node.Blockchain.Height(); got != block1.ID {
 		t.Fatalf("expected height %d after rewind, got %d", block1.ID, got)
 	}
+	node.Blockchain.mu.RLock()
+	rewoundBlocks := append([]Block(nil), node.Blockchain.Blocks...)
+	node.Blockchain.mu.RUnlock()
+	if len(rewoundBlocks) != 2 || rewoundBlocks[0].ID != 0 || rewoundBlocks[1].ID != block1.ID {
+		t.Fatalf("expected canonical genesis+anchor chain after rewind, got len=%d blocks=%v", len(rewoundBlocks), rewoundBlocks)
+	}
 	if _, ok := node.LoadBlock(int(forkTip.ID)); ok {
 		t.Fatalf("expected fork tip %d to be pruned from storage", forkTip.ID)
 	}
@@ -790,6 +954,137 @@ func TestRewindLocalChainToCommonAncestorPrunesForkTip(t *testing.T) {
 	}
 	if queueTip := node.maxQueuedFutureHeight(block1.ID); queueTip != 0 {
 		t.Fatalf("expected queued fork blocks to clear, got queue tip %d", queueTip)
+	}
+}
+
+func TestRewindLocalChainRebuildsContiguousBlocksFromStorage(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	genesis := node.Blockchain.Blocks[0]
+	block1 := Block{ID: 1, PrevHash: genesis.BlockHash, BlockHash: "block-1", StateRoot: "state-1"}
+	block2 := Block{ID: 2, PrevHash: block1.BlockHash, BlockHash: "block-2", StateRoot: "state-2"}
+	forkTip := Block{ID: 3, PrevHash: block2.BlockHash, BlockHash: "fork-3", StateRoot: "fork-state"}
+	node.StoreBlock(block1)
+	node.StoreBlock(block2)
+	node.StoreBlock(forkTip)
+
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = []Block{genesis, block2, forkTip}
+	node.Blockchain.mu.Unlock()
+	node.commitMu.Lock()
+	node.committedHeight = forkTip.ID
+	node.finalizedHeight = forkTip.ID
+	node.committed[forkTip.ID] = forkTip.BlockHash
+	node.commitMu.Unlock()
+
+	if !node.rewindLocalChainToHeight(block2.ID, "test_rebuild_storage") {
+		t.Fatal("expected rewind to rebuild canonical chain")
+	}
+
+	node.Blockchain.mu.RLock()
+	rebuilt := append([]Block(nil), node.Blockchain.Blocks...)
+	node.Blockchain.mu.RUnlock()
+	if len(rebuilt) != 3 {
+		t.Fatalf("expected genesis plus blocks 1..2 after rewind, got %d blocks: %#v", len(rebuilt), rebuilt)
+	}
+	for i, wantID := range []uint64{0, 1, 2} {
+		if rebuilt[i].ID != wantID {
+			t.Fatalf("rebuilt chain index %d ID=%d, want %d", i, rebuilt[i].ID, wantID)
+		}
+	}
+	if rebuilt[2].BlockHash != block2.BlockHash || rebuilt[2].PrevHash != block1.BlockHash {
+		t.Fatalf("anchor not preserved in rebuilt chain: %#v", rebuilt[2])
+	}
+	if _, ok := node.Blockchain.GetBlock(1); !ok {
+		t.Fatalf("rewind lost parent block from canonical chain")
+	}
+	if _, ok := node.Blockchain.GetBlock(2); !ok {
+		t.Fatalf("rewind lost anchor block from canonical chain")
+	}
+	if _, ok := node.Blockchain.GetBlock(3); ok {
+		t.Fatalf("rewind retained fork tip in canonical chain")
+	}
+	node.commitMu.Lock()
+	committedHeight := node.committedHeight
+	_, forkCommitted := node.committed[forkTip.ID]
+	node.commitMu.Unlock()
+	if committedHeight != block2.ID || forkCommitted {
+		t.Fatalf("unexpected committed state after rewind: height=%d fork_committed=%t", committedHeight, forkCommitted)
+	}
+}
+
+func TestRewindLocalChainPrefersPersistedBlocksOverStaleMemory(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	genesis := node.Blockchain.Blocks[0]
+	block1 := Block{ID: 1, PrevHash: genesis.BlockHash, BlockHash: "block-1", StateRoot: "state-1"}
+	block2 := Block{ID: 2, PrevHash: block1.BlockHash, BlockHash: "block-2", StateRoot: "state-2"}
+	forkTip := Block{ID: 3, PrevHash: block2.BlockHash, BlockHash: "fork-3", StateRoot: "fork-state"}
+	node.StoreBlock(block1)
+	node.StoreBlock(block2)
+	node.StoreBlock(forkTip)
+
+	staleBlock1 := block1
+	staleBlock1.BlockHash = "stale-memory-block-1"
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = []Block{genesis, staleBlock1, block2, forkTip}
+	node.Blockchain.mu.Unlock()
+	node.commitMu.Lock()
+	node.committedHeight = forkTip.ID
+	node.finalizedHeight = forkTip.ID
+	node.committed[forkTip.ID] = forkTip.BlockHash
+	node.commitMu.Unlock()
+
+	if !node.rewindLocalChainToHeight(block2.ID, "test_rebuild_prefers_persisted") {
+		t.Fatal("expected rewind to rebuild from persisted canonical blocks")
+	}
+
+	node.Blockchain.mu.RLock()
+	rebuilt := append([]Block(nil), node.Blockchain.Blocks...)
+	node.Blockchain.mu.RUnlock()
+	if len(rebuilt) != 3 {
+		t.Fatalf("expected genesis plus blocks 1..2 after rewind, got %d blocks: %#v", len(rebuilt), rebuilt)
+	}
+	if rebuilt[1].BlockHash != block1.BlockHash {
+		t.Fatalf("rewind used stale in-memory parent hash: got=%q want=%q", rebuilt[1].BlockHash, block1.BlockHash)
+	}
+	if rebuilt[2].PrevHash != block1.BlockHash {
+		t.Fatalf("rebuilt anchor is not linked to persisted parent: got prev=%q want=%q", rebuilt[2].PrevHash, block1.BlockHash)
+	}
+}
+
+func TestReceiveBlockBackfillsExactNextWhenFinalizedWatermarkAhead(t *testing.T) {
+	validators := []string{"A", "B", "C", "D"}
+	oldRegistry := GlobalValidatorRegistry.Snapshot()
+	t.Cleanup(func() {
+		GlobalValidatorRegistry.Load(oldRegistry)
+	})
+	bootstrapValidatorRegistry(validators, 1)
+
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	block1 := node.BuildLeaderBlock(node.currentEpoch())
+	block1.BlockTime = LogicalTimeForEpochTick(block1.ID, TickFinalize)
+	block1.Timestamp = int64(SystemTimeUnits(block1.BlockTime))
+	block1.BlockHash = HashBlock(block1)
+	if err := node.ReceiveBlock(block1, node.Blockchain); err != nil {
+		t.Fatalf("receive block1: %v", err)
+	}
+
+	node.syncMu.Lock()
+	node.syncStage = "delta_replay"
+	node.syncMu.Unlock()
+	node.commitMu.Lock()
+	node.committedHeight = block1.ID + WeakSubjectivityDepth + 10
+	node.finalizedHeight = node.committedHeight
+	node.commitMu.Unlock()
+
+	block2 := node.BuildLeaderBlock(node.currentEpoch())
+	block2.BlockTime = LogicalTimeForEpochTick(block2.ID, TickFinalize)
+	block2.Timestamp = int64(SystemTimeUnits(block2.BlockTime))
+	block2.BlockHash = HashBlock(block2)
+	if err := node.ReceiveBlock(block2, node.Blockchain); err != nil {
+		t.Fatalf("receive block2 with finalized watermark ahead: %v", err)
+	}
+	if got := node.Blockchain.Height(); got != block2.ID {
+		t.Fatalf("expected exact-next backfill to apply block %d, got height %d", block2.ID, got)
 	}
 }
 
@@ -973,6 +1268,24 @@ func TestMaybeExitSyncModeArmsWarmupAfterCatchup(t *testing.T) {
 	}
 }
 
+func TestSyncBlockRangeWarmupRequiresMeaningfulValidatorDrift(t *testing.T) {
+	previous := ValidatorLivenessMaxHeightDriftBlocks
+	ValidatorLivenessMaxHeightDriftBlocks = 8
+	t.Cleanup(func() {
+		ValidatorLivenessMaxHeightDriftBlocks = previous
+	})
+
+	if syncBlockRangeWarmupEligible(100, 102) {
+		t.Fatal("routine two-block catch-up must not trigger validator rejoin warmup")
+	}
+	if syncBlockRangeWarmupEligible(100, 108) {
+		t.Fatal("catch-up inside the configured liveness drift must not trigger validator rejoin warmup")
+	}
+	if !syncBlockRangeWarmupEligible(100, 109) {
+		t.Fatal("catch-up beyond the configured liveness drift must trigger validator rejoin warmup")
+	}
+}
+
 func TestSnapshotWarmupUsesLocalTipForProposalHeight(t *testing.T) {
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	for height := uint64(1); height <= 12; height++ {
@@ -998,6 +1311,39 @@ func TestSnapshotWarmupUsesLocalTipForProposalHeight(t *testing.T) {
 	node.syncMu.Unlock()
 	if got != node.Blockchain.Height() {
 		t.Fatalf("snapshot warmup should evaluate at local tip, got height=%d want=%d", got, node.Blockchain.Height())
+	}
+}
+
+func TestSnapshotWarmupDoesNotRegressLastHeightFromStaleCaller(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	for height := uint64(1); height <= 12; height++ {
+		block := node.BuildLeaderBlock(height)
+		block.BlockTime = LogicalTimeForEpochTick(block.ID, TickFinalize)
+		block.Timestamp = int64(SystemTimeUnits(block.BlockTime))
+		block.BlockHash = HashBlock(block)
+		node.Blockchain.AddBlock(block)
+	}
+
+	tip := node.Blockchain.Height()
+	node.setSnapshotWarmupJoinHeight(tip)
+	observedHeight := tip + 2
+	observedAt := time.Now().Add(-time.Second)
+	node.syncMu.Lock()
+	node.syncWarmupLastHeight = observedHeight
+	node.syncWarmupLastHeightAt = observedAt
+	node.syncMu.Unlock()
+
+	_ = node.snapshotWarmupActive(tip)
+
+	node.syncMu.Lock()
+	gotHeight := node.syncWarmupLastHeight
+	gotAt := node.syncWarmupLastHeightAt
+	node.syncMu.Unlock()
+	if gotHeight != observedHeight {
+		t.Fatalf("stale warmup caller regressed last height: got=%d want=%d", gotHeight, observedHeight)
+	}
+	if !gotAt.Equal(observedAt) {
+		t.Fatalf("stale warmup caller rewrote last height timestamp: got=%s want=%s", gotAt, observedAt)
 	}
 }
 
@@ -1032,6 +1378,24 @@ func TestSnapshotWarmupClearsWithStableLocalFinalizedSet(t *testing.T) {
 
 	if node.snapshotWarmupActive(tip) {
 		t.Fatal("expected stable local finalized validator-set hash to clear warmup after duration")
+	}
+	node.syncMu.Lock()
+	startAt := node.syncWarmupStartAt
+	node.syncMu.Unlock()
+	if !startAt.IsZero() {
+		t.Fatal("expected completed warmup state to be cleared")
+	}
+
+	node.validatorMu.Lock()
+	node.validatorStatus["B"] = &ValidatorStatus{
+		LastSeen:         time.Now(),
+		ReportedHeight:   tip,
+		FinalizedHeight:  tip,
+		ValidatorSetHash: "late-conflicting-validator-set-hash",
+	}
+	node.validatorMu.Unlock()
+	if node.snapshotWarmupActive(tip) {
+		t.Fatal("completed warmup must not reactivate after later validator-set observations change")
 	}
 }
 

@@ -423,7 +423,7 @@ func (a *nodeSnapshotSyncAdapter) DownloadSnapshotChunks(ctx context.Context, me
 		return errors.New("snapshot sync adapter unavailable")
 	}
 	a.hydrateSelectedSnapshotPeerValidators()
-	result, err := a.node.downloadTrustedSnapshotAndStore(meta.Height, meta.Height, true, false, false)
+	result, err := a.node.downloadTrustedSnapshotAndStore(meta.Height, meta.Height, true, false, false, false)
 	if err != nil {
 		return err
 	}
@@ -435,7 +435,7 @@ func (a *nodeSnapshotSyncAdapter) DownloadSnapshotChunks(ctx context.Context, me
 			_ = a.node.deleteStoredSnapshotHeight(result.Snapshot.Height)
 			_ = a.node.refreshLatestSnapshotPointer()
 		}
-		result, err = a.node.downloadTrustedSnapshotAndStore(meta.Height, meta.Height, true, false, false)
+		result, err = a.node.downloadTrustedSnapshotAndStore(meta.Height, meta.Height, true, false, false, false)
 		if err != nil {
 			return err
 		}
@@ -501,7 +501,11 @@ func (a *nodeSnapshotSyncAdapter) ApplySnapshot(ctx context.Context, meta syncpi
 	}
 	a.node.updateSnapshotCatalogMeta(snapshot.Height, strings.TrimSpace(snapshot.StateRoot), uint64(meta.Chunks), a.selectedProviders)
 	a.node.updateSnapshotCatalogAvailability(snapshot.Height, 1)
-	a.node.ApplySnapshotForSync(*snapshot)
+	if !a.node.ApplySnapshotForSync(*snapshot) {
+		a.node.recordSnapshotSessionStrictResult("", "snapshot_apply_noop")
+		a.node.snapshotSessionMarkFailure("snapshot_apply_noop")
+		return fmt.Errorf("snapshot apply did not anchor chain: snapshot=%d hash=%s", snapshot.Height, ShortHash(snapshot.BlockHash))
+	}
 	a.node.noteSnapshotApplied(snapshot.Height)
 	a.node.markSnapshotSessionApplied(snapshot, a.requiredProofs)
 	return nil

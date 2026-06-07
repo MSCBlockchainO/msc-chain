@@ -171,6 +171,44 @@ func TestStorageManagerArchiveProfileSkipsPruning(t *testing.T) {
 	}
 }
 
+func TestStorageManagerFinalizedEpochBoundary(t *testing.T) {
+	policy := StoragePolicy{EpochLengthBlocks: 100}
+	for _, height := range []uint64{1, 32, 99, 101, 199} {
+		if storageManagerFinalizedEpochBoundary(height, policy) {
+			t.Fatalf("height %d must not schedule finalized-epoch maintenance", height)
+		}
+	}
+	for _, height := range []uint64{100, 200, 1000} {
+		if !storageManagerFinalizedEpochBoundary(height, policy) {
+			t.Fatalf("height %d must schedule finalized-epoch maintenance", height)
+		}
+	}
+	if storageManagerFinalizedEpochBoundary(0, policy) {
+		t.Fatal("zero height must not schedule storage maintenance")
+	}
+	if !storageManagerFinalizedEpochBoundary(100, StoragePolicy{}) {
+		t.Fatal("zero interval must use the safe 100-block default")
+	}
+}
+
+func TestStorageManagerRunSingleFlight(t *testing.T) {
+	n := &Node{}
+	if !n.beginStorageManagerRun(100) {
+		t.Fatal("expected first storage manager run to start")
+	}
+	if n.beginStorageManagerRun(200) {
+		t.Fatal("expected overlapping storage manager run to be rejected")
+	}
+	n.finishStorageManagerRun()
+	if !n.beginStorageManagerRun(200) {
+		t.Fatal("expected later finalized epoch to start after prior run completes")
+	}
+	n.finishStorageManagerRun()
+	if n.beginStorageManagerRun(200) {
+		t.Fatal("expected duplicate finalized epoch to remain rejected")
+	}
+}
+
 func TestStoragePolicySnapshotReportsRetention(t *testing.T) {
 	db, cleanup := openNodeDBForTest(t)
 	defer cleanup()

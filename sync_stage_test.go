@@ -12,18 +12,21 @@ func TestSyncCatchupStageThresholds(t *testing.T) {
 	oldRange := SyncRangeFetchMaxBlocks
 	oldThreshold := SyncSnapshotCatchupThresholdBlocks
 	oldSnapshotDelta := SyncSnapshotDeltaMaxBlocks
+	oldDeltaState := SyncDeltaStateSyncEnabled
 	t.Cleanup(func() {
 		SyncDirectGossipMaxBlocks = oldDirect
 		SyncFastBlockSyncMaxBlocks = oldFast
 		SyncRangeFetchMaxBlocks = oldRange
 		SyncSnapshotCatchupThresholdBlocks = oldThreshold
 		SyncSnapshotDeltaMaxBlocks = oldSnapshotDelta
+		SyncDeltaStateSyncEnabled = oldDeltaState
 	})
 	SyncDirectGossipMaxBlocks = 128
 	SyncFastBlockSyncMaxBlocks = 256
 	SyncRangeFetchMaxBlocks = 50000
 	SyncSnapshotCatchupThresholdBlocks = 2000
 	SyncSnapshotDeltaMaxBlocks = 10000000
+	SyncDeltaStateSyncEnabled = true
 
 	cases := []struct {
 		local  uint64
@@ -45,6 +48,30 @@ func TestSyncCatchupStageThresholds(t *testing.T) {
 		if got := syncCatchupStage(tc.local, tc.target); got != tc.want {
 			t.Fatalf("syncCatchupStage(%d,%d)=%q want=%q", tc.local, tc.target, got, tc.want)
 		}
+	}
+}
+
+func TestSyncCatchupStageSkipsDeltaWhenDeltaStateSyncDisabled(t *testing.T) {
+	oldDirect := SyncDirectGossipMaxBlocks
+	oldFast := SyncFastBlockSyncMaxBlocks
+	oldRange := SyncRangeFetchMaxBlocks
+	oldThreshold := SyncSnapshotCatchupThresholdBlocks
+	oldDeltaState := SyncDeltaStateSyncEnabled
+	t.Cleanup(func() {
+		SyncDirectGossipMaxBlocks = oldDirect
+		SyncFastBlockSyncMaxBlocks = oldFast
+		SyncRangeFetchMaxBlocks = oldRange
+		SyncSnapshotCatchupThresholdBlocks = oldThreshold
+		SyncDeltaStateSyncEnabled = oldDeltaState
+	})
+	SyncDirectGossipMaxBlocks = 128
+	SyncFastBlockSyncMaxBlocks = 256
+	SyncRangeFetchMaxBlocks = 50000
+	SyncSnapshotCatchupThresholdBlocks = 2000
+	SyncDeltaStateSyncEnabled = false
+
+	if got := syncCatchupStage(100, 600); got != "state_bootstrap" {
+		t.Fatalf("expected delta disabled to choose state_bootstrap, got %q", got)
 	}
 }
 
@@ -338,6 +365,100 @@ func TestSyncCatchupPlanSelectsExecutionMethodAndBatch(t *testing.T) {
 				t.Fatalf("unexpected method flags: block=%t delta=%t snapshot=%t", plan.BlockRange, plan.DeltaReplay, plan.Snapshot)
 			}
 		})
+	}
+}
+
+func TestUsableHeadFastBootstrapRoleGate(t *testing.T) {
+	oldEnabled := SyncUsableHeadFastBootstrapEnabled
+	oldRoles := append([]string{}, SyncUsableHeadRoles...)
+	oldMinGap := SyncUsableHeadMinGapBlocks
+	oldCheckpoint := SyncUsableHeadRequireCheckpointProof
+	oldBackground := SyncUsableHeadBackgroundHistory
+	oldRecentWindow := SyncUsableHeadRecentReplayWindowBlocks
+	oldTargetSeconds := SyncUsableHeadTargetSeconds
+	oldSnapshotDelta := SyncSnapshotDeltaMaxBlocks
+	t.Cleanup(func() {
+		SyncUsableHeadFastBootstrapEnabled = oldEnabled
+		SyncUsableHeadRoles = oldRoles
+		SyncUsableHeadMinGapBlocks = oldMinGap
+		SyncUsableHeadRequireCheckpointProof = oldCheckpoint
+		SyncUsableHeadBackgroundHistory = oldBackground
+		SyncUsableHeadRecentReplayWindowBlocks = oldRecentWindow
+		SyncUsableHeadTargetSeconds = oldTargetSeconds
+		SyncSnapshotDeltaMaxBlocks = oldSnapshotDelta
+	})
+	SyncUsableHeadFastBootstrapEnabled = true
+	SyncUsableHeadRoles = []string{"full", "archive"}
+	SyncUsableHeadMinGapBlocks = 2000
+	SyncUsableHeadRequireCheckpointProof = true
+	SyncUsableHeadBackgroundHistory = true
+	SyncUsableHeadRecentReplayWindowBlocks = 2048
+	SyncUsableHeadTargetSeconds = 3
+	SyncSnapshotDeltaMaxBlocks = 10000000
+
+	fullPlan := syncCatchupPlanForRole(100, 100000100, "full", false)
+	if !fullPlan.UsableHead || !fullPlan.StateBootstrap || fullPlan.HeadStage != "checkpoint_verify" {
+		t.Fatalf("expected full node usable-head state bootstrap plan, got %+v", fullPlan)
+	}
+	if !fullPlan.RequireCheckpointProof || !fullPlan.BackgroundHistory || fullPlan.RecentReplayWindow != 2048 || fullPlan.TargetSeconds != 3 {
+		t.Fatalf("unexpected usable-head policy in plan: %+v", fullPlan)
+	}
+
+	archivePlan := syncCatchupPlanForRole(100, 100000100, "full", true)
+	if !archivePlan.UsableHead {
+		t.Fatalf("expected archive-mode full node to be usable-head eligible")
+	}
+
+	validatorPlan := syncCatchupPlanForRole(100, 100000100, "validator", false)
+	if validatorPlan.UsableHead {
+		t.Fatalf("validator must not be usable-head eligible: %+v", validatorPlan)
+	}
+
+	smallGapPlan := syncCatchupPlanForRole(100, 101, "full", false)
+	if smallGapPlan.UsableHead || smallGapPlan.Stage != "direct_gossip" {
+		t.Fatalf("small gaps must keep normal block sync, got %+v", smallGapPlan)
+	}
+}
+
+func TestUsableHeadRuntimeStatusRequiresAllowedRole(t *testing.T) {
+	oldEnabled := SyncUsableHeadFastBootstrapEnabled
+	oldRoles := append([]string{}, SyncUsableHeadRoles...)
+	oldHistoryMode := SyncHistoryMode
+	t.Cleanup(func() {
+		SyncUsableHeadFastBootstrapEnabled = oldEnabled
+		SyncUsableHeadRoles = oldRoles
+		SyncHistoryMode = oldHistoryMode
+	})
+	SyncUsableHeadFastBootstrapEnabled = true
+	SyncUsableHeadRoles = []string{"full", "archive"}
+	SyncHistoryMode = SyncHistoryModeBackground
+
+	fullNode := &Node{Role: "full"}
+	fullStatus := RuntimeStatusSnapshot{
+		Role:                  "full",
+		Height:                100000100,
+		SyncTarget:            100000100,
+		SyncStage:             "state_bootstrap",
+		SyncAction:            "state_snapshot_applied",
+		SnapshotHeightApplied: 100000100,
+		SyncComplete:          true,
+	}
+	fullNode.applyUsableHeadRuntimeStatus(&fullStatus, "full", 100000100)
+	if !fullStatus.UsableHead || !fullStatus.HeadSynced {
+		t.Fatalf("expected full node usable head after state snapshot apply, got %+v", fullStatus)
+	}
+	if fullStatus.HistoryBackfillPending {
+		t.Fatalf("history should not be pending when target height is reached: %+v", fullStatus)
+	}
+
+	validatorNode := &Node{Role: "validator"}
+	validatorStatus := fullStatus
+	validatorStatus.Role = "validator"
+	validatorStatus.UsableHead = false
+	validatorStatus.HeadSynced = false
+	validatorNode.applyUsableHeadRuntimeStatus(&validatorStatus, "validator", 100000100)
+	if validatorStatus.UsableHead {
+		t.Fatalf("validator must not be marked usable-head through fast bootstrap: %+v", validatorStatus)
 	}
 }
 

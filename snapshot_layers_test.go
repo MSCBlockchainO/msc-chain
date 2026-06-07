@@ -701,16 +701,94 @@ func TestPublishRequiredValidatorSnapshotAutoReasonThrottlesOutsideInterval(t *t
 	}
 }
 
-func TestAdaptiveSnapshotPublishReasonClassifiedForIntervalBypass(t *testing.T) {
+func TestAdaptiveSnapshotPublishReasonRemainsIntervalGated(t *testing.T) {
 	reason := "adaptive_snapshot_proof_signer_lagging_peer"
 	if !isAutomaticValidatorSnapshotPublishReason(reason) {
 		t.Fatalf("expected adaptive reason to remain an automatic publish reason")
 	}
 	if !isAdaptiveValidatorSnapshotPublishReason(reason) {
-		t.Fatalf("expected adaptive reason to bypass automatic height interval when forced")
+		t.Fatalf("expected adaptive reason classification")
 	}
 	if isAdaptiveValidatorSnapshotPublishReason("snapshot_proof_signer") {
 		t.Fatalf("plain snapshot proof signer should remain interval-gated")
+	}
+}
+
+func TestValidatorSnapshotAdaptiveReasonIgnoresSmallTransientLag(t *testing.T) {
+	oldNewNodeThreshold := SyncSnapshotPublishNewNodeThresholdBlocks
+	oldLagThreshold := SyncSnapshotPublishLagThresholdBlocks
+	t.Cleanup(func() {
+		SyncSnapshotPublishNewNodeThresholdBlocks = oldNewNodeThreshold
+		SyncSnapshotPublishLagThresholdBlocks = oldLagThreshold
+	})
+	SyncSnapshotPublishNewNodeThresholdBlocks = 50
+	SyncSnapshotPublishLagThresholdBlocks = 20
+
+	if reason, lag, ok := validatorSnapshotAdaptiveReason(100, 97); ok {
+		t.Fatalf("small transient lag must not force snapshot publication: reason=%q lag=%d", reason, lag)
+	}
+	if reason, lag, ok := validatorSnapshotAdaptiveReason(100, 80); !ok || reason != "lagging_peer" || lag != 20 {
+		t.Fatalf("configured lag threshold must trigger publication: reason=%q lag=%d ok=%t", reason, lag, ok)
+	}
+}
+
+func TestPublishRequiredValidatorSnapshotAdaptiveReasonThrottlesOutsideInterval(t *testing.T) {
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	registry := testValidatorSetMaterializationRegistry()
+	withValidatorRegistryTestState(t, registry)
+
+	ledger := NewLedger()
+	ledger.Balances["alice"] = 10
+	block1 := Block{ID: 1, BlockHash: "block-1"}
+	block2, _ := makeSnapshotLayerFixture(2, block1.BlockHash, ledger, registry)
+	block2.Signatures = canonicalValidatorIDs([]string{"A", "B", "C", "D"})
+	block2.StateRoot = ComputeExecHash(block2, HashLedger(ledger))
+	block3, _ := makeSnapshotLayerFixture(3, block2.BlockHash, ledger, registry)
+	block3.Signatures = canonicalValidatorIDs([]string{"A", "B", "C", "D"})
+	block3.StateRoot = ComputeExecHash(block3, HashLedger(ledger))
+
+	host, err := libp2p.New()
+	if err != nil {
+		t.Fatalf("create host: %v", err)
+	}
+	defer host.Close()
+
+	ps, err := pubsub.NewGossipSub(context.Background(), host)
+	if err != nil {
+		t.Fatalf("create pubsub: %v", err)
+	}
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate validator key: %v", err)
+	}
+
+	n := &Node{
+		ID:                "A",
+		Role:              "validator",
+		DB:                db,
+		Ledger:            ledger.Clone(),
+		Blockchain:        &Blockchain{Blocks: []Block{block1, block2, block3}},
+		GenesisValidators: canonicalValidatorIDs([]string{"A", "B", "C", "D"}),
+		Host:              host,
+		PubSub:            ps,
+		ValidatorKey: ValidatorKey{
+			PublicKey:  pub,
+			PrivateKey: priv,
+		},
+	}
+	if err := n.initPubSubTopics(); err != nil {
+		t.Fatalf("init pubsub topics: %v", err)
+	}
+
+	snapshot, err := n.publishRequiredValidatorSnapshot("adaptive_validator_commit_required_lagging_peer", true)
+	if err != nil {
+		t.Fatalf("publish adaptive validator snapshot: %v", err)
+	}
+	if snapshot != nil {
+		t.Fatalf("expected adaptive automatic snapshot to remain interval-gated, got %+v", snapshot)
 	}
 }
 
@@ -949,6 +1027,23 @@ func TestVerifySnapshotIntegrityDepthRebuildsFromDelta(t *testing.T) {
 	}
 	if rebuilt.SnapshotHash != snap2.SnapshotHash {
 		t.Fatalf("rebuilt snapshot hash mismatch: got=%q want=%q", rebuilt.SnapshotHash, snap2.SnapshotHash)
+	}
+}
+
+func TestSnapshotIntegrityScanHeightChecksOnlyCheckpointsAndTip(t *testing.T) {
+	const (
+		tip      = uint64(100)
+		interval = uint64(32)
+	)
+	for _, height := range []uint64{32, 64, 96, tip} {
+		if !snapshotIntegrityScanHeight(height, tip, interval) {
+			t.Fatalf("expected integrity scan at height %d", height)
+		}
+	}
+	for _, height := range []uint64{0, 31, 33, 99, 101} {
+		if snapshotIntegrityScanHeight(height, tip, interval) {
+			t.Fatalf("did not expect integrity scan at height %d", height)
+		}
 	}
 }
 

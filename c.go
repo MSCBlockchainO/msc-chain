@@ -134,6 +134,199 @@ func ledgerHasInitializedBacking(ledger Ledger) bool {
 		ledger.UsedValidatorUpdateCerts != nil
 }
 
+func (n *Node) committedBlockForLedgerHeight(height uint64) (Block, bool) {
+	if n == nil || height == 0 {
+		return Block{}, false
+	}
+	if n.Blockchain != nil {
+		if block, ok := n.Blockchain.GetBlock(height); ok {
+			return block, true
+		}
+	}
+	return n.LoadBlock(int(height))
+}
+
+func (n *Node) executionSnapshotLedgerMatchesBlock(height uint64, ledger Ledger) (bool, string, string) {
+	if !ledgerHasInitializedBacking(ledger) {
+		return false, "", ""
+	}
+	block, ok := n.committedBlockForLedgerHeight(height)
+	if !ok || strings.TrimSpace(block.StateRoot) == "" {
+		return true, "", strings.TrimSpace(HashLedger(ledger))
+	}
+	ledgerHash := strings.TrimSpace(HashLedger(ledger))
+	expectedRoot := strings.TrimSpace(ComputeExecHashVersioned(block, ledgerHash, executionStateRootVersionForHeight(block.ID)))
+	return expectedRoot != "" && strings.EqualFold(expectedRoot, strings.TrimSpace(block.StateRoot)), expectedRoot, ledgerHash
+}
+
+func (n *Node) evictExecutionSnapshotLedger(height uint64) {
+	if n == nil || height == 0 {
+		return
+	}
+	n.snapshotExecutionLedgerMu.Lock()
+	if n.snapshotExecutionLedgerByHeight != nil {
+		delete(n.snapshotExecutionLedgerByHeight, height)
+	}
+	n.snapshotExecutionLedgerMu.Unlock()
+}
+
+func (n *Node) evictPostCommitLedger(height uint64) {
+	if n == nil || height == 0 {
+		return
+	}
+	n.postCommitLedgerMu.Lock()
+	if n.postCommitLedgerByHeight != nil {
+		delete(n.postCommitLedgerByHeight, height)
+	}
+	n.postCommitLedgerMu.Unlock()
+}
+
+func (n *Node) beginExecutionLedgerConsistencyCheck(height uint64) (uint64, bool) {
+	if n == nil || height == 0 {
+		return 0, false
+	}
+	n.executionLedgerConsistencyMu.Lock()
+	defer n.executionLedgerConsistencyMu.Unlock()
+	generation := n.executionLedgerGeneration
+	if n.executionLedgerConsistencyHeight == height &&
+		n.executionLedgerConsistencyGeneration == generation {
+		return generation, false
+	}
+	if n.executionLedgerConsistencyCheckingHeight == height &&
+		n.executionLedgerConsistencyCheckingGeneration == generation {
+		// The authoritative cache is safe to return while another caller
+		// performs the one strict live-ledger reconciliation for this height.
+		return generation, false
+	}
+	n.executionLedgerConsistencyCheckingHeight = height
+	n.executionLedgerConsistencyCheckingGeneration = generation
+	n.executionLedgerConsistencyChecks++
+	return generation, true
+}
+
+func (n *Node) finishExecutionLedgerConsistencyCheck(height uint64, generation uint64) {
+	if n == nil || height == 0 {
+		return
+	}
+	n.executionLedgerConsistencyMu.Lock()
+	defer n.executionLedgerConsistencyMu.Unlock()
+	if n.executionLedgerConsistencyCheckingHeight == height &&
+		n.executionLedgerConsistencyCheckingGeneration == generation {
+		n.executionLedgerConsistencyCheckingHeight = 0
+		n.executionLedgerConsistencyCheckingGeneration = 0
+	}
+	if n.executionLedgerGeneration != generation {
+		return
+	}
+	n.executionLedgerConsistencyHeight = height
+	n.executionLedgerConsistencyGeneration = generation
+}
+
+func (n *Node) cancelExecutionLedgerConsistencyCheck(height uint64, generation uint64) {
+	if n == nil || height == 0 {
+		return
+	}
+	n.executionLedgerConsistencyMu.Lock()
+	if n.executionLedgerConsistencyCheckingHeight == height &&
+		n.executionLedgerConsistencyCheckingGeneration == generation {
+		n.executionLedgerConsistencyCheckingHeight = 0
+		n.executionLedgerConsistencyCheckingGeneration = 0
+	}
+	n.executionLedgerConsistencyMu.Unlock()
+}
+
+func (n *Node) markExecutionLedgerConsistent(height uint64) {
+	if n == nil || height == 0 {
+		return
+	}
+	n.executionLedgerConsistencyMu.Lock()
+	n.executionLedgerConsistencyHeight = height
+	n.executionLedgerConsistencyGeneration = n.executionLedgerGeneration
+	n.executionLedgerConsistencyCheckingHeight = 0
+	n.executionLedgerConsistencyCheckingGeneration = 0
+	n.executionLedgerConsistencyMu.Unlock()
+}
+
+func (n *Node) blockExecutionLedgerRepair(height uint64) {
+	if n == nil || height == 0 {
+		return
+	}
+	n.executionLedgerConsistencyMu.Lock()
+	n.executionLedgerRepairBlockedHeight = height
+	n.executionLedgerConsistencyMu.Unlock()
+}
+
+func (n *Node) executionLedgerRepairBlocked(height uint64) bool {
+	if n == nil || height == 0 {
+		return false
+	}
+	n.executionLedgerConsistencyMu.Lock()
+	defer n.executionLedgerConsistencyMu.Unlock()
+	if n.executionLedgerRepairBlockedHeight != height {
+		return false
+	}
+	nextHeight := height
+	if height < ^uint64(0) {
+		nextHeight = height + 1
+	}
+	if allowed, _ := n.allowExecutionLedgerDriftRepair(nextHeight); allowed {
+		n.executionLedgerRepairBlockedHeight = 0
+		return false
+	}
+	return true
+}
+
+func (n *Node) currentExecutionLedgerFromAuthoritative(height uint64, authoritative Ledger, reason string) Ledger {
+	if n == nil || height == 0 || !ledgerHasInitializedBacking(authoritative) {
+		return authoritative
+	}
+	generation, shouldCheck := n.beginExecutionLedgerConsistencyCheck(height)
+	if !shouldCheck {
+		return authoritative
+	}
+
+	liveLedger := n.ExecutionLedger.Clone()
+	liveHash := ""
+	authoritativeHash := ""
+	mismatch := !ledgerHasInitializedBacking(liveLedger)
+	if !mismatch {
+		liveHash = HashLedger(liveLedger)
+		authoritativeHash = HashLedger(authoritative)
+		mismatch = !strings.EqualFold(liveHash, authoritativeHash)
+	}
+	if mismatch {
+		if liveHash == "" && ledgerHasInitializedBacking(liveLedger) {
+			liveHash = HashLedger(liveLedger)
+		}
+		if authoritativeHash == "" {
+			authoritativeHash = HashLedger(authoritative)
+		}
+		if n.executionLedgerRepairBlocked(height) {
+			n.cancelExecutionLedgerConsistencyCheck(height, generation)
+			if n.shouldLogLivenessReason(fmt.Sprintf("execution_ledger_authority_mismatch:%d", height), livenessReasonLogCooldown) {
+				log.Printf("[LEDGER-DRIFT-CRITICAL] reason=%s height=%d mode=fail_closed repair_state=explicit_live_drift_lock live_ledger=%s authoritative_ledger=%s",
+					strings.TrimSpace(reason),
+					height,
+					ShortHash(liveHash),
+					ShortHash(authoritativeHash),
+				)
+			}
+			return liveLedger
+		}
+		n.setExecutionLedger(authoritative)
+		n.markExecutionLedgerConsistent(height)
+		log.Printf("[LEDGER-REBUILD] reason=%s height=%d live_ledger=%s restored_ledger=%s",
+			strings.TrimSpace(reason),
+			height,
+			ShortHash(liveHash),
+			ShortHash(authoritativeHash),
+		)
+		return authoritative
+	}
+	n.finishExecutionLedgerConsistencyCheck(height, generation)
+	return authoritative
+}
+
 func (n *Node) currentExecutionLedgerClone() Ledger {
 	if n == nil {
 		return Ledger{}.Clone()
@@ -149,30 +342,10 @@ func (n *Node) currentExecutionLedgerClone() Ledger {
 	n.commitMu.Unlock()
 	if tipHeight > 0 {
 		if cachedPostCommitLedger, ok := n.cachedPostCommitLedger(tipHeight); ok && ledgerHasInitializedBacking(cachedPostCommitLedger) {
-			if !ledgerHasInitializedBacking(n.ExecutionLedger) ||
-				!strings.EqualFold(HashLedger(n.ExecutionLedger.Clone()), HashLedger(cachedPostCommitLedger)) {
-				liveHash := HashLedger(n.ExecutionLedger.Clone())
-				n.setExecutionLedger(cachedPostCommitLedger)
-				log.Printf("[LEDGER-REBUILD] reason=current_execution_snapshot_preferred height=%d live_ledger=%s restored_ledger=%s",
-					tipHeight,
-					ShortHash(liveHash),
-					ShortHash(HashLedger(cachedPostCommitLedger)),
-				)
-			}
-			return cachedPostCommitLedger.Clone()
+			return n.currentExecutionLedgerFromAuthoritative(tipHeight, cachedPostCommitLedger, "current_execution_snapshot_preferred")
 		}
 		if restored, ok := n.committedTipLedgerFromExecutionSnapshot(tipHeight); ok && ledgerHasInitializedBacking(restored) {
-			if !ledgerHasInitializedBacking(n.ExecutionLedger) ||
-				!strings.EqualFold(HashLedger(n.ExecutionLedger.Clone()), HashLedger(restored)) {
-				liveHash := HashLedger(n.ExecutionLedger.Clone())
-				n.setExecutionLedger(restored)
-				log.Printf("[LEDGER-REBUILD] reason=current_execution_tip_replay height=%d live_ledger=%s restored_ledger=%s",
-					tipHeight,
-					ShortHash(liveHash),
-					ShortHash(HashLedger(restored)),
-				)
-			}
-			return restored.Clone()
+			return n.currentExecutionLedgerFromAuthoritative(tipHeight, restored, "current_execution_tip_replay")
 		}
 	}
 	if ledgerHasInitializedBacking(n.ExecutionLedger) {
@@ -248,11 +421,39 @@ func (n *Node) committedTipLedgerFromExecutionSnapshot(height uint64) (Ledger, b
 		return cachedPostCommitLedger.Clone(), true
 	}
 	if cachedLedger, found := n.cachedExecutionSnapshotLedger(height); found {
-		authoritative = cachedLedger
-		ok = true
-	} else if snap, _, found := n.resolveTrustedExecutionSnapshotFromStorage(height); found && snap != nil {
-		authoritative = snap.Ledger.Clone()
-		ok = true
+		if matched, expectedRoot, ledgerHash := n.executionSnapshotLedgerMatchesBlock(height, cachedLedger); matched {
+			authoritative = cachedLedger
+			ok = true
+		} else {
+			n.evictExecutionSnapshotLedger(height)
+			n.evictPostCommitLedger(height)
+			if n.shouldLogLivenessReason(fmt.Sprintf("execution_snapshot_cache_mismatch:%d", height), livenessReasonLogCooldown) {
+				block, _ := n.committedBlockForLedgerHeight(height)
+				log.Printf("[LEDGER-REBUILD-EVICT] reason=execution_snapshot_cache_mismatch height=%d snapshot_ledger=%s expected_root=%s block_root=%s",
+					height,
+					ShortHash(ledgerHash),
+					ShortHash(expectedRoot),
+					ShortHash(block.StateRoot),
+				)
+			}
+		}
+	}
+	if !ok {
+		if snap, _, found := n.resolveTrustedExecutionSnapshotFromStorage(height); found && snap != nil {
+			if matched, expectedRoot, ledgerHash := n.executionSnapshotLedgerMatchesBlock(height, snap.Ledger); matched {
+				authoritative = snap.Ledger.Clone()
+				ok = true
+				n.cacheExecutionSnapshotLedger(height, authoritative)
+			} else if n.shouldLogLivenessReason(fmt.Sprintf("execution_snapshot_storage_mismatch:%d", height), livenessReasonLogCooldown) {
+				block, _ := n.committedBlockForLedgerHeight(height)
+				log.Printf("[LEDGER-REBUILD-REJECT] reason=execution_snapshot_storage_mismatch height=%d snapshot_ledger=%s expected_root=%s block_root=%s",
+					height,
+					ShortHash(ledgerHash),
+					ShortHash(expectedRoot),
+					ShortHash(block.StateRoot),
+				)
+			}
+		}
 	}
 	if !ok || !ledgerHasInitializedBacking(authoritative) {
 		return Ledger{}, false
@@ -263,18 +464,6 @@ func (n *Node) committedTipLedgerFromExecutionSnapshot(height uint64) (Ledger, b
 	block, found := n.Blockchain.GetBlock(height)
 	if !found || strings.TrimSpace(block.StateRoot) == "" {
 		return authoritative.Clone(), true
-	}
-	expectedRoot := ComputeExecHashVersioned(block, HashLedger(authoritative), executionStateRootVersionForHeight(block.ID))
-	if !strings.EqualFold(strings.TrimSpace(expectedRoot), strings.TrimSpace(block.StateRoot)) {
-		if n.shouldLogLivenessReason(fmt.Sprintf("execution_snapshot_root_mismatch:%d", height), livenessReasonLogCooldown) {
-			log.Printf("[LEDGER-REBUILD-REJECT] reason=execution_snapshot_root_mismatch height=%d source=execution_snapshot snapshot_ledger=%s expected_root=%s block_root=%s",
-				height,
-				ShortHash(HashLedger(authoritative)),
-				ShortHash(expectedRoot),
-				ShortHash(block.StateRoot),
-			)
-		}
-		return Ledger{}, false
 	}
 	restored := n.replayPostBlockEffectsToLedger(block, authoritative)
 	n.cachePostCommitLedger(height, restored)
@@ -294,7 +483,7 @@ func (n *Node) cachePostCommitLedger(height uint64, ledger Ledger) {
 	cacheDepth := n.ledgerMemoryCacheDepth()
 	removed := 0
 	for h := range n.postCommitLedgerByHeight {
-		if h+cacheDepth < height {
+		if h+cacheDepth <= height {
 			delete(n.postCommitLedgerByHeight, h)
 			removed++
 		}
@@ -325,6 +514,12 @@ func (n *Node) setExecutionLedger(ledger Ledger) {
 	cloned := ledger.Clone()
 	n.ExecutionLedger = cloned
 	n.Ledger = cloned.Clone()
+	n.executionLedgerConsistencyMu.Lock()
+	n.executionLedgerGeneration++
+	n.executionLedgerConsistencyHeight = 0
+	n.executionLedgerConsistencyGeneration = 0
+	n.executionLedgerRepairBlockedHeight = 0
+	n.executionLedgerConsistencyMu.Unlock()
 }
 
 func (n *Node) mutateAuthoritativeLedger(mutator func(*Ledger)) Ledger {
@@ -390,14 +585,57 @@ func (n *Node) restoreLedgersFromAuthoritativeExecution(height uint64, reason st
 		source        string
 		ok            bool
 	)
-	if cachedLedger, found := n.cachedExecutionSnapshotLedger(height); found {
-		authoritative = cachedLedger
-		source = "execution_cache"
-		ok = true
-	} else if snap, _, found := n.resolveTrustedExecutionSnapshotFromStorage(height); found && snap != nil {
-		authoritative = snap.Ledger.Clone()
-		source = "trusted_snapshot"
-		ok = true
+	loadAuthoritative := func() bool {
+		if cachedLedger, found := n.cachedExecutionSnapshotLedger(height); found {
+			matched, expectedRoot, ledgerHash := n.executionSnapshotLedgerMatchesBlock(height, cachedLedger)
+			if matched {
+				authoritative = cachedLedger
+				source = "execution_cache"
+				ok = true
+				return true
+			}
+			n.evictExecutionSnapshotLedger(height)
+			n.evictPostCommitLedger(height)
+			if n.shouldLogLivenessReason(fmt.Sprintf("restore_execution_snapshot_cache_mismatch:%d", height), livenessReasonLogCooldown) {
+				block, _ := n.committedBlockForLedgerHeight(height)
+				log.Printf("[LEDGER-REBUILD-EVICT] reason=execution_snapshot_cache_mismatch height=%d source=execution_cache snapshot_ledger=%s expected_root=%s block_root=%s",
+					height,
+					ShortHash(ledgerHash),
+					ShortHash(expectedRoot),
+					ShortHash(block.StateRoot),
+				)
+			}
+		}
+		if snap, _, found := n.resolveTrustedExecutionSnapshotFromStorage(height); found && snap != nil {
+			matched, expectedRoot, ledgerHash := n.executionSnapshotLedgerMatchesBlock(height, snap.Ledger)
+			if matched {
+				authoritative = snap.Ledger.Clone()
+				source = "trusted_snapshot"
+				ok = true
+				n.cacheExecutionSnapshotLedger(height, authoritative)
+				return true
+			}
+			if n.shouldLogLivenessReason(fmt.Sprintf("restore_execution_snapshot_storage_mismatch:%d", height), livenessReasonLogCooldown) {
+				block, _ := n.committedBlockForLedgerHeight(height)
+				log.Printf("[LEDGER-REBUILD-REJECT] reason=execution_snapshot_storage_mismatch height=%d source=trusted_snapshot snapshot_ledger=%s expected_root=%s block_root=%s",
+					height,
+					ShortHash(ledgerHash),
+					ShortHash(expectedRoot),
+					ShortHash(block.StateRoot),
+				)
+			}
+		}
+		return false
+	}
+	loadAuthoritative()
+	if !ok && n.startupExecutionSnapshotCanRebuildLocally(height) {
+		if err := n.rebuildTrustedExecutionSnapshotsUpTo(height); err != nil {
+			if n.shouldLogLivenessReason(fmt.Sprintf("restore_execution_snapshot_rebuild_failed:%d:%s", height, err.Error()), livenessReasonLogCooldown) {
+				log.Printf("[LEDGER-REBUILD-REJECT] reason=execution_snapshot_rebuild_failed height=%d err=%v", height, err)
+			}
+		} else {
+			loadAuthoritative()
+		}
 	}
 	if !ok || !ledgerHasInitializedBacking(authoritative) {
 		return false
@@ -407,19 +645,6 @@ func (n *Node) restoreLedgersFromAuthoritativeExecution(height uint64, reason st
 	restoredHash := authoritativeHash
 	if n.Blockchain != nil {
 		if block, found := n.Blockchain.GetBlock(height); found && strings.TrimSpace(block.StateRoot) != "" {
-			expectedRoot := ComputeExecHashVersioned(block, authoritativeHash, executionStateRootVersionForHeight(block.ID))
-			if !strings.EqualFold(strings.TrimSpace(expectedRoot), strings.TrimSpace(block.StateRoot)) {
-				if n.shouldLogLivenessReason(fmt.Sprintf("restore_execution_snapshot_root_mismatch:%d", height), livenessReasonLogCooldown) {
-					log.Printf("[LEDGER-REBUILD-REJECT] reason=execution_snapshot_root_mismatch height=%d source=%s snapshot_ledger=%s expected_root=%s block_root=%s",
-						height,
-						source,
-						ShortHash(authoritativeHash),
-						ShortHash(expectedRoot),
-						ShortHash(block.StateRoot),
-					)
-				}
-				return false
-			}
 			restored = n.replayPostBlockEffectsToLedger(block, authoritative)
 			restoredHash = HashLedger(restored)
 			source += "_post_effects"
@@ -444,10 +669,16 @@ func (n *Node) authoritativeExecutionSnapshotLedger(height uint64) (Ledger, stri
 		return Ledger{}, "", false
 	}
 	if cachedLedger, found := n.cachedExecutionSnapshotLedger(height); found && ledgerHasInitializedBacking(cachedLedger) {
-		return cachedLedger.Clone(), "execution_cache", true
+		if matched, _, _ := n.executionSnapshotLedgerMatchesBlock(height, cachedLedger); matched {
+			return cachedLedger.Clone(), "execution_cache", true
+		}
+		n.evictExecutionSnapshotLedger(height)
+		n.evictPostCommitLedger(height)
 	}
 	if snap, _, found := n.resolveTrustedExecutionSnapshotFromStorage(height); found && snap != nil && ledgerHasInitializedBacking(snap.Ledger) {
-		return snap.Ledger.Clone(), "trusted_snapshot", true
+		if matched, _, _ := n.executionSnapshotLedgerMatchesBlock(height, snap.Ledger); matched {
+			return snap.Ledger.Clone(), "trusted_snapshot", true
+		}
 	}
 	return Ledger{}, "", false
 }
@@ -678,6 +909,7 @@ func (n *Node) enforceRuntimeLedgerMatchesExecution(height uint64, ctx *executio
 		return true
 	}
 	if allowed, mode := n.allowExecutionLedgerDriftRepair(height); !allowed {
+		n.blockExecutionLedgerRepair(ctx.ParentHeight)
 		log.Printf("[LEDGER-DRIFT-CRITICAL] reason=before_execution_drift height=%d mode=fail_closed repair_state=%s parent_height=%d runtime_ledger=%s execution_ledger=%s",
 			height,
 			mode,
@@ -902,7 +1134,7 @@ func (n *Node) executionParentLedgerForBlock(block Block) (Ledger, executionPare
 	parentHeight := block.ID - 1
 	liveExecutionLedger := n.currentExecutionLedgerClone()
 	ctx.ParentHeight = parentHeight
-	ctx.RuntimeLedgerHash = HashLedger(liveExecutionLedger)
+	ctx.RuntimeLedgerHash = HashLedger(n.Ledger.Clone())
 	ctx.ExecutionLedgerHash = HashLedger(liveExecutionLedger)
 
 	expectedPrevHash := strings.TrimSpace(block.PrevHash)
@@ -1045,7 +1277,7 @@ func (n *Node) executionTraceContext() (runtimeLedgerHash string, executionLedge
 		tipHash = strings.TrimSpace(last.BlockHash)
 	}
 	executionLedgerHash = strings.TrimSpace(HashLedger(n.currentExecutionLedgerClone()))
-	runtimeLedgerHash = executionLedgerHash
+	runtimeLedgerHash = strings.TrimSpace(HashLedger(n.Ledger.Clone()))
 	return runtimeLedgerHash, executionLedgerHash, tipHeight, tipHash
 }
 
@@ -2984,10 +3216,8 @@ func (n *Node) RegisterValidator(addr string, reportedHeight uint64, finalizedHe
 	if !n.validatorInAnyHeartbeatSet(addr, reportedHeight, finalizedHeight, execEpoch, validatorSetHeight) {
 		// Anti-flap grace: keep refreshing recently live validators during
 		// transient set-height races around epoch transitions.
-		n.validatorMu.RLock()
-		st := n.validatorStatus[addr]
-		n.validatorMu.RUnlock()
-		if st == nil || st.LastSeen.IsZero() || time.Since(st.LastSeen) > 20*time.Second {
+		st, ok := n.validatorStatusSnapshot(addr)
+		if !ok || st.LastSeen.IsZero() || time.Since(st.LastSeen) > 20*time.Second {
 			return
 		}
 	}

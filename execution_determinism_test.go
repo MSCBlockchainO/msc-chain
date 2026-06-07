@@ -310,6 +310,64 @@ func TestCurrentExecutionLedgerClonePrefersCachedSnapshotOverRuntimeFallback(t *
 	}
 }
 
+func TestCurrentExecutionLedgerCloneChecksPostCommitCacheOncePerGeneration(t *testing.T) {
+	node, parent, _, _ := testExecutionParentNode(t)
+	postCommitLedger := NewLedger()
+	addBalance(&postCommitLedger, CoinSymbol, "post-commit", 55)
+	node.setExecutionLedger(postCommitLedger)
+	node.cachePostCommitLedger(parent.ID, postCommitLedger)
+
+	first := node.currentExecutionLedgerClone()
+	second := node.currentExecutionLedgerClone()
+	if got, want := HashLedger(first), HashLedger(postCommitLedger); got != want {
+		t.Fatalf("first authoritative ledger mismatch: got=%s want=%s", got, want)
+	}
+	if got, want := HashLedger(second), HashLedger(postCommitLedger); got != want {
+		t.Fatalf("second authoritative ledger mismatch: got=%s want=%s", got, want)
+	}
+	node.executionLedgerConsistencyMu.Lock()
+	checks := node.executionLedgerConsistencyChecks
+	checkedHeight := node.executionLedgerConsistencyHeight
+	node.executionLedgerConsistencyMu.Unlock()
+	if checks != 1 {
+		t.Fatalf("expected one strict consistency check for unchanged committed generation, got=%d", checks)
+	}
+	if checkedHeight != parent.ID {
+		t.Fatalf("expected committed height %d marked consistent, got=%d", parent.ID, checkedHeight)
+	}
+}
+
+func TestCurrentExecutionLedgerCloneRechecksAfterExecutionLedgerChange(t *testing.T) {
+	node, parent, _, _ := testExecutionParentNode(t)
+	postCommitLedger := NewLedger()
+	addBalance(&postCommitLedger, CoinSymbol, "post-commit", 55)
+	node.setExecutionLedger(postCommitLedger)
+	node.cachePostCommitLedger(parent.ID, postCommitLedger)
+	_ = node.currentExecutionLedgerClone()
+
+	drifted := postCommitLedger.Clone()
+	addBalance(&drifted, CoinSymbol, "drift", 1)
+	node.setExecutionLedger(drifted)
+
+	got := node.currentExecutionLedgerClone()
+	if gotHash, want := HashLedger(got), HashLedger(postCommitLedger); gotHash != want {
+		t.Fatalf("expected authoritative post-commit ledger after drift, got=%s want=%s", gotHash, want)
+	}
+	if liveHash, want := HashLedger(node.ExecutionLedger), HashLedger(postCommitLedger); liveHash != want {
+		t.Fatalf("expected live execution ledger repaired after drift, got=%s want=%s", liveHash, want)
+	}
+	node.executionLedgerConsistencyMu.Lock()
+	checks := node.executionLedgerConsistencyChecks
+	checkedHeight := node.executionLedgerConsistencyHeight
+	node.executionLedgerConsistencyMu.Unlock()
+	if checks != 2 {
+		t.Fatalf("expected consistency check after execution-ledger generation changed, got=%d", checks)
+	}
+	if checkedHeight != parent.ID {
+		t.Fatalf("expected repaired committed height %d marked consistent, got=%d", parent.ID, checkedHeight)
+	}
+}
+
 func TestDeterministicEnsureExecutionLedgerAlignedFailsClosedDuringValidatorConsensusDrift(t *testing.T) {
 	node, parent, authoritativeLedger, _ := testExecutionParentNode(t)
 
@@ -540,11 +598,6 @@ func TestReceiveBlockCachesCommittedExecutionLedgerFromSealedParent(t *testing.T
 		t.Fatalf("expected cached execution ledger for height %d", block1.ID)
 	}
 
-	// Simulate runtime-only drift between committed execution state and the live
-	// post-effects ledger so the next commit path must choose the sealed parent
-	// execution ledger explicitly.
-	addBalance(&node.Ledger, CoinSymbol, TREASURY_ADDRESS, 77)
-
 	block2 := node.BuildLeaderBlock(node.currentEpoch())
 	block2.BlockTime = LogicalTimeForEpochTick(block2.ID, TickFinalize)
 	block2.Timestamp = int64(SystemTimeUnits(block2.BlockTime))
@@ -554,6 +607,9 @@ func TestReceiveBlockCachesCommittedExecutionLedgerFromSealedParent(t *testing.T
 	if !ok {
 		t.Fatalf("expected sealed execution ledger for block2")
 	}
+	// Simulate runtime-only drift after block construction; current ledger
+	// accessors now repair earlier drift aggressively.
+	addBalance(&node.Ledger, CoinSymbol, TREASURY_ADDRESS, 77)
 	if HashLedger(expectedExecLedger) == HashLedger(node.Ledger) {
 		t.Fatalf("test setup invalid: sealed execution ledger matches runtime ledger before commit")
 	}

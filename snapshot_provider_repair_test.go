@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 )
 
 func storeSnapshotForHeightWithLatest(t *testing.T, db *NodeDB, snapshot StateSnapshot) {
@@ -183,6 +184,54 @@ func TestSnapshotForSyncRequestServesPublishedValidatorSnapshot(t *testing.T) {
 	again := n.snapshotForSyncRequest(5)
 	if again == nil || again.StateRoot != snap5.StateRoot {
 		t.Fatalf("expected served snapshot to be cloned from publish cache")
+	}
+}
+
+func TestSnapshotForSyncRequestWaitsForConcurrentSnapshotCreate(t *testing.T) {
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	block5, snap5 := makeAnchoredSnapshotFixture(5, "34a93d19feedbeef")
+	n := &Node{
+		Blockchain: &Blockchain{
+			Blocks: []Block{block5},
+		},
+		DB: db,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		time.Sleep(snapshotServeRetryBackoff)
+		key := []byte(fmt.Sprintf("snapshot:%d", snap5.Height))
+		raw, err := json.Marshal(snap5)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		if err := db.State.Update(func(txn *Txn) error {
+			return txn.Set(key, raw)
+		}); err != nil {
+			errCh <- err
+			return
+		}
+		if err := db.Meta.Update(func(txn *Txn) error {
+			return txn.Set([]byte("snapshot:latest"), key)
+		}); err != nil {
+			errCh <- err
+			return
+		}
+		errCh <- nil
+	}()
+
+	got := n.snapshotForSyncRequest(5)
+	if err := <-errCh; err != nil {
+		t.Fatalf("concurrent snapshot store failed: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("expected provider to wait for concurrent snapshot creation")
+	}
+	if got.Height != 5 {
+		t.Fatalf("unexpected snapshot height: got=%d want=5", got.Height)
 	}
 }
 

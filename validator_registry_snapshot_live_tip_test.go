@@ -277,7 +277,9 @@ func TestResolveCommittedValidatorRegistrySnapshotCarriesForwardCommittedMatch(t
 		{ID: 3, BlockHash: "block-3", ValidatorRegistryHash: hash},
 	})
 
+	before := n.observabilityStatsSnapshot().SnapshotLoadTotal
 	got, gotHash, source, ok := n.resolveCommittedValidatorRegistrySnapshot(3)
+	after := n.observabilityStatsSnapshot().SnapshotLoadTotal
 	if !ok {
 		t.Fatalf("expected committed carry-forward repair to resolve")
 	}
@@ -292,6 +294,49 @@ func TestResolveCommittedValidatorRegistrySnapshotCarriesForwardCommittedMatch(t
 	}
 	if !n.registrySnapshotExists(3) {
 		t.Fatalf("expected carried-forward snapshot to be persisted at height 3")
+	}
+	if after != before {
+		t.Fatalf("carry-forward fast path loaded full snapshot: before=%d after=%d", before, after)
+	}
+}
+
+func TestCatchupRegistryCarryForwardSkipsDuplicateHeightWrite(t *testing.T) {
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	registry := testValidatorSetMaterializationRegistry()
+	hash := ValidatorRegistrySnapshotHash(registry)
+	storeCanonicalValidatorRegistrySnapshotRecord(t, db, 2, registry)
+
+	n := testNodeWithRegistryBlocks(db, []Block{
+		{ID: 1, BlockHash: "block-1"},
+		{ID: 2, BlockHash: "block-2"},
+		{ID: 3, BlockHash: "block-3", ValidatorRegistryHash: hash},
+	})
+	n.Consensus = &ConsensusState{Syncing: true}
+
+	if err := n.deterministicPersistRegistrySnapshot(3, registry, hash); err != nil {
+		t.Fatalf("deterministic persist during catch-up: %v", err)
+	}
+	if n.registrySnapshotExists(3) {
+		t.Fatalf("catch-up persist should avoid duplicate carry-forward snapshot write")
+	}
+
+	got, gotHash, source, ok := n.resolveCommittedValidatorRegistrySnapshot(3)
+	if !ok {
+		t.Fatalf("expected carry-forward resolver to work without duplicate write")
+	}
+	if source != "committed_carry_forward_repair" {
+		t.Fatalf("unexpected source: got=%q want=committed_carry_forward_repair", source)
+	}
+	if !strings.EqualFold(strings.TrimSpace(gotHash), strings.TrimSpace(hash)) {
+		t.Fatalf("unexpected hash: got=%q want=%q", gotHash, hash)
+	}
+	if len(got) != len(registry) {
+		t.Fatalf("unexpected registry size: got=%d want=%d", len(got), len(registry))
+	}
+	if n.registrySnapshotExists(3) {
+		t.Fatalf("catch-up resolver should avoid duplicate carry-forward snapshot write")
 	}
 }
 

@@ -102,11 +102,6 @@ func (n *Node) ReceiveBlock(block Block, bc *Blockchain) error {
 	}
 
 	currentHeight := bc.Height()
-	n.commitMu.Lock()
-	if n.committedHeight > currentHeight {
-		currentHeight = n.committedHeight
-	}
-	n.commitMu.Unlock()
 	if block.ID <= currentHeight {
 		if block.ID > 0 && strings.TrimSpace(block.BlockHash) != "" && n.hasCommittedDifferentHash(block.ID, block.BlockHash) {
 			n.recordFinalizedHashConflictEvidence(block.ID, block.Round, "", block.BlockHash, "already_committed_observation")
@@ -128,6 +123,13 @@ func (n *Node) ReceiveBlock(block Block, bc *Blockchain) error {
 	finalizedHeight := n.getFinalizedHeight()
 	deferMaintenance := n.shouldDeferNonConsensusCommitMaintenance()
 	syncStage, syncProvider := n.syncDiagnosticContext()
+	stageActive := strings.TrimSpace(syncStage) != "" && !strings.EqualFold(strings.TrimSpace(syncStage), "idle")
+	exactNextSyncBackfill := false
+	if stageActive && block.ID == nextHeight {
+		lastBlock := bc.LastBlock()
+		exactNextSyncBackfill = strings.TrimSpace(lastBlock.BlockHash) != "" &&
+			strings.EqualFold(strings.TrimSpace(block.PrevHash), strings.TrimSpace(lastBlock.BlockHash))
+	}
 	logSyncCommitPhase := func(phase string) {
 		if strings.TrimSpace(syncStage) == "" {
 			return
@@ -183,7 +185,7 @@ func (n *Node) ReceiveBlock(block Block, bc *Blockchain) error {
 	// Weak-subjectivity guard against long-range rewrites:
 	// very old blocks should be accepted only via snapshot trust path.
 	if WeakSubjectivityDepth > 0 && finalizedHeight > 0 {
-		if block.ID+WeakSubjectivityDepth <= finalizedHeight {
+		if block.ID+WeakSubjectivityDepth <= finalizedHeight && !exactNextSyncBackfill {
 			if DebugConsensus {
 				fmt.Printf("Rejected long-range block | local_finalized=%d block=%d depth=%d proposer=%s\n",
 					finalizedHeight, block.ID, WeakSubjectivityDepth, ShortID(block.Proposer))
@@ -317,8 +319,19 @@ func (n *Node) ReceiveBlock(block Block, bc *Blockchain) error {
 	if seenKey == "" {
 		seenKey = block.BlockHash
 	}
+	syncDuplicateStage := strings.TrimSpace(syncStage)
+	if strings.EqualFold(syncDuplicateStage, "idle") {
+		syncDuplicateStage = ""
+	}
 	if n.markBlockSeen(seenKey) {
-		return nil
+		if block.ID == nextHeight && syncDuplicateStage != "" {
+			// A sync range can race with queued/gossiped copies of the exact next
+			// block. Treating the seen marker as final here can trap catch-up at
+			// one height forever, even though the block body is valid and needed.
+			n.unmarkBlockSeen(seenKey)
+		} else {
+			return nil
+		}
 	}
 	keepSeen := false
 	defer func() {
@@ -462,7 +475,7 @@ func (n *Node) ReceiveBlock(block Block, bc *Blockchain) error {
 		executionSnapshotLedger = n.ExecutionLedger.Clone()
 	}
 	n.cacheExecutionSnapshotLedger(block.ID, executionSnapshotLedger)
-	n.markExecutionSnapshotReadyHeight(block.ID)
+	n.markLiveCommittedExecutionSnapshotReadyHeight(block.ID)
 
 	n.commitMu.Lock()
 	if n.committed == nil {
@@ -621,7 +634,9 @@ func (n *Node) ReceiveBlock(block Block, bc *Blockchain) error {
 		logSyncCommitPhase("enter_safe_mode_done")
 	}
 	logSyncCommitPhase("ensure_tip_snapshot_begin")
-	if snapSource, snapOK := n.ensureCommittedTipStateSnapshot(block.ID, "post_commit"); !snapOK {
+	if deferMaintenance {
+		logSyncCommitPhase("ensure_tip_snapshot_deferred")
+	} else if snapSource, snapOK := n.ensureCommittedTipStateSnapshot(block.ID, "post_commit"); !snapOK {
 		key := fmt.Sprintf("snapshot_materialize_missing:%d", block.ID)
 		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
 			log.Printf("[WARN] committed snapshot unresolved after commit height=%d", block.ID)
@@ -1003,8 +1018,15 @@ func (n *Node) rewindLocalChainToHeight(height uint64, reason string) bool {
 	n.applyMu.Lock()
 	defer n.applyMu.Unlock()
 
+	rebuiltBlocks, err := n.rebuildLocalChainBlocksForRewind(height, anchor)
+	if err != nil {
+		log.Printf("[SYNC-REWIND] action=skip reason=%s local=%d target=%d detail=rebuild_failed err=%v",
+			strings.TrimSpace(reason), localHeight, height, err)
+		return false
+	}
+
 	n.Blockchain.mu.Lock()
-	n.Blockchain.Blocks = []Block{anchor}
+	n.Blockchain.Blocks = rebuiltBlocks
 	n.Blockchain.mu.Unlock()
 	n.pruneBlocksAboveHeight(height)
 	if err := n.pruneFinalizedHashInvariantsAboveHeight(height); err != nil {
@@ -1081,6 +1103,94 @@ func (n *Node) rewindLocalChainToHeight(height uint64, reason string) bool {
 	return true
 }
 
+func (n *Node) rebuildLocalChainBlocksForRewind(height uint64, anchor Block) ([]Block, error) {
+	if n == nil || n.Blockchain == nil {
+		return nil, fmt.Errorf("node_or_blockchain_unavailable")
+	}
+	if height == 0 || anchor.ID != height || strings.TrimSpace(anchor.BlockHash) == "" {
+		return nil, fmt.Errorf("invalid_anchor height=%d anchor=%d", height, anchor.ID)
+	}
+
+	n.Blockchain.mu.RLock()
+	existing := append([]Block(nil), n.Blockchain.Blocks...)
+	n.Blockchain.mu.RUnlock()
+
+	existingByHeight := make(map[uint64]Block, len(existing)+1)
+	for _, block := range existing {
+		if block.ID == 0 {
+			existingByHeight[0] = block
+			continue
+		}
+		if block.ID > 0 && block.ID <= height && strings.TrimSpace(block.BlockHash) != "" {
+			existingByHeight[block.ID] = block
+		}
+	}
+
+	genesis, ok := existingByHeight[0]
+	if !ok {
+		genesis = NewBlockchain().Blocks[0]
+	}
+	if genesis.ID != 0 {
+		return nil, fmt.Errorf("invalid_genesis_id=%d", genesis.ID)
+	}
+	if strings.TrimSpace(genesis.BlockHash) == "" {
+		genesis.BlockHash = GenesisHash
+	}
+
+	rebuilt := make([]Block, 0, int(height)+1)
+	rebuilt = append(rebuilt, genesis)
+	for h := uint64(1); h <= height; h++ {
+		block, ok := n.loadPersistedBlockForRewind(h)
+		if !ok && h == height {
+			block, ok = anchor, true
+		}
+		if !ok {
+			block, ok = existingByHeight[h]
+		}
+		if !ok || block.ID != h || strings.TrimSpace(block.BlockHash) == "" {
+			return nil, fmt.Errorf("missing_block_%d", h)
+		}
+		prev := rebuilt[len(rebuilt)-1]
+		if strings.TrimSpace(block.PrevHash) != "" &&
+			strings.TrimSpace(prev.BlockHash) != "" &&
+			!strings.EqualFold(strings.TrimSpace(block.PrevHash), strings.TrimSpace(prev.BlockHash)) {
+			return nil, fmt.Errorf("prev_hash_mismatch_%d", h)
+		}
+		rebuilt = append(rebuilt, block)
+	}
+	return rebuilt, nil
+}
+
+func (n *Node) loadPersistedBlockForRewind(height uint64) (Block, bool) {
+	if n == nil || height == 0 {
+		return Block{}, false
+	}
+	if block, ok := n.loadBlockFile(height); ok {
+		return block, true
+	}
+	if n.DB == nil || n.DB.Blocks == nil {
+		return Block{}, false
+	}
+	var block Block
+	err := n.DB.Blocks.View(func(txn *Txn) error {
+		item, err := txn.Get([]byte(fmt.Sprintf("block:%d", height)))
+		if err != nil {
+			return err
+		}
+		return item.Value(func(v []byte) error {
+			plain, derr := decryptDBValue(v)
+			if derr != nil {
+				return derr
+			}
+			return json.Unmarshal(plain, &block)
+		})
+	})
+	if err != nil || block.ID != height || strings.TrimSpace(block.BlockHash) == "" {
+		return Block{}, false
+	}
+	return block, true
+}
+
 func (n *Node) auditAndRewindInvalidQuorumEvidence(reason string) (uint64, bool) {
 	if n == nil || n.Blockchain == nil {
 		return 0, false
@@ -1114,13 +1224,13 @@ func (n *Node) auditAndRewindInvalidQuorumEvidence(reason string) (uint64, bool)
 	return 0, false
 }
 
-func sanitizeContiguousLoadedBlocks(blocks []Block) ([]Block, uint64, string) {
+func sanitizeContiguousLoadedBlocks(blocks []Block) ([]Block, uint64, error) {
 	if len(blocks) == 0 {
-		return blocks, 0, ""
+		return blocks, 0, nil
 	}
 	first := blocks[0]
 	if first.ID > 1 {
-		return nil, 0, fmt.Sprintf("height_gap_0_to_%d", first.ID)
+		return nil, 0, fmt.Errorf("height_gap_0_to_%d", first.ID)
 	}
 	out := make([]Block, 0, len(blocks))
 	out = append(out, first)
@@ -1128,16 +1238,16 @@ func sanitizeContiguousLoadedBlocks(blocks []Block) ([]Block, uint64, string) {
 		prev := out[len(out)-1]
 		block := blocks[i]
 		if block.ID != prev.ID+1 {
-			return out, prev.ID, fmt.Sprintf("height_gap_%d_to_%d", prev.ID, block.ID)
+			return out, prev.ID, fmt.Errorf("height_gap_%d_to_%d", prev.ID, block.ID)
 		}
 		if strings.TrimSpace(prev.BlockHash) != "" &&
 			strings.TrimSpace(block.PrevHash) != "" &&
 			!strings.EqualFold(strings.TrimSpace(block.PrevHash), strings.TrimSpace(prev.BlockHash)) {
-			return out, prev.ID, fmt.Sprintf("prev_hash_mismatch_%d", block.ID)
+			return out, prev.ID, fmt.Errorf("prev_hash_mismatch_%d", block.ID)
 		}
 		out = append(out, block)
 	}
-	return out, 0, ""
+	return out, 0, nil
 }
 
 func (n *Node) trimConsensusCachesLocked(committedHeight uint64) {

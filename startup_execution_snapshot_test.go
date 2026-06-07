@@ -175,6 +175,45 @@ func TestCurrentExecutionLedgerCloneRejectsRootMismatchedSnapshot(t *testing.T) 
 	}
 }
 
+func TestRestoreLedgersEvictsBadExecutionCacheAndUsesTrustedSnapshot(t *testing.T) {
+	oldGenesisHash := GenesisHash
+	oldGenesisHashExpected := GenesisHashExpected
+	t.Cleanup(func() {
+		GenesisHash = oldGenesisHash
+		GenesisHashExpected = oldGenesisHashExpected
+	})
+
+	node, parent, parentExecutionLedger, genesisHash := setupStartupExecutionSnapshotNode(t, []string{"A", "B", "C", "D"})
+	GenesisHash = genesisHash
+	GenesisHashExpected = genesisHash
+
+	storeExecutionSnapshotForTest(t, node, parent, parentExecutionLedger, SnapshotVersion, snapshotLedgerStageExecution)
+
+	badExecutionCache := parentExecutionLedger.Clone()
+	addBalance(&badExecutionCache, CoinSymbol, "bad-cache-wallet", 99)
+	if got := ComputeExecHashVersioned(parent, HashLedger(badExecutionCache), executionStateRootVersionForHeight(parent.ID)); got == parent.StateRoot {
+		t.Fatalf("test setup did not create mismatched execution cache")
+	}
+	node.cacheExecutionSnapshotLedger(parent.ID, badExecutionCache)
+	node.cachePostCommitLedger(parent.ID, badExecutionCache)
+	node.setExecutionLedger(badExecutionCache)
+
+	if !node.restoreLedgersFromAuthoritativeExecution(parent.ID, "test_bad_cache") {
+		t.Fatalf("expected restore to evict bad cache and use trusted snapshot")
+	}
+
+	wantPostCommit := node.replayPostBlockEffectsToLedger(parent, parentExecutionLedger)
+	if got, want := HashLedger(node.currentExecutionLedgerClone()), HashLedger(wantPostCommit); got != want {
+		t.Fatalf("restored execution ledger mismatch: got=%s want=%s", got, want)
+	}
+	if cached, ok := node.cachedExecutionSnapshotLedger(parent.ID); !ok || HashLedger(cached) != HashLedger(parentExecutionLedger) {
+		t.Fatalf("expected good execution snapshot cached after restore")
+	}
+	if cachedPost, ok := node.cachedPostCommitLedger(parent.ID); !ok || HashLedger(cachedPost) != HashLedger(wantPostCommit) {
+		t.Fatalf("expected good post-commit ledger cached after restore")
+	}
+}
+
 func TestVerifyBlockRepairsStalePostCommitLedgerFromParentExecutionSnapshot(t *testing.T) {
 	validators := []string{"A", "B", "C", "D"}
 	oldGenesisHash := GenesisHash
@@ -579,6 +618,32 @@ func TestEnsureStartupTrustedExecutionSnapshotsUsesAuthoritativeLiveCache(t *tes
 	}
 	if got := node.executionSnapshotRebuildReadyHeight; got != parent.ID {
 		t.Fatalf("unexpected ready height: got=%d want=%d", got, parent.ID)
+	}
+}
+
+func TestEnsureStartupTrustedExecutionSnapshotsUsesCurrentProcessLiveCommitMarker(t *testing.T) {
+	oldGenesisHash := GenesisHash
+	oldGenesisHashExpected := GenesisHashExpected
+	t.Cleanup(func() {
+		GenesisHash = oldGenesisHash
+		GenesisHashExpected = oldGenesisHashExpected
+	})
+
+	node, parent, _, genesisHash := setupStartupExecutionSnapshotNode(t, []string{"A", "B", "C", "D"})
+	GenesisHash = genesisHash
+	GenesisHashExpected = genesisHash
+
+	if _, _, ok := node.resolveTrustedExecutionSnapshotFromStorage(parent.ID); ok {
+		t.Fatalf("expected trusted snapshot storage to be empty before readiness check")
+	}
+
+	node.markLiveCommittedExecutionSnapshotReadyHeight(parent.ID)
+	ok, reason := node.ensureStartupTrustedExecutionSnapshots(parent.ID)
+	if !ok || reason != "ready" {
+		t.Fatalf("expected current-process live commit marker to satisfy readiness, got ok=%v reason=%q", ok, reason)
+	}
+	if _, _, ok := node.resolveTrustedExecutionSnapshotFromStorage(parent.ID); ok {
+		t.Fatalf("live commit readiness should not rebuild a persistent startup snapshot")
 	}
 }
 

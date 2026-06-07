@@ -247,7 +247,11 @@ func (n *Node) verifyBlockConsensusEvidence(block Block, validators []string) er
 			proposalHash := executionVoteProposalHashForFinalBlock(block)
 			if !strings.EqualFold(resultBlockHash, finalHash) && (proposalHash == "" || !strings.EqualFold(resultBlockHash, proposalHash)) {
 				if !verifyBlockExecutionResultSignatureForHint(result, block, resultBlockHash) {
-					return errors.New("execution_result_block_mismatch")
+					// Legacy v1 votes omit block-hash hints; accept them when the
+					// exec/merkle signature still matches under the canonical paths.
+					if err := verifyBlockExecutionResultSignature(result, block); err != nil {
+						return errors.New("execution_result_block_mismatch")
+					}
 				}
 				signatureVerified = true
 			}
@@ -346,6 +350,9 @@ func verifyBlockQuorumMetadata(block Block, validatorCount int) error {
 	if strings.TrimSpace(block.QuorumPolicyVersion) == "" {
 		return errors.New("quorum_policy_version_missing")
 	}
+	if recoveryQuorumMetadataAllowsOmittedCounts(mode, block) {
+		return nil
+	}
 	if block.RequiredQuorum <= 0 {
 		return errors.New("required_quorum_missing")
 	}
@@ -374,6 +381,13 @@ func verifyBlockQuorumMetadata(block Block, validatorCount int) error {
 		return fmt.Errorf("quorum_metadata_below_mainnet_floor: required=%d strict=%d", block.RequiredQuorum, block.StrictQuorum)
 	}
 	return nil
+}
+
+func recoveryQuorumMetadataAllowsOmittedCounts(mode string, block Block) bool {
+	return mode == "RECOVERY" &&
+		block.ActiveReadyCount == 0 &&
+		block.RequiredQuorum == 0 &&
+		block.StrictQuorum == 0
 }
 
 func verifyBlockExecutionResultSignature(result ExecutionResult, block Block) error {

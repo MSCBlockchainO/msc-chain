@@ -37,6 +37,14 @@ type observabilityStats struct {
 	StorageSizeBytes            uint64
 	ColdStorageSizeBytes        uint64
 	StorageSizeScannedAtUnix    int64
+	StorageSizeScanInProgress   bool
+	FinalityCertificates        uint64
+	FinalityAnchors             uint64
+	FinalityValidatorCommits    uint64
+	FinalityIrreversibleRoots   uint64
+	FinalityStateCheckpoints    uint64
+	FinalityArtifactsScannedAt  int64
+	FinalityScanInProgress      bool
 	ColdExportsTotal            uint64
 
 	SyncModeSwitchTotal              uint64
@@ -408,18 +416,52 @@ type finalityArtifactObservability struct {
 	StateCheckpoints  uint64
 }
 
+const filesystemObservabilityCacheTTL = 5 * time.Minute
+
 func (n *Node) finalityArtifactObservability() finalityArtifactObservability {
 	if n == nil {
 		return finalityArtifactObservability{}
 	}
+	now := time.Now()
+	n.observabilityMu.Lock()
+	cached := finalityArtifactObservability{
+		Certificates:      n.observability.FinalityCertificates,
+		Anchors:           n.observability.FinalityAnchors,
+		ValidatorCommits:  n.observability.FinalityValidatorCommits,
+		IrreversibleRoots: n.observability.FinalityIrreversibleRoots,
+		StateCheckpoints:  n.observability.FinalityStateCheckpoints,
+	}
+	stale := n.observability.FinalityArtifactsScannedAt == 0 ||
+		now.Unix()-n.observability.FinalityArtifactsScannedAt >= int64(filesystemObservabilityCacheTTL/time.Second)
+	if stale && !n.observability.FinalityScanInProgress {
+		n.observability.FinalityScanInProgress = true
+		go n.refreshFinalityArtifactObservability()
+	}
+	n.observabilityMu.Unlock()
+	return cached
+}
+
+func (n *Node) refreshFinalityArtifactObservability() {
+	if n == nil {
+		return
+	}
 	base := nodeDataPath(n.DataDir, n.ID)
-	return finalityArtifactObservability{
+	latest := finalityArtifactObservability{
 		Certificates:      countRegularFiles(filepath.Join(base, finalityCertificatesDir)),
 		Anchors:           countRegularFiles(filepath.Join(base, finalityEpochAnchorsDir)),
 		ValidatorCommits:  countRegularFiles(filepath.Join(base, finalityValidatorCommitmentsDir)),
 		IrreversibleRoots: countRegularFiles(filepath.Join(base, finalityIrreversibleRootsDir)),
 		StateCheckpoints:  countRegularFiles(filepath.Join(base, "state_checkpoints")),
 	}
+	n.observabilityMu.Lock()
+	n.observability.FinalityCertificates = latest.Certificates
+	n.observability.FinalityAnchors = latest.Anchors
+	n.observability.FinalityValidatorCommits = latest.ValidatorCommits
+	n.observability.FinalityIrreversibleRoots = latest.IrreversibleRoots
+	n.observability.FinalityStateCheckpoints = latest.StateCheckpoints
+	n.observability.FinalityArtifactsScannedAt = time.Now().Unix()
+	n.observability.FinalityScanInProgress = false
+	n.observabilityMu.Unlock()
 }
 
 func (n *Node) storageDirectorySizeSnapshot() (storageSizeBytes uint64, coldStorageSizeBytes uint64) {
@@ -427,25 +469,33 @@ func (n *Node) storageDirectorySizeSnapshot() (storageSizeBytes uint64, coldStor
 		return 0, 0
 	}
 	now := time.Now()
-	n.observabilityMu.RLock()
-	if n.observability.StorageSizeScannedAtUnix > 0 && now.Unix()-n.observability.StorageSizeScannedAtUnix < 60 {
-		storageSizeBytes = n.observability.StorageSizeBytes
-		coldStorageSizeBytes = n.observability.ColdStorageSizeBytes
-		n.observabilityMu.RUnlock()
-		return storageSizeBytes, coldStorageSizeBytes
+	n.observabilityMu.Lock()
+	storageSizeBytes = n.observability.StorageSizeBytes
+	coldStorageSizeBytes = n.observability.ColdStorageSizeBytes
+	stale := n.observability.StorageSizeScannedAtUnix == 0 ||
+		now.Unix()-n.observability.StorageSizeScannedAtUnix >= int64(filesystemObservabilityCacheTTL/time.Second)
+	if stale && !n.observability.StorageSizeScanInProgress {
+		n.observability.StorageSizeScanInProgress = true
+		go n.refreshStorageDirectorySizeSnapshot()
 	}
-	n.observabilityMu.RUnlock()
+	n.observabilityMu.Unlock()
+	return storageSizeBytes, coldStorageSizeBytes
+}
 
+func (n *Node) refreshStorageDirectorySizeSnapshot() {
+	if n == nil {
+		return
+	}
 	nodeRoot := nodeDataPath(n.DataDir, n.ID)
-	storageSizeBytes = directorySizeBytes(nodeRoot)
-	coldStorageSizeBytes = directorySizeBytes(filepath.Join(nodeRoot, "cold-storage"))
+	storageSizeBytes := directorySizeBytes(nodeRoot)
+	coldStorageSizeBytes := directorySizeBytes(filepath.Join(nodeRoot, "cold-storage"))
 
 	n.observabilityMu.Lock()
 	n.observability.StorageSizeBytes = storageSizeBytes
 	n.observability.ColdStorageSizeBytes = coldStorageSizeBytes
-	n.observability.StorageSizeScannedAtUnix = now.Unix()
+	n.observability.StorageSizeScannedAtUnix = time.Now().Unix()
+	n.observability.StorageSizeScanInProgress = false
 	n.observabilityMu.Unlock()
-	return storageSizeBytes, coldStorageSizeBytes
 }
 
 func countRegularFiles(root string) uint64 {

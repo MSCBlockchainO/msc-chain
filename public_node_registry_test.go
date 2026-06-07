@@ -199,6 +199,26 @@ func TestPublicNodesComputesHeightLag(t *testing.T) {
 	}
 }
 
+func TestPublicNodesSummarySeparatesStableWarningAndActive(t *testing.T) {
+	fast := newPublicNodeProbeServer("full", 45680, 45680, "NORMAL", "abc")
+	slow := newPublicNodeProbeServer("full", 45677, 45677, "NORMAL", "abc")
+	defer fast.Close()
+	defer slow.Close()
+	withPublicNodeRegistryTestEnv(t, "F|"+fast.URL+"|full;G|"+slow.URL+"|full")
+
+	first := publicNodesSnapshot(&Node{ID: "F", Role: "full"}, true)
+	if first.Stable != 0 || first.Warning != 2 || first.Active != 1 {
+		t.Fatalf("first clean sample should warm up as warning with one fallback active: stable=%d warning=%d active=%d nodes=%+v", first.Stable, first.Warning, first.Active, first.Nodes)
+	}
+	second := publicNodesSnapshot(&Node{ID: "F", Role: "full"}, true)
+	if second.Stable != 1 || second.Warning != 1 || second.Active != 1 {
+		t.Fatalf("second sample should separate stable and lag warning: stable=%d warning=%d active=%d nodes=%+v", second.Stable, second.Warning, second.Active, second.Nodes)
+	}
+	if second.BestNode == nil || !second.BestNode.ActiveGateway {
+		t.Fatalf("best node should match active gateway, got best=%+v nodes=%+v", second.BestNode, second.Nodes)
+	}
+}
+
 func TestPublicNodesActiveGatewayExcludesLaggingBackend(t *testing.T) {
 	fast := newPublicNodeProbeServer("full", 45680, 45680, "NORMAL", "abc")
 	slow := newPublicNodeProbeServer("full", 45677, 45677, "NORMAL", "abc")

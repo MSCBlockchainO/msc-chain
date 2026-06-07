@@ -192,6 +192,34 @@ Mainnet validator policy includes:
 
 Validator stake persists across restart and rejoin until the wallet submits an unstake transaction. A rejoining validator does not need to stake again if the stake was never unstaked.
 
+### Chain-Committed Promotion Window Freeze
+
+When `hybrid_score_rotation` has more than 21 eligible validators, MSC can freeze the 15 performance-slot validators for a promotion window. This freeze must be chain-committed, not saved only in a local cache.
+
+Simple Hinglish explanation:
+
+If every node recalculates top validators from the same chain state, all nodes get the same answer. That is deterministic. The danger starts if one node stores `top15.cache` locally for 10 epochs while another node has a different cache or a fresh node has no cache at all. Same blockchain data could then produce a different active validator set, which is a consensus failure.
+
+MSC solves this with `PromotionWindowRecord`:
+
+```text
+PromotionWindow: 42
+StartHeight: 4,200,000
+EndHeight: 4,299,999
+PerformanceValidators:
+- valA
+- valB
+- valC
+...
+SelectionHash: ...
+ScoreConfigHash: ...
+SourceValidatorRegistryHash: ...
+```
+
+The record is consensus state. Its hash is committed through `promotion_window_hash` in blocks and snapshots after `promotion_window_record_v1_height`. Future nodes replaying from genesis or restoring a trusted snapshot can reconstruct or verify the same frozen top-15 set. Local caches may mirror this record for speed, but the cache is never the source of truth.
+
+Hard exceptions such as jailed, exited, double-sign, or confirmed offline replacement are recorded through `PromotionWindowReplacementRecord`. Mid-window score changes do not modify the frozen top-15; promotion and demotion happen at the next promotion boundary unless a chain-committed hard replacement is required.
+
 ## 7. Validator Key Lifecycle
 
 Validator identity is rooted in the node's validator secret key. MSC Chain treats validator key lifecycle as consensus-adjacent infrastructure, not an operator convenience.
@@ -941,6 +969,88 @@ This section is the production command reference for operators. Do not commit va
 go test . -run "TestOperator|TestProductionGenesis|TestConsensusMode|TestFormalVerification|TestGovernance|TestProtocolUpgrade|TestEmergency" -count=1
 go build -o msc-node.exe .
 .\msc-node.exe help
+```
+
+### Universal 1-Click Setup
+
+Preferred home/operator setup uses the built-in dispatcher. The release package may expose the same binary as `msc` and `msc-node`.
+
+```powershell
+.\msc-node.exe setup validator --id HOME1 --low-ram --auto-start
+.\msc-node.exe setup candidate --id HOME1 --low-ram --auto-start
+.\msc-node.exe doctor --id HOME1 --role validator --datadir data --json
+.\msc-node.exe backup wizard --id HOME1 --datadir data
+.\msc-node.exe service status --install-dir "$env:LOCALAPPDATA\MSCNode"
+```
+
+Ubuntu/Linux:
+
+```bash
+./msc setup validator --id HOME1 --low-ram --auto-start
+./msc doctor --id HOME1 --role validator --datadir data --json
+./msc backup wizard --id HOME1 --datadir data
+./msc service status --install-dir "$HOME/.msc-node"
+```
+
+Setup source modes:
+
+```text
+--source auto      signed release when configured, otherwise local build
+--source local     build from the local repository
+--source release   download release artifact, verify checksum, and verify Ed25519 signature when --release-public-key is supplied
+```
+
+### Idempotent Install, Repair, And Recovery
+
+Rerunning setup is recovery-safe by default. If MSC finds an existing install manifest, validator key, database, config, or service, it preserves them and treats the run as a repair/update path. A fresh destructive install is refused unless the operator explicitly confirms the node ID and has already removed or quarantined old data.
+
+```powershell
+.\msc-node.exe install validator --id HOME1 --low-ram --auto-start
+.\msc-node.exe repair --id HOME1 --install-dir "$env:LOCALAPPDATA\MSCNode"
+.\msc-node.exe update --id HOME1 --source auto --install-dir "$env:LOCALAPPDATA\MSCNode"
+.\msc-node.exe start --id HOME1 --install-dir "$env:LOCALAPPDATA\MSCNode"
+.\msc-node.exe stop --id HOME1 --install-dir "$env:LOCALAPPDATA\MSCNode"
+.\msc-node.exe status --id HOME1 --install-dir "$env:LOCALAPPDATA\MSCNode"
+.\msc-node.exe uninstall --id HOME1 --install-dir "$env:LOCALAPPDATA\MSCNode"
+```
+
+Ubuntu/Linux:
+
+```bash
+./msc install validator --id HOME1 --low-ram --auto-start
+./msc repair --id HOME1 --install-dir "$HOME/.msc-node"
+./msc update --id HOME1 --source auto --install-dir "$HOME/.msc-node"
+./msc start --id HOME1 --install-dir "$HOME/.msc-node"
+./msc stop --id HOME1 --install-dir "$HOME/.msc-node"
+./msc status --id HOME1 --install-dir "$HOME/.msc-node"
+./msc uninstall --id HOME1 --install-dir "$HOME/.msc-node"
+```
+
+Each install directory contains `install_manifest.json` with the node ID, role, data directory, config path, binary path, genesis hash, validator public key or fingerprint when available, service name, OS, architecture, source, and update time. Lifecycle commands read this manifest before touching files.
+
+Safe backup and restore:
+
+```powershell
+.\msc-node.exe backup --id HOME1 --datadir data --out D:\msc-backups
+.\msc-node.exe restore --id HOME1 --backup D:\msc-backups\HOME1-20260604T120000Z --install-dir "$env:LOCALAPPDATA\MSCNode"
+```
+
+Safe uninstall stops or disables the service and leaves keys, database, wallet files, and backups in place. Data removal requires an explicit dangerous confirmation:
+
+```powershell
+.\msc-node.exe uninstall --id HOME1 --install-dir "$env:LOCALAPPDATA\MSCNode" --purge-data --confirm-delete-node-id HOME1
+```
+
+If a validator key is lost and there is no backup, the old validator identity cannot be recovered. The operator must create a new validator identity and go through validator registration again. Key replacement during restore requires `--replace-key --confirm-validator-pubkey <hex>` so accidental identity drift cannot happen silently.
+
+Future remote bootstrap commands must be enabled only after signed release manifests are published:
+
+```powershell
+irm https://install.mscchain.io | iex
+```
+
+```bash
+curl -fsSL https://install.mscchain.io | bash
 ```
 
 ### Local Node Startup

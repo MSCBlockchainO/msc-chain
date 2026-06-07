@@ -166,6 +166,31 @@ func (n *Node) frozenValidatorsForCommittedHash(targetHash string, preferredHeig
 	return append([]string{}, candidates[0].values...)
 }
 
+func (n *Node) committedFrozenValidatorSetCandidate(targetHash string, preferredHeights ...uint64) ([]string, bool) {
+	if n == nil {
+		return nil, false
+	}
+	targetHash = strings.TrimSpace(targetHash)
+	if targetHash == "" {
+		return nil, false
+	}
+	n.validatorSetMu.RLock()
+	defer n.validatorSetMu.RUnlock()
+	for _, height := range preferredHeights {
+		if height == 0 {
+			continue
+		}
+		hash := strings.TrimSpace(n.frozenValidatorHashByHeight[height])
+		if hash == "" || !strings.EqualFold(hash, targetHash) {
+			continue
+		}
+		if values := canonicalValidatorIDs(n.frozenValidatorsByHeight[height]); len(values) > 0 {
+			return values, true
+		}
+	}
+	return nil, false
+}
+
 func (n *Node) reconstructValidatorSetCandidateForTarget(height uint64, targetHash string, registrySnapshot map[string]ValidatorRecord, candidates ...[]string) ([]string, bool) {
 	if n == nil {
 		return nil, false
@@ -366,14 +391,23 @@ func (n *Node) resolveCommittedValidatorSetForHeight(height uint64) ([]string, s
 		return nil, "", "none", false
 	}
 
-	registrySnapshot := n.validatorRegistrySnapshotForHeight(height)
+	var registrySnapshot map[string]ValidatorRecord
+	registrySnapshotLoaded := false
+	loadRegistrySnapshot := func() map[string]ValidatorRecord {
+		if !registrySnapshotLoaded {
+			registrySnapshot = n.validatorRegistrySnapshotForHeight(height)
+			registrySnapshotLoaded = true
+		}
+		return registrySnapshot
+	}
 	tryTarget := func(targetHash string, source string, candidates ...[]string) ([]string, string, string, bool) {
 		targetHash = strings.TrimSpace(targetHash)
 		if targetHash == "" {
 			return nil, "", "none", false
 		}
+		registry := loadRegistrySnapshot()
 		for _, candidate := range candidates {
-			if matched, ok := n.validatorSetCandidateMatchesTarget(height, targetHash, candidate, registrySnapshot); ok {
+			if matched, ok := n.validatorSetCandidateMatchesTarget(height, targetHash, candidate, registry); ok {
 				return matched, targetHash, source, true
 			}
 		}
@@ -384,8 +418,9 @@ func (n *Node) resolveCommittedValidatorSetForHeight(height uint64) ([]string, s
 		if targetHash == "" {
 			return nil, "", "none", false
 		}
-		if reconstructed, ok := n.reconstructValidatorSetCandidateForTarget(height, targetHash, registrySnapshot, candidates...); ok {
-			if len(registrySnapshot) > 0 {
+		registry := loadRegistrySnapshot()
+		if reconstructed, ok := n.reconstructValidatorSetCandidateForTarget(height, targetHash, registry, candidates...); ok {
+			if len(registry) > 0 {
 				source = "registry_verified"
 			}
 			return reconstructed, targetHash, source, true
@@ -394,6 +429,10 @@ func (n *Node) resolveCommittedValidatorSetForHeight(height uint64) ([]string, s
 	}
 
 	if block, ok := n.Blockchain.GetBlock(height); ok {
+		targetHash := strings.TrimSpace(block.ValidatorSetHash)
+		if frozen, ok := n.committedFrozenValidatorSetCandidate(targetHash, height); ok {
+			return frozen, targetHash, "chain_pruned_frozen", true
+		}
 		candidates := make([][]string, 0, 3)
 		if resolved, resolvedHash, source, ok := n.validatorSetCandidateFromStoredSnapshot(height, block.ValidatorSetHash); ok {
 			return resolved, resolvedHash, source, true
@@ -429,6 +468,10 @@ func (n *Node) resolveCommittedValidatorSetForHeight(height uint64) ([]string, s
 		return nil, "", "none", false
 	}
 
+	targetHash := strings.TrimSpace(parent.NextValidatorSetHash)
+	if frozen, ok := n.committedFrozenValidatorSetCandidate(targetHash, height, parent.ID); ok {
+		return frozen, targetHash, "chain_parent_commitment_carry_forward", true
+	}
 	candidates := make([][]string, 0, 5)
 	if resolved, resolvedHash, source, ok := n.validatorSetCandidateFromStoredSnapshot(height, parent.NextValidatorSetHash); ok {
 		return resolved, resolvedHash, source, true
@@ -453,7 +496,6 @@ func (n *Node) resolveCommittedValidatorSetForHeight(height uint64) ([]string, s
 	if resolved, resolvedHash, source, ok := tryTarget(parent.NextValidatorSetHash, "chain_parent_commitment", candidates...); ok {
 		return resolved, resolvedHash, source, true
 	}
-	targetHash := strings.TrimSpace(parent.NextValidatorSetHash)
 	if targetHash != "" {
 		if frozen := n.frozenValidatorsForHeight(height); len(frozen) > 0 {
 			if frozenHash, ok := n.frozenValidatorSetHash(height); ok && strings.EqualFold(strings.TrimSpace(frozenHash), targetHash) {

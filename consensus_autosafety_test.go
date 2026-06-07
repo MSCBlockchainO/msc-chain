@@ -36,6 +36,63 @@ func TestInvalidProposerStrikeTupleScoped(t *testing.T) {
 	}
 }
 
+func TestInvalidProposerStrikeDecaysInsteadOfHardReset(t *testing.T) {
+	n := newConsensusAutoSafetyNode([]string{"A", "B", "C", "D"})
+	key := invalidProposerStrikeKey("B", "A", "B")
+
+	first := n.recordInvalidProposerStrike("B", 10, "A", "B")
+	if first != 1 {
+		t.Fatalf("expected first strike=1, got %d", first)
+	}
+
+	n.invalidProposerMu.Lock()
+	tracker := n.invalidProposerStrikes[key]
+	tracker.LastAt = time.Now().Add(-invalidProposerStrikeWindow - time.Second)
+	tracker.LastEpoch = 10
+	n.invalidProposerStrikes[key] = tracker
+	n.invalidProposerMu.Unlock()
+
+	second := n.recordInvalidProposerStrike("B", 99, "A", "B")
+	if second != 2 {
+		t.Fatalf("expected strike to survive old reset window and height gap, got %d", second)
+	}
+
+	n.invalidProposerMu.Lock()
+	tracker = n.invalidProposerStrikes[key]
+	tracker.Count = 1
+	tracker.LastAt = time.Now().Add(-invalidProposerStrikeDecayEvery - time.Second)
+	n.invalidProposerStrikes[key] = tracker
+	n.invalidProposerMu.Unlock()
+
+	afterDecay := n.recordInvalidProposerStrike("B", 100, "A", "B")
+	if afterDecay != 1 {
+		t.Fatalf("expected very old single strike to decay before increment, got %d", afterDecay)
+	}
+}
+
+func TestInvalidProposerPeerStrikeDecaysInsteadOfHardReset(t *testing.T) {
+	n := newConsensusAutoSafetyNode([]string{"A", "B", "C", "D"})
+	peerID := "peer-B"
+	key := peerID + "|" + invalidProposerStrikeKey("B", "A", "B")
+
+	first := n.recordInvalidProposerPeerStrike(peerID, 10, "A", "B")
+	if first != 1 {
+		t.Fatalf("expected first peer strike=1, got %d", first)
+	}
+
+	n.invalidProposerMu.Lock()
+	tracker := n.invalidProposerPeerStrikes[key]
+	tracker.LastAt = time.Now().Add(-invalidProposerStrikeWindow - time.Second)
+	tracker.LastEpoch = 10
+	n.invalidProposerPeerStrikes[key] = tracker
+	n.invalidProposerMu.Unlock()
+
+	second := n.recordInvalidProposerPeerStrike(peerID, 99, "A", "B")
+	if second != 2 {
+		t.Fatalf("expected peer strike to survive old reset window and height gap, got %d", second)
+	}
+}
+
 func TestCanEnforceConsensusPenaltyConvergedOnly(t *testing.T) {
 	oldMode := ConsensusPenaltyEnforceMode
 	ConsensusPenaltyEnforceMode = "converged_only"

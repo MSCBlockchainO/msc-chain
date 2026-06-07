@@ -140,11 +140,27 @@ func (n *Node) snapshotLocalFinalityRejectReason(snapshot *StateSnapshot) string
 	if n == nil || snapshot == nil || snapshot.Height == 0 {
 		return ""
 	}
-	localFinalized := n.getFinalizedHeight()
+	localHeight := uint64(0)
+	localFinalized := uint64(0)
 	if n.Blockchain != nil {
+		localHeight = n.Blockchain.Height()
 		if chainFinalized := n.Blockchain.FinalizedHeight(); chainFinalized > localFinalized {
 			localFinalized = chainFinalized
 		}
+	}
+	n.commitMu.Lock()
+	committed := n.committedHeight
+	nodeFinalized := n.finalizedHeight
+	n.commitMu.Unlock()
+	// Peer heartbeat majority can advance n.finalizedHeight ahead of the local
+	// block anchor while a full node is catching up. Snapshot regression checks
+	// must only use locally anchored finality, otherwise a valid catch-up
+	// snapshot below the remote-observed network head is rejected before apply.
+	if localHeight > 0 && committed <= localHeight && committed > localFinalized {
+		localFinalized = committed
+	}
+	if localHeight > 0 && nodeFinalized <= localHeight && nodeFinalized > localFinalized {
+		localFinalized = nodeFinalized
 	}
 	if localFinalized > 0 && snapshot.Height < localFinalized {
 		return "snapshot_below_finalized_height"

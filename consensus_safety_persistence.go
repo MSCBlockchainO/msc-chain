@@ -66,6 +66,13 @@ type consensusSafetySnapshot struct {
 	FinalizedHeight  uint64                         `json:"finalized_height,omitempty"`
 	LastCommitHeight uint64                         `json:"last_commit_height,omitempty"`
 	LastCommitAtUnix int64                          `json:"last_commit_at_unix,omitempty"`
+
+	PostBlockSafeMode map[uint64]consensusSafeModeWindowSnapshot `json:"post_block_safe_mode,omitempty"`
+}
+
+type consensusSafeModeWindowSnapshot struct {
+	UntilUnixNano int64 `json:"until_unix_nano"`
+	WindowNanos   int64 `json:"window_nanos,omitempty"`
 }
 
 type consensusSafetyJournalRecord struct {
@@ -368,6 +375,13 @@ func cloneCommitVoted(in map[uint64]map[string]string) map[uint64]map[string]str
 	return out
 }
 
+func shouldPruneRestoredCommitVoteHeight(height, chainHeight uint64) bool {
+	if chainHeight == 0 {
+		return true
+	}
+	return height < chainHeight || height > chainHeight
+}
+
 func cloneCommittedHashes(in map[uint64]string) map[uint64]string {
 	if len(in) == 0 {
 		return nil
@@ -379,11 +393,67 @@ func cloneCommittedHashes(in map[uint64]string) map[uint64]string {
 	return out
 }
 
+func clonePostBlockSafeModeWindows(untilByHeight map[uint64]time.Time, windowByHeight map[uint64]time.Duration, now time.Time) map[uint64]consensusSafeModeWindowSnapshot {
+	if len(untilByHeight) == 0 {
+		return nil
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	out := make(map[uint64]consensusSafeModeWindowSnapshot, len(untilByHeight))
+	for height, until := range untilByHeight {
+		if height == 0 || until.IsZero() || !until.After(now) {
+			continue
+		}
+		window := time.Duration(0)
+		if windowByHeight != nil {
+			window = windowByHeight[height]
+		}
+		out[height] = consensusSafeModeWindowSnapshot{
+			UntilUnixNano: until.UnixNano(),
+			WindowNanos:   int64(window),
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func restorePostBlockSafeModeWindows(in map[uint64]consensusSafeModeWindowSnapshot, chainHeight uint64, now time.Time) (map[uint64]time.Time, map[uint64]time.Duration) {
+	if len(in) == 0 || chainHeight == 0 {
+		return nil, nil
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	untilByHeight := make(map[uint64]time.Time)
+	windowByHeight := make(map[uint64]time.Duration)
+	for height, snap := range in {
+		if height == 0 || height <= chainHeight || height > chainHeight+1 || snap.UntilUnixNano <= 0 {
+			continue
+		}
+		until := time.Unix(0, snap.UntilUnixNano)
+		if !until.After(now) {
+			continue
+		}
+		untilByHeight[height] = until
+		if snap.WindowNanos > 0 {
+			windowByHeight[height] = time.Duration(snap.WindowNanos)
+		}
+	}
+	if len(untilByHeight) == 0 {
+		return nil, nil
+	}
+	return untilByHeight, windowByHeight
+}
+
 func (n *Node) snapshotConsensusSafetyState(reason string) consensusSafetySnapshot {
+	now := time.Now()
 	snap := consensusSafetySnapshot{
 		Version:     consensusSafetyVersion,
 		NodeID:      strings.TrimSpace(n.ID),
-		SavedAtUnix: time.Now().Unix(),
+		SavedAtUnix: now.Unix(),
 		Reason:      strings.TrimSpace(reason),
 	}
 	if n.Consensus != nil {
@@ -434,6 +504,9 @@ func (n *Node) snapshotConsensusSafetyState(reason string) consensusSafetySnapsh
 		snap.LastCommitAtUnix = n.lastCommitAt.Unix()
 	}
 	n.commitMu.Unlock()
+	n.validatorSetMu.RLock()
+	snap.PostBlockSafeMode = clonePostBlockSafeModeWindows(n.safeModeUntilByHeight, n.safeModeWindowByHeight, now)
+	n.validatorSetMu.RUnlock()
 	return snap
 }
 
@@ -836,7 +909,7 @@ func (n *Node) restoreConsensusSafetyState() error {
 	if snap.CommitVotes != nil {
 		n.commitVotes = inflateCommitVotes(snap.CommitVotes)
 		for height := range n.commitVotes {
-			if chainHeight == 0 || height > chainHeight {
+			if shouldPruneRestoredCommitVoteHeight(height, chainHeight) {
 				delete(n.commitVotes, height)
 			}
 		}
@@ -844,7 +917,7 @@ func (n *Node) restoreConsensusSafetyState() error {
 	if snap.CommitVoted != nil {
 		n.commitVoted = cloneCommitVoted(snap.CommitVoted)
 		for height := range n.commitVoted {
-			if chainHeight == 0 || height > chainHeight {
+			if shouldPruneRestoredCommitVoteHeight(height, chainHeight) {
 				delete(n.commitVoted, height)
 			}
 		}
@@ -897,6 +970,28 @@ func (n *Node) restoreConsensusSafetyState() error {
 	}
 	n.commitMu.Unlock()
 
+	restoredSafeModeUntil, restoredSafeModeWindow := restorePostBlockSafeModeWindows(snap.PostBlockSafeMode, chainHeight, time.Now())
+	n.validatorSetMu.Lock()
+	if n.safeModeUntilByHeight == nil {
+		n.safeModeUntilByHeight = make(map[uint64]time.Time)
+	}
+	if n.safeModeWindowByHeight == nil {
+		n.safeModeWindowByHeight = make(map[uint64]time.Duration)
+	}
+	for height := range n.safeModeUntilByHeight {
+		delete(n.safeModeUntilByHeight, height)
+	}
+	for height := range n.safeModeWindowByHeight {
+		delete(n.safeModeWindowByHeight, height)
+	}
+	for height, until := range restoredSafeModeUntil {
+		n.safeModeUntilByHeight[height] = until
+	}
+	for height, window := range restoredSafeModeWindow {
+		n.safeModeWindowByHeight[height] = window
+	}
+	n.validatorSetMu.Unlock()
+
 	n.emitConsensusTelemetry(consensusTelemetryEvent{
 		Type:   "consensus_safety_restored",
 		Reason: snap.Reason,
@@ -911,6 +1006,7 @@ func (n *Node) restoreConsensusSafetyState() error {
 			"restored_finalized":   restoredFinalizedHeight,
 			"last_commit_height":   snap.LastCommitHeight,
 			"restored_last_commit": restoredLastCommitHeight,
+			"safe_mode_windows":    len(restoredSafeModeUntil),
 		},
 	})
 	return nil

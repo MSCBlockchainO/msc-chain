@@ -60,6 +60,7 @@ const state = {
     eventDelayMs: null,
   },
   blockAgeTimer: null,
+  validatorFilter: "all",
 };
 
 function normalizeRPC(raw) {
@@ -1339,9 +1340,17 @@ function renderNetworkStatus(status) {
   const height = Math.max(Number.isFinite(rawHeight) ? rawHeight : 0, state.realtime.height || 0);
   const finalized = Math.max(Number.isFinite(rawFinalized) ? rawFinalized : 0, state.realtime.finalizedHeight || 0);
   state.status = { ...status, height, finalized_height: finalized };
+  const headSynced = !!(best.head_synced ?? status.head_synced);
+  const backfilling = !!(best.history_backfill_pending ?? status.history_backfill_pending);
+  const fastStage = best.fast_bootstrap_stage || status.fast_bootstrap_stage || "";
+  const networkLabel = headSynced
+    ? backfilling
+      ? `head synced | history backfilling${fastStage ? ` | ${fastStage}` : ""}`
+      : "head synced"
+    : status.health || status.network_health || "connected";
   setLastBlockAgeBase(best.last_block_age_seconds ?? status.last_block_age_seconds);
   setText("topHeight", formatNumber(height));
-  setText("networkStatus", status.health || status.network_health || "connected");
+  setText("networkStatus", networkLabel);
   setText("blockHeight", formatNumber(height));
   setText("finalizedHeight", formatNumber(finalized));
   setText("latestBlocks", `height ${formatNumber(height)} | finalized ${formatNumber(finalized)}`);
@@ -1473,17 +1482,63 @@ async function refreshTransactions(options = {}) {
 function renderValidatorsData(data) {
   const list = $("validatorList");
   if (!list) return;
-  const vals = data?.validators || data?.active || data?.items || [];
+  const vals = data?.entries || data?.validators || data?.active || data?.items || [];
+  const campaign = data?.testnet_campaign || {};
+  const campaignEnabled = !!campaign?.enabled;
+  const campaignTop = Array.isArray(campaign?.top_validators) ? campaign.top_validators : [];
+  setText("validatorActiveCount", formatNumber(data?.active_count ?? data?.pool?.active_count ?? "-"));
+  setText("validatorHomePCCount", formatNumber(data?.home_pc_count ?? "-"));
+  setText("validatorFounderCount", formatNumber(data?.founder_count ?? "-"));
+  setText("validatorCampaignSeason", campaignEnabled ? (campaign.program_name || campaign.season_id || "Testnet") : "Disabled");
+  setText("validatorCampaignStatus", campaignEnabled ? (campaign.status || "active") : "Disabled");
+  setText("validatorCampaignLeader", campaignEnabled && campaignTop[0]?.validator_id ? `#1 ${campaignTop[0].validator_id}` : "-");
+  const filter = state.validatorFilter || "all";
+  const filtered = vals.filter((v) => {
+    const slot = String(v.slot_type || "").toLowerCase();
+    if (filter === "all") return true;
+    if (filter === "home_pc") return !!v.home_pc;
+    if (filter === "founder") return !!(v.founder_badge || v.founder_eligible);
+    return slot === filter;
+  });
   list.innerHTML = "";
-  if (!vals.length) {
+  if (!filtered.length) {
     list.innerHTML = `<div class="list-item">Validator list unavailable</div>`;
     return;
   }
-  vals.forEach((v) => {
-    const id = v.id || v.validator || v.name || "-";
+  filtered.forEach((v) => {
+    const id = v.validator_id || v.id || v.validator || v.name || "-";
+    const score = Number(v.final_score ?? 0);
+    const scoreText = Number.isFinite(score) ? `${Math.round(score * 1000) / 10}%` : "-";
+    const signed = Number(v.signed_ratio_bps ?? 0);
+    const signedText = Number.isFinite(signed) ? `${Math.round(signed / 100) / 100}%` : "-";
+    const slot = v.slot_type || (v.active ? "active" : "standby");
+    const online = v.online ? "online" : "offline";
+    const founder = v.founder_badge ? "Founder" : v.founder_eligible ? "Founder eligible" : "";
+    const home = v.home_pc ? "Home-PC" : "";
+    const campaignBadges = Array.isArray(v.campaign_badges) ? v.campaign_badges : [];
+    const campaignRank = campaignEnabled && v.campaign_rank ? `Campaign #${v.campaign_rank}` : "";
+    const tags = [slot, online, home, founder, campaignRank].filter(Boolean).join(" | ");
+    const campaignLine = campaignEnabled
+      ? `<span>Campaign ${formatNumber(v.campaign_reputation_points ?? 0)} pts | Weekly #${v.campaign_weekly_rank ?? "-"} | Bug ${formatNumber(v.campaign_bug_points ?? 0)} | Weight ${Math.round(Number(v.campaign_operator_weight_bps ?? 0) / 100)}%</span>`
+      : "";
+    const usefulLine = campaignEnabled
+      ? `<span>Useful node: ${v.campaign_useful_node ? "yes" : "no"} | Raw node points ${formatNumber(v.campaign_raw_node_points ?? 0)}</span>`
+      : "";
+    const campaignBadgeLine = campaignEnabled
+      ? `<span>${campaignBadges.length ? `Badges: ${campaignBadges.join(", ")}` : "Badges: -"}</span>`
+      : "";
     const item = document.createElement("div");
     item.className = "list-item";
-    item.innerHTML = `<strong>${id}</strong><span>Status: ${v.status || (v.active ? "active" : "unknown")}</span><span>Uptime: ${v.uptime ?? "-"} | Voting power: ${v.voting_power ?? v.power ?? "-"}</span>`;
+    item.innerHTML = `
+      <strong>#${v.rank ?? "-"} ${id}</strong>
+      <span>${tags || "validator"}</span>
+      <span>Score ${scoreText} | Signed ${signedText} | CMD ${v.cmd || "-"}</span>
+      ${campaignLine}
+      ${usefulLine}
+      <span>Stake ${formatNumber(v.actual_stake ?? 0)} MSC | Effective ${formatNumber(v.effective_stake ?? 0)} MSC</span>
+      <span>Age ${formatNumber(v.validator_age_epochs ?? 0)} epochs | Missed ${formatNumber(v.missed_blocks ?? 0)}</span>
+      ${campaignBadgeLine}
+      <span>${v.performance_ineligible_reason ? `Performance gate: ${v.performance_ineligible_reason}` : "Performance gate: ok"}</span>`;
     list.appendChild(item);
   });
 }
@@ -1492,7 +1547,7 @@ async function refreshValidators(options = {}) {
   const list = $("validatorList");
   if (!list) return;
   try {
-    const result = await cachedAPI("validators", "/v1/validators", { ttl: CACHE_TTL.validators, force: !!options.force, cacheOnly: !!options.cacheOnly });
+    const result = await cachedAPI("validators", "/v1/validators/leaderboard", { ttl: CACHE_TTL.validators, force: !!options.force, cacheOnly: !!options.cacheOnly });
     renderValidatorsData(result?.data);
   } catch (err) {
     list.innerHTML = `<div class="list-item">${err.message || "Validator sync failed"}</div>`;
@@ -1848,6 +1903,15 @@ function bindEvents() {
   document.querySelectorAll(".nav a").forEach((link) => {
     const active = link.dataset.page === page;
     link.classList.toggle("active", active);
+  });
+  document.querySelectorAll("[data-validator-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.validatorFilter = button.dataset.validatorFilter || "all";
+      document.querySelectorAll("[data-validator-filter]").forEach((candidate) => {
+        candidate.classList.toggle("active", candidate === button);
+      });
+      refreshValidators({ force: false }).catch(() => {});
+    });
   });
   $("quickSearch")?.addEventListener("submit", (event) => {
     event.preventDefault();

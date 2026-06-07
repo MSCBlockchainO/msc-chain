@@ -21,6 +21,7 @@ type SnapshotMetaRecord struct {
 	ValidatorSetHash       string `json:"validator_set_hash,omitempty"`
 	ValidatorSetSource     string `json:"validator_set_source,omitempty"`
 	ValidatorRegistryHash  string `json:"validator_registry_hash,omitempty"`
+	PromotionWindowHash    string `json:"promotion_window_hash,omitempty"`
 	NextValidatorSetHash   string `json:"next_validator_set_hash,omitempty"`
 	NextValidatorSetSource string `json:"next_validator_set_source,omitempty"`
 	NextValidatorSetHeight uint64 `json:"next_validator_set_height,omitempty"`
@@ -39,68 +40,72 @@ type TipSnapshotRecord struct {
 	Registry              map[string]ValidatorRecord `json:"registry,omitempty"`
 	Snapshot              *StateSnapshot             `json:"snapshot,omitempty"`
 	ValidatorRegistryHash string                     `json:"validator_registry_hash,omitempty"`
+	PromotionWindowHash   string                     `json:"promotion_window_hash,omitempty"`
 	StateRoot             string                     `json:"state_root,omitempty"`
 	Source                string                     `json:"source,omitempty"`
 	UpdatedAt             int64                      `json:"updated_at"`
 }
 
 type StateDeltaSnapshot struct {
-	Height                          uint64                       `json:"height"`
-	BaseHeight                      uint64                       `json:"base_height"`
-	PrevSnapshotHash                string                       `json:"prev_snapshot_hash,omitempty"`
-	SnapshotHash                    string                       `json:"snapshot_hash,omitempty"`
-	BlockHash                       string                       `json:"block_hash,omitempty"`
-	PrevHash                        string                       `json:"prev_hash,omitempty"`
-	GenesisHash                     string                       `json:"genesis_hash,omitempty"`
-	LedgerHash                      string                       `json:"ledger_hash,omitempty"`
-	LedgerStage                     string                       `json:"ledger_stage,omitempty"`
-	StateRoot                       string                       `json:"state_root,omitempty"`
-	ValidatorSetHash                string                       `json:"validator_set_hash,omitempty"`
-	ValidatorSetRoot                string                       `json:"validator_set_root,omitempty"`
-	ValidatorRegistryHash           string                       `json:"validator_registry_hash,omitempty"`
-	ValidatorSetHeight              uint64                       `json:"validator_set_height,omitempty"`
-	NextValidatorSetHash            string                       `json:"next_validator_set_hash,omitempty"`
-	NextValidatorSetRoot            string                       `json:"next_validator_set_root,omitempty"`
-	NextValidatorSetHeight          uint64                       `json:"next_validator_set_height,omitempty"`
-	ActivationHeight                uint64                       `json:"activation_height,omitempty"`
-	CheckpointHeight                uint64                       `json:"checkpoint_height,omitempty"`
-	CheckpointDomain                string                       `json:"checkpoint_domain,omitempty"`
-	CheckpointProof                 map[string]string            `json:"checkpoint_proof,omitempty"`
-	FinalizedEpoch                  uint64                       `json:"finalized_epoch,omitempty"`
-	FinalizedHeight                 uint64                       `json:"finalized_height,omitempty"`
-	FinalizedHash                   string                       `json:"finalized_hash,omitempty"`
-	FinalizedStateRoot              string                       `json:"finalized_state_root,omitempty"`
-	FinalizedValidatorSetHash       string                       `json:"finalized_validator_set_hash,omitempty"`
-	FinalizedValidatorSetRoot       string                       `json:"finalized_validator_set_root,omitempty"`
-	EpochAnchorHash                 string                       `json:"epoch_anchor_hash,omitempty"`
-	PreviousEpochAnchorHash         string                       `json:"previous_epoch_anchor_hash,omitempty"`
-	FinalityRoot                    string                       `json:"finality_root,omitempty"`
-	FinalityCertificate             *FinalizedEpochCertificate   `json:"finality_certificate,omitempty"`
-	Timestamp                       int64                        `json:"timestamp"`
-	Validators                      map[string]bool              `json:"validators,omitempty"`
-	PendingValidators               map[string]uint64            `json:"pending_validators,omitempty"`
-	PendingValidatorRemovals        map[string]uint64            `json:"pending_validator_removals,omitempty"`
-	ChangedBalances                 map[string]int               `json:"changed_balances,omitempty"`
-	DeletedBalances                 []string                     `json:"deleted_balances,omitempty"`
-	ChangedNonces                   map[string]int               `json:"changed_nonces,omitempty"`
-	DeletedNonces                   []string                     `json:"deleted_nonces,omitempty"`
-	ChangedStakes                   map[string]StakeLock         `json:"changed_stakes,omitempty"`
-	DeletedStakes                   []string                     `json:"deleted_stakes,omitempty"`
-	ChangedRewardWallets            map[string]string            `json:"changed_reward_wallets,omitempty"`
-	DeletedRewardWallets            []string                     `json:"deleted_reward_wallets,omitempty"`
-	ChangedEVMState                 map[string]string            `json:"changed_evm_state,omitempty"`
-	DeletedEVMState                 []string                     `json:"deleted_evm_state,omitempty"`
-	ChangedEVMCode                  map[string]string            `json:"changed_evm_code,omitempty"`
-	DeletedEVMCode                  []string                     `json:"deleted_evm_code,omitempty"`
-	ChangedEVMStorage               map[string]map[string]string `json:"changed_evm_storage,omitempty"`
-	DeletedEVMStorage               []string                     `json:"deleted_evm_storage,omitempty"`
-	ChangedUsedValidatorUpdateCerts map[string]uint64            `json:"changed_used_validator_update_certs,omitempty"`
-	DeletedUsedValidatorUpdateCerts []string                     `json:"deleted_used_validator_update_certs,omitempty"`
-	ChangedValidatorRegistry        map[string]ValidatorRecord   `json:"changed_validator_registry,omitempty"`
-	DeletedValidatorRegistry        []string                     `json:"deleted_validator_registry,omitempty"`
-	ChangedStateValidators          map[string]Validator         `json:"changed_state_validators,omitempty"`
-	DeletedStateValidators          []string                     `json:"deleted_state_validators,omitempty"`
-	DTL                             *DTLState                    `json:"dtl,omitempty"`
+	Height                             uint64                                        `json:"height"`
+	BaseHeight                         uint64                                        `json:"base_height"`
+	PrevSnapshotHash                   string                                        `json:"prev_snapshot_hash,omitempty"`
+	SnapshotHash                       string                                        `json:"snapshot_hash,omitempty"`
+	BlockHash                          string                                        `json:"block_hash,omitempty"`
+	PrevHash                           string                                        `json:"prev_hash,omitempty"`
+	GenesisHash                        string                                        `json:"genesis_hash,omitempty"`
+	LedgerHash                         string                                        `json:"ledger_hash,omitempty"`
+	LedgerStage                        string                                        `json:"ledger_stage,omitempty"`
+	StateRoot                          string                                        `json:"state_root,omitempty"`
+	ValidatorSetHash                   string                                        `json:"validator_set_hash,omitempty"`
+	ValidatorSetRoot                   string                                        `json:"validator_set_root,omitempty"`
+	ValidatorRegistryHash              string                                        `json:"validator_registry_hash,omitempty"`
+	PromotionWindowHash                string                                        `json:"promotion_window_hash,omitempty"`
+	ValidatorSetHeight                 uint64                                        `json:"validator_set_height,omitempty"`
+	NextValidatorSetHash               string                                        `json:"next_validator_set_hash,omitempty"`
+	NextValidatorSetRoot               string                                        `json:"next_validator_set_root,omitempty"`
+	NextValidatorSetHeight             uint64                                        `json:"next_validator_set_height,omitempty"`
+	ActivationHeight                   uint64                                        `json:"activation_height,omitempty"`
+	CheckpointHeight                   uint64                                        `json:"checkpoint_height,omitempty"`
+	CheckpointDomain                   string                                        `json:"checkpoint_domain,omitempty"`
+	CheckpointProof                    map[string]string                             `json:"checkpoint_proof,omitempty"`
+	FinalizedEpoch                     uint64                                        `json:"finalized_epoch,omitempty"`
+	FinalizedHeight                    uint64                                        `json:"finalized_height,omitempty"`
+	FinalizedHash                      string                                        `json:"finalized_hash,omitempty"`
+	FinalizedStateRoot                 string                                        `json:"finalized_state_root,omitempty"`
+	FinalizedValidatorSetHash          string                                        `json:"finalized_validator_set_hash,omitempty"`
+	FinalizedValidatorSetRoot          string                                        `json:"finalized_validator_set_root,omitempty"`
+	EpochAnchorHash                    string                                        `json:"epoch_anchor_hash,omitempty"`
+	PreviousEpochAnchorHash            string                                        `json:"previous_epoch_anchor_hash,omitempty"`
+	FinalityRoot                       string                                        `json:"finality_root,omitempty"`
+	FinalityCertificate                *FinalizedEpochCertificate                    `json:"finality_certificate,omitempty"`
+	Timestamp                          int64                                         `json:"timestamp"`
+	Validators                         map[string]bool                               `json:"validators,omitempty"`
+	PendingValidators                  map[string]uint64                             `json:"pending_validators,omitempty"`
+	PendingValidatorRemovals           map[string]uint64                             `json:"pending_validator_removals,omitempty"`
+	ChangedBalances                    map[string]int                                `json:"changed_balances,omitempty"`
+	DeletedBalances                    []string                                      `json:"deleted_balances,omitempty"`
+	ChangedNonces                      map[string]int                                `json:"changed_nonces,omitempty"`
+	DeletedNonces                      []string                                      `json:"deleted_nonces,omitempty"`
+	ChangedStakes                      map[string]StakeLock                          `json:"changed_stakes,omitempty"`
+	DeletedStakes                      []string                                      `json:"deleted_stakes,omitempty"`
+	ChangedRewardWallets               map[string]string                             `json:"changed_reward_wallets,omitempty"`
+	DeletedRewardWallets               []string                                      `json:"deleted_reward_wallets,omitempty"`
+	ChangedEVMState                    map[string]string                             `json:"changed_evm_state,omitempty"`
+	DeletedEVMState                    []string                                      `json:"deleted_evm_state,omitempty"`
+	ChangedEVMCode                     map[string]string                             `json:"changed_evm_code,omitempty"`
+	DeletedEVMCode                     []string                                      `json:"deleted_evm_code,omitempty"`
+	ChangedEVMStorage                  map[string]map[string]string                  `json:"changed_evm_storage,omitempty"`
+	DeletedEVMStorage                  []string                                      `json:"deleted_evm_storage,omitempty"`
+	ChangedUsedValidatorUpdateCerts    map[string]uint64                             `json:"changed_used_validator_update_certs,omitempty"`
+	DeletedUsedValidatorUpdateCerts    []string                                      `json:"deleted_used_validator_update_certs,omitempty"`
+	ChangedValidatorRegistry           map[string]ValidatorRecord                    `json:"changed_validator_registry,omitempty"`
+	DeletedValidatorRegistry           []string                                      `json:"deleted_validator_registry,omitempty"`
+	ChangedPromotionWindowRecords      map[uint64]PromotionWindowRecord              `json:"changed_promotion_window_records,omitempty"`
+	ChangedPromotionWindowReplacements map[uint64][]PromotionWindowReplacementRecord `json:"changed_promotion_window_replacements,omitempty"`
+	ChangedStateValidators             map[string]Validator                          `json:"changed_state_validators,omitempty"`
+	DeletedStateValidators             []string                                      `json:"deleted_state_validators,omitempty"`
+	DTL                                *DTLState                                     `json:"dtl,omitempty"`
 }
 
 func snapshotMetaKey(height uint64) []byte {
@@ -145,6 +150,8 @@ func cloneStateSnapshot(snapshot *StateSnapshot) *StateSnapshot {
 	clone.PendingValidatorRemovals = copySnapshotUint64Map(snapshot.PendingValidatorRemovals)
 	clone.ValidatorRegistry = copyValidatorRegistrySnapshot(snapshot.ValidatorRegistry)
 	clone.StateValidators = copyValidatorMap(snapshot.StateValidators)
+	clone.PromotionWindowRecords = copyPromotionWindowRecords(snapshot.PromotionWindowRecords)
+	clone.PromotionWindowReplacements = copyPromotionWindowReplacements(snapshot.PromotionWindowReplacements)
 	clone.CheckpointProof = copyStringMap(snapshot.CheckpointProof)
 	clone.FinalityCertificate = copyFinalizedEpochCertificate(snapshot.FinalityCertificate)
 	return &clone
@@ -237,6 +244,7 @@ func snapshotMetaFromSnapshot(snapshot *StateSnapshot, source string, stateType 
 		ValidatorSetHash:       strings.TrimSpace(snapshotValidatorSetHash(snapshot)),
 		ValidatorSetSource:     validatorSetSource,
 		ValidatorRegistryHash:  strings.TrimSpace(snapshotValidatorRegistryHash(snapshot)),
+		PromotionWindowHash:    strings.TrimSpace(snapshot.PromotionWindowHash),
 		NextValidatorSetHash:   strings.TrimSpace(snapshot.NextValidatorSetHash),
 		NextValidatorSetSource: nextValidatorSetSource,
 		NextValidatorSetHeight: snapshot.NextValidatorSetHeight,
@@ -260,6 +268,7 @@ func normalizeSnapshotMetaRecord(record *SnapshotMetaRecord) {
 	record.ValidatorSetHash = strings.TrimSpace(record.ValidatorSetHash)
 	record.ValidatorSetSource = strings.TrimSpace(record.ValidatorSetSource)
 	record.ValidatorRegistryHash = strings.TrimSpace(record.ValidatorRegistryHash)
+	record.PromotionWindowHash = strings.TrimSpace(record.PromotionWindowHash)
 	record.NextValidatorSetHash = strings.TrimSpace(record.NextValidatorSetHash)
 	record.NextValidatorSetSource = strings.TrimSpace(record.NextValidatorSetSource)
 	record.FinalizedHash = strings.TrimSpace(record.FinalizedHash)
@@ -344,6 +353,7 @@ func (n *Node) ensureSnapshotMetaRecord(snapshot *StateSnapshot, source string) 
 			strings.EqualFold(record.ValidatorSetHash, expected.ValidatorSetHash) &&
 			strings.EqualFold(record.ValidatorSetSource, expected.ValidatorSetSource) &&
 			strings.EqualFold(record.ValidatorRegistryHash, expected.ValidatorRegistryHash) &&
+			strings.EqualFold(record.PromotionWindowHash, expected.PromotionWindowHash) &&
 			strings.EqualFold(record.NextValidatorSetHash, expected.NextValidatorSetHash) &&
 			strings.EqualFold(record.NextValidatorSetSource, expected.NextValidatorSetSource) &&
 			record.NextValidatorSetHeight == expected.NextValidatorSetHeight {
@@ -411,6 +421,7 @@ func (n *Node) storeTipSnapshotRecords(snapshot *StateSnapshot, source string) e
 		Height:                snapshot.Height,
 		Snapshot:              cloneStateSnapshot(snapshot),
 		ValidatorRegistryHash: strings.TrimSpace(snapshotValidatorRegistryHash(snapshot)),
+		PromotionWindowHash:   strings.TrimSpace(snapshotPromotionWindowHash(snapshot)),
 		StateRoot:             strings.TrimSpace(snapshot.StateRoot),
 		Source:                strings.TrimSpace(source),
 		UpdatedAt:             updatedAt,
@@ -419,6 +430,7 @@ func (n *Node) storeTipSnapshotRecords(snapshot *StateSnapshot, source string) e
 		Height:                snapshot.Height,
 		Registry:              copyValidatorRegistrySnapshot(snapshot.ValidatorRegistry),
 		ValidatorRegistryHash: strings.TrimSpace(snapshotValidatorRegistryHash(snapshot)),
+		PromotionWindowHash:   strings.TrimSpace(snapshotPromotionWindowHash(snapshot)),
 		StateRoot:             strings.TrimSpace(snapshot.StateRoot),
 		Source:                strings.TrimSpace(source),
 		UpdatedAt:             updatedAt,
@@ -426,6 +438,7 @@ func (n *Node) storeTipSnapshotRecords(snapshot *StateSnapshot, source string) e
 	metaRecord := TipSnapshotRecord{
 		Height:                snapshot.Height,
 		ValidatorRegistryHash: strings.TrimSpace(snapshotValidatorRegistryHash(snapshot)),
+		PromotionWindowHash:   strings.TrimSpace(snapshotPromotionWindowHash(snapshot)),
 		StateRoot:             strings.TrimSpace(snapshot.StateRoot),
 		Source:                strings.TrimSpace(source),
 		UpdatedAt:             updatedAt,
@@ -654,6 +667,7 @@ func (n *Node) storeCommittedStateSnapshotRecord(snapshot *StateSnapshot, source
 	if n == nil || snapshot == nil || snapshot.Height == 0 || n.DB == nil || n.DB.SnapshotStore() == nil {
 		return nil
 	}
+	n.attachPromotionWindowStateToSnapshot(snapshot)
 	populateSnapshotDerivedFields(snapshot)
 	snapshot.SnapshotHash = snapshotCanonicalHash(snapshot)
 	data, err := json.Marshal(snapshot)
@@ -856,7 +870,7 @@ func (n *Node) fetchCommittedTipSnapshotFromPeers(height uint64, reason string) 
 	if DebugSync || DebugConsensus {
 		fmt.Printf("[SNAPSHOT-FETCH] height=%d reason=%s source=peers\n", height, strings.TrimSpace(reason))
 	}
-	result, err := n.downloadTrustedSnapshotAndStore(height, height, true, false, false)
+	result, err := n.downloadTrustedSnapshotAndStore(height, height, true, false, false, false)
 	if err != nil {
 		key := fmt.Sprintf("snapshot_peer_fetch_failed:%d", height)
 		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
@@ -1226,67 +1240,78 @@ func buildStateDeltaSnapshot(base *StateSnapshot, current *StateSnapshot) (*Stat
 	changedCerts, deletedCerts := diffUint64Map(base.Ledger.UsedValidatorUpdateCerts, current.Ledger.UsedValidatorUpdateCerts)
 	changedRegistry, deletedRegistry := diffValidatorRegistryMap(base.ValidatorRegistry, current.ValidatorRegistry)
 	changedStateValidators, deletedStateValidators := diffValidatorMap(base.StateValidators, current.StateValidators)
+	var changedPromotionRecords map[uint64]PromotionWindowRecord
+	if !reflect.DeepEqual(base.PromotionWindowRecords, current.PromotionWindowRecords) {
+		changedPromotionRecords = copyPromotionWindowRecords(current.PromotionWindowRecords)
+	}
+	var changedPromotionReplacements map[uint64][]PromotionWindowReplacementRecord
+	if !reflect.DeepEqual(base.PromotionWindowReplacements, current.PromotionWindowReplacements) {
+		changedPromotionReplacements = copyPromotionWindowReplacements(current.PromotionWindowReplacements)
+	}
 	var dtlCopy *DTLState
 	if !reflect.DeepEqual(base.Ledger.DTL, current.Ledger.DTL) {
 		dtlCopy = deepCopyDTLState(current.Ledger.DTL)
 	}
 	return &StateDeltaSnapshot{
-		Height:                          current.Height,
-		BaseHeight:                      base.Height,
-		PrevSnapshotHash:                strings.TrimSpace(base.SnapshotHash),
-		SnapshotHash:                    strings.TrimSpace(current.SnapshotHash),
-		BlockHash:                       strings.TrimSpace(current.BlockHash),
-		PrevHash:                        strings.TrimSpace(current.PrevHash),
-		GenesisHash:                     strings.TrimSpace(current.GenesisHash),
-		LedgerHash:                      strings.TrimSpace(current.LedgerHash),
-		LedgerStage:                     strings.TrimSpace(current.LedgerStage),
-		StateRoot:                       strings.TrimSpace(current.StateRoot),
-		ValidatorSetHash:                strings.TrimSpace(snapshotValidatorSetHash(current)),
-		ValidatorSetRoot:                strings.TrimSpace(snapshotValidatorSetRoot(current)),
-		ValidatorRegistryHash:           strings.TrimSpace(snapshotValidatorRegistryHash(current)),
-		ValidatorSetHeight:              current.ValidatorSetHeight,
-		NextValidatorSetHash:            strings.TrimSpace(current.NextValidatorSetHash),
-		NextValidatorSetRoot:            strings.TrimSpace(current.NextValidatorSetRoot),
-		NextValidatorSetHeight:          current.NextValidatorSetHeight,
-		ActivationHeight:                current.ActivationHeight,
-		CheckpointHeight:                current.CheckpointHeight,
-		CheckpointDomain:                strings.TrimSpace(current.CheckpointDomain),
-		CheckpointProof:                 copyStringMap(current.CheckpointProof),
-		FinalizedEpoch:                  current.FinalizedEpoch,
-		FinalizedHeight:                 current.FinalizedHeight,
-		FinalizedHash:                   strings.TrimSpace(current.FinalizedHash),
-		FinalizedStateRoot:              strings.TrimSpace(current.FinalizedStateRoot),
-		FinalizedValidatorSetHash:       strings.TrimSpace(current.FinalizedValidatorSetHash),
-		FinalizedValidatorSetRoot:       strings.TrimSpace(current.FinalizedValidatorSetRoot),
-		EpochAnchorHash:                 strings.TrimSpace(current.EpochAnchorHash),
-		PreviousEpochAnchorHash:         strings.TrimSpace(current.PreviousEpochAnchorHash),
-		FinalityRoot:                    strings.TrimSpace(current.FinalityRoot),
-		FinalityCertificate:             copyFinalizedEpochCertificate(current.FinalityCertificate),
-		Timestamp:                       current.Timestamp,
-		Validators:                      copyBoolMap(current.Validators),
-		PendingValidators:               copySnapshotUint64Map(current.PendingValidators),
-		PendingValidatorRemovals:        copySnapshotUint64Map(current.PendingValidatorRemovals),
-		ChangedBalances:                 changedBalances,
-		DeletedBalances:                 deletedBalances,
-		ChangedNonces:                   changedNonces,
-		DeletedNonces:                   deletedNonces,
-		ChangedStakes:                   changedStakes,
-		DeletedStakes:                   deletedStakes,
-		ChangedRewardWallets:            changedRewardWallets,
-		DeletedRewardWallets:            deletedRewardWallets,
-		ChangedEVMState:                 changedEVMState,
-		DeletedEVMState:                 deletedEVMState,
-		ChangedEVMCode:                  changedEVMCode,
-		DeletedEVMCode:                  deletedEVMCode,
-		ChangedEVMStorage:               changedEVMStorage,
-		DeletedEVMStorage:               deletedEVMStorage,
-		ChangedUsedValidatorUpdateCerts: changedCerts,
-		DeletedUsedValidatorUpdateCerts: deletedCerts,
-		ChangedValidatorRegistry:        changedRegistry,
-		DeletedValidatorRegistry:        deletedRegistry,
-		ChangedStateValidators:          changedStateValidators,
-		DeletedStateValidators:          deletedStateValidators,
-		DTL:                             dtlCopy,
+		Height:                             current.Height,
+		BaseHeight:                         base.Height,
+		PrevSnapshotHash:                   strings.TrimSpace(base.SnapshotHash),
+		SnapshotHash:                       strings.TrimSpace(current.SnapshotHash),
+		BlockHash:                          strings.TrimSpace(current.BlockHash),
+		PrevHash:                           strings.TrimSpace(current.PrevHash),
+		GenesisHash:                        strings.TrimSpace(current.GenesisHash),
+		LedgerHash:                         strings.TrimSpace(current.LedgerHash),
+		LedgerStage:                        strings.TrimSpace(current.LedgerStage),
+		StateRoot:                          strings.TrimSpace(current.StateRoot),
+		ValidatorSetHash:                   strings.TrimSpace(snapshotValidatorSetHash(current)),
+		ValidatorSetRoot:                   strings.TrimSpace(snapshotValidatorSetRoot(current)),
+		ValidatorRegistryHash:              strings.TrimSpace(snapshotValidatorRegistryHash(current)),
+		PromotionWindowHash:                strings.TrimSpace(snapshotPromotionWindowHash(current)),
+		ValidatorSetHeight:                 current.ValidatorSetHeight,
+		NextValidatorSetHash:               strings.TrimSpace(current.NextValidatorSetHash),
+		NextValidatorSetRoot:               strings.TrimSpace(current.NextValidatorSetRoot),
+		NextValidatorSetHeight:             current.NextValidatorSetHeight,
+		ActivationHeight:                   current.ActivationHeight,
+		CheckpointHeight:                   current.CheckpointHeight,
+		CheckpointDomain:                   strings.TrimSpace(current.CheckpointDomain),
+		CheckpointProof:                    copyStringMap(current.CheckpointProof),
+		FinalizedEpoch:                     current.FinalizedEpoch,
+		FinalizedHeight:                    current.FinalizedHeight,
+		FinalizedHash:                      strings.TrimSpace(current.FinalizedHash),
+		FinalizedStateRoot:                 strings.TrimSpace(current.FinalizedStateRoot),
+		FinalizedValidatorSetHash:          strings.TrimSpace(current.FinalizedValidatorSetHash),
+		FinalizedValidatorSetRoot:          strings.TrimSpace(current.FinalizedValidatorSetRoot),
+		EpochAnchorHash:                    strings.TrimSpace(current.EpochAnchorHash),
+		PreviousEpochAnchorHash:            strings.TrimSpace(current.PreviousEpochAnchorHash),
+		FinalityRoot:                       strings.TrimSpace(current.FinalityRoot),
+		FinalityCertificate:                copyFinalizedEpochCertificate(current.FinalityCertificate),
+		Timestamp:                          current.Timestamp,
+		Validators:                         copyBoolMap(current.Validators),
+		PendingValidators:                  copySnapshotUint64Map(current.PendingValidators),
+		PendingValidatorRemovals:           copySnapshotUint64Map(current.PendingValidatorRemovals),
+		ChangedBalances:                    changedBalances,
+		DeletedBalances:                    deletedBalances,
+		ChangedNonces:                      changedNonces,
+		DeletedNonces:                      deletedNonces,
+		ChangedStakes:                      changedStakes,
+		DeletedStakes:                      deletedStakes,
+		ChangedRewardWallets:               changedRewardWallets,
+		DeletedRewardWallets:               deletedRewardWallets,
+		ChangedEVMState:                    changedEVMState,
+		DeletedEVMState:                    deletedEVMState,
+		ChangedEVMCode:                     changedEVMCode,
+		DeletedEVMCode:                     deletedEVMCode,
+		ChangedEVMStorage:                  changedEVMStorage,
+		DeletedEVMStorage:                  deletedEVMStorage,
+		ChangedUsedValidatorUpdateCerts:    changedCerts,
+		DeletedUsedValidatorUpdateCerts:    deletedCerts,
+		ChangedValidatorRegistry:           changedRegistry,
+		DeletedValidatorRegistry:           deletedRegistry,
+		ChangedPromotionWindowRecords:      changedPromotionRecords,
+		ChangedPromotionWindowReplacements: changedPromotionReplacements,
+		ChangedStateValidators:             changedStateValidators,
+		DeletedStateValidators:             deletedStateValidators,
+		DTL:                                dtlCopy,
 	}, nil
 }
 
@@ -1311,6 +1336,7 @@ func applyStateDeltaSnapshot(base *StateSnapshot, delta *StateDeltaSnapshot) (*S
 	next.ValidatorSetHash = delta.ValidatorSetHash
 	next.ValidatorSetRoot = delta.ValidatorSetRoot
 	next.ValidatorRegistryHash = delta.ValidatorRegistryHash
+	next.PromotionWindowHash = delta.PromotionWindowHash
 	next.ValidatorSetHeight = delta.ValidatorSetHeight
 	next.NextValidatorSetHash = delta.NextValidatorSetHash
 	next.NextValidatorSetRoot = delta.NextValidatorSetRoot
@@ -1429,6 +1455,26 @@ func applyStateDeltaSnapshot(base *StateSnapshot, delta *StateDeltaSnapshot) (*S
 	for _, key := range delta.DeletedStateValidators {
 		delete(next.StateValidators, key)
 	}
+	if len(delta.ChangedPromotionWindowRecords) > 0 {
+		if next.PromotionWindowRecords == nil {
+			next.PromotionWindowRecords = make(map[uint64]PromotionWindowRecord)
+		}
+		for window, record := range delta.ChangedPromotionWindowRecords {
+			next.PromotionWindowRecords[window] = normalizePromotionWindowRecord(record)
+		}
+	}
+	if len(delta.ChangedPromotionWindowReplacements) > 0 {
+		if next.PromotionWindowReplacements == nil {
+			next.PromotionWindowReplacements = make(map[uint64][]PromotionWindowReplacementRecord)
+		}
+		for window, replacements := range delta.ChangedPromotionWindowReplacements {
+			copied := make([]PromotionWindowReplacementRecord, 0, len(replacements))
+			for _, replacement := range replacements {
+				copied = append(copied, normalizePromotionWindowReplacement(replacement))
+			}
+			next.PromotionWindowReplacements[window] = copied
+		}
+	}
 	populateSnapshotDerivedFields(next)
 	computedSnapshotHash := snapshotCanonicalHash(next)
 	if strings.TrimSpace(delta.SnapshotHash) != "" && !strings.EqualFold(strings.TrimSpace(computedSnapshotHash), strings.TrimSpace(delta.SnapshotHash)) {
@@ -1437,6 +1483,9 @@ func applyStateDeltaSnapshot(base *StateSnapshot, delta *StateDeltaSnapshot) (*S
 	next.SnapshotHash = computedSnapshotHash
 	if strings.TrimSpace(delta.ValidatorRegistryHash) != "" && !strings.EqualFold(strings.TrimSpace(snapshotValidatorRegistryHash(next)), strings.TrimSpace(delta.ValidatorRegistryHash)) {
 		return nil, fmt.Errorf("snapshot_delta_registry_hash_mismatch got=%s want=%s", snapshotValidatorRegistryHash(next), delta.ValidatorRegistryHash)
+	}
+	if strings.TrimSpace(delta.PromotionWindowHash) != "" && !strings.EqualFold(strings.TrimSpace(snapshotPromotionWindowHash(next)), strings.TrimSpace(delta.PromotionWindowHash)) {
+		return nil, fmt.Errorf("snapshot_delta_promotion_window_hash_mismatch got=%s want=%s", snapshotPromotionWindowHash(next), delta.PromotionWindowHash)
 	}
 	return next, nil
 }
@@ -1666,6 +1715,9 @@ func (n *Node) startSnapshotCreateWorker(ctx context.Context) {
 		if tip == 0 {
 			return
 		}
+		if n.shouldDeferNonConsensusCommitMaintenance() {
+			return
+		}
 		source, ok := n.ensureCommittedTipStateSnapshot(tip, "snapshot_create_worker")
 		if !ok || source == "snapshot_committed" || source == "checkpoint_interval_deferred" {
 			return
@@ -1690,6 +1742,19 @@ func (n *Node) startSnapshotCreateWorker(ctx context.Context) {
 	}
 }
 
+func snapshotIntegrityScanHeight(height uint64, tip uint64, interval uint64) bool {
+	if height == 0 || tip == 0 || height > tip {
+		return false
+	}
+	if height == tip {
+		return true
+	}
+	if interval == 0 {
+		interval = 32
+	}
+	return height%interval == 0
+}
+
 func (n *Node) verifySnapshotIntegrityDepth(depth uint64) error {
 	if n == nil || n.DB == nil || n.DB.SnapshotStore() == nil || n.Blockchain == nil {
 		return nil
@@ -1708,7 +1773,22 @@ func (n *Node) verifySnapshotIntegrityDepth(depth uint64) error {
 	if tip > depth {
 		start = tip - depth + 1
 	}
+	interval := syncCheckpointIntervalBlocks()
 	for height := start; height <= tip; height++ {
+		if !snapshotIntegrityScanHeight(height, tip, interval) {
+			continue
+		}
+		recordExists := n.committedStateSnapshotRecordExists(height)
+		if !recordExists && height < tip {
+			// Checkpoint-only snapshot policies intentionally leave most historical
+			// heights without a committed snapshot record. Avoid loading and
+			// verifying snapshot state for those expected gaps; on small nodes that
+			// work can otherwise monopolize CPU during every integrity pass.
+			if n.shouldLogLivenessReason(fmt.Sprintf("snapshot_materializing:%d", height), livenessReasonLogCooldown) {
+				log.Printf("[SNAPSHOT-MATERIALIZING] height=%d chain_tip=%d kind=missing_committed", height, tip)
+			}
+			continue
+		}
 		snap, _, _, ok := n.ResolveCommittedStateSnapshot(height)
 		if ok && snap != nil {
 			meta, metaErr := n.loadSnapshotMetaRecord(height)
@@ -1718,7 +1798,8 @@ func (n *Node) verifySnapshotIntegrityDepth(depth uint64) error {
 				if !strings.EqualFold(meta.SnapshotHash, expected.SnapshotHash) ||
 					!strings.EqualFold(meta.StateRoot, expected.StateRoot) ||
 					!strings.EqualFold(meta.ValidatorSetHash, expected.ValidatorSetHash) ||
-					!strings.EqualFold(meta.ValidatorRegistryHash, expected.ValidatorRegistryHash) {
+					!strings.EqualFold(meta.ValidatorRegistryHash, expected.ValidatorRegistryHash) ||
+					!strings.EqualFold(meta.PromotionWindowHash, expected.PromotionWindowHash) {
 					if n.shouldLogLivenessReason(fmt.Sprintf("snapshot_integrity_meta:%d", height), livenessReasonLogCooldown) {
 						log.Printf("[SNAPSHOT-INTEGRITY] height=%d kind=meta_mismatch", height)
 					}
@@ -1730,13 +1811,6 @@ func (n *Node) verifySnapshotIntegrityDepth(depth uint64) error {
 				if err := n.storeSnapshotMetaRecord(height, snap, "integrity_backfill", "committed_full", snapshotBaseHeight(height)); err != nil {
 					return err
 				}
-			}
-			continue
-		}
-		recordExists := n.committedStateSnapshotRecordExists(height)
-		if !recordExists && height < tip {
-			if n.shouldLogLivenessReason(fmt.Sprintf("snapshot_materializing:%d", height), livenessReasonLogCooldown) {
-				log.Printf("[SNAPSHOT-MATERIALIZING] height=%d chain_tip=%d kind=missing_committed", height, tip)
 			}
 			continue
 		}
@@ -1762,7 +1836,8 @@ func (n *Node) verifySnapshotIntegrityDepth(depth uint64) error {
 	if tipMeta, err := n.loadTipSnapshotMeta(); err == nil && tipMeta != nil && tipMeta.Height > 0 {
 		if snap, _, _, ok := n.ResolveCommittedStateSnapshot(tipMeta.Height); ok && snap != nil {
 			if !strings.EqualFold(strings.TrimSpace(tipMeta.StateRoot), strings.TrimSpace(snap.StateRoot)) ||
-				!strings.EqualFold(strings.TrimSpace(tipMeta.ValidatorRegistryHash), strings.TrimSpace(snapshotValidatorRegistryHash(snap))) {
+				!strings.EqualFold(strings.TrimSpace(tipMeta.ValidatorRegistryHash), strings.TrimSpace(snapshotValidatorRegistryHash(snap))) ||
+				!strings.EqualFold(strings.TrimSpace(tipMeta.PromotionWindowHash), strings.TrimSpace(snapshotPromotionWindowHash(snap))) {
 				_ = n.clearTipSnapshotRecords()
 			}
 		}

@@ -48,7 +48,7 @@ func runOperatorCLI(args []string) (bool, int) {
 
 func isOperatorCLICommand(cmd string) bool {
 	switch strings.ToLower(strings.TrimSpace(cmd)) {
-	case "wallet", "balance", "send", "validator-keygen", "validator-pubkey", "validator", "stake", "unstake", "claim-rewards", "status", "peers", "sync-status", "backup", "snapshot", "indexer", "help":
+	case "wallet", "balance", "send", "validator-keygen", "validator-pubkey", "validator", "stake", "unstake", "claim-rewards", "status", "peers", "sync-status", "setup", "install", "doctor", "service", "start", "stop", "repair", "update", "restore", "uninstall", "backup", "snapshot", "storage", "indexer", "help":
 		return true
 	default:
 		return false
@@ -79,15 +79,35 @@ func operatorRun(cmd string, args []string) error {
 	case "claim-rewards":
 		return operatorClaimRewardsCommand(args)
 	case "status":
-		return operatorStatusCommand(args, true)
+		return operatorStatusAliasCommand(args)
 	case "sync-status":
 		return operatorStatusCommand(args, false)
 	case "peers":
 		return operatorPeersCommand(args)
+	case "setup":
+		return operatorSetupCommand(args)
+	case "install":
+		return operatorSetupCommand(args)
+	case "doctor":
+		return operatorDoctorCommand(args)
+	case "service":
+		return operatorServiceCommand(args)
+	case "start", "stop":
+		return operatorServiceCommand(append([]string{cmd}, args...))
+	case "repair":
+		return operatorRepairCommand(args)
+	case "update":
+		return operatorUpdateCommand(args)
+	case "restore":
+		return operatorRestoreCommand(args)
+	case "uninstall":
+		return operatorUninstallCommand(args)
 	case "backup":
 		return operatorBackupCommand(args)
 	case "snapshot":
 		return operatorSnapshotCommand(args)
+	case "storage":
+		return operatorStorageCommand(args)
 	case "indexer":
 		return operatorIndexerCommand(args)
 	default:
@@ -122,16 +142,30 @@ func operatorPrintHelp() {
 	fmt.Println("  claim-rewards --wallet wallet.json --rpc http://127.0.0.1:26657")
 	fmt.Println()
 	fmt.Println("Node:")
-	fmt.Println("  status --rpc http://127.0.0.1:26657")
+	fmt.Println("  install validator --id HOME1 --low-ram --auto-start")
+	fmt.Println("  setup validator --id HOME1 --low-ram --auto-start")
+	fmt.Println("  setup candidate --id HOME1 --low-ram --auto-start")
+	fmt.Println("  doctor --id HOME1 --datadir data [--json]")
+	fmt.Println("  start|stop|status --id HOME1 --install-dir ~/.msc-node")
+	fmt.Println("  repair --id HOME1 --install-dir ~/.msc-node")
+	fmt.Println("  update --id HOME1 --source auto --install-dir ~/.msc-node")
+	fmt.Println("  restore --id HOME1 --backup /path/to/backup --install-dir ~/.msc-node")
+	fmt.Println("  uninstall --id HOME1 --install-dir ~/.msc-node")
+	fmt.Println("  service start|stop|status --install-dir ~/.msc-node")
+	fmt.Println("  status --rpc http://127.0.0.1:26657  (explicit RPC status)")
 	fmt.Println("  peers --rpc http://127.0.0.1:26657")
 	fmt.Println("  sync-status --rpc http://127.0.0.1:26657")
 	fmt.Println()
 	fmt.Println("Backup / recovery:")
+	fmt.Println("  backup --id A --datadir data --out /offline/msc-backups")
 	fmt.Println("  backup export --id A --datadir data/A [--height 0]")
 	fmt.Println("  backup verify --path data/A/node_A/backups/backup_...")
 	fmt.Println("  backup import --id RESTORE --datadir /tmp/restore --path /tmp/backup --apply")
 	fmt.Println("  backup recover --id A --datadir data/A --height 1000")
+	fmt.Println("  backup wizard --id A --datadir data")
 	fmt.Println("  snapshot export|import|verify ...  (aliases for backup commands)")
+	fmt.Println("  storage metrics --path data/A/node_A/meta.db")
+	fmt.Println("  storage compact --path data/A/node_A/meta.db --confirm-offline")
 	fmt.Println()
 	fmt.Println("Archive / indexer:")
 	fmt.Println("  indexer run --source http://127.0.0.1:26667 --listen 127.0.0.1:26780 --datadir runtime-data/indexer/INDEXER1")
@@ -649,10 +683,15 @@ func operatorPeersCommand(args []string) error {
 
 func operatorBackupCommand(args []string) error {
 	if len(args) == 0 {
-		return errors.New("backup subcommand required (export/import/verify/recover)")
+		return operatorBackupBundle(args)
+	}
+	if strings.HasPrefix(strings.TrimSpace(args[0]), "-") {
+		return operatorBackupBundle(args)
 	}
 	sub := strings.ToLower(strings.TrimSpace(args[0]))
 	switch sub {
+	case "wizard":
+		return operatorBackupWizard(args[1:])
 	case "export":
 		return operatorBackupExport(args[1:])
 	case "import":

@@ -14,6 +14,24 @@ type DB struct {
 	db *pebble.DB
 }
 
+type DBMetricsSummary struct {
+	DiskSpaceBytes          uint64 `json:"disk_space_bytes"`
+	EstimatedCompactionDebt uint64 `json:"estimated_compaction_debt_bytes"`
+	CompactionsInProgress   int64  `json:"compactions_in_progress"`
+	TotalFiles              int64  `json:"total_files"`
+	L0Files                 int64  `json:"l0_files"`
+	L0Sublevels             int32  `json:"l0_sublevels"`
+	ReadAmplification       int    `json:"read_amplification"`
+	ObsoleteTables          int64  `json:"obsolete_tables"`
+	ObsoleteTableBytes      uint64 `json:"obsolete_table_bytes"`
+	ZombieTables            int64  `json:"zombie_tables"`
+	ZombieTableBytes        uint64 `json:"zombie_table_bytes"`
+	OpenSnapshots           int    `json:"open_snapshots"`
+	OpenTableIterators      int64  `json:"open_table_iterators"`
+	WALFiles                int64  `json:"wal_files"`
+	WALBytes                uint64 `json:"wal_bytes"`
+}
+
 func openPebbleDB(path string) (*DB, error) {
 	opts := &pebble.Options{}
 	db, err := pebble.Open(path, opts)
@@ -21,6 +39,46 @@ func openPebbleDB(path string) (*DB, error) {
 		return nil, err
 	}
 	return &DB{db: db}, nil
+}
+
+func (d *DB) MetricsSummary() (DBMetricsSummary, error) {
+	if d == nil || d.db == nil {
+		return DBMetricsSummary{}, errors.New("db not initialized")
+	}
+	metrics := d.db.Metrics()
+	total := metrics.Total()
+	return DBMetricsSummary{
+		DiskSpaceBytes:          metrics.DiskSpaceUsage(),
+		EstimatedCompactionDebt: metrics.Compact.EstimatedDebt,
+		CompactionsInProgress:   metrics.Compact.NumInProgress,
+		TotalFiles:              total.NumFiles,
+		L0Files:                 metrics.Levels[0].NumFiles,
+		L0Sublevels:             metrics.Levels[0].Sublevels,
+		ReadAmplification:       metrics.ReadAmp(),
+		ObsoleteTables:          metrics.Table.ObsoleteCount,
+		ObsoleteTableBytes:      metrics.Table.ObsoleteSize,
+		ZombieTables:            metrics.Table.ZombieCount,
+		ZombieTableBytes:        metrics.Table.ZombieSize,
+		OpenSnapshots:           metrics.Snapshots.Count,
+		OpenTableIterators:      metrics.TableIters,
+		WALFiles:                metrics.WAL.Files,
+		WALBytes:                metrics.WAL.PhysicalSize,
+	}, nil
+}
+
+func (d *DB) CompactAll(parallel bool) error {
+	if d == nil || d.db == nil {
+		return errors.New("db not initialized")
+	}
+	if err := d.db.Flush(); err != nil {
+		return err
+	}
+	// MSC database keys are textual protocol prefixes. This range covers the
+	// complete application keyspace while satisfying Pebble's start < end
+	// requirement.
+	start := []byte{}
+	end := bytes.Repeat([]byte{0xff}, 32)
+	return d.db.Compact(start, end, parallel)
 }
 
 func (d *DB) Close() error {

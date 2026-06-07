@@ -86,6 +86,16 @@ func TestValidatorGeographicDiversityHealthyMultiProvider(t *testing.T) {
 	}
 }
 
+func TestValidatorDiversityParsesOperatorAndHomePCMetadata(t *testing.T) {
+	info, ok := parseValidatorDiversityEntry("H|US|AS7018|Home ISP|home-1|operator-home|home_pc")
+	if !ok {
+		t.Fatalf("expected metadata entry to parse")
+	}
+	if info.ValidatorID != "H" || info.OperatorID != "OPERATORHOME" || !info.HomePC {
+		t.Fatalf("unexpected extended diversity metadata: %+v", info)
+	}
+}
+
 func TestValidatorGeographicDiversityDetectsSingleAWSRegion(t *testing.T) {
 	configureValidatorDiversityForTest(t, []string{
 		"A|US|AS14618|AWS|us-east-1",

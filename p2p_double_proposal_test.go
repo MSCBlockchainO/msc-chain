@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"testing"
 	"time"
 )
@@ -56,5 +58,54 @@ func TestShouldCountDoubleProposalEvidenceDedupes(t *testing.T) {
 	n.doubleProposalMu.Unlock()
 	if !n.shouldCountDoubleProposalEvidence(61, 7, "A", "hash-a", "hash-b") {
 		t.Fatal("expired evidence should be countable again")
+	}
+}
+
+func TestVerifyLeaderBlockDoesNotRecordRejectedProposalAsEquivocation(t *testing.T) {
+	proposedBlocksMu.Lock()
+	oldProposed := ProposedBlocks
+	ProposedBlocks = make(map[uint64]map[uint32]map[string]string)
+	proposedBlocksMu.Unlock()
+
+	oldRuntimeKeys := ValidatorPubKeys
+	oldGenesisKeys := GenesisValidatorPubKeys
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate validator key: %v", err)
+	}
+	ValidatorPubKeys = map[string]ed25519.PublicKey{"A": append(ed25519.PublicKey(nil), pub...)}
+	GenesisValidatorPubKeys = map[string]ed25519.PublicKey{"A": append(ed25519.PublicKey(nil), pub...)}
+	t.Cleanup(func() {
+		proposedBlocksMu.Lock()
+		ProposedBlocks = oldProposed
+		proposedBlocksMu.Unlock()
+		ValidatorPubKeys = oldRuntimeKeys
+		GenesisValidatorPubKeys = oldGenesisKeys
+	})
+
+	node := newValidatorRoundTestNode(t, t.TempDir(), "A", []string{"A"}, pub, priv)
+	valid := node.BuildLeaderBlock(node.currentEpoch())
+	if len(valid.Signature) == 0 || !VerifyBlockSignature(valid) {
+		t.Fatalf("test block should be signed")
+	}
+
+	rejected := valid
+	rejected.PrevHash = "wrong-prev"
+	node.SignBlock(&rejected)
+	if rejected.BlockHash == valid.BlockHash {
+		t.Fatalf("bad-prev proposal should have a distinct hash")
+	}
+	if node.verifyLeaderBlock(rejected, "peer-bad-prev") {
+		t.Fatalf("bad-prev proposal should be rejected")
+	}
+	proposedBlocksMu.Lock()
+	_, recordedRejected := ProposedBlocks[rejected.ID][rejected.Round][normalizeValidatorID(rejected.Proposer)]
+	proposedBlocksMu.Unlock()
+	if recordedRejected {
+		t.Fatalf("rejected proposal must not enter double-proposal registry")
+	}
+
+	if !node.verifyLeaderBlock(valid, "peer-corrected") {
+		t.Fatalf("corrected proposal should not be treated as equivocation")
 	}
 }

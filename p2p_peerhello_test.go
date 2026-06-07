@@ -3,10 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 func TestDecodePeerHelloPayloadRaw(t *testing.T) {
@@ -30,6 +33,54 @@ func TestDecodePeerHelloPayloadRaw(t *testing.T) {
 	}
 	if got.ChainID != in.ChainID || got.ValidatorID != in.ValidatorID {
 		t.Fatalf("decoded hello mismatch: got=%+v want=%+v", got, in)
+	}
+}
+
+func TestOnPeerDisconnectedDebouncesValidatorOffline(t *testing.T) {
+	pid := peer.ID("peerA")
+	n := &Node{
+		peerToValidator:       map[string]string{pid.String(): "A"},
+		peerSuspectAt:         make(map[string]time.Time),
+		peerHelloOK:           make(map[string]bool),
+		peerAckHeight:         make(map[string]uint64),
+		peerTipHash:           make(map[string]string),
+		peerFlapTimes:         make(map[string][]time.Time),
+		validatorSuspect:      make(map[string]time.Time),
+		validatorOfflineSince: make(map[string]time.Time),
+		validatorStatus: map[string]*ValidatorStatus{
+			"A": {
+				Active:              true,
+				Enabled:             true,
+				ConsensusReadyKnown: true,
+				LastSeen:            time.Now(),
+			},
+		},
+	}
+
+	n.onPeerDisconnected(pid)
+
+	if st := n.validatorStatus["A"]; st == nil || !st.Active {
+		t.Fatalf("transient peer disconnect should not immediately mark validator offline: %+v", st)
+	}
+	n.validatorMu.RLock()
+	if _, ok := n.validatorSuspect["A"]; !ok {
+		n.validatorMu.RUnlock()
+		t.Fatalf("expected validator to be marked suspect")
+	}
+	n.validatorMu.RUnlock()
+	if _, ok := n.peerSuspectAt[pid.String()]; !ok {
+		t.Fatalf("expected peer to enter suspect debounce window")
+	}
+	if _, offline := n.validatorOfflineSince["A"]; offline {
+		t.Fatalf("validator should not enter offline state until suspect timeout expires")
+	}
+
+	n.applyPeerInfo(pid.String(), PeerHello{Role: "validator", ValidatorID: "A"})
+	n.validatorMu.RLock()
+	_, stillSuspect := n.validatorSuspect["A"]
+	n.validatorMu.RUnlock()
+	if stillSuspect {
+		t.Fatalf("validated peer info should clear validator suspect state")
 	}
 }
 
@@ -104,6 +155,48 @@ func TestValidatePeerHelloAcceptsMatchingAdvertisedPeerID(t *testing.T) {
 	}
 	if node.isPeerQuarantined(remotePeerID) {
 		t.Fatal("matching peer hello must not quarantine peer")
+	}
+}
+
+func TestOutboundPeerHelloPreValidationRedactsSensitiveFields(t *testing.T) {
+	node := &Node{}
+
+	hello := node.outboundPeerHelloPreValidation()
+
+	if hello.ChainID != ChainID || hello.GenesisHash != GenesisHash || hello.Version != Version || hello.ConsensusHash != consensusParamsHash() {
+		t.Fatalf("pre-validation hello missing compatibility fields: %+v", hello)
+	}
+	if peerHelloHasPostValidationFields(hello) {
+		t.Fatalf("pre-validation hello leaked post-validation fields: %+v", hello)
+	}
+	if !node.validatePeerHelloEnvelope("peerA", hello) {
+		t.Fatal("pre-validation hello envelope should validate compatibility fields")
+	}
+	if node.isPeerHelloOK("peerA") {
+		t.Fatal("envelope validation must not mark peer hello-ok")
+	}
+}
+
+func TestValidatePeerHelloEnvelopeDoesNotReserveIdentity(t *testing.T) {
+	remotePeerID, hello := signedPeerHelloForTest(t)
+	node := &Node{}
+	node.ensurePeerIsolationMaps()
+
+	if !node.validatePeerHelloEnvelope(remotePeerID, hello) {
+		t.Fatal("expected signed hello envelope to validate")
+	}
+	if node.isPeerHelloOK(remotePeerID) {
+		t.Fatal("envelope validation must not mark peer hello-ok")
+	}
+	if got := node.validatorToPeer[hello.ValidatorID]; got != "" {
+		t.Fatalf("envelope validation must not reserve validator identity, got peer %q", got)
+	}
+
+	if !node.validatePeerHello(remotePeerID, hello) {
+		t.Fatal("full peer hello should validate after envelope-only check")
+	}
+	if !node.isPeerHelloOK(remotePeerID) {
+		t.Fatal("full peer hello should mark peer hello-ok")
 	}
 }
 
@@ -192,6 +285,105 @@ func TestClearPeerStateReleasesNodeIDMapping(t *testing.T) {
 	node.clearPeerState(peerID)
 	if got := node.nodeIDToPeer["F"]; got != "" {
 		t.Fatalf("clearPeerState should release node id mapping, got=%s", got)
+	}
+}
+
+func TestClearPeerStatePreservesPeerHelloNonceUntilTTL(t *testing.T) {
+	peerID := "12D3KooWSjgBtznLkWFcuKkib3o4GAxxREFUPrRtcYqwTAUruXJo"
+	node := &Node{ID: "A"}
+	node.ensurePeerIsolationMaps()
+	node.peerStateMu.Lock()
+	node.peerHelloNonces[peerID+"|nonce-1"] = time.Now()
+	node.peerHelloNonces["other-peer|nonce-2"] = time.Now()
+	node.peerStateMu.Unlock()
+
+	node.clearPeerState(peerID)
+
+	node.peerStateMu.Lock()
+	_, stale := node.peerHelloNonces[peerID+"|nonce-1"]
+	_, other := node.peerHelloNonces["other-peer|nonce-2"]
+	node.peerStateMu.Unlock()
+	if !stale {
+		t.Fatal("clearPeerState must not clear nonce tombstones before TTL expiry")
+	}
+	if !other {
+		t.Fatal("clearPeerState should not remove nonce entries for other peers")
+	}
+}
+
+func TestPeerHelloNonceReplayRejectedAfterRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	peerID := "12D3KooWSjgBtznLkWFcuKkib3o4GAxxREFUPrRtcYqwTAUruXJo"
+	hello := PeerHello{Nonce: "nonce-replay"}
+
+	first := &Node{ID: "A", DataDir: dataDir}
+	first.ensurePeerIsolationMaps()
+	if !first.acceptPeerHelloNonce(peerID, hello) {
+		t.Fatal("first peer hello nonce should be accepted")
+	}
+
+	restarted := &Node{ID: "A", DataDir: dataDir}
+	restarted.ensurePeerIsolationMaps()
+	restarted.loadPeerHelloNonces()
+	if restarted.acceptPeerHelloNonce(peerID, hello) {
+		t.Fatal("persisted nonce tombstone should reject replay after restart")
+	}
+}
+
+func TestSweepPeerHelloNoncesPrunesExpiredEntries(t *testing.T) {
+	node := &Node{ID: "A", DataDir: t.TempDir()}
+	node.ensurePeerIsolationMaps()
+	now := time.Now()
+	node.peerStateMu.Lock()
+	node.peerHelloNonces["peer-a|old"] = now.Add(-peerHelloNonceTTL - time.Second)
+	node.peerHelloNonces["peer-a|fresh"] = now
+	node.peerStateMu.Unlock()
+
+	if !node.sweepPeerHelloNonces(now) {
+		t.Fatal("expected sweep to prune expired nonce")
+	}
+
+	node.peerStateMu.Lock()
+	_, oldExists := node.peerHelloNonces["peer-a|old"]
+	_, freshExists := node.peerHelloNonces["peer-a|fresh"]
+	node.peerStateMu.Unlock()
+	if oldExists {
+		t.Fatal("expired nonce should be removed")
+	}
+	if !freshExists {
+		t.Fatal("fresh nonce should remain")
+	}
+	raw, err := os.ReadFile(node.peerHelloNonceStorePath())
+	if err != nil {
+		t.Fatalf("read nonce store: %v", err)
+	}
+	if strings.Contains(string(raw), "peer-a|old") {
+		t.Fatal("expired nonce should be removed from persisted store")
+	}
+}
+
+func TestValidatorStatusSnapshotCopiesUnderLock(t *testing.T) {
+	node := &Node{ID: "A"}
+	node.validatorStatus = map[string]*ValidatorStatus{
+		"B": {
+			ReportedHeight:   10,
+			FinalizedHeight:  9,
+			ValidatorSetHash: "hash-1",
+			LastSeen:         time.Now(),
+		},
+	}
+
+	snapshot, ok := node.validatorStatusSnapshot("B")
+	if !ok {
+		t.Fatal("expected validator status snapshot")
+	}
+	node.validatorMu.Lock()
+	node.validatorStatus["B"].ValidatorSetHash = "hash-2"
+	node.validatorStatus["B"].ReportedHeight = 11
+	node.validatorMu.Unlock()
+
+	if snapshot.ValidatorSetHash != "hash-1" || snapshot.ReportedHeight != 10 {
+		t.Fatalf("snapshot should be a stable copy, got hash=%s height=%d", snapshot.ValidatorSetHash, snapshot.ReportedHeight)
 	}
 }
 

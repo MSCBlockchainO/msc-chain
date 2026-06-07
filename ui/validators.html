@@ -20,9 +20,23 @@
       <div class="card"><div class="label">CMD Mode</div><div id="validatorCMD" class="value">-</div></div>
       <div class="card"><div class="label">Block Height</div><div id="blockHeight" class="value">-</div></div>
       <div class="card"><div class="label">Finalized Height</div><div id="finalizedHeight" class="value">-</div></div>
+      <div class="card"><div class="label">Active Validators</div><div id="validatorActiveCount" class="value">-</div></div>
+      <div class="card"><div class="label">Home-PC Nodes</div><div id="validatorHomePCCount" class="value">-</div></div>
+      <div class="card"><div class="label">Founder Badges</div><div id="validatorFounderCount" class="value">-</div></div>
+      <div class="card"><div class="label">Program</div><div id="validatorCampaignSeason" class="value">-</div></div>
+      <div class="card"><div class="label">Program Status</div><div id="validatorCampaignStatus" class="value">-</div></div>
+      <div class="card"><div class="label">Program Leader</div><div id="validatorCampaignLeader" class="value">-</div></div>
     </section>
     <section class="card">
-      <div class="label">Validator List</div>
+      <div class="label">Validator Leaderboard</div>
+      <div class="filter-row" id="validatorFilters">
+        <button type="button" class="filter-button active" data-validator-filter="all">All</button>
+        <button type="button" class="filter-button" data-validator-filter="performance">Performance</button>
+        <button type="button" class="filter-button" data-validator-filter="rotation">Rotation</button>
+        <button type="button" class="filter-button" data-validator-filter="standby">Standby</button>
+        <button type="button" class="filter-button" data-validator-filter="home_pc">Home-PC</button>
+        <button type="button" class="filter-button" data-validator-filter="founder">Founder</button>
+      </div>
       <div id="validatorList" class="list"><div class="list-item">Loading validators...</div></div>
     </section>
   </main>

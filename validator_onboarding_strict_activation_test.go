@@ -1779,6 +1779,32 @@ func TestRuntimeStatusTreatsNearTipTargetCompleteAfterConsensusStarted(t *testin
 	}
 }
 
+func TestRuntimeStatusClearsStaleRawSyncingAtTarget(t *testing.T) {
+	defer withOnboardingStrictActivationGlobals(t)()
+	configureStrictActivationDefaults()
+
+	ConfigAuthRequireWallet = false
+	ValidatorRequireStake = false
+
+	n := makeStrictActivationNode(50)
+	n.Consensus = &ConsensusState{
+		Syncing:    true,
+		SyncTarget: n.Blockchain.Height(),
+	}
+	setStrictActivationObservedHeight(n, n.Blockchain.Height())
+
+	status := n.runtimeStatusSnapshot()
+	if status.Syncing {
+		t.Fatalf("expected status to clear stale raw syncing once target is reached")
+	}
+	if !status.SyncComplete {
+		t.Fatalf("expected status to remain sync-complete once target is reached")
+	}
+	if status.WaitReason == "syncing" {
+		t.Fatalf("expected wait reason not to be syncing after target is reached")
+	}
+}
+
 func TestRuntimeStatusKeepsMultiBlockLagSyncingAfterConsensusStarted(t *testing.T) {
 	defer withOnboardingStrictActivationGlobals(t)()
 	configureStrictActivationDefaults()

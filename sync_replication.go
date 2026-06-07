@@ -71,6 +71,9 @@ func (n *Node) fetchReplicatedSnapshotChunk(manifest *SnapshotManifest, provider
 		return nil, "", fmt.Errorf("snapshot chunk hash unavailable index=%d", idx)
 	}
 	replicationFactor := syncSnapshotChunkReplicationFactor()
+	if !syncSnapshotMultiPeerChunkFetchEnabled() {
+		replicationFactor = 1
+	}
 	if replicationFactor > len(providers) {
 		replicationFactor = len(providers)
 	}

@@ -241,9 +241,9 @@ func TestStateCorruptionRecoveryCorruptBlockIndexGapPrunesFutureWithoutRollback(
 	}
 
 	loaded := node.LoadBlocksFromDB()
-	sanitized, tip, reason := sanitizeContiguousLoadedBlocks(loaded)
-	if !strings.Contains(reason, "height_gap_2_to_4") || tip != 2 {
-		t.Fatalf("expected corrupt block index gap at 2->4, tip=%d reason=%q loaded=%d", tip, reason, len(loaded))
+	sanitized, tip, err := sanitizeContiguousLoadedBlocks(loaded)
+	if err == nil || !strings.Contains(err.Error(), "height_gap_2_to_4") || tip != 2 {
+		t.Fatalf("expected corrupt block index gap at 2->4, tip=%d err=%v loaded=%d", tip, err, len(loaded))
 	}
 	node.Blockchain.ReplaceChain(sanitized)
 	node.restoreCommittedHeightFromChain()

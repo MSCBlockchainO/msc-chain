@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"sort"
@@ -53,12 +54,15 @@ const (
 	peerFlapWindow                  = 5 * time.Minute
 	peerFlapThreshold               = 5
 	peerQuarantineFor               = 5 * time.Minute
+	peerQuarantineForFlap           = 45 * time.Second
 	peerQuarantineForProtocol       = 30 * time.Minute
 	peerQuarantineForPeerInfoStream = 20 * time.Second
 	peerQuarantineForMismatch       = 1 * time.Hour
 	peerHelloCooldown               = 30 * time.Second
 	peerHelloMaxClockSkew           = 5 * time.Minute
 	peerHelloNonceTTL               = 15 * time.Minute
+	peerHelloNonceSweepInterval     = time.Minute
+	peerHelloNonceStoreFile         = "peer_hello_nonces.json"
 	peerSuspectInterval             = 20 * time.Second
 	syncCooldown                    = 30 * time.Second
 	peerMinHold                     = 30 * time.Second
@@ -76,6 +80,7 @@ const (
 	execMismatchQuarantineAt        = 2
 	execMismatchSlashAt             = 3
 	invalidProposerStrikeWindow     = 3 * time.Minute
+	invalidProposerStrikeDecayEvery = time.Hour
 	invalidProposerQuarantineAt     = 2
 	invalidProposerPeerQuarantineAt = 3
 	execVoteStaleLagBlocks          = 2
@@ -88,11 +93,26 @@ const (
 	finalizedDriftMaxServeRange     = 64
 	finalizedDriftSnapshotCooldown  = 30 * time.Second
 	blockSyncServeMaxBlocks         = 512
+	blockRequestServeMinConcurrency = 64
+	blockRequestServeSlotsPerPeer   = 4
+	snapshotServeRetryAttempts      = 6
+	snapshotServeRetryBackoff       = 25 * time.Millisecond
 	consensusPublishTimeout         = 500 * time.Millisecond
 )
 
-var blockRequestServeSem = make(chan struct{}, 64)
+var blockRequestServeSem = make(chan struct{}, blockRequestServeConcurrencyLimit(MaxPeers))
 var syncPeerRequestTimeoutOverride time.Duration
+
+func blockRequestServeConcurrencyLimit(maxPeers int) int {
+	if maxPeers <= 0 {
+		return blockRequestServeMinConcurrency
+	}
+	limit := maxPeers * blockRequestServeSlotsPerPeer
+	if limit < blockRequestServeMinConcurrency {
+		return blockRequestServeMinConcurrency
+	}
+	return limit
+}
 
 type blockRequestPhaseError struct {
 	Stage   string
@@ -556,7 +576,11 @@ func (n *Node) requestBlocksFromPeerDirect(
 		fmt.Printf("[SYNC-REQUEST-OPEN-OK] peer=%s range=%d-%d duration_ms=%d\n",
 			peerLabel, from, to, time.Since(openStarted).Milliseconds())
 	}
-	defer s.Close()
+	defer func() {
+		if s != nil {
+			_ = s.Close()
+		}
+	}()
 
 	req := BlockRequest{
 		From:           from,
@@ -573,6 +597,7 @@ func (n *Node) requestBlocksFromPeerDirect(
 	}
 	if err := enc.Encode(req); err != nil {
 		_ = s.Reset()
+		s = nil
 		wrapped := newBlockRequestPhaseError("encode", pid, from, to, time.Since(encodeStarted), isNetTimeout(err), err)
 		fmt.Printf("[SYNC-REQUEST-ENCODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, wrapped)
 		return nil, nil, nil, wrapped
@@ -591,6 +616,7 @@ func (n *Node) requestBlocksFromPeerDirect(
 	var resp BlockResponse
 	if err := dec.Decode(&resp); err != nil {
 		_ = s.Reset()
+		s = nil
 		wrapped := newBlockRequestPhaseError("decode", pid, from, to, time.Since(decodeStarted), isNetTimeout(err), err)
 		fmt.Printf("[SYNC-REQUEST-DECODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, wrapped)
 		return nil, nil, nil, wrapped
@@ -811,7 +837,13 @@ func legacyProposalVoteKey(height uint64) string {
 func proposalVoteKey(height uint64, round uint32, blockHash string, txMerkle string, stateRoot string) string {
 	// ProposalID / consensus identity must remain round-aware even when the
 	// underlying block hash stays stable across retries.
-	return fmt.Sprintf("%d|%d|%s|%s|%s", height, round, blockHash, txMerkle, stateRoot)
+	//
+	// Do not include stateRoot in the identity. A proposal can be observed
+	// before local execution fills StateRoot and then later re-observed with a
+	// populated root. Including that volatile value splits execution votes for
+	// the same proposal across two buckets.
+	_ = stateRoot
+	return fmt.Sprintf("%d|%d|%s|%s|", height, round, blockHash, txMerkle)
 }
 
 func proposalVoteKeyParts(proposalKey string) (uint64, uint32, string, string, string, bool) {
@@ -925,6 +957,16 @@ func (n *Node) acceptedProposalVoteCountLocked(epoch uint64, proposalKey string)
 			}
 		}
 	}
+	if scoped := execPoolScopeKey(epoch, proposalKey); scoped != "" && n.execSignerSeen != nil {
+		if byProposal := n.execSignerSeen[epoch]; byProposal != nil {
+			if signers := byProposal[scoped]; len(signers) > count {
+				count = len(signers)
+			}
+		}
+	}
+	if global := getExecCountForProposalScopeGlobal(epoch, proposalKey, ""); global > count {
+		count = global
+	}
 	return count
 }
 
@@ -933,12 +975,20 @@ func execVoteCreditedGlobal(epoch uint64, proposalKey string, signer string, exe
 	if epoch == 0 || proposalKey == "" || signer == "" || execHash == "" {
 		return false
 	}
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+	return execVoteCreditedGlobalLocked(epoch, proposalKey, signer, execHash, txMerkle)
+}
+
+func execVoteCreditedGlobalLocked(epoch uint64, proposalKey string, signer string, execHash string, txMerkle string) bool {
+	signer = normalizeValidatorID(signer)
+	if epoch == 0 || proposalKey == "" || signer == "" || execHash == "" {
+		return false
+	}
 	poolScopeKey := execPoolScopeKey(epoch, proposalKey)
 	scopedExecKey := execPoolResultKey(epoch, poolScopeKey, execHash)
 	choice := execBroadcastKey(execHash, txMerkle)
 
-	ExecPool.mu.Lock()
-	defer ExecPool.mu.Unlock()
 	if byHash, ok := ExecPool.pool[epoch]; ok {
 		if bySigner, ok := byHash[scopedExecKey]; ok {
 			if existing, ok := bySigner[signer]; ok {
@@ -2682,7 +2732,31 @@ func (n *Node) releaseStaleLocalExecutionVoteMarkerLocked(epoch uint64, existing
 		return false
 	}
 	if n.localExecutionVoteMarkerHasEvidenceLocked(epoch, existingKey) {
-		return false
+		if !n.releaseStalledQuorumBackedLocalExecutionVoteMarkerLocked(epoch, existingRound, incomingRound, existingKey, incomingKey) {
+			return false
+		}
+		log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=release_stalled_quorum_cross_round_marker existing_round=%d existing=%s incoming=%s stall=%s",
+			ShortID(n.ID),
+			epoch,
+			incomingRound,
+			existingRound,
+			existingKey,
+			incomingKey,
+			n.commitStallDuration().Truncate(time.Second),
+		)
+		return true
+	}
+	if n.commitStallDuration() >= execQuorumEmergencyStallTimeout {
+		log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=release_stalled_nonquorum_cross_round_marker existing_round=%d existing=%s incoming=%s stall=%s",
+			ShortID(n.ID),
+			epoch,
+			incomingRound,
+			existingRound,
+			existingKey,
+			incomingKey,
+			n.commitStallDuration().Truncate(time.Second),
+		)
+		return true
 	}
 	roundGap := incomingRound - existingRound
 	if roundGap < localExecVoteStaleRoundReleaseGap && !n.localExecutionVoteMarkerNearQuorumLocked(epoch, incomingKey) {
@@ -2699,6 +2773,26 @@ func (n *Node) releaseStaleLocalExecutionVoteMarkerLocked(epoch uint64, existing
 	return true
 }
 
+func (n *Node) releaseStalledQuorumBackedLocalExecutionVoteMarkerLocked(epoch uint64, existingRound uint32, incomingRound uint32, existingKey string, incomingKey string) bool {
+	if n == nil || epoch == 0 {
+		return false
+	}
+	if incomingRound <= existingRound {
+		return false
+	}
+	roundGap := incomingRound - existingRound
+	if roundGap < localExecVoteStaleRoundReleaseGap && !n.localExecutionVoteMarkerNearQuorumLocked(epoch, incomingKey) {
+		return false
+	}
+	if n.Blockchain == nil || n.Blockchain.Height()+1 != epoch {
+		return false
+	}
+	if n.commitStallDuration() < execQuorumEmergencyStallTimeout {
+		return false
+	}
+	return true
+}
+
 func (n *Node) localExecutionVoteMarkerEvidenceCountLocked(epoch uint64, proposalKey string) int {
 	if n == nil || epoch == 0 {
 		return 0
@@ -2710,7 +2804,19 @@ func (n *Node) localExecutionVoteMarkerEvidenceCountLocked(epoch uint64, proposa
 	evidenceCount := n.acceptedProposalVoteCountLocked(epoch, proposalKey)
 	_, _, blockHash, txMerkle, stateRoot, ok := proposalVoteKeyParts(proposalKey)
 	if ok {
+		stateRoot = strings.TrimSpace(stateRoot)
+		if stateRoot == "" && n.acceptedProposalBlocks != nil {
+			if block, exists := n.acceptedProposalBlocks[proposalKey]; exists && block.ID == epoch {
+				stateRoot = strings.TrimSpace(block.StateRoot)
+				if stateRoot == "" {
+					stateRoot = strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
+				}
+			}
+		}
 		if global := getExecCountGlobal(epoch, proposalKey, stateRoot, txMerkle); global > evidenceCount {
+			evidenceCount = global
+		}
+		if global := getExecCountForProposalScopeGlobal(epoch, proposalKey, txMerkle); global > evidenceCount {
 			evidenceCount = global
 		}
 		if blockHash != "" && n.Consensus != nil {
@@ -3208,10 +3314,8 @@ func (n *Node) executionVoteSignerLikelyStale(signer string, epoch uint64) bool 
 	if signer == "" {
 		return false
 	}
-	n.validatorMu.RLock()
-	st := n.validatorStatus[signer]
-	n.validatorMu.RUnlock()
-	if st == nil {
+	st, ok := n.validatorStatusSnapshot(signer)
+	if !ok {
 		return false
 	}
 	observed := st.FinalizedHeight
@@ -3228,6 +3332,30 @@ func (n *Node) executionVoteSignerLikelyStale(signer string, epoch uint64) bool 
 		return true
 	}
 	return false
+}
+
+func (n *Node) validatorStatusSnapshot(id string) (ValidatorStatus, bool) {
+	id = normalizeValidatorID(id)
+	if n == nil || id == "" {
+		return ValidatorStatus{}, false
+	}
+	n.validatorMu.RLock()
+	st := n.validatorStatus[id]
+	if st == nil {
+		for key, candidate := range n.validatorStatus {
+			if normalizeValidatorID(key) == id {
+				st = candidate
+				break
+			}
+		}
+	}
+	if st == nil {
+		n.validatorMu.RUnlock()
+		return ValidatorStatus{}, false
+	}
+	snapshot := *st
+	n.validatorMu.RUnlock()
+	return snapshot, true
 }
 
 func execResultPubKeyCandidates(signer string) []ed25519.PublicKey {
@@ -3303,6 +3431,13 @@ func recordExecResultGlobal(epoch uint64, proposalKey string, execHash string, t
 	}
 	if _, ok := ExecPool.choice[epoch][poolScopeKey]; !ok {
 		ExecPool.choice[epoch][poolScopeKey] = make(map[string]string)
+	}
+
+	if execVoteCreditedGlobalLocked(epoch, poolScopeKey, signer, execHash, txMerkle) {
+		if byHash, ok := ExecPool.pool[epoch][scopedExecKey]; ok {
+			return len(byHash), false, false
+		}
+		return 0, false, false
 	}
 
 	if existing, ok := ExecPool.txMerkle[epoch][scopedExecKey]; ok && existing != "" && existing != txMerkle {
@@ -3562,6 +3697,39 @@ func getExecCountGlobal(epoch uint64, proposalKey string, execHash string, txMer
 		}
 	}
 	return len(resultsMap)
+}
+
+func getExecCountForProposalScopeGlobal(epoch uint64, proposalKey string, txMerkle string) int {
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+
+	if epoch == 0 || strings.TrimSpace(proposalKey) == "" {
+		return 0
+	}
+	scope := execPoolScopeKey(epoch, proposalKey)
+	if scope == "" {
+		return 0
+	}
+	byHash, ok := ExecPool.pool[epoch]
+	if !ok {
+		return 0
+	}
+	prefix := scope + "|"
+	best := 0
+	for scopedExecKey, resultsMap := range byHash {
+		if !strings.HasPrefix(scopedExecKey, prefix) {
+			continue
+		}
+		if txMerkle != "" {
+			if expected, ok := ExecPool.txMerkle[epoch][scopedExecKey]; ok && expected != "" && expected != txMerkle {
+				continue
+			}
+		}
+		if len(resultsMap) > best {
+			best = len(resultsMap)
+		}
+	}
+	return best
 }
 
 func clearExecPoolProposal(epoch uint64, proposalKey string) {
@@ -3882,7 +4050,7 @@ func (n *Node) replayQueuedLeaderBlocksForCurrentEpoch() {
 	}
 }
 
-func recordProposedBlock(height uint64, round uint32, proposer string, blockHash string) (bool, bool, string) {
+func recordVerifiedProposedBlock(height uint64, round uint32, proposer string, blockHash string) (bool, bool, string) {
 	proposer = normalizeValidatorID(proposer)
 	if height == 0 || proposer == "" || blockHash == "" {
 		return false, false, ""
@@ -3920,6 +4088,10 @@ func recordProposedBlock(height uint64, round uint32, proposer string, blockHash
 	}
 
 	return true, false, ""
+}
+
+func recordProposedBlock(height uint64, round uint32, proposer string, blockHash string) (bool, bool, string) {
+	return recordVerifiedProposedBlock(height, round, proposer, blockHash)
 }
 
 func penalizeSignedProposal(n *Node, block Block, reason string) {
@@ -4168,19 +4340,6 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		return false
 	}
 
-	_, equivocated, prevHash := recordProposedBlock(block.ID, block.Round, block.Proposer, block.BlockHash)
-	if equivocated {
-		if !n.shouldCountDoubleProposalEvidence(block.ID, block.Round, block.Proposer, prevHash, block.BlockHash) {
-			return false
-		}
-		if DebugConsensus {
-			fmt.Printf("Double proposal detected at height %d | round=%d proposer=%s prev=%s got=%s\n",
-				block.ID, block.Round, ShortID(block.Proposer), ShortHash(prevHash), ShortHash(block.BlockHash))
-		}
-		n.requestConsensusRecomputePause(block.ID, "double_proposal")
-		return false
-	}
-
 	last := n.Blockchain.LastBlock()
 	if block.PrevHash != last.BlockHash {
 		if DebugConsensus {
@@ -4233,6 +4392,18 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 			}
 			return false
 		}
+	}
+	_, equivocated, prevHash := recordVerifiedProposedBlock(block.ID, block.Round, block.Proposer, block.BlockHash)
+	if equivocated {
+		if !n.shouldCountDoubleProposalEvidence(block.ID, block.Round, block.Proposer, prevHash, block.BlockHash) {
+			return false
+		}
+		if DebugConsensus {
+			fmt.Printf("Double proposal detected at height %d | round=%d proposer=%s prev=%s got=%s\n",
+				block.ID, block.Round, ShortID(block.Proposer), ShortHash(prevHash), ShortHash(block.BlockHash))
+		}
+		n.requestConsensusRecomputePause(block.ID, "double_proposal")
+		return false
 	}
 	// StateRoot mismatch should be resolved by execution-result quorum.
 	// Proposal-stage rejection here can create false-positive slashing loops.
@@ -4667,7 +4838,8 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		leaderBlock.StrictQuorum != policy.StrictRequired {
 		proposalPolicyCompatible = false
 	}
-	if proposalPolicyDefined && proposalPolicyCompatible {
+	preserveProposalPolicy := proposalPolicyDefined && proposalPolicyCompatible
+	if preserveProposalPolicy {
 		policy.Mode = strings.TrimSpace(leaderBlock.ConsensusMode)
 		policy.Version = strings.TrimSpace(leaderBlock.QuorumPolicyVersion)
 		policy.ActiveReadyCount = leaderBlock.ActiveReadyCount
@@ -4684,7 +4856,7 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 			policy.StrictRequired,
 		)
 	}
-	if policy.ActiveReadyCount < len(commitSigners) {
+	if !preserveProposalPolicy && policy.ActiveReadyCount < len(commitSigners) {
 		policy.ActiveReadyCount = len(commitSigners)
 	}
 	final.ConsensusMode = policy.Mode
@@ -4715,8 +4887,15 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		}
 		final.ExecutionResults = filtered
 	}
+	proposalHashForVotes := executionVoteProposalHashForFinalBlock(final)
 	for i := range final.ExecutionResults {
-		if strings.TrimSpace(final.ExecutionResults[i].BlockHash) == "" {
+		// Always bind execution evidence to the canonical proposal hash for this
+		// height. Votes are recorded against the leader block hash before quorum
+		// metadata is stamped onto the finalized envelope; leaving that stale
+		// value in place makes verifyBlock reject our own commits.
+		if proposalHashForVotes != "" {
+			final.ExecutionResults[i].BlockHash = proposalHashForVotes
+		} else if strings.TrimSpace(final.ExecutionResults[i].BlockHash) == "" {
 			final.ExecutionResults[i].BlockHash = executionVoteProposalHashForFinalBlock(final)
 		}
 		if final.ExecutionResults[i].Round == 0 {
@@ -5789,6 +5968,32 @@ func (n *Node) outboundPeerHello() PeerHello {
 	n.signPeerHello(&hello)
 	return hello
 }
+
+func (n *Node) outboundPeerHelloPreValidation() PeerHello {
+	hello := PeerHello{
+		ChainID:       ChainID,
+		GenesisHash:   GenesisHash,
+		Version:       Version,
+		ConsensusHash: consensusParamsHash(),
+	}
+	n.signPeerHello(&hello)
+	return hello
+}
+
+func peerHelloHasPostValidationFields(hello PeerHello) bool {
+	return strings.TrimSpace(hello.Role) != "" ||
+		strings.TrimSpace(hello.NodeID) != "" ||
+		strings.TrimSpace(hello.ValidatorID) != "" ||
+		strings.TrimSpace(hello.ValidatorPubKey) != "" ||
+		strings.TrimSpace(hello.P2PAddr) != "" ||
+		strings.TrimSpace(hello.ValidatorSetHash) != "" ||
+		hello.ValidatorSetHeight != 0 ||
+		strings.TrimSpace(hello.NextValidatorSetHash) != "" ||
+		hello.ActivationHeight != 0 ||
+		hello.Height != 0 ||
+		strings.TrimSpace(hello.TipHash) != ""
+}
+
 func (n *Node) setGossipQuiet(quiet bool) {
 	n.peerStateMu.Lock()
 	n.gossipQuiet = quiet
@@ -5988,6 +6193,8 @@ func (n *Node) decayDialFailures(now time.Time) {
 }
 func quarantineDurationFor(reason string) time.Duration {
 	switch {
+	case strings.Contains(reason, "peer_flap"):
+		return peerQuarantineForFlap
 	case strings.Contains(reason, "peerinfo_protocol_mismatch"):
 		// Peer-info streams can fail transiently during peer startup/restart.
 		// Keep quarantine short so healthy peers recover quickly.
@@ -6026,7 +6233,6 @@ func (n *Node) clearPeerState(peerID string) {
 	delete(n.peerSubnet, peerID)
 	delete(n.peerASN, peerID)
 	delete(n.peerOutbound, peerID)
-	delete(n.peerHelloNonces, peerID)
 	delete(n.peerHelloOK, peerID)
 	delete(n.peerSuspectAt, peerID)
 	delete(n.peerHashMatch, peerID)
@@ -6484,6 +6690,142 @@ func (n *Node) peerHelloPublicKey(peerID string) (libp2pcrypto.PubKey, bool) {
 	return pub, true
 }
 
+type peerHelloNonceStore struct {
+	Nonces map[string]int64 `json:"nonces"`
+}
+
+func (n *Node) peerHelloNonceStorePath() string {
+	if n == nil || strings.TrimSpace(n.DataDir) == "" || strings.TrimSpace(n.ID) == "" {
+		return ""
+	}
+	return filepath.Join(nodeDataPath(n.DataDir, n.ID), peerHelloNonceStoreFile)
+}
+
+func (n *Node) prunePeerHelloNoncesLocked(now time.Time) bool {
+	if n == nil || n.peerHelloNonces == nil {
+		return false
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	changed := false
+	for key, seenAt := range n.peerHelloNonces {
+		if strings.TrimSpace(key) == "" || seenAt.IsZero() || now.Sub(seenAt) > peerHelloNonceTTL || seenAt.After(now.Add(peerHelloMaxClockSkew)) {
+			delete(n.peerHelloNonces, key)
+			changed = true
+		}
+	}
+	return changed
+}
+
+func (n *Node) loadPeerHelloNonces() {
+	path := n.peerHelloNonceStorePath()
+	if path == "" {
+		return
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var store peerHelloNonceStore
+	if err := json.Unmarshal(raw, &store); err != nil {
+		return
+	}
+	n.ensurePeerIsolationMaps()
+	now := time.Now()
+	changed := false
+	n.peerStateMu.Lock()
+	for key, seenUnix := range store.Nonces {
+		key = strings.TrimSpace(key)
+		if key == "" || seenUnix <= 0 {
+			changed = true
+			continue
+		}
+		seenAt := time.Unix(seenUnix, 0)
+		if now.Sub(seenAt) > peerHelloNonceTTL || seenAt.After(now.Add(peerHelloMaxClockSkew)) {
+			changed = true
+			continue
+		}
+		n.peerHelloNonces[key] = seenAt
+	}
+	if n.prunePeerHelloNoncesLocked(now) {
+		changed = true
+	}
+	n.peerStateMu.Unlock()
+	if changed {
+		n.persistPeerHelloNonces()
+	}
+}
+
+func (n *Node) persistPeerHelloNonces() {
+	path := n.peerHelloNonceStorePath()
+	if path == "" {
+		return
+	}
+	n.ensurePeerIsolationMaps()
+	nonces := make(map[string]int64)
+	n.peerStateMu.Lock()
+	for key, seenAt := range n.peerHelloNonces {
+		key = strings.TrimSpace(key)
+		if key != "" && !seenAt.IsZero() {
+			nonces[key] = seenAt.Unix()
+		}
+	}
+	n.peerStateMu.Unlock()
+	if len(nonces) == 0 {
+		_ = os.Remove(path)
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return
+	}
+	raw, err := json.MarshalIndent(peerHelloNonceStore{Nonces: nonces}, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = writeFileAtomic(path, raw, 0o600)
+}
+
+func (n *Node) sweepPeerHelloNonces(now time.Time) bool {
+	if n == nil {
+		return false
+	}
+	n.ensurePeerIsolationMaps()
+	n.peerStateMu.Lock()
+	changed := n.prunePeerHelloNoncesLocked(now)
+	n.peerStateMu.Unlock()
+	if changed {
+		n.persistPeerHelloNonces()
+	}
+	return changed
+}
+
+func (n *Node) startPeerHelloNonceSweeper(ctx context.Context) {
+	if n == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = n.RootContext()
+	}
+	interval := peerHelloNonceSweepInterval
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	n.sweepPeerHelloNonces(time.Now())
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-n.shutdownCh:
+			return
+		case now := <-ticker.C:
+			n.sweepPeerHelloNonces(now)
+		}
+	}
+}
+
 func (n *Node) acceptPeerHelloNonce(peerID string, hello PeerHello) bool {
 	nonce := strings.TrimSpace(hello.Nonce)
 	if n == nil || peerID == "" || nonce == "" {
@@ -6493,17 +6835,13 @@ func (n *Node) acceptPeerHelloNonce(peerID string, hello PeerHello) bool {
 	now := time.Now()
 	key := peerID + "|" + nonce
 	n.peerStateMu.Lock()
-	for seenKey, seenAt := range n.peerHelloNonces {
-		if now.Sub(seenAt) > peerHelloNonceTTL {
-			delete(n.peerHelloNonces, seenKey)
-		}
-	}
 	if _, exists := n.peerHelloNonces[key]; exists {
 		n.peerStateMu.Unlock()
 		return false
 	}
 	n.peerHelloNonces[key] = now
 	n.peerStateMu.Unlock()
+	n.persistPeerHelloNonces()
 	return true
 }
 
@@ -6529,7 +6867,7 @@ func (n *Node) verifyPeerHelloSignature(peerID string, hello PeerHello) bool {
 	return err == nil && ok
 }
 
-func (n *Node) validatePeerHello(peerID string, hello PeerHello) bool {
+func (n *Node) validatePeerHelloEnvelope(peerID string, hello PeerHello) bool {
 	if advertisedPeerID := peerHelloAdvertisedPeerID(hello); advertisedPeerID != "" {
 		if remotePeerID, ok := peerIdentityFromAddrOrID(peerID); ok && remotePeerID != advertisedPeerID {
 			n.disconnectPeerID(peerID, "peer_id_mismatch")
@@ -6557,6 +6895,15 @@ func (n *Node) validatePeerHello(peerID string, hello PeerHello) bool {
 			n.disconnectPeerID(peerID, "peer_hello_bad_signature")
 			return false
 		}
+	}
+	return true
+}
+
+func (n *Node) validatePeerHello(peerID string, hello PeerHello) bool {
+	if !n.validatePeerHelloEnvelope(peerID, hello) {
+		return false
+	}
+	if _, hasPubKey := n.peerHelloPublicKey(peerID); hasPubKey {
 		if !n.acceptPeerHelloNonce(peerID, hello) {
 			n.disconnectPeerID(peerID, "peer_hello_replay")
 			return false
@@ -6709,18 +7056,9 @@ func (n *Node) sendPeerHello(pid peer.ID) {
 	defer s.Close()
 	deadline := time.Now().Add(5 * time.Second)
 	_ = s.SetDeadline(deadline)
-	hello := n.outboundPeerHello()
 	enc := json.NewEncoder(s)
 	dec := json.NewDecoder(s)
-	_ = enc.Encode(hello)
-	var raw json.RawMessage
-	if err := dec.Decode(&raw); err == nil {
-		peerInfo, derr := decodePeerHelloPayload(raw)
-		if derr == nil && n.validatePeerHello(pid.String(), peerInfo) {
-			n.applyPeerInfo(pid.String(), peerInfo)
-		}
-	}
-	n.recordDialSuccess(pid.String())
+	_ = n.completeOutboundPeerHelloExchange(pid.String(), enc, dec)
 }
 func decodePeerHelloPayload(raw json.RawMessage) (PeerHello, error) {
 	var hello PeerHello
@@ -6741,6 +7079,48 @@ func decodePeerHelloPayload(raw json.RawMessage) (PeerHello, error) {
 	}
 	return PeerHello{}, fmt.Errorf("invalid peer hello payload")
 }
+
+func (n *Node) completeOutboundPeerHelloExchange(peerID string, enc *json.Encoder, dec *json.Decoder) bool {
+	var raw json.RawMessage
+	if err := dec.Decode(&raw); err != nil {
+		n.recordDialFailure(peerID)
+		return false
+	}
+	peerInfo, derr := decodePeerHelloPayload(raw)
+	if derr != nil {
+		n.recordDialFailure(peerID)
+		return false
+	}
+	if !n.validatePeerHelloEnvelope(peerID, peerInfo) {
+		return false
+	}
+	if err := enc.Encode(n.outboundPeerHello()); err != nil {
+		n.recordDialFailure(peerID)
+		return false
+	}
+	if !peerHelloHasPostValidationFields(peerInfo) {
+		if err := dec.Decode(&raw); err != nil {
+			n.recordDialFailure(peerID)
+			return false
+		}
+		peerInfo, derr = decodePeerHelloPayload(raw)
+		if derr != nil {
+			n.recordDialFailure(peerID)
+			return false
+		}
+	}
+	if !peerHelloHasPostValidationFields(peerInfo) {
+		n.recordDialFailure(peerID)
+		return false
+	}
+	if !n.validatePeerHello(peerID, peerInfo) {
+		return false
+	}
+	n.applyPeerInfo(peerID, peerInfo)
+	n.recordDialSuccess(peerID)
+	return true
+}
+
 func (n *Node) exchangePeerInfo(pid peer.ID) {
 	if n.Host == nil {
 		return
@@ -6768,24 +7148,7 @@ func (n *Node) exchangePeerInfo(pid peer.ID) {
 	defer s.Close()
 	enc := json.NewEncoder(s)
 	dec := json.NewDecoder(s)
-	info := n.outboundPeerHello()
-	_ = enc.Encode(info)
-	var peerInfo PeerHello
-	var raw json.RawMessage
-	if err := dec.Decode(&raw); err == nil {
-		decoded, derr := decodePeerHelloPayload(raw)
-		if derr != nil {
-			n.recordDialFailure(pid.String())
-			return
-		}
-		peerInfo = decoded
-		if n.validatePeerHello(pid.String(), peerInfo) {
-			n.applyPeerInfo(pid.String(), peerInfo)
-			n.recordDialSuccess(pid.String())
-		}
-	} else {
-		n.recordDialFailure(pid.String())
-	}
+	_ = n.completeOutboundPeerHelloExchange(pid.String(), enc, dec)
 }
 func (n *Node) sendPeersList(pid peer.ID) {
 	if n.Host == nil {
@@ -6903,6 +7266,43 @@ func shouldForceSnapshotResyncForValidatorSetMismatch(localHeight, targetHeight 
 	// and force deterministic snapshot recovery immediately.
 	return targetHeight > localHeight
 }
+
+func (n *Node) markValidatorSuspect(id string, at time.Time) {
+	id = normalizeValidatorID(id)
+	if n == nil || id == "" {
+		return
+	}
+	if at.IsZero() {
+		at = time.Now()
+	}
+	n.validatorMu.Lock()
+	if n.validatorSuspect == nil {
+		n.validatorSuspect = make(map[string]time.Time)
+	}
+	n.validatorSuspect[id] = at
+	n.validatorMu.Unlock()
+}
+
+func (n *Node) clearValidatorSuspect(id string) {
+	id = normalizeValidatorID(id)
+	if n == nil || id == "" {
+		return
+	}
+	n.validatorMu.Lock()
+	delete(n.validatorSuspect, id)
+	n.validatorMu.Unlock()
+}
+
+func (n *Node) validatorSuspectCount() int {
+	if n == nil {
+		return 0
+	}
+	n.validatorMu.RLock()
+	count := len(n.validatorSuspect)
+	n.validatorMu.RUnlock()
+	return count
+}
+
 func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
 	peerRole := normalizeNodeRole(hello.Role)
 	if peerRole == "validator" && hello.ValidatorID == "" {
@@ -6973,9 +7373,6 @@ func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
 	n.peerSetHash[peerAddr] = hello.ValidatorSetHash
 	n.peerTipHash[peerAddr] = hello.TipHash
 	n.peerHashMatch[peerAddr] = hashMatch
-	if hello.ValidatorID != "" {
-		delete(n.validatorSuspect, hello.ValidatorID)
-	}
 	if hello.Height > 0 {
 		// Reset peer ACK cursor from fresh hello advertisement.
 		// A restarted peer may rejoin from a lower height, and stale higher ACK
@@ -6983,6 +7380,7 @@ func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
 		n.peerAckHeight[peerAddr] = hello.Height
 	}
 	n.peerStateMu.Unlock()
+	n.clearValidatorSuspect(hello.ValidatorID)
 	if hashMatch {
 		n.clearPeerDriftState(peerAddr)
 	}
@@ -7236,10 +7634,8 @@ func (n *Node) peerHeightSnapshot(peerID string) (peerHeight, peerFinalized uint
 	if validatorID == "" {
 		return peerHeight, peerFinalized
 	}
-	n.validatorMu.RLock()
-	st := n.validatorStatus[validatorID]
-	n.validatorMu.RUnlock()
-	if st == nil {
+	st, ok := n.validatorStatusSnapshot(validatorID)
+	if !ok {
 		return peerHeight, peerFinalized
 	}
 	if st.ReportedHeight > peerHeight {
@@ -7770,13 +8166,11 @@ func (n *Node) onPeerDisconnected(pid peer.ID) {
 	// Mark validator as suspect if we know the mapping
 	n.peerStateMu.Lock()
 	vid := n.peerToValidator[pid.String()]
-	if vid != "" {
-		n.validatorSuspect[vid] = time.Now()
-	}
 	n.peerStateMu.Unlock()
-	if vid != "" {
-		n.markValidatorOffline(vid, "peer_disconnected")
-	}
+	n.markValidatorSuspect(vid, time.Now())
+	// Disconnect notifications can be transient or per-connection. Keep the
+	// validator in suspect state first; monitorPeerSuspects marks it offline
+	// only if the peer remains gone past peerSuspectTimeout.
 }
 func (n *Node) removeValidatorByPeer(peerID string) {
 	n.peerStateMu.Lock()
@@ -9828,7 +10222,7 @@ func (n *Node) startNetworkCLI() {
 				)
 			}
 		case "snapshot download", "network snapshot download":
-			result, err := n.downloadTrustedSnapshotAndStore(0, 0, false, true, false)
+			result, err := n.downloadTrustedSnapshotAndStore(0, 0, false, true, false, false)
 			if err != nil || result == nil || result.Snapshot == nil {
 				fmt.Printf("snapshot download failed: %v\n", err)
 				continue
@@ -10089,24 +10483,29 @@ func (n *Node) handlePeerInfoStream(s network.Stream) {
 	defer s.Close()
 	enc := json.NewEncoder(s)
 	dec := json.NewDecoder(s)
-	// Send our info
-	info := n.outboundPeerHello()
-	_ = enc.Encode(info)
-	// Receive peer info
+	peerID := s.Conn().RemotePeer().String()
+	if err := enc.Encode(n.outboundPeerHelloPreValidation()); err != nil {
+		n.recordDialFailure(peerID)
+		return
+	}
 	var raw json.RawMessage
 	if err := dec.Decode(&raw); err == nil {
-		peerID := s.Conn().RemotePeer().String()
 		peerInfo, derr := decodePeerHelloPayload(raw)
 		if derr != nil {
+			n.recordDialFailure(peerID)
+			return
+		}
+		if !peerHelloHasPostValidationFields(peerInfo) {
 			n.recordDialFailure(peerID)
 			return
 		}
 		if n.validatePeerHello(peerID, peerInfo) {
 			n.applyPeerInfo(peerID, peerInfo)
 			n.recordDialSuccess(peerID)
+			_ = enc.Encode(n.outboundPeerHello())
 		}
 	} else {
-		n.recordDialFailure(s.Conn().RemotePeer().String())
+		n.recordDialFailure(peerID)
 	}
 }
 func (n *Node) handleMessage(msg Message, peerAddr string) {
@@ -10593,15 +10992,40 @@ func (n *Node) latestSnapshotMetaForSyncRequest() *StateSnapshot {
 		return nil
 	}
 	if err := n.CreateSnapshot(tip, block.BlockHash); err != nil {
-		return nil
+		return n.waitForSnapshotAtHeightForSync(tip)
 	}
 	snapshot, err := n.GetSnapshot(tip)
 	if err != nil || snapshot == nil || !n.snapshotMatchesLocalAnchor(snapshot) {
+		if snapshot := n.waitForSnapshotAtHeightForSync(tip); snapshot != nil {
+			return snapshot
+		}
 		_ = n.deleteStoredSnapshotHeight(tip)
 		_ = n.refreshLatestSnapshotPointer()
 		return nil
 	}
 	return snapshot
+}
+
+func (n *Node) waitForSnapshotAtHeightForSync(height uint64) *StateSnapshot {
+	if n == nil || height == 0 {
+		return nil
+	}
+	for attempt := 0; attempt < snapshotServeRetryAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(snapshotServeRetryBackoff)
+		}
+		if snapshot := n.publishedValidatorSnapshotForSyncRequest(height); snapshot != nil && snapshot.Height == height {
+			return snapshot
+		}
+		if snapshot, _, _, ok := n.ResolveCommittedStateSnapshot(height); ok && snapshot != nil && snapshot.Height == height && n.snapshotMatchesLocalAnchor(snapshot) {
+			return snapshot
+		}
+		snapshot, err := n.GetSnapshot(height)
+		if err == nil && snapshot != nil && snapshot.Height == height && n.snapshotMatchesLocalAnchor(snapshot) {
+			return snapshot
+		}
+	}
+	return nil
 }
 
 func (n *Node) snapshotForSyncRequest(targetHeight uint64) *StateSnapshot {
@@ -10635,10 +11059,13 @@ func (n *Node) snapshotForSyncRequest(targetHeight uint64) *StateSnapshot {
 		return nil
 	}
 	if err := n.CreateSnapshot(tip, block.BlockHash); err != nil {
-		return nil
+		return n.waitForSnapshotAtHeightForSync(tip)
 	}
 	snapshot, err := n.GetSnapshot(tip)
 	if err != nil || snapshot == nil || !n.snapshotMatchesLocalAnchor(snapshot) {
+		if snapshot := n.waitForSnapshotAtHeightForSync(tip); snapshot != nil {
+			return snapshot
+		}
 		_ = n.deleteStoredSnapshotHeight(tip)
 		_ = n.refreshLatestSnapshotPointer()
 		return nil
@@ -10902,18 +11329,8 @@ func (n *Node) handleSnapshotMetaStream(s network.Stream) {
 	if err := dec.Decode(&req); err != nil {
 		return
 	}
-	var snapshot *StateSnapshot
-	if req.Height == 0 {
-		snapshot = n.latestSnapshotMetaForSyncRequest()
-	} else {
-		snapshot = n.snapshotForSyncRequest(req.Height)
-	}
-	if snapshot == nil {
-		_ = enc.Encode(SnapshotMetaResponse{Available: false})
-		return
-	}
-	manifest, data, err := snapshotManifestFromSnapshot(snapshot)
-	if err != nil {
+	snapshot, manifest, _, _, err := n.snapshotManifestForTransfer(req.Height)
+	if err != nil || snapshot == nil || manifest == nil {
 		_ = enc.Encode(SnapshotMetaResponse{Available: false})
 		return
 	}
@@ -10921,18 +11338,24 @@ func (n *Node) handleSnapshotMetaStream(s network.Stream) {
 	if chunkSize == 0 {
 		chunkSize = 1024 * 1024
 	}
-	totalChunks := uint64((len(data) + int(chunkSize) - 1) / int(chunkSize))
+	totalChunks := manifest.ChunkCount
+	if totalChunks == 0 {
+		totalChunks = 1
+	}
 	resp := SnapshotMetaResponse{
 		Height:                snapshot.Height,
 		SnapshotHash:          snapshot.SnapshotHash,
 		StateRoot:             snapshot.StateRoot,
 		StateMerkleRoot:       snapshot.StateMerkleRoot,
 		ValidatorSetHash:      snapshot.ValidatorSetHash,
+		ValidatorSetRoot:      snapshotValidatorSetRoot(snapshot),
 		ValidatorRegistryHash: snapshot.ValidatorRegistryHash,
 		FinalizedHeight:       snapshot.FinalizedHeight,
 		FinalizedHash:         strings.TrimSpace(snapshot.FinalizedHash),
 		EpochAnchorHash:       strings.TrimSpace(snapshot.EpochAnchorHash),
 		FinalityRoot:          strings.TrimSpace(snapshot.FinalityRoot),
+		Encoding:              "binary",
+		Compression:           syncSnapshotCompression(),
 		ChunkSize:             chunkSize,
 		TotalChunks:           totalChunks,
 		CheckpointProof:       snapshot.CheckpointProof,
@@ -10944,11 +11367,14 @@ func (n *Node) handleSnapshotMetaStream(s network.Stream) {
 		resp.StateRoot = manifest.StateRoot
 		resp.StateMerkleRoot = manifest.StateMerkleRoot
 		resp.ValidatorSetHash = manifest.ValidatorSetHash
+		resp.ValidatorSetRoot = manifest.ValidatorSetRoot
 		resp.ValidatorRegistryHash = manifest.ValidatorRegistryHash
 		resp.FinalizedHeight = manifest.FinalizedHeight
 		resp.FinalizedHash = manifest.FinalizedHash
 		resp.EpochAnchorHash = manifest.EpochAnchorHash
 		resp.FinalityRoot = manifest.FinalityRoot
+		resp.Encoding = manifest.Encoding
+		resp.Compression = manifest.Compression
 	}
 	_ = enc.Encode(resp)
 }
@@ -10964,37 +11390,10 @@ func (n *Node) handleSnapshotChunkStream(s network.Stream) {
 	if err := dec.Decode(&req); err != nil {
 		return
 	}
-	snapshot := n.snapshotForSyncRequest(req.Height)
-	if snapshot == nil {
+	resp, _, _, _, err := n.snapshotChunkForTransfer(req.Height, req.Index)
+	if err != nil || resp == nil {
 		_ = enc.Encode(SnapshotChunkResponse{})
 		return
-	}
-	data, err := json.Marshal(snapshot)
-	if err != nil {
-		_ = enc.Encode(SnapshotChunkResponse{})
-		return
-	}
-	chunkSize := syncSnapshotChunkSizeBytes()
-	if chunkSize == 0 {
-		chunkSize = 1024 * 1024
-	}
-	totalChunks := uint64((len(data) + int(chunkSize) - 1) / int(chunkSize))
-	if req.Index >= totalChunks {
-		_ = enc.Encode(SnapshotChunkResponse{})
-		return
-	}
-	start := req.Index * chunkSize
-	end := start + chunkSize
-	if end > uint64(len(data)) {
-		end = uint64(len(data))
-	}
-	chunk := data[start:end]
-	resp := SnapshotChunkResponse{
-		Height:       snapshot.Height,
-		Index:        req.Index,
-		ChunkHash:    snapshotChunkHash(chunk),
-		SnapshotHash: snapshot.SnapshotHash,
-		Data:         chunk,
 	}
 	_ = enc.Encode(resp)
 }

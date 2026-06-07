@@ -35,6 +35,8 @@ max_future_block_gap = 256
 validator_set_commitment_v2_height = 1
 enforce_deterministic_tx_order = true
 proposer_round_timeout_seconds = 2
+fast_proposer_failover_enabled = true
+fast_proposer_failover_min_seconds = 1
 proposer_round_max_skew = 1
 transition_barrier_relax_seconds = 60
 transition_barrier_max_drop = 1
@@ -74,9 +76,27 @@ idle_timeout_seconds = 120
 dynamic_selection = true
 deterministic_selection = true
 equal_chance_selection = true
-active_set_size = 50
-active_set_mode = "adaptive_committee"
+active_set_size = 21
+active_set_mode = "hybrid_score_rotation"
 max_active_committee = 512
+max_active_validators = 21
+performance_slots = 15
+rotation_slots = 6
+effective_stake_cap = 5000000
+validator_epoch_blocks = 10000
+score_weight_stake = 40
+score_weight_uptime = 35
+score_weight_performance = 15
+score_weight_decentralization = 10
+performance_min_signed_bps = 9000
+promotion_window_epochs = 10
+minimum_age_for_performance_slot_epochs = 10
+promotion_window_record_v1_height = 0
+minimum_online_validators_when_full = 15
+diversity_weight_asn = 40
+diversity_weight_region = 30
+diversity_weight_provider = 20
+diversity_weight_home_pc = 10
 adaptive_committee_log_multiplier = 16
 committee_rotation_blocks = 32
 selection_activity_window_blocks = 64
@@ -296,8 +316,14 @@ snapshot_warmup_seconds = 10
 delta_replay_max_blocks = 50000
 delta_replay_batch_blocks = 1024
 delta_replay_verify_workers = 8
+delta_state_sync_enabled = true
+ed25519_batch_verify_workers = 8
+snapshot_distribution_enabled = true
+snapshot_multi_peer_chunk_fetch = true
+snapshot_compression = "zstd"
 snapshot_chunk_size_bytes = 1048576
 snapshot_parallel_chunks = 8
+snapshot_chunk_replication_factor = 2
 sync_stall_seconds = 180
 sync_peer_timeout_seconds = 15
 snapshot_anchor_timeout_seconds = 10
@@ -311,6 +337,13 @@ snapshot_session_reset_watchdog_seconds = 60
 snapshot_invalid_proof_quarantine_after = 3
 history_mode = "background"
 trusted_snapshot_require_checkpoint_proof = true
+usable_head_fast_bootstrap_enabled = true
+usable_head_roles = ["full", "archive"]
+usable_head_min_gap_blocks = 2000
+usable_head_target_seconds = 3
+usable_head_require_checkpoint_proof = true
+usable_head_background_history = true
+usable_head_recent_replay_window_blocks = 2048
 
 [promotion]
 candidate_observation_epochs = 50
@@ -337,6 +370,30 @@ registry_path = "core_validators.json"
 registry_enforcement = "warn"
 registry_min_signatures = 0
 registry_reload_seconds = 10
+
+[founder]
+# Founder validator badges are disabled until governance/testnet activation.
+validator_badge_enabled = false
+validator_cutoff_height = 0
+validator_max_count = 0
+validator_min_signed_bps = 9500
+validator_nft_collection = ""
+
+[testnet_campaign]
+# MSC Founding Validators Program. Disabled by default until testnet launch.
+enabled = false
+program_name = "MSC Founding Validators Program"
+season_id = "testnet-season-1"
+start_time = ""
+end_time = ""
+discord_url = ""
+telegram_url = ""
+bug_report_url = ""
+weekly_publish_day = "Friday"
+data_dir = "data/campaign"
+founder_max_count = 100
+founder_days = 30
+reporter_cooldown_per_day = 3
 
 [storage]
 encryption_key_env = "MSC_DB_ENCRYPTION_KEY"

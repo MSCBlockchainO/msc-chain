@@ -37,6 +37,23 @@ var (
 	ValidatorActiveSetSize                       int     = 0
 	ValidatorActiveSetMode                       string  = "adaptive_committee"
 	ValidatorMaxActiveCommittee                  int     = 512
+	ValidatorHybridMaxActiveValidators           int     = 21
+	ValidatorHybridPerformanceSlots              int     = 15
+	ValidatorHybridRotationSlots                 int     = 6
+	ValidatorHybridEffectiveStakeCap             int64   = 5_000_000
+	ValidatorHybridEpochBlocks                   uint64  = 10_000
+	ValidatorHybridStakeWeight                   int     = 40
+	ValidatorHybridUptimeWeight                  int     = 35
+	ValidatorHybridPerformanceWeight             int     = 15
+	ValidatorHybridDecentralizationWeight        int     = 10
+	ValidatorHybridPerformanceMinSignedBPS       int     = 9000
+	ValidatorHybridPromotionWindowEpochs         uint64  = 10
+	ValidatorHybridMinimumPerformanceAgeEpochs   uint64  = 10
+	ValidatorHybridMinimumOnlineWhenFull         int     = 15
+	ValidatorHybridDiversityASNWeight            int     = 40
+	ValidatorHybridDiversityRegionWeight         int     = 30
+	ValidatorHybridDiversityProviderWeight       int     = 20
+	ValidatorHybridDiversityHomePCWeight         int     = 10
 	ValidatorAdaptiveCommitteeLogMult            int     = 16
 	ValidatorCommitteeRotationBlocks             uint64  = 32
 	ValidatorSelectionActivityWindow             uint64  = 64
@@ -1292,6 +1309,9 @@ func (n *Node) activeSetTarget() int {
 	if n == nil {
 		return minActiveValidatorsFloor()
 	}
+	if activeSetModeHybridScoreRotation() {
+		return validatorHybridMaxActiveValidators()
+	}
 	if ValidatorActiveSetSize < 0 {
 		return ValidatorActiveSetSize
 	}
@@ -1321,9 +1341,705 @@ func normalizeActiveSetMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "", "adaptive_committee":
 		return "adaptive_committee"
+	case "hybrid_score_rotation", "hybrid", "score_rotation":
+		return "hybrid_score_rotation"
 	default:
 		return "adaptive_committee"
 	}
+}
+
+func activeSetModeHybridScoreRotation() bool {
+	return normalizeActiveSetMode(ValidatorActiveSetMode) == "hybrid_score_rotation"
+}
+
+func validatorHybridMaxActiveValidators() int {
+	maxActive := ValidatorHybridMaxActiveValidators
+	if maxActive <= 0 {
+		maxActive = 21
+	}
+	if floor := minActiveValidatorsFloor(); maxActive < floor {
+		maxActive = floor
+	}
+	return maxActive
+}
+
+func validatorHybridPerformanceSlots() int {
+	maxActive := validatorHybridMaxActiveValidators()
+	slots := ValidatorHybridPerformanceSlots
+	if slots <= 0 {
+		slots = 15
+	}
+	if slots > maxActive {
+		slots = maxActive
+	}
+	return slots
+}
+
+func validatorHybridRotationSlots() int {
+	maxActive := validatorHybridMaxActiveValidators()
+	performanceSlots := validatorHybridPerformanceSlots()
+	slots := ValidatorHybridRotationSlots
+	if slots <= 0 {
+		slots = maxActive - performanceSlots
+	}
+	if slots < 0 {
+		slots = 0
+	}
+	if performanceSlots+slots > maxActive {
+		slots = maxActive - performanceSlots
+	}
+	if slots < 0 {
+		return 0
+	}
+	return slots
+}
+
+func validatorHybridEffectiveStakeCap() int64 {
+	if ValidatorHybridEffectiveStakeCap > 0 {
+		return ValidatorHybridEffectiveStakeCap
+	}
+	if ValidatorStakeCapPct > 0 {
+		return int64(float64(FixedTotalSupply) * ValidatorStakeCapPct)
+	}
+	return 5_000_000
+}
+
+func validatorHybridEpochBlocks() uint64 {
+	if ValidatorHybridEpochBlocks == 0 {
+		return 10_000
+	}
+	return ValidatorHybridEpochBlocks
+}
+
+func validatorHybridScoreWeights() (float64, float64, float64, float64) {
+	stake := ValidatorHybridStakeWeight
+	uptime := ValidatorHybridUptimeWeight
+	performance := ValidatorHybridPerformanceWeight
+	decentralization := ValidatorHybridDecentralizationWeight
+	total := stake + uptime + performance + decentralization
+	if total <= 0 {
+		stake, uptime, performance, decentralization, total = 40, 35, 15, 10, 100
+	}
+	return float64(stake) / float64(total), float64(uptime) / float64(total), float64(performance) / float64(total), float64(decentralization) / float64(total)
+}
+
+func validatorHybridDiversityWeights() (float64, float64, float64, float64) {
+	asn := ValidatorHybridDiversityASNWeight
+	region := ValidatorHybridDiversityRegionWeight
+	provider := ValidatorHybridDiversityProviderWeight
+	homePC := ValidatorHybridDiversityHomePCWeight
+	total := asn + region + provider + homePC
+	if total <= 0 {
+		asn, region, provider, homePC, total = 40, 30, 20, 10, 100
+	}
+	return float64(asn) / float64(total), float64(region) / float64(total), float64(provider) / float64(total), float64(homePC) / float64(total)
+}
+
+func validatorHybridPerformanceMinSignedBPS() int {
+	v := ValidatorHybridPerformanceMinSignedBPS
+	if v <= 0 {
+		return 9000
+	}
+	if v > 10000 {
+		return 10000
+	}
+	return v
+}
+
+func validatorHybridPromotionWindowEpochs() uint64 {
+	if ValidatorHybridPromotionWindowEpochs == 0 {
+		return 10
+	}
+	return ValidatorHybridPromotionWindowEpochs
+}
+
+func validatorHybridMinimumPerformanceAgeEpochs() uint64 {
+	return ValidatorHybridMinimumPerformanceAgeEpochs
+}
+
+func validatorHybridMinimumPerformanceAgeBlocks() uint64 {
+	return validatorHybridMinimumPerformanceAgeEpochs() * validatorHybridEpochBlocks()
+}
+
+func validatorHybridPromotionWindowBucket(height uint64) uint64 {
+	epochBlocks := validatorHybridEpochBlocks()
+	if epochBlocks == 0 {
+		return 0
+	}
+	return (height / epochBlocks) / validatorHybridPromotionWindowEpochs()
+}
+
+func validatorHybridMinimumOnlineForActiveCount(activeCount int) int {
+	maxActive := validatorHybridMaxActiveValidators()
+	if activeCount < maxActive || maxActive <= 0 {
+		return 0
+	}
+	required := ValidatorHybridMinimumOnlineWhenFull
+	if required <= 0 {
+		required = 15
+	}
+	if required > activeCount {
+		required = activeCount
+	}
+	return required
+}
+
+func validatorHybridMinimumOnlineOK(activeCount int, onlineCount int) bool {
+	required := validatorHybridMinimumOnlineForActiveCount(activeCount)
+	return required == 0 || onlineCount >= required
+}
+
+func clampUnit(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+type ValidatorPoolEntry struct {
+	ID                                 string  `json:"id"`
+	SlotType                           string  `json:"slot_type"`
+	Active                             bool    `json:"active"`
+	FinalScore                         float64 `json:"final_score"`
+	StakeScore                         float64 `json:"stake_score"`
+	UptimeScore                        float64 `json:"uptime_score"`
+	PerformanceScore                   float64 `json:"performance_score"`
+	DecentralizationScore              float64 `json:"decentralization_score"`
+	ASNScore                           float64 `json:"asn_score"`
+	RegionScore                        float64 `json:"region_score"`
+	ProviderScore                      float64 `json:"provider_score"`
+	HomePCScore                        float64 `json:"home_pc_score"`
+	OperatorScore                      float64 `json:"operator_score"`
+	SignedRatioBPS                     int     `json:"signed_ratio_bps"`
+	PerformanceEligible                bool    `json:"performance_eligible"`
+	PerformanceAgeEligible             bool    `json:"performance_age_eligible"`
+	PerformanceIneligibleReason        string  `json:"performance_ineligible_reason,omitempty"`
+	ValidatorAgeBlocks                 uint64  `json:"validator_age_blocks"`
+	ValidatorAgeEpochs                 uint64  `json:"validator_age_epochs"`
+	MinimumAgeForPerformanceSlotEpochs uint64  `json:"minimum_age_for_performance_slot_epochs"`
+	PromotionWindowBucket              uint64  `json:"promotion_window_bucket"`
+	PromotionRank                      int     `json:"promotion_rank"`
+	EffectiveStake                     int64   `json:"effective_stake"`
+	ActualStake                        int64   `json:"actual_stake"`
+	ReplacementReason                  string  `json:"replacement_reason,omitempty"`
+}
+
+type ValidatorPoolSnapshot struct {
+	Mode                        string               `json:"mode"`
+	Height                      uint64               `json:"height"`
+	EpochBucket                 uint64               `json:"epoch_bucket"`
+	PromotionWindowBucket       uint64               `json:"promotion_window_bucket"`
+	PromotionWindowHash         string               `json:"promotion_window_hash,omitempty"`
+	PromotionWindowSource       string               `json:"promotion_window_source,omitempty"`
+	PromotionWindowFrozen       bool                 `json:"promotion_window_frozen"`
+	PromotionWindowValidators   []string             `json:"promotion_window_validators,omitempty"`
+	PromotionWindowReplacements int                  `json:"promotion_window_replacements,omitempty"`
+	MaxActiveValidators         int                  `json:"max_active_validators"`
+	PerformanceSlots            int                  `json:"performance_slots"`
+	RotationSlots               int                  `json:"rotation_slots"`
+	ActiveCount                 int                  `json:"active_count"`
+	StandbyCount                int                  `json:"standby_count"`
+	PerformanceActiveCount      int                  `json:"performance_active_count"`
+	RotationActiveCount         int                  `json:"rotation_active_count"`
+	EmergencyReplacementCount   int                  `json:"emergency_replacement_count"`
+	MinimumOnlineValidators     int                  `json:"minimum_online_validators"`
+	Entries                     []ValidatorPoolEntry `json:"entries,omitempty"`
+}
+
+type validatorHybridScoreContext struct {
+	asnCounts      map[string]int
+	regionCounts   map[string]int
+	providerCounts map[string]int
+	operatorCounts map[string]int
+}
+
+func validatorHybridDiversityInfoForScoring(id string) ValidatorDiversityInfo {
+	info, ok := validatorDiversityMetadataForID(id)
+	if !ok {
+		info = ValidatorDiversityInfo{ValidatorID: normalizeValidatorID(id)}
+	}
+	if info.ValidatorID == "" {
+		info.ValidatorID = normalizeValidatorID(id)
+	}
+	if info.OperatorID == "" {
+		info.OperatorID = normalizeValidatorDiversityOperator(info.ValidatorID)
+	}
+	return info
+}
+
+func validatorHybridScoreContextForRecords(records []ValidatorRecord) validatorHybridScoreContext {
+	ctx := validatorHybridScoreContext{
+		asnCounts:      make(map[string]int),
+		regionCounts:   make(map[string]int),
+		providerCounts: make(map[string]int),
+		operatorCounts: make(map[string]int),
+	}
+	for _, rec := range records {
+		id := normalizeValidatorID(rec.ID)
+		if id == "" {
+			continue
+		}
+		info := validatorHybridDiversityInfoForScoring(id)
+		if info.ASN != "" {
+			ctx.asnCounts[info.ASN]++
+		}
+		if info.Region != "" {
+			ctx.regionCounts[info.Region]++
+		}
+		if info.Cloud != "" {
+			ctx.providerCounts[info.Cloud]++
+		}
+		if info.OperatorID != "" {
+			ctx.operatorCounts[info.OperatorID]++
+		}
+	}
+	return ctx
+}
+
+func validatorHybridOperatorScore(operatorCount int) float64 {
+	switch {
+	case operatorCount <= 1:
+		return 1
+	case operatorCount == 2:
+		return 0.5
+	default:
+		return 0
+	}
+}
+
+func validatorHybridSignedRatioBPS(rec *ValidatorRecord) int {
+	if rec == nil || len(rec.ActiveHeights) == 0 {
+		return 0
+	}
+	ratio := rec.UptimeScore(rec.LastActive)
+	if ratio < 0 {
+		ratio = 0
+	}
+	if ratio > 1 {
+		ratio = 1
+	}
+	return int(math.Round(ratio * 10000))
+}
+
+func validatorHybridScoreWithContext(rec *ValidatorRecord, ctx *validatorHybridScoreContext) ValidatorPoolEntry {
+	entry := ValidatorPoolEntry{}
+	if rec == nil {
+		return entry
+	}
+	capStake := validatorHybridEffectiveStakeCap()
+	effective := rec.Stake
+	if capStake > 0 && effective > capStake {
+		effective = capStake
+	}
+	if effective < 0 {
+		effective = 0
+	}
+	stakeScore := float64(0)
+	if capStake > 0 {
+		stakeScore = clampUnit(float64(effective) / float64(capStake))
+	}
+	uptimeScore := clampUnit(rec.UptimeScore(rec.LastActive))
+	performanceScore := clampUnit(rec.Reputation - rec.PenaltyScore())
+	signedRatioBPS := validatorHybridSignedRatioBPS(rec)
+	performanceEligible := signedRatioBPS >= validatorHybridPerformanceMinSignedBPS()
+	performanceReason := ""
+	if !performanceEligible {
+		performanceReason = "signed_ratio_below_minimum"
+	}
+	asnScore, regionScore, providerScore, homePCScore, operatorScore := float64(0), float64(0), float64(0), float64(0), float64(1)
+	if ctx != nil {
+		info := validatorHybridDiversityInfoForScoring(rec.ID)
+		if info.ASN != "" && ctx.asnCounts[info.ASN] == 1 {
+			asnScore = 1
+		}
+		if info.Region != "" && ctx.regionCounts[info.Region] == 1 {
+			regionScore = 1
+		}
+		if info.Cloud != "" && ctx.providerCounts[info.Cloud] == 1 {
+			providerScore = 1
+		}
+		if info.HomePC && uptimeScore >= 0.95 && rec.TotalSlashes == 0 {
+			homePCScore = 1
+		}
+		operatorScore = validatorHybridOperatorScore(ctx.operatorCounts[info.OperatorID])
+	}
+	asnWeight, regionWeight, providerWeight, homePCWeight := validatorHybridDiversityWeights()
+	decentralizationScore := clampUnit((asnWeight*asnScore + regionWeight*regionScore + providerWeight*providerScore + homePCWeight*homePCScore) * operatorScore)
+	stakeWeight, uptimeWeight, performanceWeight, decentralizationWeight := validatorHybridScoreWeights()
+	finalScore := stakeWeight*stakeScore + uptimeWeight*uptimeScore + performanceWeight*performanceScore + decentralizationWeight*decentralizationScore
+	return ValidatorPoolEntry{
+		ID:                                 normalizeValidatorID(rec.ID),
+		FinalScore:                         clampUnit(finalScore),
+		StakeScore:                         stakeScore,
+		UptimeScore:                        uptimeScore,
+		PerformanceScore:                   performanceScore,
+		DecentralizationScore:              decentralizationScore,
+		ASNScore:                           asnScore,
+		RegionScore:                        regionScore,
+		ProviderScore:                      providerScore,
+		HomePCScore:                        homePCScore,
+		OperatorScore:                      operatorScore,
+		SignedRatioBPS:                     signedRatioBPS,
+		PerformanceEligible:                performanceEligible,
+		PerformanceAgeEligible:             true,
+		PerformanceIneligibleReason:        performanceReason,
+		MinimumAgeForPerformanceSlotEpochs: validatorHybridMinimumPerformanceAgeEpochs(),
+		EffectiveStake:                     effective,
+		ActualStake:                        rec.Stake,
+	}
+}
+
+func validatorHybridScore(rec *ValidatorRecord) ValidatorPoolEntry {
+	return validatorHybridScoreWithContext(rec, nil)
+}
+
+func validatorHybridAgeBlocksAt(height uint64, joinHeight uint64) uint64 {
+	if height == 0 {
+		return 0
+	}
+	if joinHeight == 0 {
+		return height
+	}
+	if height <= joinHeight {
+		return 0
+	}
+	return height - joinHeight
+}
+
+func validatorHybridApplyPerformanceAgeGate(height uint64, rec *ValidatorRecord, entry *ValidatorPoolEntry) {
+	if entry == nil {
+		return
+	}
+	minAgeEpochs := validatorHybridMinimumPerformanceAgeEpochs()
+	minAgeBlocks := validatorHybridMinimumPerformanceAgeBlocks()
+	ageBlocks := uint64(0)
+	if rec != nil {
+		ageBlocks = validatorHybridAgeBlocksAt(height, rec.JoinHeight)
+	}
+	ageEpochs := uint64(0)
+	if epochBlocks := validatorHybridEpochBlocks(); epochBlocks > 0 {
+		ageEpochs = ageBlocks / epochBlocks
+	}
+	entry.ValidatorAgeBlocks = ageBlocks
+	entry.ValidatorAgeEpochs = ageEpochs
+	entry.MinimumAgeForPerformanceSlotEpochs = minAgeEpochs
+	legacyOrGenesisValidator := rec != nil && rec.JoinHeight == 0
+	entry.PerformanceAgeEligible = legacyOrGenesisValidator || minAgeBlocks == 0 || ageBlocks >= minAgeBlocks
+	if !entry.PerformanceAgeEligible {
+		if entry.PerformanceIneligibleReason != "" {
+			entry.PerformanceIneligibleReason += ","
+		}
+		entry.PerformanceIneligibleReason += "age_below_minimum"
+		entry.PerformanceEligible = false
+	}
+}
+
+func validatorHybridEligibleEntries(height uint64, snapshot map[string]ValidatorRecord) []ValidatorPoolEntry {
+	if len(snapshot) == 0 {
+		return nil
+	}
+	records := make([]ValidatorRecord, 0, len(snapshot))
+	for _, recVal := range snapshot {
+		rec := recVal
+		rec.ActiveHeights = append([]uint64{}, recVal.ActiveHeights...)
+		rec.SignedHeights = append([]uint64{}, recVal.SignedHeights...)
+		ValidatorStateMachine{}.Update(&rec, height)
+		id := normalizeValidatorID(rec.ID)
+		if id == "" || isValidatorBanned(id) {
+			continue
+		}
+		if rec.Status != ValidatorActive {
+			continue
+		}
+		if rec.JailUntilHeight > 0 && height < rec.JailUntilHeight {
+			continue
+		}
+		if rec.JoinHeight > 0 && height < rec.JoinHeight {
+			continue
+		}
+		if !validatorPassesStakeGate(id, rec.Stake) {
+			continue
+		}
+		rec.ID = id
+		records = append(records, rec)
+	}
+	ctx := validatorHybridScoreContextForRecords(records)
+	entries := make([]ValidatorPoolEntry, 0, len(records))
+	for i := range records {
+		entry := validatorHybridScoreWithContext(&records[i], &ctx)
+		validatorHybridApplyPerformanceAgeGate(height, &records[i], &entry)
+		entries = append(entries, entry)
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].FinalScore != entries[j].FinalScore {
+			return entries[i].FinalScore > entries[j].FinalScore
+		}
+		if entries[i].EffectiveStake != entries[j].EffectiveStake {
+			return entries[i].EffectiveStake > entries[j].EffectiveStake
+		}
+		if entries[i].ActualStake != entries[j].ActualStake {
+			return entries[i].ActualStake > entries[j].ActualStake
+		}
+		return entries[i].ID < entries[j].ID
+	})
+	return entries
+}
+
+func validatorHybridWeightedRotation(height uint64, seedAnchor string, candidates []ValidatorPoolEntry, slots int) []ValidatorPoolEntry {
+	if slots <= 0 || len(candidates) == 0 {
+		return nil
+	}
+	if slots >= len(candidates) {
+		out := append([]ValidatorPoolEntry{}, candidates...)
+		for i := range out {
+			out[i].SlotType = "rotation"
+			out[i].Active = true
+		}
+		return out
+	}
+	epochBlocks := validatorHybridEpochBlocks()
+	epochBucket := uint64(0)
+	if epochBlocks > 0 {
+		epochBucket = height / epochBlocks
+	}
+	ids := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		ids = append(ids, c.ID)
+	}
+	if strings.TrimSpace(seedAnchor) == "" {
+		seedAnchor = ValidatorSetHash(ids)
+	}
+	seed := HashStrings([]string{
+		"hybrid_score_rotation_v1",
+		ChainID,
+		strconv.FormatUint(epochBucket, 10),
+		strings.TrimSpace(seedAnchor),
+		ValidatorSetHash(ids),
+	})
+	type ranked struct {
+		entry  ValidatorPoolEntry
+		rank   uint64
+		weight uint64
+	}
+	rankedEntries := make([]ranked, 0, len(candidates))
+	for _, c := range candidates {
+		weight := uint64(c.FinalScore*1_000_000) + 1
+		rawHash := HashStrings([]string{seed, c.ID})
+		raw := uint64(0)
+		if len(rawHash) >= 16 {
+			if parsed, err := strconv.ParseUint(rawHash[:16], 16, 64); err == nil {
+				raw = parsed
+			}
+		}
+		if raw == 0 {
+			raw = 1
+		}
+		rankedEntries = append(rankedEntries, ranked{
+			entry:  c,
+			rank:   raw / weight,
+			weight: weight,
+		})
+	}
+	sort.Slice(rankedEntries, func(i, j int) bool {
+		if rankedEntries[i].rank != rankedEntries[j].rank {
+			return rankedEntries[i].rank < rankedEntries[j].rank
+		}
+		if rankedEntries[i].weight != rankedEntries[j].weight {
+			return rankedEntries[i].weight > rankedEntries[j].weight
+		}
+		if rankedEntries[i].entry.FinalScore != rankedEntries[j].entry.FinalScore {
+			return rankedEntries[i].entry.FinalScore > rankedEntries[j].entry.FinalScore
+		}
+		return rankedEntries[i].entry.ID < rankedEntries[j].entry.ID
+	})
+	out := make([]ValidatorPoolEntry, 0, slots)
+	for i := 0; i < len(rankedEntries) && len(out) < slots; i++ {
+		entry := rankedEntries[i].entry
+		entry.SlotType = "rotation"
+		entry.Active = true
+		out = append(out, entry)
+	}
+	return out
+}
+
+func validatorHybridPoolSnapshot(height uint64, snapshot map[string]ValidatorRecord, seedAnchor string) ValidatorPoolSnapshot {
+	return validatorHybridPoolSnapshotWithPromotionState(height, snapshot, seedAnchor, nil, nil, "", "disabled")
+}
+
+func validatorHybridPoolSnapshotWithPromotionState(height uint64, snapshot map[string]ValidatorRecord, seedAnchor string, promotionRecord *PromotionWindowRecord, promotionReplacements []PromotionWindowReplacementRecord, promotionHash string, promotionSource string) ValidatorPoolSnapshot {
+	maxActive := validatorHybridMaxActiveValidators()
+	performanceSlots := validatorHybridPerformanceSlots()
+	rotationSlots := validatorHybridRotationSlots()
+	epochBucket := uint64(0)
+	if epochBlocks := validatorHybridEpochBlocks(); epochBlocks > 0 {
+		epochBucket = height / epochBlocks
+	}
+	promotionWindowBucket := validatorHybridPromotionWindowBucket(height)
+	out := ValidatorPoolSnapshot{
+		Mode:                  normalizeActiveSetMode(ValidatorActiveSetMode),
+		Height:                height,
+		EpochBucket:           epochBucket,
+		PromotionWindowBucket: promotionWindowBucket,
+		PromotionWindowHash:   strings.TrimSpace(promotionHash),
+		PromotionWindowSource: strings.TrimSpace(promotionSource),
+		MaxActiveValidators:   maxActive,
+		PerformanceSlots:      performanceSlots,
+		RotationSlots:         rotationSlots,
+	}
+	eligible := validatorHybridEligibleEntries(height, snapshot)
+	if len(eligible) == 0 {
+		return out
+	}
+	performanceRank := 0
+	for i := range eligible {
+		eligible[i].PromotionWindowBucket = promotionWindowBucket
+		if eligible[i].PerformanceEligible {
+			performanceRank++
+			eligible[i].PromotionRank = performanceRank
+		}
+	}
+	entries := make([]ValidatorPoolEntry, 0, len(eligible))
+	activeIDs := make(map[string]struct{}, maxActive)
+	if len(eligible) <= maxActive {
+		for _, entry := range eligible {
+			entry.Active = true
+			if entry.PerformanceEligible && out.PerformanceActiveCount < performanceSlots {
+				entry.SlotType = "performance"
+				out.PerformanceActiveCount++
+			} else {
+				entry.SlotType = "rotation"
+				out.RotationActiveCount++
+			}
+			activeIDs[entry.ID] = struct{}{}
+			entries = append(entries, entry)
+		}
+		out.ActiveCount = len(entries)
+		out.MinimumOnlineValidators = validatorHybridMinimumOnlineForActiveCount(out.ActiveCount)
+		out.Entries = entries
+		return out
+	}
+	eligibleByID := make(map[string]ValidatorPoolEntry, len(eligible))
+	for _, entry := range eligible {
+		eligibleByID[entry.ID] = entry
+	}
+	if promotionWindowRecordAppliesAtHeight(promotionRecord, height) {
+		out.PromotionWindowFrozen = true
+		out.PromotionWindowValidators = promotionWindowEffectivePerformanceIDs(promotionRecord, promotionReplacements)
+		out.PromotionWindowReplacements = len(promotionReplacements)
+		for _, id := range out.PromotionWindowValidators {
+			entry, ok := eligibleByID[id]
+			if !ok {
+				continue
+			}
+			entry.SlotType = "performance"
+			entry.Active = true
+			entry.ReplacementReason = "promotion_window_locked"
+			activeIDs[entry.ID] = struct{}{}
+			out.PerformanceActiveCount++
+			entries = append(entries, entry)
+			if out.PerformanceActiveCount >= performanceSlots {
+				break
+			}
+		}
+	} else {
+		performanceEligible := make([]ValidatorPoolEntry, 0, len(eligible))
+		for _, entry := range eligible {
+			if entry.PerformanceEligible {
+				performanceEligible = append(performanceEligible, entry)
+			}
+		}
+		performanceCount := performanceSlots
+		if performanceCount > len(performanceEligible) {
+			performanceCount = len(performanceEligible)
+		}
+		for i := 0; i < performanceCount; i++ {
+			entry := performanceEligible[i]
+			entry.SlotType = "performance"
+			entry.Active = true
+			activeIDs[entry.ID] = struct{}{}
+			out.PerformanceActiveCount++
+			entries = append(entries, entry)
+		}
+	}
+	remaining := make([]ValidatorPoolEntry, 0, len(eligible)-out.PerformanceActiveCount)
+	for _, entry := range eligible {
+		if _, ok := activeIDs[entry.ID]; ok {
+			continue
+		}
+		remaining = append(remaining, entry)
+	}
+	rotationTarget := maxActive - out.PerformanceActiveCount
+	if rotationTarget < 0 {
+		rotationTarget = 0
+	}
+	for _, entry := range validatorHybridWeightedRotation(height, seedAnchor, remaining, rotationTarget) {
+		if _, ok := activeIDs[entry.ID]; ok {
+			continue
+		}
+		activeIDs[entry.ID] = struct{}{}
+		out.RotationActiveCount++
+		entries = append(entries, entry)
+	}
+	for _, entry := range eligible {
+		if _, ok := activeIDs[entry.ID]; ok {
+			continue
+		}
+		entry.SlotType = "standby"
+		entry.Active = false
+		out.StandbyCount++
+		entries = append(entries, entry)
+	}
+	out.ActiveCount = len(activeIDs)
+	out.MinimumOnlineValidators = validatorHybridMinimumOnlineForActiveCount(out.ActiveCount)
+	out.Entries = entries
+	return out
+}
+
+func selectHybridValidatorsFromRegistrySnapshot(height uint64, snapshot map[string]ValidatorRecord, seedAnchor string) []string {
+	pool := validatorHybridPoolSnapshot(height, snapshot, seedAnchor)
+	out := make([]string, 0, pool.ActiveCount)
+	for _, entry := range pool.Entries {
+		if entry.Active {
+			out = append(out, entry.ID)
+		}
+	}
+	return canonicalValidatorIDs(out)
+}
+
+func (n *Node) selectHybridValidatorsFromRegistrySnapshot(height uint64, snapshot map[string]ValidatorRecord, seedAnchor string) []string {
+	pool := n.validatorPoolSnapshotForHeight(height, snapshot)
+	if strings.EqualFold(strings.TrimSpace(pool.PromotionWindowSource), "missing_committed_record") {
+		return nil
+	}
+	out := make([]string, 0, pool.ActiveCount)
+	for _, entry := range pool.Entries {
+		if entry.Active {
+			out = append(out, entry.ID)
+		}
+	}
+	return canonicalValidatorIDs(out)
+}
+
+func (n *Node) validatorPoolSnapshotForHeight(height uint64, snapshot map[string]ValidatorRecord) ValidatorPoolSnapshot {
+	if height == 0 {
+		height = 1
+	}
+	anchor := ""
+	if n != nil && height > 1 {
+		anchor = strings.TrimSpace(n.expectedValidatorSetHash(height - 1))
+	}
+	if len(snapshot) == 0 && n != nil {
+		snapshot = n.validatorRegistrySnapshotForHeight(height)
+	}
+	if n == nil || !promotionWindowRecordV1EnabledAt(height) || !activeSetModeHybridScoreRotation() {
+		return validatorHybridPoolSnapshot(height, snapshot, anchor)
+	}
+	eligible := validatorHybridEligibleEntries(height, snapshot)
+	record, replacements, hash, source := n.promotionWindowStateForHeight(height, snapshot, anchor, eligible)
+	return validatorHybridPoolSnapshotWithPromotionState(height, snapshot, anchor, record, replacements, hash, source)
 }
 
 func normalizeHeartbeatScope(scope string) string {
@@ -1657,6 +2373,22 @@ func (n *Node) GetDynamicValidators(height int) []string {
 	}
 	target := n.activeSetTarget()
 	if DeterministicValidatorSelection {
+		if activeSetModeHybridScoreRotation() {
+			anchor := ""
+			if n != nil && uint64(height) > 1 {
+				anchor = strings.TrimSpace(n.expectedValidatorSetHash(uint64(height) - 1))
+			}
+			if n != nil {
+				if out := n.selectHybridValidatorsFromRegistrySnapshot(uint64(height), registrySnap, anchor); len(out) > 0 {
+					return canonicalValidatorIDs(out)
+				}
+				return nil
+			}
+			if out := selectHybridValidatorsFromRegistrySnapshot(uint64(height), registrySnap, anchor); len(out) > 0 {
+				return canonicalValidatorIDs(out)
+			}
+			return nil
+		}
 		if out := SelectValidatorsFromRegistrySnapshot(uint64(height), target, registrySnap); len(out) > 0 {
 			return canonicalValidatorIDs(out)
 		}
@@ -1680,6 +2412,9 @@ func SelectValidatorsFromRegistrySnapshot(height uint64, target int, snapshot ma
 		if out := selectAllStakedValidatorsFromSnapshot(height, snapshot); len(out) > 0 {
 			return canonicalValidatorIDs(out)
 		}
+	}
+	if activeSetModeHybridScoreRotation() {
+		return canonicalValidatorIDs(selectHybridValidatorsFromRegistrySnapshot(height, snapshot, ""))
 	}
 	if DeterministicValidatorSelection {
 		return canonicalValidatorIDs(selectDeterministicValidatorsFromSnapshot(height, target, snapshot))

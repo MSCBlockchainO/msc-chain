@@ -213,6 +213,91 @@ func TestEnsureRegistrySnapshotSkipsEmptyRegistry(t *testing.T) {
 	}
 }
 
+func TestEnsureGenesisCommittedValidatorRegistrySnapshotPersistsHeightOneProjection(t *testing.T) {
+	oldRegistry := GlobalValidatorRegistry.Snapshot()
+	t.Cleanup(func() {
+		GlobalValidatorRegistry.Load(oldRegistry)
+	})
+
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	node := &Node{
+		DB:              db,
+		Blockchain:      &Blockchain{Blocks: []Block{{ID: 0, BlockHash: "genesis"}}},
+		validatorStatus: make(map[string]*ValidatorStatus),
+	}
+	genesis := &Genesis{
+		ChainID: ChainID,
+		Validators: map[string]string{
+			"A": "",
+			"B": "",
+		},
+	}
+	node.installGenesisValidatorIDs(genesis)
+	node.bootstrapGenesisValidators(genesis)
+	wantSnapshot, wantHash, ok := node.genesisCommittedValidatorRegistryCandidate(GlobalValidatorRegistry.Snapshot())
+	if !ok {
+		t.Fatal("expected genesis registry candidate")
+	}
+
+	node.ensureGenesisCommittedValidatorRegistrySnapshot("test")
+
+	snap, err := node.loadValidatorRegistrySnapshot(1)
+	if err != nil {
+		t.Fatalf("expected height-1 genesis registry snapshot: %v", err)
+	}
+	if gotHash := ValidatorRegistrySnapshotHash(snap); !strings.EqualFold(gotHash, wantHash) {
+		t.Fatalf("unexpected genesis registry hash: got=%q want=%q", gotHash, wantHash)
+	}
+	if len(snap) != len(wantSnapshot) {
+		t.Fatalf("unexpected genesis registry size: got=%d want=%d", len(snap), len(wantSnapshot))
+	}
+
+	GlobalValidatorRegistry.Load(map[string]ValidatorRecord{
+		"Z": {ID: "Z", Stake: 300, Status: ValidatorActive},
+	})
+	got, source, err := node.deterministicPreCommitRegistrySnapshot(Block{
+		ID:                    2,
+		BlockHash:             "block-2",
+		PrevHash:              "genesis",
+		ValidatorRegistryHash: wantHash,
+	})
+	if err != nil {
+		t.Fatalf("expected committed genesis registry to resolve height-2 precommit: %v", err)
+	}
+	if source != "committed_carry_forward" {
+		t.Fatalf("unexpected precommit source: got=%q want=committed_carry_forward", source)
+	}
+	if gotHash := ValidatorRegistrySnapshotHash(got); !strings.EqualFold(gotHash, wantHash) {
+		t.Fatalf("unexpected precommit registry hash: got=%q want=%q", gotHash, wantHash)
+	}
+}
+
+func TestEnsureGenesisCommittedValidatorRegistrySnapshotDoesNotOverwriteConflictingHeightOneCommitment(t *testing.T) {
+	oldRegistry := GlobalValidatorRegistry.Snapshot()
+	t.Cleanup(func() {
+		GlobalValidatorRegistry.Load(oldRegistry)
+	})
+
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	node := &Node{
+		DB:                db,
+		Blockchain:        &Blockchain{Blocks: []Block{{ID: 1, BlockHash: "block-1", ValidatorRegistryHash: "different-registry-hash"}}},
+		GenesisValidators: []string{"A"},
+		validatorStatus:   make(map[string]*ValidatorStatus),
+	}
+	bootstrapValidatorRegistry([]string{"A"}, 0)
+
+	node.ensureGenesisCommittedValidatorRegistrySnapshot("test_mismatch")
+
+	if node.registrySnapshotExists(1) {
+		t.Fatalf("conflicting height-1 registry commitment must not be overwritten")
+	}
+}
+
 func TestPersistRegistrySnapshotOverwrites(t *testing.T) {
 	oldRegistry := GlobalValidatorRegistry.Snapshot()
 	t.Cleanup(func() {

@@ -173,6 +173,100 @@ func TestConsensusValidatorsForHeightCarriesForwardParentFrozenSetWhenCommitment
 	}
 }
 
+func TestCommittedFrozenValidatorSetCandidateRequiresExactCommittedHash(t *testing.T) {
+	set := canonicalValidatorIDs([]string{"A", "B", "C", "D"})
+	targetHash := "chain-committed-validator-set-hash"
+	n := &Node{
+		frozenValidatorsByHeight: map[uint64][]string{
+			10: append([]string{}, set...),
+		},
+		frozenValidatorHashByHeight: map[uint64]string{
+			10: targetHash,
+		},
+	}
+
+	got, ok := n.committedFrozenValidatorSetCandidate(targetHash, 10)
+	if !ok || !sameStringSlice(got, set) {
+		t.Fatalf("expected exact committed frozen set, ok=%t got=%v want=%v", ok, got, set)
+	}
+	if got, ok := n.committedFrozenValidatorSetCandidate("different-committed-hash", 10); ok || len(got) != 0 {
+		t.Fatalf("expected committed hash mismatch to reject frozen set, ok=%t got=%v", ok, got)
+	}
+}
+
+func TestResolveCommittedValidatorSetFrozenFastPathAvoidsSnapshotLoad(t *testing.T) {
+	withValidatorSetCommitmentV2AtHeight(t, 1)
+
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	set := canonicalValidatorIDs([]string{"A", "B", "C", "D"})
+	targetHash := "chain-committed-validator-set-hash"
+	n := &Node{
+		DB: db,
+		Blockchain: &Blockchain{Blocks: []Block{{
+			ID:                     10,
+			BlockHash:              "block-10",
+			NextValidatorSetHash:   targetHash,
+			NextValidatorSetHeight: 11,
+			ActivationHeight:       11,
+		}}},
+		frozenValidatorsByHeight: map[uint64][]string{
+			10: append([]string{}, set...),
+		},
+		frozenValidatorHashByHeight: map[uint64]string{
+			10: targetHash,
+		},
+	}
+
+	before := n.observabilityStatsSnapshot().SnapshotLoadTotal
+	got, resolvedHash, source, ok := n.resolveCommittedValidatorSetForHeight(11)
+	after := n.observabilityStatsSnapshot().SnapshotLoadTotal
+
+	if !ok || !sameStringSlice(got, set) {
+		t.Fatalf("expected committed frozen fast path, ok=%t got=%v want=%v", ok, got, set)
+	}
+	if !strings.EqualFold(resolvedHash, targetHash) {
+		t.Fatalf("unexpected resolved hash: got=%q want=%q", resolvedHash, targetHash)
+	}
+	if source != "chain_parent_commitment_carry_forward" {
+		t.Fatalf("unexpected fast-path source: got=%q", source)
+	}
+	if after != before {
+		t.Fatalf("fast path loaded full snapshot: before=%d after=%d", before, after)
+	}
+}
+
+func TestExpectedValidatorSetHashParentCommitmentAvoidsSnapshotLoad(t *testing.T) {
+	withValidatorSetCommitmentV2AtHeight(t, 1)
+
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	targetHash := "chain-parent-commitment"
+	n := &Node{
+		DB: db,
+		Blockchain: &Blockchain{Blocks: []Block{{
+			ID:                     10,
+			BlockHash:              "block-10",
+			NextValidatorSetHash:   targetHash,
+			NextValidatorSetHeight: 11,
+			ActivationHeight:       11,
+		}}},
+	}
+
+	before := n.observabilityStatsSnapshot().SnapshotLoadTotal
+	got, source := n.expectedValidatorSetHashWithSource(11)
+	after := n.observabilityStatsSnapshot().SnapshotLoadTotal
+
+	if got != targetHash || source != "chain_parent_commitment" {
+		t.Fatalf("unexpected expected validator-set hash: got=%q source=%q", got, source)
+	}
+	if after != before {
+		t.Fatalf("chain parent commitment path loaded full snapshot: before=%d after=%d", before, after)
+	}
+}
+
 func TestConsensusValidatorsForHeightUsesHeartbeatSetDuringTipSync(t *testing.T) {
 	prevV2 := ValidatorSetCommitmentV2Height
 	ValidatorSetCommitmentV2Height = 1

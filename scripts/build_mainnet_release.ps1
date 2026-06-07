@@ -76,6 +76,15 @@ try {
             file = $name
             sha256 = Get-LowerSha256 $outPath
         }
+        $aliasName = "msc-$VersionTag-$($target.GOOS)-$($target.GOARCH)$($target.Ext)"
+        $aliasPath = Join-Path $releaseDir $aliasName
+        Copy-Item -LiteralPath $outPath -Destination $aliasPath -Force
+        $buildOutputs += [ordered]@{
+            os = $target.GOOS
+            arch = $target.GOARCH
+            file = $aliasName
+            sha256 = Get-LowerSha256 $aliasPath
+        }
     }
 }
 finally {

@@ -650,6 +650,9 @@ func HashBlock(block Block) string {
 	if finalityData := blockFinalityHashData(block); finalityData != "" {
 		quorumPolicyData += finalityData
 	}
+	if promotionData := blockPromotionWindowHashData(block); promotionData != "" {
+		quorumPolicyData += promotionData
+	}
 	data := ""
 	if validatorSetCommitmentV2EnabledAt(block.ID) {
 		activationHeight := canonicalActivationHeight(block.NextValidatorSetHeight, block.ActivationHeight)
@@ -2696,6 +2699,7 @@ func (n *Node) createSnapshotWithLedger(
 
 		Timestamp: time.Now().Unix(),
 	}
+	n.attachPromotionWindowStateToSnapshot(&snapshot)
 	populateSnapshotDerivedFields(&snapshot)
 	n.attachSnapshotCheckpointProof(&snapshot)
 	snapshot.SnapshotHash = snapshotCanonicalHash(&snapshot)
@@ -2737,6 +2741,19 @@ func (n *Node) CreateSnapshot(
 			n.cacheExecutionSnapshotLedger(height, snapshotLedger)
 		}
 	}
+	// A snapshot worker can observe Blockchain.Height immediately after
+	// ProcessBlock advances the tip but before the commit tail caches the
+	// execution-stage ledger. Prefer the already verified live ledger before
+	// falling back to historical replay; replay at every checkpoint can starve
+	// consensus and make otherwise healthy validators repeatedly catch up.
+	if !ledgerHasInitializedBacking(snapshotLedger) {
+		liveLedger := n.currentExecutionLedgerClone()
+		if ledgerMatchesBlock(liveLedger) {
+			snapshotLedger = liveLedger
+			ledgerStage = snapshotLedgerStageExecution
+			n.cacheExecutionSnapshotLedger(height, snapshotLedger)
+		}
+	}
 	if !ledgerHasInitializedBacking(snapshotLedger) && n.startupExecutionSnapshotCanRebuildLocally(height) {
 		if err := n.rebuildTrustedExecutionSnapshotsUpTo(height); err != nil {
 			return err
@@ -2751,13 +2768,7 @@ func (n *Node) CreateSnapshot(
 		}
 	}
 	if !ledgerHasInitializedBacking(snapshotLedger) {
-		liveLedger := n.currentExecutionLedgerClone()
-		if ledgerMatchesBlock(liveLedger) {
-			snapshotLedger = liveLedger
-			ledgerStage = snapshotLedgerStageExecution
-		} else {
-			return fmt.Errorf("execution_snapshot_ledger_unavailable height=%d", height)
-		}
+		return fmt.Errorf("execution_snapshot_ledger_unavailable height=%d", height)
 	}
 	return n.createSnapshotWithLedger(height, blockHash, snapshotLedger, ledgerStage)
 }
@@ -2775,7 +2786,7 @@ func (n *Node) cacheExecutionSnapshotLedger(height uint64, ledger Ledger) {
 	cacheDepth := n.ledgerMemoryCacheDepth()
 	removed := 0
 	for h := range n.snapshotExecutionLedgerByHeight {
-		if h+cacheDepth < height {
+		if h+cacheDepth <= height {
 			delete(n.snapshotExecutionLedgerByHeight, h)
 			removed++
 		}
@@ -2951,7 +2962,8 @@ func appendUniqueSnapshotAnchorCandidate(candidates []Block, seen map[string]str
 		strings.TrimSpace(candidate.StateRoot) + "|" +
 		strings.TrimSpace(candidate.ValidatorSetHash) + "|" +
 		strings.TrimSpace(candidate.NextValidatorSetHash) + "|" +
-		strings.TrimSpace(candidate.ValidatorRegistryHash)
+		strings.TrimSpace(candidate.ValidatorRegistryHash) + "|" +
+		strings.TrimSpace(candidate.PromotionWindowHash)
 	if _, ok := seen[key]; ok {
 		return candidates
 	}
@@ -3001,6 +3013,10 @@ func (n *Node) snapshotMatchesLocalAnchorDetailed(snapshot *StateSnapshot) (bool
 		expectedRegistry := strings.TrimSpace(blk.ValidatorRegistryHash)
 		if expectedRegistry != "" && !strings.EqualFold(strings.TrimSpace(snapshotValidatorRegistryHash(snapshot)), expectedRegistry) {
 			return false, "registry_hash_mismatch"
+		}
+		expectedPromotionWindow := strings.TrimSpace(blk.PromotionWindowHash)
+		if expectedPromotionWindow != "" && !strings.EqualFold(strings.TrimSpace(snapshotPromotionWindowHash(snapshot)), expectedPromotionWindow) {
+			return false, "promotion_window_hash_mismatch"
 		}
 		return true, ""
 	}
@@ -3347,9 +3363,8 @@ func (n *Node) GetSnapshotKey(key []byte) (*StateSnapshot, error) {
 	return readSnapshotFromStores(n.DB.SnapshotStoresForRead(), key)
 }
 
-func (n *Node) ApplySnapshotForSync(snapshot StateSnapshot) {
+func (n *Node) ApplySnapshotForSync(snapshot StateSnapshot) (applied bool) {
 	started := time.Now()
-	applied := false
 	defer func() {
 		n.observeSnapshotOperation("apply", snapshot.Height, time.Since(started), applied)
 	}()
@@ -3423,6 +3438,8 @@ func (n *Node) ApplySnapshotForSync(snapshot StateSnapshot) {
 			BlockTime:              LogicalTimeForEpoch(snapshot.Height),
 			ValidatorSetHash:       strings.TrimSpace(snapshot.ValidatorSetHash),
 			ValidatorSetRoot:       strings.TrimSpace(snapshot.ValidatorSetRoot),
+			ValidatorRegistryHash:  strings.TrimSpace(snapshotValidatorRegistryHash(&snapshot)),
+			PromotionWindowHash:    strings.TrimSpace(snapshotPromotionWindowHash(&snapshot)),
 			NextValidatorSetHash:   nextHash,
 			NextValidatorSetRoot:   strings.TrimSpace(snapshot.NextValidatorSetRoot),
 			NextValidatorSetHeight: nextActivation,
@@ -3473,13 +3490,13 @@ func (n *Node) ApplySnapshotForSync(snapshot StateSnapshot) {
 
 	n.setLogicalTick(snapshot.Height+1, TickExec)
 	applied = true
+	return applied
 }
 
 // ApplySnapshotForRecovery force-applies a snapshot even if local height is higher.
 // This is used for auto-heal when local state diverges.
-func (n *Node) ApplySnapshotForRecovery(snapshot StateSnapshot) {
+func (n *Node) ApplySnapshotForRecovery(snapshot StateSnapshot) (applied bool) {
 	started := time.Now()
-	applied := false
 	defer func() {
 		n.observeSnapshotOperation("apply", snapshot.Height, time.Since(started), applied)
 	}()
@@ -3604,6 +3621,8 @@ func (n *Node) ApplySnapshotForRecovery(snapshot StateSnapshot) {
 		BlockTime:              LogicalTimeForEpoch(snapshot.Height),
 		ValidatorSetHash:       strings.TrimSpace(snapshot.ValidatorSetHash),
 		ValidatorSetRoot:       strings.TrimSpace(snapshot.ValidatorSetRoot),
+		ValidatorRegistryHash:  strings.TrimSpace(snapshotValidatorRegistryHash(&snapshot)),
+		PromotionWindowHash:    strings.TrimSpace(snapshotPromotionWindowHash(&snapshot)),
 		NextValidatorSetHash:   strings.TrimSpace(snapshot.NextValidatorSetHash),
 		NextValidatorSetRoot:   strings.TrimSpace(snapshot.NextValidatorSetRoot),
 		NextValidatorSetHeight: snapshotActivationHeight(&snapshot),
@@ -3670,6 +3689,7 @@ func (n *Node) ApplySnapshotForRecovery(snapshot StateSnapshot) {
 		fmt.Printf("RECOVERY snapshot applied height=%d\n", snapshot.Height)
 	}
 	applied = true
+	return applied
 }
 
 func (n *Node) pruneFrozenValidatorStateBefore(anchorHeight uint64) {

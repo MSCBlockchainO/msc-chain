@@ -68,7 +68,9 @@ func TestApplySnapshotForSyncRestoresCommittedValidatorState(t *testing.T) {
 		ActivationHeight:       26,
 	}
 
-	node.ApplySnapshotForSync(snapshot)
+	if !node.ApplySnapshotForSync(snapshot) {
+		t.Fatalf("expected snapshot sync apply to succeed")
+	}
 
 	if got := node.Blockchain.Height(); got != 25 {
 		t.Fatalf("unexpected blockchain height after snapshot apply: got=%d want=25", got)
@@ -110,8 +112,63 @@ func TestApplySnapshotForSyncRestoresCommittedValidatorState(t *testing.T) {
 	if anchor.BlockHash != "h25" {
 		t.Fatalf("unexpected anchor block hash: got=%q want=%q", anchor.BlockHash, "h25")
 	}
+	if got, want := anchor.ValidatorRegistryHash, snapshotValidatorRegistryHash(&snapshot); got != want {
+		t.Fatalf("unexpected anchor validator registry hash: got=%q want=%q", got, want)
+	}
 	if anchor.NextValidatorSetHeight != 26 || anchor.ActivationHeight != 26 {
 		t.Fatalf("unexpected anchor activation fields: next=%d activation=%d", anchor.NextValidatorSetHeight, anchor.ActivationHeight)
+	}
+}
+
+func TestApplySnapshotForSyncReturnsFalseWhenRejected(t *testing.T) {
+	chain := NewBlockchain()
+	node := &Node{
+		ID:         "A",
+		Role:       "full",
+		Blockchain: &chain,
+		Ledger:     GenesisLedger(),
+		committed:  map[uint64]string{},
+	}
+
+	node.commitMu.Lock()
+	node.finalizedHeight = 10
+	node.committedHeight = 10
+	node.commitMu.Unlock()
+
+	snapshotLedger := NewLedger()
+	snapshot := StateSnapshot{
+		Version:         SnapshotVersion,
+		Height:          5,
+		PrevHash:        "h4",
+		BlockHash:       "h5",
+		StateRoot:       "state5",
+		FinalizedHeight: 5,
+		FinalizedHash:   "h5",
+		GenesisHash:     GenesisHash,
+		Ledger:          snapshotLedger,
+		LedgerHash:      HashLedger(snapshotLedger),
+		Validators: map[string]bool{
+			"A": true,
+			"B": true,
+			"C": true,
+			"D": true,
+		},
+		ValidatorRegistry: map[string]ValidatorRecord{
+			"A": {ID: "A", Stake: 100, Status: ValidatorActive},
+			"B": {ID: "B", Stake: 100, Status: ValidatorActive},
+			"C": {ID: "C", Stake: 100, Status: ValidatorActive},
+			"D": {ID: "D", Stake: 100, Status: ValidatorActive},
+		},
+	}
+
+	if node.ApplySnapshotForSync(snapshot) {
+		t.Fatalf("expected stale snapshot apply to be rejected")
+	}
+	if got := node.Blockchain.Height(); got != 0 {
+		t.Fatalf("rejected snapshot changed chain height: got=%d", got)
+	}
+	if got := node.syncSnapshotHeight; got != 0 {
+		t.Fatalf("rejected snapshot advanced sync snapshot height: got=%d", got)
 	}
 }
 

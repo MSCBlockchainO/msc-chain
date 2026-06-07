@@ -562,9 +562,6 @@ func validatorSnapshotAdaptiveReason(localHeight uint64, peerHeight uint64) (str
 		return "", 0, false
 	}
 	lag := localHeight - peerHeight
-	if lag > 2 {
-		return "sync_lag", lag, true
-	}
 	if peerHeight <= 1 {
 		return "new_node_join", lag, true
 	}
@@ -663,13 +660,7 @@ func isAdaptiveValidatorSnapshotPublishReason(reason string) bool {
 }
 
 func shouldPublishAutomaticValidatorSnapshotAtHeight(height uint64) bool {
-	if height == 0 {
-		return false
-	}
-	if validatorSnapshotAutoPublishIntervalBlocks <= 1 || height <= 2 {
-		return true
-	}
-	return height%validatorSnapshotAutoPublishIntervalBlocks == 0
+	return shouldAutoCreateSnapshotAtHeight(height)
 }
 
 func (n *Node) maybeTriggerAdaptiveValidatorSnapshotPublish(trigger string) {
@@ -761,6 +752,8 @@ func (n *Node) publishRequiredValidatorSnapshot(reason string, force bool) (*Sta
 	if n == nil {
 		return nil, fmt.Errorf("node unavailable")
 	}
+	n.validatorSnapshotPublishMu.Lock()
+	defer n.validatorSnapshotPublishMu.Unlock()
 	if normalizeNodeRole(n.Role) != "validator" {
 		return nil, nil
 	}
@@ -770,19 +763,26 @@ func (n *Node) publishRequiredValidatorSnapshot(reason string, force bool) (*Sta
 		return nil, err
 	}
 	tip := n.Blockchain.Height()
-	if isAutomaticValidatorSnapshotPublishReason(reason) &&
-		!shouldPublishAutomaticValidatorSnapshotAtHeight(tip) &&
-		!(force && isAdaptiveValidatorSnapshotPublishReason(reason)) {
-		if DebugConsensus || DebugSync {
-			key := fmt.Sprintf("snapshot_publish_interval_deferred:%s:%d", normalizeValidatorID(n.ID), tip)
-			if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
-				fmt.Printf("[SNAPSHOT-PUBLISH] deferred height=%d reason=auto_publish_interval_%d\n",
-					tip,
-					validatorSnapshotAutoPublishIntervalBlocks,
-				)
-			}
+	if isAutomaticValidatorSnapshotPublishReason(reason) {
+		publishedHeight, _, _, publishErr := n.validatorSnapshotPublicationState()
+		if publishedHeight >= tip && strings.TrimSpace(publishErr) == "" {
+			return nil, nil
 		}
-		return nil, nil
+		if !shouldPublishAutomaticValidatorSnapshotAtHeight(tip) {
+			if DebugConsensus || DebugSync {
+				key := fmt.Sprintf("snapshot_publish_interval_deferred:%s:%d", normalizeValidatorID(n.ID), tip)
+				if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+					fmt.Printf("[SNAPSHOT-PUBLISH] deferred height=%d reason=auto_publish_interval_%d\n",
+						tip,
+						syncCheckpointIntervalBlocks(),
+					)
+				}
+			}
+			return nil, nil
+		}
+		if !n.authoritativeExecutionLedgerAvailable(tip) {
+			return nil, nil
+		}
 	}
 	if !force && !shouldAutoCreateSnapshotAtHeight(tip) {
 		if strings.Contains(reason, "snapshot_proof_signer") {
@@ -797,7 +797,7 @@ func (n *Node) publishRequiredValidatorSnapshot(reason string, force bool) (*Sta
 			return nil, nil
 		}
 	}
-	if len(n.ValidatorKey.PrivateKey) != ed25519.PrivateKeySize {
+	if !isValidatorSigningKeyUsable(n.ValidatorKey) {
 		err := fmt.Errorf("validator key unavailable for snapshot publication")
 		n.markValidatorSnapshotPublishResult(nil, err)
 		return nil, err

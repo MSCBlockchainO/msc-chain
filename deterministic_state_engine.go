@@ -45,6 +45,16 @@ func (n *Node) deterministicPersistRegistrySnapshot(height uint64, registry map[
 	if err := n.validatePersistableValidatorRegistrySource(height, expectedHash, registry); err != nil {
 		return err
 	}
+	if skip, sourceHeight := n.shouldSkipCatchupRegistrySnapshotWrite(height, expectedHash); skip {
+		if DebugConsensus {
+			fmt.Printf("[REGISTRY-PERSIST-SKIP] height=%d source=catchup_carry_forward from=%d hash=%s\n",
+				height,
+				sourceHeight,
+				ShortHash(expectedHash),
+			)
+		}
+		return nil
+	}
 	return n.persistValidatorRegistrySnapshotFromSource(height, registry)
 }
 

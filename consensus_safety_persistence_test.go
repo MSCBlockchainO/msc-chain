@@ -179,6 +179,115 @@ func TestConsensusSafetyRestoreDoesNotReactivateFutureHeightLock(t *testing.T) {
 	}
 }
 
+func TestConsensusSafetyRestorePrunesFinalizedCommitVoteHistory(t *testing.T) {
+	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), []string{"A", "B", "C"})
+	node.Blockchain.AddBlock(Block{ID: 7, BlockHash: "chain-seven"})
+	node.Consensus = NewConsensusState(7)
+	currentHash := "chain-seven"
+
+	node.commitMu.Lock()
+	node.commitVotes = map[uint64]map[string]map[string]struct{}{
+		1: {"hash-one": {"A": {}}},
+		6: {"hash-six": {"B": {}}},
+		7: {currentHash: {"A": {}, "B": {}}},
+		8: {"future-eight": {"C": {}}},
+	}
+	node.commitVoted = map[uint64]map[string]string{
+		1: {"A": "hash-one"},
+		6: {"B": "hash-six"},
+		7: {"A": currentHash, "B": currentHash},
+		8: {"C": "future-eight"},
+	}
+	node.committed = map[uint64]string{7: currentHash}
+	node.committedHeight = 7
+	node.finalizedHeight = 7
+	node.lastCommitHeight = 7
+	node.commitMu.Unlock()
+
+	if err := node.persistConsensusSafetyState("prune_finalized_commit_votes"); err != nil {
+		t.Fatalf("persist consensus safety state: %v", err)
+	}
+
+	node.commitMu.Lock()
+	node.commitVotes = nil
+	node.commitVoted = nil
+	node.commitMu.Unlock()
+	if err := node.restoreConsensusSafetyState(); err != nil {
+		t.Fatalf("restore consensus safety state: %v", err)
+	}
+
+	node.commitMu.Lock()
+	_, oldOneVotes := node.commitVotes[1]
+	_, oldSixVotes := node.commitVotes[6]
+	_, futureVotes := node.commitVotes[8]
+	_, currentVote := node.commitVotes[7][currentHash]["B"]
+	_, oldOneVoted := node.commitVoted[1]
+	_, oldSixVoted := node.commitVoted[6]
+	_, futureVoted := node.commitVoted[8]
+	currentVoted := node.commitVoted[7]["B"]
+	node.commitMu.Unlock()
+	if oldOneVotes || oldSixVotes || futureVotes || oldOneVoted || oldSixVoted || futureVoted {
+		t.Fatal("restored commit vote lineage should keep only the local chain-tip height")
+	}
+	if !currentVote || currentVoted != currentHash {
+		t.Fatalf("current commit vote lineage not restored: vote=%t voted=%q", currentVote, currentVoted)
+	}
+}
+
+func TestConsensusSafetyRestoresPostBlockSafeModeWindow(t *testing.T) {
+	oldSafeModeEnabled := ConsensusPostBlockSafeModeEnabled
+	ConsensusPostBlockSafeModeEnabled = true
+	t.Cleanup(func() {
+		ConsensusPostBlockSafeModeEnabled = oldSafeModeEnabled
+	})
+
+	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), []string{"A", "B", "C"})
+	node.Blockchain.AddBlock(Block{ID: 7, BlockHash: "chain-seven"})
+	node.Consensus = NewConsensusState(8)
+	until := time.Unix(0, time.Now().Add(30*time.Second).UnixNano())
+	window := 6 * time.Second
+
+	node.validatorSetMu.Lock()
+	node.safeModeUntilByHeight = map[uint64]time.Time{
+		7: until,
+		8: until,
+		9: until,
+	}
+	node.safeModeWindowByHeight = map[uint64]time.Duration{
+		7: 2 * time.Second,
+		8: window,
+		9: 9 * time.Second,
+	}
+	node.validatorSetMu.Unlock()
+
+	if err := node.persistConsensusSafetyState("safe_mode_window"); err != nil {
+		t.Fatalf("persist consensus safety state: %v", err)
+	}
+
+	node.validatorSetMu.Lock()
+	node.safeModeUntilByHeight = make(map[uint64]time.Time)
+	node.safeModeWindowByHeight = make(map[uint64]time.Duration)
+	node.validatorSetMu.Unlock()
+	node.clearPostBlockSafeModeGate(0)
+
+	if err := node.restoreConsensusSafetyState(); err != nil {
+		t.Fatalf("restore consensus safety state: %v", err)
+	}
+
+	active, restoredUntil, restoredWindow := node.postBlockSafeModeState(8)
+	if !active || !restoredUntil.Equal(until) || restoredWindow != window {
+		t.Fatalf("safe mode window not restored: active=%t until=%s want=%s window=%s want=%s",
+			active, restoredUntil, until, restoredWindow, window)
+	}
+	node.validatorSetMu.RLock()
+	_, staleHeightRestored := node.safeModeUntilByHeight[7]
+	_, futureHeightRestored := node.safeModeUntilByHeight[9]
+	node.validatorSetMu.RUnlock()
+	if staleHeightRestored || futureHeightRestored {
+		t.Fatalf("safe mode restore should keep only next local height: stale=%t future=%t", staleHeightRestored, futureHeightRestored)
+	}
+}
+
 func TestConsensusSafetyRestoreDropsUnbackedLocalVoteMarker(t *testing.T) {
 	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), []string{"A", "B", "C", "D"})
 	node.Blockchain.AddBlock(Block{ID: 7, BlockHash: "chain-seven"})

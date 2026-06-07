@@ -114,12 +114,12 @@ func TestSanitizeContiguousLoadedBlocksTruncatesSparseTail(t *testing.T) {
 		{ID: 10, PrevHash: "h9", BlockHash: "h10"},
 	}
 
-	got, tip, reason := sanitizeContiguousLoadedBlocks(blocks)
+	got, tip, err := sanitizeContiguousLoadedBlocks(blocks)
 	if tip != 2 || len(got) != 2 {
-		t.Fatalf("expected truncate at height 2, got tip=%d len=%d reason=%s", tip, len(got), reason)
+		t.Fatalf("expected truncate at height 2, got tip=%d len=%d err=%v", tip, len(got), err)
 	}
-	if reason == "" {
-		t.Fatal("expected sparse-chain reason")
+	if err == nil {
+		t.Fatal("expected sparse-chain error")
 	}
 }
 
@@ -128,12 +128,12 @@ func TestSanitizeContiguousLoadedBlocksRejectsUnanchoredSnapshotOnlyTip(t *testi
 		{ID: 1000, PrevHash: "h999", BlockHash: "h1000"},
 	}
 
-	got, tip, reason := sanitizeContiguousLoadedBlocks(blocks)
+	got, tip, err := sanitizeContiguousLoadedBlocks(blocks)
 	if tip != 0 || len(got) != 0 {
-		t.Fatalf("expected unanchored tip to be removed, got tip=%d len=%d reason=%s", tip, len(got), reason)
+		t.Fatalf("expected unanchored tip to be removed, got tip=%d len=%d err=%v", tip, len(got), err)
 	}
-	if reason == "" {
-		t.Fatal("expected sparse-chain reason")
+	if err == nil {
+		t.Fatal("expected sparse-chain error")
 	}
 }
 
@@ -155,11 +155,11 @@ func TestSanitizeContiguousLoadedBlocksTruncatesPrevHashMismatch(t *testing.T) {
 		{ID: 2, PrevHash: "not-h1", BlockHash: "h2"},
 	}
 
-	got, tip, reason := sanitizeContiguousLoadedBlocks(blocks)
+	got, tip, err := sanitizeContiguousLoadedBlocks(blocks)
 	if tip != 1 || len(got) != 1 {
-		t.Fatalf("expected truncate at height 1, got tip=%d len=%d reason=%s", tip, len(got), reason)
+		t.Fatalf("expected truncate at height 1, got tip=%d len=%d err=%v", tip, len(got), err)
 	}
-	if reason == "" {
-		t.Fatal("expected prev-hash reason")
+	if err == nil {
+		t.Fatal("expected prev-hash error")
 	}
 }

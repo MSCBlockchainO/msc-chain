@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
 
 func TestDetectConsensusModePriorityAndModes(t *testing.T) {
@@ -76,6 +78,24 @@ func TestDetectConsensusModePriorityAndModes(t *testing.T) {
 			want: ConsensusDetectorRecovery,
 		},
 		{
+			name: "full node local catchup is recovery not halted",
+			in: ConsensusDetectorMetrics{
+				NodeRole:              "full",
+				Height:                1537,
+				FinalizedHeight:       1537,
+				TotalValidators:       4,
+				ActiveValidators:      4,
+				Quorum:                3,
+				NetworkQuorumVotes:    4,
+				NetworkQuorumRequired: 3,
+				SyncingValidators:     1,
+				MaxValidatorLag:       1000,
+				FinalityLagBlocks:     0,
+				LastFinalitySec:       120,
+			},
+			want: ConsensusDetectorRecovery,
+		},
+		{
 			name: "full node near tip sync bit is still normal",
 			in: ConsensusDetectorMetrics{
 				NodeRole:              "full",
@@ -138,6 +158,7 @@ func TestDetectConsensusModePriorityAndModes(t *testing.T) {
 				ActiveValidators: 4,
 				Quorum:           3,
 				BlockTimeMS:      12000,
+				DegradedAfterSec: 12,
 			},
 			want: ConsensusDetectorDegraded,
 		},
@@ -175,7 +196,7 @@ func TestDetectConsensusModePriorityAndModes(t *testing.T) {
 			want: ConsensusDetectorNormal,
 		},
 		{
-			name: "validator low peer count is degraded",
+			name: "validator low peer count with healthy finality is normal",
 			in: ConsensusDetectorMetrics{
 				NodeRole:          "validator",
 				TotalValidators:   4,
@@ -183,6 +204,18 @@ func TestDetectConsensusModePriorityAndModes(t *testing.T) {
 				Quorum:            3,
 				PeerCount:         2,
 				FinalityLagBlocks: 0,
+			},
+			want: ConsensusDetectorNormal,
+		},
+		{
+			name: "validator low peer count with finality lag is degraded",
+			in: ConsensusDetectorMetrics{
+				NodeRole:          "validator",
+				TotalValidators:   4,
+				ActiveValidators:  4,
+				Quorum:            3,
+				PeerCount:         2,
+				FinalityLagBlocks: 1,
 			},
 			want: ConsensusDetectorDegraded,
 		},
@@ -273,6 +306,71 @@ func TestConsensusModeDetectorStabilizesSoftModeChanges(t *testing.T) {
 	}
 }
 
+func TestConsensusDetectorMetricsUsesNextProposalValidatorHeight(t *testing.T) {
+	runtime := RuntimeStatusSnapshot{
+		Height:          12,
+		FinalizedHeight: 12,
+		LiveValidators:  3,
+		RequiredQuorum:  2,
+		StrictQuorum:    2,
+		Role:            "validator",
+	}
+	node := &Node{}
+
+	metrics := node.consensusDetectorMetricsFromRuntime(runtime)
+
+	if metrics.ValidatorMetricHeight != runtime.Height+1 {
+		t.Fatalf("validator metric height=%d, want next proposal height %d", metrics.ValidatorMetricHeight, runtime.Height+1)
+	}
+	if metrics.ActiveValidators != runtime.LiveValidators {
+		t.Fatalf("active validators changed during metric conversion: got=%d want=%d", metrics.ActiveValidators, runtime.LiveValidators)
+	}
+	if metrics.Quorum != runtime.RequiredQuorum {
+		t.Fatalf("quorum changed during metric conversion: got=%d want=%d", metrics.Quorum, runtime.RequiredQuorum)
+	}
+}
+
+func TestConsensusDetectorRecoveryLagConfigBinding(t *testing.T) {
+	oldLag := ConsensusDetectorRecoveryValidatorLagBlocks
+	oldDegradedAfter := ConsensusDetectorDegradedAfter
+	oldHaltedAfter := ConsensusDetectorHaltedAfter
+	t.Cleanup(func() {
+		ConsensusDetectorRecoveryValidatorLagBlocks = oldLag
+		ConsensusDetectorDegradedAfter = oldDegradedAfter
+		ConsensusDetectorHaltedAfter = oldHaltedAfter
+	})
+	ConsensusDetectorRecoveryValidatorLagBlocks = 100
+
+	var cfg struct {
+		Consensus ConsensusConfig `toml:"consensus"`
+	}
+	if _, err := toml.Decode(`
+[consensus]
+detector_recovery_validator_lag_blocks = 37
+`, &cfg); err != nil {
+		t.Fatalf("decode detector config: %v", err)
+	}
+	if cfg.Consensus.DetectorRecoveryValidatorLagBlocks != 37 {
+		t.Fatalf("toml field not bound: got=%d", cfg.Consensus.DetectorRecoveryValidatorLagBlocks)
+	}
+	if !applyConsensusDetectorConfig(cfg.Consensus) {
+		t.Fatal("expected detector config apply to report a change")
+	}
+	if got := ConsensusDetectorRecoveryValidatorLagBlocks; got != 37 {
+		t.Fatalf("detector recovery lag config ignored: got=%d want=37", got)
+	}
+
+	result := DetectConsensusMode(ConsensusDetectorMetrics{
+		TotalValidators:  4,
+		ActiveValidators: 4,
+		Quorum:           3,
+		MaxValidatorLag:  38,
+	})
+	if result.Mode != ConsensusDetectorRecovery || result.RecoveryValidatorLagBlocks != 37 {
+		t.Fatalf("expected configured recovery threshold to drive detector, got=%+v", result)
+	}
+}
+
 func TestHandleConsensusModeEndpoint(t *testing.T) {
 	oldRequireWallet := ConfigAuthRequireWallet
 	oldAPIToken := apiToken
@@ -319,5 +417,8 @@ func TestHandleConsensusModeEndpoint(t *testing.T) {
 	}
 	if payload["degraded_after_seconds"] == nil || payload["halted_after_seconds"] == nil || payload["recovery_validator_lag_blocks"] == nil {
 		t.Fatalf("expected detector thresholds in response: %#v", payload)
+	}
+	if payload["validator_metric_height"] == nil {
+		t.Fatalf("expected validator metric height in response: %#v", payload)
 	}
 }

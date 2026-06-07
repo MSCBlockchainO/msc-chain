@@ -11,6 +11,72 @@ import (
 )
 
 const runtimeGuardMiB int64 = 1024 * 1024
+const homeValidatorRecommendedRAMMiB int64 = 8192
+const homeFullNodeMinimumRAMMiB int64 = 4096
+
+func truthyEnv(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func currentNodeProfile(role string) string {
+	profile := strings.ToLower(strings.TrimSpace(os.Getenv("MSC_NODE_PROFILE")))
+	if profile == "" && truthyEnv("MSC_LOW_RAM_MODE") {
+		profile = "home_low_ram"
+	}
+	switch profile {
+	case "home", "homepc", "home_pc", "home-low-ram":
+		return "home_low_ram"
+	case "":
+		role = strings.ToLower(strings.TrimSpace(role))
+		if role == "light" {
+			return "light"
+		}
+		return "standard"
+	default:
+		return profile
+	}
+}
+
+func homeLowRAMModeEnabled(role string) bool {
+	return currentNodeProfile(role) == "home_low_ram" || truthyEnv("MSC_LOW_RAM_MODE")
+}
+
+func homeValidatorSupported(role string, totalMiB int64) bool {
+	role = strings.ToLower(strings.TrimSpace(role))
+	if role == "validator" {
+		return totalMiB <= 0 || totalMiB >= homeValidatorRecommendedRAMMiB || truthyEnv("MSC_ALLOW_4GB_VALIDATOR")
+	}
+	return totalMiB <= 0 || totalMiB >= homeFullNodeMinimumRAMMiB
+}
+
+func runtimeMemoryLimitBytes() int64 {
+	current := debug.SetMemoryLimit(-1)
+	if current < 0 {
+		return 0
+	}
+	return current
+}
+
+func homeNodeStatusFields(role string) map[string]any {
+	totalMiB := hostMemoryTotalMiB()
+	return map[string]any{
+		"node_profile":                       currentNodeProfile(role),
+		"low_ram_mode":                       homeLowRAMModeEnabled(role),
+		"memory_limit_bytes":                 runtimeMemoryLimitBytes(),
+		"host_memory_total_mib":              totalMiB,
+		"home_validator_supported":           homeValidatorSupported(role, totalMiB),
+		"validator_min_recommended_ram_gb":   homeValidatorRecommendedRAMMiB / 1024,
+		"full_node_min_recommended_ram_gb":   homeFullNodeMinimumRAMMiB / 1024,
+		"allow_4gb_validator_override":       truthyEnv("MSC_ALLOW_4GB_VALIDATOR"),
+		"home_low_ram_profile_env_required":  "MSC_NODE_PROFILE=home_low_ram",
+		"home_low_ram_validator_safety_note": "4GB is full/candidate only by default; validator-ready is 8GB recommended.",
+	}
+}
 
 func runtimeAutoMemoryLimitMiB(totalMiB int64, role string) int64 {
 	if totalMiB < 2048 {
@@ -18,7 +84,15 @@ func runtimeAutoMemoryLimitMiB(totalMiB int64, role string) int64 {
 	}
 	role = strings.ToLower(strings.TrimSpace(role))
 	var limit int64
-	if role == "full" || role == "light" {
+	if homeLowRAMModeEnabled(role) {
+		limit = totalMiB * 35 / 100
+		if role == "validator" {
+			limit = totalMiB * 40 / 100
+		}
+		if limit > 2048 {
+			limit = 2048
+		}
+	} else if role == "full" || role == "light" {
 		limit = totalMiB * 40 / 100
 		if limit > 3072 {
 			limit = 3072
@@ -39,17 +113,31 @@ func ledgerMemoryCacheDepthForRole(role string, override string) uint64 {
 	if raw := strings.TrimSpace(override); raw != "" {
 		parsed, err := strconv.ParseUint(raw, 10, 64)
 		if err == nil && parsed > 0 {
-			if parsed > 256 {
-				return 256
+			if parsed > 32 {
+				return 32
 			}
 			return parsed
 		}
 	}
+	// Each retained height is a full deep copy in both the execution-snapshot
+	// and post-commit caches. Keep the default window deliberately small so an
+	// 8GB validator cannot accumulate dozens of complete state copies before
+	// the Go memory guard can reclaim them. Historical recovery uses persisted
+	// snapshots/block replay rather than this in-memory optimization window.
 	role = strings.ToLower(strings.TrimSpace(role))
-	if role == "full" || role == "light" {
-		return 16
+	if homeLowRAMModeEnabled(role) {
+		if role == "validator" {
+			return 2
+		}
+		return 1
 	}
-	return 32
+	if role == "validator" || role == "auto" || role == "full" || role == "light" {
+		return 2
+	}
+	if role == "archive" {
+		return 4
+	}
+	return 2
 }
 
 func nodeLedgerMemoryCacheDepth(role string) uint64 {
@@ -124,6 +212,34 @@ func configureRuntimeMemoryGuard(role string) {
 	if strings.TrimSpace(os.Getenv("GOGC")) == "" {
 		debug.SetGCPercent(75)
 		log.Printf("[RUNTIME-GUARD] gc_percent=75")
+	}
+}
+
+func runtimePressureModeFor(goroutines int, threshold int, quiet bool) string {
+	if quiet {
+		return "quiet_backpressure"
+	}
+	if threshold > 0 {
+		if goroutines >= threshold {
+			return "pressure"
+		}
+		if goroutines >= (threshold*8)/10 {
+			return "warming"
+		}
+	}
+	return "normal"
+}
+
+func runtimePressureModeCode(mode string) float64 {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "quiet_backpressure":
+		return 3
+	case "pressure":
+		return 2
+	case "warming":
+		return 1
+	default:
+		return 0
 	}
 }
 
