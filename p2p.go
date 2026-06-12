@@ -1143,7 +1143,7 @@ func (n *Node) executionQuorumRequiredForEpoch(epoch uint64) int {
 	if !ok || len(validators) == 0 {
 		return 0
 	}
-	return strictExecSupermajority(len(validators))
+	return execQuorumRequired(len(validators))
 }
 
 func (n *Node) higherRoundQuorumSeenForProposal(epoch uint64, lockedBlock Block, incoming Block, projectedVotes int) (int, int, bool) {
@@ -2853,7 +2853,7 @@ func (n *Node) tryFinalizeExecutionQuorumFromPool(targetEpoch uint64, proposalSn
 	total := len(validators)
 	required := n.executionQuorumRequiredForEpoch(targetEpoch)
 	if required == 0 {
-		required = strictExecSupermajority(total)
+		required = execQuorumRequired(total)
 	}
 	if total == 0 || required == 0 {
 		return false
@@ -2894,7 +2894,7 @@ func (n *Node) storeVoteButIgnoreForCommit(epoch uint64, res ExecutionResultMsg,
 	validators := n.freezeValidatorSetForHeight(epoch, n.GetConsensusValidators(int(epoch)))
 	required := n.executionQuorumRequiredForEpoch(epoch)
 	if required == 0 {
-		required = strictExecSupermajority(len(validators))
+		required = execQuorumRequired(len(validators))
 	}
 	n.logExecutionVoteAccept("recorded_committed", res, proposalSnap, votes, required)
 	if n.Blockchain != nil && n.Blockchain.Height() >= epoch {
@@ -4646,7 +4646,7 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 	final.Timestamp = int64(SystemTimeUnits(final.BlockTime))
 	final.StateRoot = execHash
 	validators, _, _ := n.deterministicCommitteeValidatorsForHeight(epoch)
-	strictRequired := strictExecSupermajority(len(validators))
+	strictRequired := execQuorumRequired(len(validators))
 	policy := quorumPolicySnapshot{
 		Mode:             "NORMAL",
 		Version:          quorumPolicyVersionV1,
@@ -5194,7 +5194,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 	total := len(epochValidators)
 	required := n.executionQuorumRequiredForEpoch(targetEpoch)
 	if required == 0 {
-		required = strictExecSupermajority(total)
+		required = execQuorumRequired(total)
 	}
 	storedCount, ok, equivocation := recordExecResultGlobalWithRequired(targetEpoch, proposalSnap.ProposalKey, res.ExecHash, res.TxMerkle, ExecutionResult{
 		Height:              targetEpoch,
@@ -5491,7 +5491,7 @@ func (n *Node) tryFinalizeProposalIfQuorum(block Block, reason string) bool {
 	total := len(validators)
 	required := n.executionQuorumRequiredForEpoch(block.ID)
 	if required == 0 {
-		required = strictExecSupermajority(total)
+		required = execQuorumRequired(total)
 	}
 	if total == 0 || required == 0 {
 		return false
@@ -5536,7 +5536,7 @@ func (n *Node) tryFinalizeFromStoredResults() {
 	total := len(validators)
 	required := n.executionQuorumRequiredForEpoch(epoch)
 	if required == 0 {
-		required = strictExecSupermajority(total)
+		required = execQuorumRequired(total)
 	}
 	if total == 0 || required == 0 {
 		return
@@ -5559,7 +5559,7 @@ func (n *Node) hasFinalExecutionResult(epoch uint64, execHash string, txMerkle s
 	total := len(validators)
 	required := n.executionQuorumRequiredForEpoch(epoch)
 	if required == 0 {
-		required = strictExecSupermajority(total)
+		required = execQuorumRequired(total)
 	}
 	if total == 0 || required == 0 {
 		return false

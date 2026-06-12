@@ -106,6 +106,8 @@ func TestAdaptiveCommitteeIgnoresLocalLivenessAndQueues(t *testing.T) {
 	oldMult := ValidatorAdaptiveCommitteeLogMult
 	oldMin := ValidatorMinActiveSet
 	oldFrozen := GenesisValidatorSetFrozen
+	oldFrozenSize := GenesisFrozenValidatorSetSize
+	oldExecQuorumPct := GlobalConfig.ExecQuorumPct
 	oldRegistry := GlobalValidatorRegistry.Snapshot()
 	defer func() {
 		ValidatorActiveSetMode = oldMode
@@ -113,6 +115,8 @@ func TestAdaptiveCommitteeIgnoresLocalLivenessAndQueues(t *testing.T) {
 		ValidatorAdaptiveCommitteeLogMult = oldMult
 		ValidatorMinActiveSet = oldMin
 		GenesisValidatorSetFrozen = oldFrozen
+		GenesisFrozenValidatorSetSize = oldFrozenSize
+		GlobalConfig.ExecQuorumPct = oldExecQuorumPct
 		GlobalValidatorRegistry.Load(oldRegistry)
 	}()
 
@@ -121,6 +125,7 @@ func TestAdaptiveCommitteeIgnoresLocalLivenessAndQueues(t *testing.T) {
 	ValidatorAdaptiveCommitteeLogMult = 1
 	ValidatorMinActiveSet = 3
 	GenesisValidatorSetFrozen = false
+	GlobalConfig.ExecQuorumPct = 60
 
 	validators := []string{"A", "B", "C", "D", "F"}
 	registry := make(map[string]ValidatorRecord, len(validators))
@@ -167,9 +172,23 @@ func TestAdaptiveCommitteeIgnoresLocalLivenessAndQueues(t *testing.T) {
 		b1.QuorumPolicyVersion != b2.QuorumPolicyVersion {
 		t.Fatalf("local liveness changed signed quorum metadata: node1=%+v node2=%+v", b1, b2)
 	}
-	if b1.ActiveReadyCount != len(c1) || b1.RequiredQuorum != strictExecSupermajority(len(c1)) {
+	if b1.ActiveReadyCount != len(c1) || b1.RequiredQuorum != execQuorumRequired(len(c1)) {
 		t.Fatalf("quorum metadata not derived from frozen committee: ready=%d required=%d committee=%d",
 			b1.ActiveReadyCount, b1.RequiredQuorum, len(c1))
+	}
+
+	GenesisValidatorSetFrozen = true
+	GenesisFrozenValidatorSetSize = len(validators)
+	frozenNode := &Node{GenesisValidators: append([]string{}, validators...)}
+	fullCommittee := frozenNode.freezeValidatorSetForHeight(1, nil)
+	if len(fullCommittee) != 5 {
+		t.Fatalf("unexpected full committee size: got=%d want=5", len(fullCommittee))
+	}
+	fullBlock := Block{ID: 1, Round: 0, BlockHash: "proposal-full", PrevHash: "parent", Proposer: "A"}
+	frozenNode.applyBlockQuorumPolicyMetadata(&fullBlock)
+	if fullBlock.ActiveReadyCount != 5 || fullBlock.RequiredQuorum != 3 || fullBlock.StrictQuorum != 3 {
+		t.Fatalf("5-validator quorum must stay configured at 3, got ready=%d required=%d strict=%d",
+			fullBlock.ActiveReadyCount, fullBlock.RequiredQuorum, fullBlock.StrictQuorum)
 	}
 }
 

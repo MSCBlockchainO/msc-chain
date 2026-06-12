@@ -67,7 +67,7 @@ func (n *Node) applyBlockQuorumPolicyMetadata(block *Block) {
 	if !ok || len(validators) == 0 {
 		return
 	}
-	required := strictExecSupermajority(len(validators))
+	required := execQuorumRequired(len(validators))
 	block.ConsensusMode = "NORMAL"
 	block.QuorumPolicyVersion = quorumPolicyVersionV1
 	block.ActiveReadyCount = len(validators)

@@ -27640,12 +27640,12 @@ func (n *Node) inheritedDegradedQuorumPolicy(height uint64, policy quorumPolicyS
 }
 
 // executionQuorumPolicy returns the exec quorum threshold and committed
-// observability metadata for a given height. Commit/finality quorum remains
-// strict BFT even during emergency liveness conditions; degraded liveness is
-// reported as diagnostics rather than as a weaker finality threshold.
+// observability metadata for a given height. Commit/finality quorum follows the
+// configured deterministic execution threshold; degraded liveness is reported as
+// diagnostics rather than as a locally weakened finality threshold.
 func (n *Node) executionQuorumPolicy(height uint64) quorumPolicySnapshot {
 	total := n.executionQuorumTotal(height)
-	required := strictExecSupermajority(total)
+	required := execQuorumRequired(total)
 	policy := quorumPolicySnapshot{
 		Mode:           "NORMAL",
 		Version:        quorumPolicyVersionV1,
@@ -27942,7 +27942,7 @@ func (n *Node) recordCommitVote(height uint64, hash string, from string) (int, i
 
 		required := n.executionQuorumRequiredForEpoch(height)
 		if required == 0 {
-			required = strictExecSupermajority(len(validators))
+			required = execQuorumRequired(len(validators))
 		}
 		return 0, required
 
@@ -27950,7 +27950,7 @@ func (n *Node) recordCommitVote(height uint64, hash string, from string) (int, i
 
 	required := n.executionQuorumRequiredForEpoch(height)
 	if required == 0 {
-		required = strictExecSupermajority(len(validators))
+		required = execQuorumRequired(len(validators))
 	}
 	if required < 1 {
 		required = 1
@@ -28055,7 +28055,7 @@ func (n *Node) hasCommitQuorum(height uint64, hash string) bool {
 	validators := n.freezeValidatorSetForHeight(height, n.GetConsensusValidators(int(height)))
 	required := n.executionQuorumRequiredForEpoch(height)
 	if required == 0 {
-		required = strictExecSupermajority(len(validators))
+		required = execQuorumRequired(len(validators))
 	}
 	if required < 1 {
 		required = 1
