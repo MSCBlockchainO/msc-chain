@@ -24,6 +24,8 @@ func withAdaptiveReentryGlobals(t *testing.T) func() {
 	oldBootstrapSlots := ValidatorOnboardingBootstrapMaxNewSlots
 	oldMinStake := ValidatorMinStake
 	oldCoreStakeExempt := ValidatorCoreStakeExempt
+	oldGenesisFrozen := GenesisValidatorSetFrozen
+	oldGenesisFrozenSize := GenesisFrozenValidatorSetSize
 	oldCoreValidators := append([]string{}, ConfigAuthCoreValidators...)
 	oldTTL := ValidatorLivenessHeartbeatTTLSeconds
 	oldGrace := ValidatorLivenessGraceSeconds
@@ -52,6 +54,8 @@ func withAdaptiveReentryGlobals(t *testing.T) func() {
 		ValidatorOnboardingBootstrapMaxNewSlots = oldBootstrapSlots
 		ValidatorMinStake = oldMinStake
 		ValidatorCoreStakeExempt = oldCoreStakeExempt
+		GenesisValidatorSetFrozen = oldGenesisFrozen
+		GenesisFrozenValidatorSetSize = oldGenesisFrozenSize
 		ConfigAuthCoreValidators = oldCoreValidators
 		ValidatorLivenessHeartbeatTTLSeconds = oldTTL
 		ValidatorLivenessGraceSeconds = oldGrace
@@ -75,6 +79,8 @@ func configureAdaptiveReentryDefaults() {
 	ValidatorOnboardingBootstrapMaxNewSlots = 0
 	ValidatorMinStake = 1
 	ValidatorCoreStakeExempt = true
+	GenesisValidatorSetFrozen = true
+	GenesisFrozenValidatorSetSize = 4
 	ConfigAuthCoreValidators = []string{"A", "B", "C", "D"}
 	ValidatorLivenessHeartbeatTTLSeconds = 25
 	ValidatorLivenessGraceSeconds = 10
@@ -100,10 +106,14 @@ func loadAdaptiveReentryRegistry(ids []string) {
 
 func makeAdaptiveReentryNode(height uint64, live map[string]bool, prevFrozen []string) *Node {
 	bc := NewBlockchain()
+	baseHash := ValidatorSetHash(adaptiveReentryBaseIDs)
 	for i, proposer := range []string{"A", "B", "C", "A", "B", "C", "A", "B", "C"} {
 		bc.Blocks = append(bc.Blocks, Block{
-			ID:       uint64(i + 1),
-			Proposer: proposer,
+			ID:                   uint64(i + 1),
+			Proposer:             proposer,
+			Signatures:           append([]string{}, adaptiveReentryBaseIDs...),
+			ValidatorSetHash:     baseHash,
+			NextValidatorSetHash: baseHash,
 		})
 	}
 

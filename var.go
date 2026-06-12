@@ -1975,7 +1975,6 @@ type Node struct {
 	leaderMu                    sync.Mutex
 	leaderBlocks                map[uint64]Block
 	queuedFutureLeaderBlocks    map[uint64][]Block
-	leaderConflictReplaceCount  map[uint64]uint32
 	lastProposedRoundByHeight   map[uint64]uint32
 	lastProposedRoundAtByHeight map[uint64]time.Time
 	lastLeaderSlot              int64

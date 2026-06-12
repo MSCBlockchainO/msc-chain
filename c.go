@@ -63,18 +63,16 @@ func (n *Node) applyBlockQuorumPolicyMetadata(block *Block) {
 	if n == nil || block == nil || block.ID == 0 {
 		return
 	}
-	policy := n.executionQuorumPolicy(block.ID)
-	if strings.TrimSpace(policy.Version) == "" {
-		policy.Version = quorumPolicyVersionV1
+	validators, _, ok := n.deterministicCommitteeValidatorsForHeight(block.ID)
+	if !ok || len(validators) == 0 {
+		return
 	}
-	if strings.TrimSpace(policy.Mode) == "" {
-		policy.Mode = "NORMAL"
-	}
-	block.ConsensusMode = policy.Mode
-	block.QuorumPolicyVersion = policy.Version
-	block.ActiveReadyCount = policy.ActiveReadyCount
-	block.RequiredQuorum = policy.Required
-	block.StrictQuorum = policy.StrictRequired
+	required := strictExecSupermajority(len(validators))
+	block.ConsensusMode = "NORMAL"
+	block.QuorumPolicyVersion = quorumPolicyVersionV1
+	block.ActiveReadyCount = len(validators)
+	block.RequiredQuorum = required
+	block.StrictQuorum = required
 }
 
 const executionStateRootVersionV1 = "v1"
@@ -1877,7 +1875,7 @@ func (n *Node) ActivateConsensus(ctx context.Context) error {
 				}
 				validators := n.freezeValidatorSetForHeight(epoch, n.GetConsensusValidators(int(epoch)))
 				total := len(validators)
-				required := n.executionQuorumRequired(epoch)
+				required := n.executionQuorumRequiredForEpoch(epoch)
 				if required == 0 {
 					required = execQuorumRequired(total)
 				}
@@ -1906,21 +1904,9 @@ func (n *Node) ActivateConsensus(ctx context.Context) error {
 						continue
 					}
 				}
-				leaderID, liveRound, skippedDead := n.selectLiveLeaderForHeightRound(epoch, round, validators)
+				leaderID, _, _ := n.selectLiveLeaderForHeightRound(epoch, round, validators)
 				if leaderID == "" {
 					continue
-				}
-				if liveRound != round {
-					if DebugConsensus {
-						fmt.Printf("[LEADER-SKIP] height=%d round=%d->%d leader=%s skipped=%d\n",
-							epoch,
-							round,
-							liveRound,
-							ShortID(leaderID),
-							skippedDead,
-						)
-					}
-					round = liveRound
 				}
 				if round != lastRound {
 					if DebugConsensus && round > 0 {
@@ -1941,8 +1927,6 @@ func (n *Node) ActivateConsensus(ctx context.Context) error {
 					if DebugConsensus {
 						n.logLivenessReasonSummary("consensus", epoch, required, snap)
 					}
-					n.pauseConsensusForLivenessShortfall(epoch, required, snap)
-					continue
 				}
 				n.setProposedRound(epoch, round)
 

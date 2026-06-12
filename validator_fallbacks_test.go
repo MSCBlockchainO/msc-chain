@@ -870,7 +870,7 @@ func TestValidatorHeartbeatExitsSafeModeAndBroadcastsLeaderVote(t *testing.T) {
 	}
 }
 
-func TestProposerSignatureFallbackUsesCandidatePubKeyOnTestnet(t *testing.T) {
+func TestProposerSignatureFallbackRejectsHeartbeatOnlyPubKeyOnTestnet(t *testing.T) {
 	oldTestnet := IsTestnet
 	oldDebug := DebugConsensus
 	oldValidatorPubKeys := ValidatorPubKeys
@@ -917,6 +917,9 @@ func TestProposerSignatureFallbackUsesCandidatePubKeyOnTestnet(t *testing.T) {
 		Timestamp: int64(SystemTimeUnits(lt)),
 	}
 	node.SignBlock(&block)
+	validatorPubKeysMu.Lock()
+	delete(ValidatorPubKeys, "A")
+	validatorPubKeysMu.Unlock()
 
 	if ok := verifyBlockSignatureWithCandidates(block, []ed25519.PublicKey{pub}); !ok {
 		t.Fatalf("expected candidate pubkey to verify proposer signature")
@@ -928,14 +931,14 @@ func TestProposerSignatureFallbackUsesCandidatePubKeyOnTestnet(t *testing.T) {
 		t.Fatalf("unexpected current epoch: got=%d want=1", node.currentEpoch())
 	}
 
-	if ok := node.verifyLeaderBlock(block, ""); !ok {
-		t.Fatalf("expected proposer signature fallback to accept block on testnet")
+	if ok := node.verifyLeaderBlock(block, ""); ok {
+		t.Fatalf("heartbeat-only proposer key must not be consensus authority on testnet")
 	}
 	validatorPubKeysMu.RLock()
-	got := ValidatorPubKeys["A"]
+	_, ok := ValidatorPubKeys["A"]
 	validatorPubKeysMu.RUnlock()
-	if !bytes.Equal(got, pub) {
-		t.Fatalf("expected proposer pubkey to be updated via fallback")
+	if ok {
+		t.Fatalf("heartbeat-only proposer key must not update the validator key map")
 	}
 }
 
@@ -986,6 +989,9 @@ func TestProposerSignatureFallbackDisabledOnMainnet(t *testing.T) {
 		Timestamp: int64(SystemTimeUnits(lt)),
 	}
 	node.SignBlock(&block)
+	validatorPubKeysMu.Lock()
+	delete(ValidatorPubKeys, "A")
+	validatorPubKeysMu.Unlock()
 
 	if ok := node.verifyLeaderBlock(block, ""); ok {
 		t.Fatalf("expected proposer signature fallback to be disabled on mainnet")

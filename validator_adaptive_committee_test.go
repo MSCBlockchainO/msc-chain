@@ -100,6 +100,79 @@ func TestAdaptiveCommitteeVRFStableWithinRotationBucket(t *testing.T) {
 	}
 }
 
+func TestAdaptiveCommitteeIgnoresLocalLivenessAndQueues(t *testing.T) {
+	oldMode := ValidatorActiveSetMode
+	oldMax := ValidatorMaxActiveCommittee
+	oldMult := ValidatorAdaptiveCommitteeLogMult
+	oldMin := ValidatorMinActiveSet
+	oldFrozen := GenesisValidatorSetFrozen
+	oldRegistry := GlobalValidatorRegistry.Snapshot()
+	defer func() {
+		ValidatorActiveSetMode = oldMode
+		ValidatorMaxActiveCommittee = oldMax
+		ValidatorAdaptiveCommitteeLogMult = oldMult
+		ValidatorMinActiveSet = oldMin
+		GenesisValidatorSetFrozen = oldFrozen
+		GlobalValidatorRegistry.Load(oldRegistry)
+	}()
+
+	ValidatorActiveSetMode = "adaptive_committee"
+	ValidatorMaxActiveCommittee = 3
+	ValidatorAdaptiveCommitteeLogMult = 1
+	ValidatorMinActiveSet = 3
+	GenesisValidatorSetFrozen = false
+
+	validators := []string{"A", "B", "C", "D", "F"}
+	registry := make(map[string]ValidatorRecord, len(validators))
+	for _, id := range validators {
+		registry[id] = ValidatorRecord{ID: id, Stake: 10, Status: ValidatorActive}
+	}
+	GlobalValidatorRegistry.Load(registry)
+
+	n1 := &Node{
+		GenesisValidators:        append([]string{}, validators...),
+		validatorStatus:          map[string]*ValidatorStatus{"A": {Active: true, LastSeen: time.Now()}},
+		pendingValidators:        map[string]uint64{"F": 1},
+		pendingValidatorRemovals: map[string]uint64{"B": 1},
+	}
+	n2 := &Node{
+		GenesisValidators:        append([]string{}, validators...),
+		validatorStatus:          map[string]*ValidatorStatus{"F": {Active: true, LastSeen: time.Now().Add(-time.Hour)}},
+		pendingValidators:        map[string]uint64{"B": 1},
+		pendingValidatorRemovals: map[string]uint64{"F": 1},
+	}
+
+	c1 := n1.freezeValidatorSetForHeight(1, validators)
+	c2 := n2.freezeValidatorSetForHeight(1, validators)
+	if !reflect.DeepEqual(c1, c2) {
+		t.Fatalf("local liveness or queues changed committee: node1=%v node2=%v", c1, c2)
+	}
+	if len(c1) != 3 {
+		t.Fatalf("unexpected adaptive committee size: got=%d want=3", len(c1))
+	}
+	h1, ok1 := n1.frozenValidatorSetHash(1)
+	h2, ok2 := n2.frozenValidatorSetHash(1)
+	if !ok1 || !ok2 || h1 != h2 {
+		t.Fatalf("local state changed frozen commitment: node1=%q node2=%q", h1, h2)
+	}
+
+	b1 := Block{ID: 1, Round: 2, BlockHash: "proposal", PrevHash: "parent", Proposer: "A"}
+	b2 := b1
+	n1.applyBlockQuorumPolicyMetadata(&b1)
+	n2.applyBlockQuorumPolicyMetadata(&b2)
+	if b1.ConsensusMode != b2.ConsensusMode ||
+		b1.ActiveReadyCount != b2.ActiveReadyCount ||
+		b1.RequiredQuorum != b2.RequiredQuorum ||
+		b1.StrictQuorum != b2.StrictQuorum ||
+		b1.QuorumPolicyVersion != b2.QuorumPolicyVersion {
+		t.Fatalf("local liveness changed signed quorum metadata: node1=%+v node2=%+v", b1, b2)
+	}
+	if b1.ActiveReadyCount != len(c1) || b1.RequiredQuorum != strictExecSupermajority(len(c1)) {
+		t.Fatalf("quorum metadata not derived from frozen committee: ready=%d required=%d committee=%d",
+			b1.ActiveReadyCount, b1.RequiredQuorum, len(c1))
+	}
+}
+
 func TestSafeModeWindowClamp(t *testing.T) {
 	oldMin := ConsensusPostBlockSafeModeMin
 	oldMax := ConsensusPostBlockSafeModeMax

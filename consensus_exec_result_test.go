@@ -893,12 +893,15 @@ func TestExecutionQuorumPolicyContinuesRecentDegradedMode(t *testing.T) {
 
 	node.Blockchain.mu.Lock()
 	node.Blockchain.Blocks = append(node.Blockchain.Blocks, Block{
-		ID:                  1,
-		ConsensusMode:       "DEGRADED",
-		QuorumPolicyVersion: quorumPolicyVersionV1,
-		ActiveReadyCount:    2,
-		RequiredQuorum:      2,
-		StrictQuorum:        3,
+		ID:                   1,
+		ConsensusMode:        "DEGRADED",
+		QuorumPolicyVersion:  quorumPolicyVersionV1,
+		ActiveReadyCount:     2,
+		RequiredQuorum:       2,
+		StrictQuorum:         3,
+		Signatures:           append([]string{}, validators...),
+		ValidatorSetHash:     ValidatorSetHash(validators),
+		NextValidatorSetHash: ValidatorSetHash(validators),
 	})
 	node.Blockchain.mu.Unlock()
 
@@ -1449,7 +1452,7 @@ func TestHandleLeaderBlockVotesForIncomingProposalDirectly(t *testing.T) {
 	}
 }
 
-func TestProcessExecutionResultMsgAcceptsRecentLaggedEpoch(t *testing.T) {
+func TestProcessExecutionResultMsgRejectsRecentLaggedCommittedEpoch(t *testing.T) {
 	oldValidatorPubKeys := ValidatorPubKeys
 	oldGenesisValidatorPubKeys := GenesisValidatorPubKeys
 	t.Cleanup(func() {
@@ -1503,8 +1506,8 @@ func TestProcessExecutionResultMsgAcceptsRecentLaggedEpoch(t *testing.T) {
 	target.processExecutionResultMsg(msg, false)
 
 	proposalKey := proposalVoteKey(epoch, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot)
-	if got := getExecCountGlobal(epoch, proposalKey, block.StateRoot, block.MempoolRoot); got != 1 {
-		t.Fatalf("expected recent lagged vote to record once, got=%d", got)
+	if got := getExecCountGlobal(epoch, proposalKey, block.StateRoot, block.MempoolRoot); got != 0 {
+		t.Fatalf("committed lagged vote must not be recorded, got=%d", got)
 	}
 }
 
@@ -3390,8 +3393,15 @@ func TestPrepareExecutionBroadcastRejectsChangedExecHash(t *testing.T) {
 }
 
 func TestAcceptedProposalReleasesStaleStateRootLock(t *testing.T) {
-	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
-	node.Blockchain.AddBlock(Block{ID: 1, BlockHash: "parent-hash"})
+	validators := []string{"A", "B", "C", "D"}
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	node.Blockchain.AddBlock(Block{
+		ID:                   1,
+		BlockHash:            "parent-hash",
+		Signatures:           append([]string{}, validators...),
+		ValidatorSetHash:     ValidatorSetHash(validators),
+		NextValidatorSetHash: ValidatorSetHash(validators),
+	})
 	node.commitMu.Lock()
 	node.committedHeight = 1
 	node.commitMu.Unlock()

@@ -80,7 +80,7 @@ func TestLocalExecutionVoteGuardBlocksUnsafeCrossRoundProposalSwitch(t *testing.
 	}
 }
 
-func TestLocalExecutionVoteGuardReleasesStaleEvidenceFreeRoundMarker(t *testing.T) {
+func TestLocalExecutionVoteGuardDoesNotReleaseEvidenceFreeRoundMarker(t *testing.T) {
 	node := &Node{
 		ID:                   "A",
 		localExecVoteByRound: make(map[uint64]map[uint32]string),
@@ -92,14 +92,14 @@ func TestLocalExecutionVoteGuardReleasesStaleEvidenceFreeRoundMarker(t *testing.
 	if !node.allowLocalExecutionVoteRound(epoch, 0, stale) {
 		t.Fatalf("expected stale seed vote to be allowed")
 	}
-	if !node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
-		t.Fatalf("expected evidence-free stale marker to release after many rounds")
+	if node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
+		t.Fatalf("evidence-free marker must not release without higher-round quorum")
 	}
-	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != fresh {
-		t.Fatalf("fresh marker not stored after stale release: got=%q", got)
+	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != "" {
+		t.Fatalf("unexpected fresh marker without quorum: got=%q", got)
 	}
-	if _, ok := node.localExecVoteByRound[epoch][0]; ok {
-		t.Fatalf("stale marker should be deleted after release")
+	if got := node.localExecVoteByRound[epoch][0]; got != stale {
+		t.Fatalf("existing marker should remain without quorum: got=%q", got)
 	}
 }
 
@@ -193,7 +193,7 @@ func TestStaleExecutionVoteMirrorsCannotKeepProposalLocked(t *testing.T) {
 	}
 }
 
-func TestLocalExecutionVoteGuardReleasesStaleMinorityRoundMarker(t *testing.T) {
+func TestLocalExecutionVoteGuardDoesNotReleaseMinorityRoundMarker(t *testing.T) {
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	node.ID = "A"
 	node.localExecVoteByRound = make(map[uint64]map[uint32]string)
@@ -211,15 +211,15 @@ func TestLocalExecutionVoteGuardReleasesStaleMinorityRoundMarker(t *testing.T) {
 		},
 	}
 
-	if !node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
-		t.Fatalf("expected stale minority-backed marker to release after many rounds")
+	if node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
+		t.Fatalf("minority-backed marker must not release without higher-round quorum")
 	}
-	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != fresh {
-		t.Fatalf("fresh marker not stored after minority stale release: got=%q", got)
+	if got := node.localExecVoteByRound[epoch][0]; got != stale {
+		t.Fatalf("minority marker should remain without quorum: got=%q", got)
 	}
 }
 
-func TestLocalExecutionVoteGuardReleasesNearbyNonQuorumMarkerAfterCommitStall(t *testing.T) {
+func TestLocalExecutionVoteGuardIgnoresCommitStallWithoutQuorum(t *testing.T) {
 	resetExecPoolForTest(t)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	node.ID = "A"
@@ -246,18 +246,18 @@ func TestLocalExecutionVoteGuardReleasesNearbyNonQuorumMarkerAfterCommitStall(t 
 	node.lastCommitAt = time.Now().Add(-2 * execQuorumEmergencyStallTimeout)
 	node.commitMu.Unlock()
 
-	if !node.allowLocalExecutionVoteRound(epoch, 2, fresh) {
-		t.Fatalf("expected stalled non-quorum marker to release for nearby higher-round recovery")
+	if node.allowLocalExecutionVoteRound(epoch, 2, fresh) {
+		t.Fatalf("local commit stall must not release a non-quorum marker")
 	}
-	if got := node.localExecVoteByRound[epoch][2]; got != fresh {
-		t.Fatalf("fresh marker not stored after stalled non-quorum release: got=%q", got)
+	if got := node.localExecVoteByRound[epoch][2]; got != "" {
+		t.Fatalf("unexpected fresh marker after local commit stall: got=%q", got)
 	}
-	if _, ok := node.localExecVoteByRound[epoch][0]; ok {
-		t.Fatalf("stale marker should be deleted after stalled non-quorum release")
+	if got := node.localExecVoteByRound[epoch][0]; got != stale {
+		t.Fatalf("existing marker should remain after local commit stall: got=%q", got)
 	}
 }
 
-func TestLocalExecutionVoteGuardReleasesNonQuorumMarkerForNearQuorumProposal(t *testing.T) {
+func TestLocalExecutionVoteGuardReleasesNonQuorumMarkerForHigherRoundQuorum(t *testing.T) {
 	resetExecPoolForTest(t)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	node.ID = "B"
@@ -267,7 +267,7 @@ func TestLocalExecutionVoteGuardReleasesNonQuorumMarkerForNearQuorumProposal(t *
 	stale := proposalVoteKey(epoch, 1, "stale-block", "", "stale-root")
 	fresh := proposalVoteKey(epoch, 2, "fresh-block", "", "fresh-root")
 	node.localExecVoteByRound[epoch] = map[uint32]string{1: stale}
-	for _, signer := range []string{"A", "D"} {
+	for _, signer := range []string{"A", "C", "D"} {
 		count, ok, equivocation := recordExecResultGlobal(epoch, fresh, "fresh-root", "", ExecutionResult{
 			Height:     epoch,
 			Round:      2,
@@ -282,7 +282,7 @@ func TestLocalExecutionVoteGuardReleasesNonQuorumMarkerForNearQuorumProposal(t *
 	}
 
 	if !node.allowLocalExecutionVoteRound(epoch, 2, fresh) {
-		t.Fatalf("expected near-quorum higher-round proposal to release non-quorum stale marker")
+		t.Fatalf("expected higher-round quorum to release non-quorum stale marker")
 	}
 	if got := node.localExecVoteByRound[epoch][2]; got != fresh {
 		t.Fatalf("fresh marker not stored after near-quorum release: got=%q", got)
@@ -315,7 +315,7 @@ func TestLocalExecutionVoteGuardCollapsesSameScopeRoundMarkers(t *testing.T) {
 	}
 }
 
-func TestLocalExecutionVoteGuardReleasesLowerRoundWithBetterEvidenceAfterStall(t *testing.T) {
+func TestLocalExecutionVoteGuardNeverReleasesToLowerRound(t *testing.T) {
 	resetExecPoolForTest(t)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"B", "C", "D"})
 	node.ID = "B"
@@ -355,14 +355,14 @@ func TestLocalExecutionVoteGuardReleasesLowerRoundWithBetterEvidenceAfterStall(t
 			t.Fatalf("seed incoming near-quorum vote signer=%s count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
 		}
 	}
-	if !node.allowLocalExecutionVoteRound(epoch, 5, incoming) {
-		t.Fatalf("expected stalled marker to release to lower round with stronger near-quorum evidence")
+	if node.allowLocalExecutionVoteRound(epoch, 5, incoming) {
+		t.Fatalf("lower-round proposal must remain blocked regardless of local stall or evidence")
 	}
-	if got := node.localExecVoteByRound[epoch][5]; got != incoming {
-		t.Fatalf("incoming marker not stored after evidence-based release: got=%q", got)
+	if got := node.localExecVoteByRound[epoch][5]; got != "" {
+		t.Fatalf("lower-round marker must not be stored: got=%q", got)
 	}
-	if _, ok := node.localExecVoteByRound[epoch][6]; ok {
-		t.Fatalf("existing marker should be deleted after evidence-based release")
+	if got := node.localExecVoteByRound[epoch][6]; got != existing {
+		t.Fatalf("existing higher-round marker should remain: got=%q", got)
 	}
 }
 
@@ -456,7 +456,7 @@ func TestLocalExecutionVoteGuardKeepsStaleQuorumRoundMarker(t *testing.T) {
 	}
 }
 
-func TestLocalExecutionVoteGuardReleasesQuorumMarkerAfterCommitStall(t *testing.T) {
+func TestLocalExecutionVoteGuardKeepsQuorumMarkerAfterCommitStall(t *testing.T) {
 	resetExecPoolForTest(t)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	node.ID = "A"
@@ -484,14 +484,14 @@ func TestLocalExecutionVoteGuardReleasesQuorumMarkerAfterCommitStall(t *testing.
 	node.lastCommitAt = time.Now().Add(-2 * execQuorumEmergencyStallTimeout)
 	node.commitMu.Unlock()
 
-	if !node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
-		t.Fatalf("expected stalled quorum-backed marker to release for higher-round recovery")
+	if node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
+		t.Fatalf("local commit stall must not release a quorum-backed marker")
 	}
-	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != fresh {
-		t.Fatalf("fresh marker not stored after stalled quorum release: got=%q", got)
+	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != "" {
+		t.Fatalf("unexpected fresh marker after stalled quorum: got=%q", got)
 	}
-	if _, ok := node.localExecVoteByRound[epoch][0]; ok {
-		t.Fatalf("stale marker should be deleted after stalled quorum release")
+	if got := node.localExecVoteByRound[epoch][0]; got != stale {
+		t.Fatalf("quorum marker should remain after local commit stall: got=%q", got)
 	}
 }
 
@@ -549,7 +549,7 @@ func TestRecordExecResultGlobalRejectsSignerSameRoundEquivocationAcrossProposals
 	}
 }
 
-func TestRecordExecResultGlobalAllowsHigherRoundAfterNonQuorumChoice(t *testing.T) {
+func TestRecordExecResultGlobalRejectsHigherRoundWithoutQuorumProof(t *testing.T) {
 	resetExecPoolForTest(t)
 
 	epoch := uint64(89)
@@ -564,20 +564,20 @@ func TestRecordExecResultGlobalAllowsHigherRoundAfterNonQuorumChoice(t *testing.
 	}); !ok || equivocation || count != 1 {
 		t.Fatalf("expected first vote count=1 ok=true equivocation=false, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
 	}
-	if count, ok, equivocation := recordExecResultGlobal(epoch, higher, "root-b", "", ExecutionResult{
+	if count, ok, equivocation := recordExecResultGlobalWithRequired(epoch, higher, "root-b", "", ExecutionResult{
 		Height:     epoch,
 		Round:      4,
 		BlockHash:  "block-b",
 		Signer:     "A",
 		ResultHash: "root-b",
-	}); !ok || equivocation || count != 1 {
-		t.Fatalf("expected higher-round non-quorum choice release, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}, 3); ok || !equivocation || count != 0 {
+		t.Fatalf("expected higher-round non-quorum choice to be rejected, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
 	}
-	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 0 {
-		t.Fatalf("non-quorum lower-round proposal should lose released vote, got %d", got)
+	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 1 {
+		t.Fatalf("lower-round proposal should retain signer vote, got %d", got)
 	}
-	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 1 {
-		t.Fatalf("higher-round proposal should gain released vote, got %d", got)
+	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 0 {
+		t.Fatalf("higher-round proposal must not gain an unproven switched vote, got %d", got)
 	}
 }
 
@@ -624,21 +624,30 @@ func TestRecordExecResultGlobalKeepsQuorumChoiceLockedAcrossRounds(t *testing.T)
 	}
 }
 
-func TestRecordExecResultGlobalUsesLiveRequiredQuorumForCrossRoundRelease(t *testing.T) {
+func TestRecordExecResultGlobalReleasesForProjectedHigherRoundQuorum(t *testing.T) {
 	resetExecPoolForTest(t)
 
 	epoch := uint64(89)
 	first := proposalVoteKey(epoch, 1, "block-a", "", "root-a")
 	higher := proposalVoteKey(epoch, 4, "block-b", "", "root-b")
-	for _, signer := range []string{"A", "B", "C"} {
-		if count, ok, equivocation := recordExecResultGlobalWithRequired(epoch, first, "root-a", "", ExecutionResult{
+	if count, ok, equivocation := recordExecResultGlobalWithRequired(epoch, first, "root-a", "", ExecutionResult{
+		Height:     epoch,
+		Round:      1,
+		BlockHash:  "block-a",
+		Signer:     "A",
+		ResultHash: "root-a",
+	}, 4); !ok || equivocation || count != 1 {
+		t.Fatalf("expected lower-round seed vote, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}
+	for _, signer := range []string{"B", "C", "D"} {
+		if count, ok, equivocation := recordExecResultGlobalWithRequired(epoch, higher, "root-b", "", ExecutionResult{
 			Height:     epoch,
-			Round:      1,
-			BlockHash:  "block-a",
+			Round:      4,
+			BlockHash:  "block-b",
 			Signer:     signer,
-			ResultHash: "root-a",
+			ResultHash: "root-b",
 		}, 4); !ok || equivocation || count <= 0 {
-			t.Fatalf("expected non-quorum seed vote for %s, got count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
+			t.Fatalf("expected higher-round quorum seed vote for %s, got count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
 		}
 	}
 	if count, ok, equivocation := recordExecResultGlobalWithRequired(epoch, higher, "root-b", "", ExecutionResult{
@@ -647,14 +656,14 @@ func TestRecordExecResultGlobalUsesLiveRequiredQuorumForCrossRoundRelease(t *tes
 		BlockHash:  "block-b",
 		Signer:     "A",
 		ResultHash: "root-b",
-	}, 4); !ok || equivocation || count != 1 {
-		t.Fatalf("expected 3-of-4 lower-round choice to release, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}, 4); !ok || equivocation || count != 4 {
+		t.Fatalf("expected projected higher-round quorum to release signer, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
 	}
-	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 2 {
-		t.Fatalf("released lower-round proposal should retain only two votes, got %d", got)
+	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 0 {
+		t.Fatalf("released lower-round proposal should lose switched vote, got %d", got)
 	}
-	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 1 {
-		t.Fatalf("higher-round proposal should gain released vote, got %d", got)
+	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 4 {
+		t.Fatalf("higher-round proposal should reach quorum, got %d", got)
 	}
 }
 
@@ -693,7 +702,7 @@ func TestQueuedExecutionVoteDropThrottleStaysCoarseInDebugMode(t *testing.T) {
 	}
 }
 
-func TestRecordExecResultGlobalReleasesStaleCrossRoundChoiceAfterGap(t *testing.T) {
+func TestRecordExecResultGlobalDoesNotReleaseChoiceFromRoundGap(t *testing.T) {
 	resetExecPoolForTest(t)
 
 	epoch := uint64(89)
@@ -708,20 +717,20 @@ func TestRecordExecResultGlobalReleasesStaleCrossRoundChoiceAfterGap(t *testing.
 	}); !ok || equivocation || count != 1 {
 		t.Fatalf("expected first vote count=1 ok=true equivocation=false, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
 	}
-	if count, ok, equivocation := recordExecResultGlobal(epoch, higher, "root-b", "", ExecutionResult{
+	if count, ok, equivocation := recordExecResultGlobalWithRequired(epoch, higher, "root-b", "", ExecutionResult{
 		Height:     epoch,
 		Round:      1 + localExecVoteStaleRoundReleaseGap,
 		BlockHash:  "block-b",
 		Signer:     "A",
 		ResultHash: "root-b",
-	}); !ok || equivocation || count != 1 {
-		t.Fatalf("expected stale cross-round choice to release, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}, 3); ok || !equivocation || count != 0 {
+		t.Fatalf("expected round-gap-only switch to be rejected, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
 	}
-	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 0 {
-		t.Fatalf("stale proposal should lose released signer vote, got %d", got)
+	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 1 {
+		t.Fatalf("round gap must not remove prior signer vote, got %d", got)
 	}
-	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 1 {
-		t.Fatalf("higher-round proposal should gain released vote, got %d", got)
+	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 0 {
+		t.Fatalf("higher-round proposal must not gain round-gap-only vote, got %d", got)
 	}
 }
 
@@ -1203,7 +1212,7 @@ func TestLeaderProposalRetryStateThrottlesSameRoundSameEpoch(t *testing.T) {
 	}
 }
 
-func TestSelectLiveLeaderForHeightRoundSkipsDeadCanonicalLeader(t *testing.T) {
+func TestSelectLiveLeaderForHeightRoundIgnoresLocalLiveness(t *testing.T) {
 	validators := []string{"A", "B", "C", "D"}
 	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
 	now := time.Now()
@@ -1247,20 +1256,17 @@ func TestSelectLiveLeaderForHeightRoundSkipsDeadCanonicalLeader(t *testing.T) {
 	node.validatorMu.Unlock()
 
 	gotLeader, gotRound, skipped := node.selectLiveLeaderForHeightRound(height, deadLeaderRound, validators)
-	if gotLeader == "" {
-		t.Fatalf("expected a live leader to be selected")
+	if gotLeader != "A" {
+		t.Fatalf("local liveness must not change canonical leader: got=%s want=A", gotLeader)
 	}
-	if gotLeader == "A" {
-		t.Fatalf("expected dead canonical leader A to be skipped")
+	if gotRound != deadLeaderRound {
+		t.Fatalf("local liveness must not advance the round: got=%d want=%d", gotRound, deadLeaderRound)
 	}
-	if gotRound <= deadLeaderRound {
-		t.Fatalf("expected live leader round to advance: got=%d start=%d", gotRound, deadLeaderRound)
+	if skipped != 0 {
+		t.Fatalf("local liveness must not report skipped leaders: got=%d", skipped)
 	}
-	if skipped <= 0 {
-		t.Fatalf("expected at least one dead leader skip, got=%d", skipped)
-	}
-	if canonical := node.consensusLeaderForHeightRound(height, gotRound, validators); canonical != gotLeader {
-		t.Fatalf("expected selected live leader to remain canonical for chosen round: got=%s canonical=%s", gotLeader, canonical)
+	if canonical := node.consensusLeaderForHeightRound(height, gotRound, validators); canonical != "A" {
+		t.Fatalf("expected canonical leader to remain A, got=%s", canonical)
 	}
 }
 
@@ -1626,8 +1632,9 @@ func TestStoreLeaderBlockAllowsConflictingProposalWithOnlyPrevotes(t *testing.T)
 	if !target.storeLeaderBlock(highBlock) {
 		t.Fatalf("expected conflicting higher-round proposal to remain admissible before quorum lock")
 	}
-	if got := target.currentProposalVoteKey(epoch); got != lockedKey {
-		t.Fatalf("expected prevote-only candidate to remain sticky until higher-round proof arrives: got=%s want=%s", got, lockedKey)
+	highKey := proposalVoteKey(epoch, highBlock.Round, highBlock.BlockHash, highBlock.MempoolRoot, highBlock.StateRoot)
+	if got := target.currentProposalVoteKey(epoch); got != highKey {
+		t.Fatalf("expected higher-round proposal to replace prevote-only candidate: got=%s want=%s old=%s", got, highKey, lockedKey)
 	}
 	got, ok := target.getLeaderBlock(epoch)
 	if !ok || got.BlockHash != highBlock.BlockHash {
@@ -1680,12 +1687,13 @@ func TestStoreLeaderBlockAllowsHigherRoundAfterSingleVote(t *testing.T) {
 		t.Fatalf("failed to store higher-round proposal")
 	}
 
-	if got := target.currentProposalVoteKey(epoch); got != lockedKey {
-		t.Fatalf("expected single vote candidate to remain sticky until higher-round proof arrives: got=%s want=%s", got, lockedKey)
+	highKey := proposalVoteKey(epoch, highBlock.Round, highBlock.BlockHash, highBlock.MempoolRoot, highBlock.StateRoot)
+	if got := target.currentProposalVoteKey(epoch); got != highKey {
+		t.Fatalf("expected higher-round proposal to replace single-vote candidate: got=%s want=%s old=%s", got, highKey, lockedKey)
 	}
 }
 
-func TestAcceptedProposalVoteLockKeepsRoundZeroWithoutHigherProof(t *testing.T) {
+func TestAcceptedProposalSingleVoteDoesNotLockRoundZero(t *testing.T) {
 	setProposerRoundMaxForTest(t, 0)
 	oldValidatorPubKeys := ValidatorPubKeys
 	oldGenesisValidatorPubKeys := GenesisValidatorPubKeys
@@ -1724,23 +1732,24 @@ func TestAcceptedProposalVoteLockKeepsRoundZeroWithoutHigherProof(t *testing.T) 
 		t.Fatalf("expected first signer mark on round-zero proposal")
 	}
 	lockedBlock, lockedVotes, locked, reason := target.acceptedProposalVoteLockForRound(epoch, highBlock.Round)
-	if !locked || lockedVotes != 1 || reason != "accepted_vote_lock" || lockedBlock.BlockHash != lowBlock.BlockHash {
-		t.Fatalf("expected accepted vote lock on round-zero proposal, locked=%t votes=%d reason=%q block=%s",
+	if locked || lockedVotes != 0 || reason != "" || lockedBlock.ID != 0 {
+		t.Fatalf("single vote must not create a round lock, locked=%t votes=%d reason=%q block=%s",
 			locked, lockedVotes, reason, ShortHash(lockedBlock.BlockHash))
 	}
 
 	target.execResultsMu.Lock()
 	changed := target.setAcceptedProposalLocked(highBlock, "observed", false)
 	target.execResultsMu.Unlock()
-	if changed {
-		t.Fatalf("expected no-proof higher-round proposal to stay non-current while round-zero has a vote")
+	if !changed {
+		t.Fatalf("expected higher-round proposal to replace non-quorum round-zero proposal")
 	}
-	if got := target.currentProposalVoteKey(epoch); got != lockedKey {
-		t.Fatalf("expected round-zero proposal to remain current: got=%s want=%s", got, lockedKey)
+	highKey := proposalVoteKey(epoch, highBlock.Round, highBlock.BlockHash, highBlock.MempoolRoot, highBlock.StateRoot)
+	if got := target.currentProposalVoteKey(epoch); got != highKey {
+		t.Fatalf("expected higher-round proposal to become current: got=%s want=%s old=%s", got, highKey, lockedKey)
 	}
 }
 
-func TestAcceptedProposalVoteLockSurvivesSoftLockExpiry(t *testing.T) {
+func TestAcceptedProposalLockIgnoresLocalCommitAge(t *testing.T) {
 	setProposerRoundMaxForTest(t, 0)
 	oldValidatorPubKeys := ValidatorPubKeys
 	oldGenesisValidatorPubKeys := GenesisValidatorPubKeys
@@ -1779,24 +1788,22 @@ func TestAcceptedProposalVoteLockSurvivesSoftLockExpiry(t *testing.T) {
 		t.Fatalf("expected local vote marker on locked proposal")
 	}
 	target.lastCommitAt = time.Now().Add(-blockProductionStaleThreshold() - time.Second)
-	if !target.acceptedProposalSoftLockExpired(epoch) {
-		t.Fatalf("expected accepted proposal soft lock to be expired")
-	}
 
 	lockedBlock, lockedVotes, locked, reason := target.acceptedProposalVoteLockForRound(epoch, highBlock.Round)
-	if !locked || lockedVotes != 1 || reason != "accepted_vote_lock" || lockedBlock.BlockHash != lowBlock.BlockHash {
-		t.Fatalf("expected expired single-vote proposal to stay locked, locked=%t votes=%d reason=%q block=%s",
+	if locked || lockedVotes != 0 || reason != "" || lockedBlock.ID != 0 {
+		t.Fatalf("local commit age and a single vote must not create a lock, locked=%t votes=%d reason=%q block=%s",
 			locked, lockedVotes, reason, ShortHash(lockedBlock.BlockHash))
 	}
 
 	target.execResultsMu.Lock()
 	changed := target.setAcceptedProposalLocked(highBlock, "observed_after_soft_expiry", false)
 	target.execResultsMu.Unlock()
-	if changed {
-		t.Fatalf("expected no-proof higher-round proposal to be rejected after soft lock expiry")
+	if !changed {
+		t.Fatalf("expected higher-round proposal to replace non-quorum proposal regardless of local commit age")
 	}
-	if got := target.currentProposalVoteKey(epoch); got != lockedKey {
-		t.Fatalf("expected voted proposal to remain current after soft expiry: got=%s want=%s", got, lockedKey)
+	highKey := proposalVoteKey(epoch, highBlock.Round, highBlock.BlockHash, highBlock.MempoolRoot, highBlock.StateRoot)
+	if got := target.currentProposalVoteKey(epoch); got != highKey {
+		t.Fatalf("expected higher-round proposal to become current: got=%s want=%s old=%s", got, highKey, lockedKey)
 	}
 }
 
@@ -1846,8 +1853,9 @@ func TestStoreLeaderBlockAllowsNearbyHigherRoundAfterLocalPrevote(t *testing.T) 
 	if !target.storeLeaderBlock(highBlock) {
 		t.Fatalf("expected nearby conflicting higher-round proposal to stay admissible after local prevote")
 	}
-	if got := target.currentProposalVoteKey(epoch); got != lockedKey {
-		t.Fatalf("expected local prevote candidate to remain sticky until nearby higher-round proof arrives: got=%s want=%s", got, lockedKey)
+	highKey := proposalVoteKey(epoch, highBlock.Round, highBlock.BlockHash, highBlock.MempoolRoot, highBlock.StateRoot)
+	if got := target.currentProposalVoteKey(epoch); got != highKey {
+		t.Fatalf("expected nearby higher-round proposal to replace local prevote candidate: got=%s want=%s old=%s", got, highKey, lockedKey)
 	}
 }
 
@@ -1898,12 +1906,13 @@ func TestStoreLeaderBlockAllowsFarHigherRoundAfterLocalPrevote(t *testing.T) {
 		t.Fatalf("expected far higher-round proposal to remain admissible after local prevote")
 	}
 
-	if got := target.currentProposalVoteKey(epoch); got != lockedKey {
-		t.Fatalf("expected local prevote candidate to remain sticky until far higher-round proof arrives: got=%s want=%s", got, lockedKey)
+	highKey := proposalVoteKey(epoch, highBlock.Round, highBlock.BlockHash, highBlock.MempoolRoot, highBlock.StateRoot)
+	if got := target.currentProposalVoteKey(epoch); got != highKey {
+		t.Fatalf("expected far higher-round proposal to replace local prevote candidate: got=%s want=%s old=%s", got, highKey, lockedKey)
 	}
 }
 
-func TestStoreLeaderBlockStabilizesAfterConflictingReplacement(t *testing.T) {
+func TestStoreLeaderBlockDoesNotUseLocalReplacementTimer(t *testing.T) {
 	setProposerRoundMaxForTest(t, 0)
 	oldValidatorPubKeys := ValidatorPubKeys
 	oldGenesisValidatorPubKeys := GenesisValidatorPubKeys
@@ -1950,17 +1959,17 @@ func TestStoreLeaderBlockStabilizesAfterConflictingReplacement(t *testing.T) {
 	if !target.storeLeaderBlock(midBlock) {
 		t.Fatalf("expected first conflicting replacement to be accepted")
 	}
-	if target.storeLeaderBlock(highBlock) {
-		t.Fatalf("expected rapid conflicting replacement to be stabilized")
+	if !target.storeLeaderBlock(highBlock) {
+		t.Fatalf("expected rapid higher-round replacement to be accepted without a local timer gate")
 	}
 
 	got, ok := target.getLeaderBlock(epoch)
-	if !ok || got.BlockHash != midBlock.BlockHash {
-		t.Fatalf("expected stabilized leader block to remain on first replacement")
+	if !ok || got.BlockHash != highBlock.BlockHash {
+		t.Fatalf("expected leader block to advance to highest observed round")
 	}
 }
 
-func TestStoreLeaderBlockAllowsReplacementAfterStabilizationWindow(t *testing.T) {
+func TestStoreLeaderBlockAllowsSequentialHigherRoundReplacement(t *testing.T) {
 	setProposerRoundMaxForTest(t, 0)
 	oldValidatorPubKeys := ValidatorPubKeys
 	oldGenesisValidatorPubKeys := GenesisValidatorPubKeys
@@ -2008,16 +2017,8 @@ func TestStoreLeaderBlockAllowsReplacementAfterStabilizationWindow(t *testing.T)
 		t.Fatalf("expected first conflicting replacement to be accepted")
 	}
 
-	window := leaderProposalStabilizationWindow(ProposerRoundTimeout, ConsensusMinBlockInterval, 0)
-	target.leaderMu.Lock()
-	if target.lastProposedRoundAtByHeight == nil {
-		target.lastProposedRoundAtByHeight = make(map[uint64]time.Time)
-	}
-	target.lastProposedRoundAtByHeight[epoch] = time.Now().Add(-window - time.Millisecond)
-	target.leaderMu.Unlock()
-
 	if !target.storeLeaderBlock(highBlock) {
-		t.Fatalf("expected replacement after stabilization window to be accepted")
+		t.Fatalf("expected sequential higher-round replacement to be accepted")
 	}
 
 	got, ok := target.getLeaderBlock(epoch)
@@ -2375,8 +2376,8 @@ func TestProcessExecutionResultMsgAdoptsRecentProposalAfterSinglePriorVote(t *te
 		t.Fatalf("failed to store higher-round proposal")
 	}
 	highKey := proposalVoteKey(epoch, highBlock.Round, highBlock.BlockHash, highBlock.MempoolRoot, highBlock.StateRoot)
-	if got := target.currentProposalVoteKey(epoch); got != lockedKey {
-		t.Fatalf("expected single prior vote to keep the current proposal sticky until higher-round proof arrives: got=%s want=%s", got, lockedKey)
+	if got := target.currentProposalVoteKey(epoch); got != highKey {
+		t.Fatalf("expected higher-round proposal to replace single-vote proposal: got=%s want=%s old=%s", got, highKey, lockedKey)
 	}
 
 	msg := ExecutionResultMsg{
@@ -2436,9 +2437,9 @@ func TestProcessExecutionResultMsgFinalizesRecentProposalAfterObservedVotes(t *t
 	if !target.storeLeaderBlock(highBlock) {
 		t.Fatalf("failed to store higher-round proposal")
 	}
-	lowKey := proposalVoteKey(epoch, lowBlock.Round, lowBlock.BlockHash, lowBlock.MempoolRoot, lowBlock.StateRoot)
-	if got := target.currentProposalVoteKey(epoch); got != lowKey {
-		t.Fatalf("expected lower-round proposal to remain current until higher-round votes arrive: got=%s want=%s", got, lowKey)
+	highKey := proposalVoteKey(epoch, highBlock.Round, highBlock.BlockHash, highBlock.MempoolRoot, highBlock.StateRoot)
+	if got := target.currentProposalVoteKey(epoch); got != highKey {
+		t.Fatalf("expected deterministic higher-round proposal to replace non-quorum lower round: got=%s want=%s", got, highKey)
 	}
 
 	for _, signer := range []string{"A", "B", "C"} {

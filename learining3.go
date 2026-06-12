@@ -5075,7 +5075,7 @@ func (n *Node) committeeForHeight(height uint64, hint []string) []string {
 	}
 	n.validatorSetMu.RUnlock()
 
-	eligible := n.getEligibleSortedValidatorIDs(height, hint)
+	eligible := n.deterministicCommitteeEligibleValidators(height, hint)
 	if len(eligible) == 0 {
 		return nil
 	}
@@ -5109,6 +5109,32 @@ func (n *Node) committeeForHeight(height uint64, hint []string) []string {
 		fmt.Printf("[COMMITTEE] height=%d size=%d target=%d hash=%s\n", height, len(committee), target, ShortHash(hash))
 	}
 	return committee
+}
+
+// deterministicCommitteeEligibleValidators keeps consensus committee
+// construction independent from heartbeat, liveness, onboarding queues, and
+// other node-local state. Membership changes must arrive through committed
+// validator authority; adaptive selection only rotates that committed pool.
+func (n *Node) deterministicCommitteeEligibleValidators(height uint64, hint []string) []string {
+	if n == nil || height == 0 {
+		return nil
+	}
+	base := canonicalValidatorIDs(hint)
+	if len(base) == 0 {
+		if committed, _, ok := n.chainDerivedValidatorAuthorityForHeight(height); ok {
+			base = canonicalValidatorIDs(committed)
+		}
+	}
+	if len(base) == 0 {
+		base = canonicalValidatorIDs(n.consensusValidatorsForHeight(height))
+	}
+	if len(base) == 0 && (n.Blockchain == nil || n.Blockchain.Height() == 0) {
+		base = canonicalValidatorIDs(n.GenesisValidators)
+	}
+	if len(base) == 0 {
+		return nil
+	}
+	return deterministicStakeHashOrderedValidatorIDs(base, n.validatorRegistrySnapshotForHeight(height))
 }
 
 func (n *Node) committeeHashForHeight(height uint64) (string, bool) {
@@ -5497,9 +5523,9 @@ func validatorReadyMap(validators []string) map[string]bool {
 	return out
 }
 
-// selectLiveLeaderForHeightRound is a local proposer optimization only.
-// It never changes the canonical leader for a given round; it simply skips
-// ahead to the next round whose canonical leader is locally live.
+// selectLiveLeaderForHeightRound returns the canonical leader for a height and
+// round. Local liveness is intentionally ignored here; heartbeat views must not
+// change proposal identity or round selection.
 func (n *Node) selectLiveLeaderForHeightRound(height uint64, round uint32, validators []string) (string, uint32, int) {
 	if n == nil || height == 0 {
 		return "", round, 0
@@ -5510,31 +5536,6 @@ func (n *Node) selectLiveLeaderForHeightRound(height uint64, round uint32, valid
 	}
 	registrySnapshot := n.validatorRegistrySnapshotForHeight(height)
 	canonicalLeader := LeaderForHeightFromSnapshot(height+uint64(round), base, registrySnapshot)
-	liveMap := n.committeeLiveMapForHeight(height)
-	if readyMap := validatorReadyMap(n.consensusReadyValidatorsForHeight(height, base)); len(readyMap) > 0 {
-		liveMap = readyMap
-	}
-	if len(liveMap) == 0 || canonicalLeader == "" {
-		return canonicalLeader, round, 0
-	}
-	if liveMap[canonicalLeader] {
-		return canonicalLeader, round, 0
-	}
-	maxAdvance := len(base) - 1
-	maxRounds := proposerRoundRecoveryCap()
-	for skipped := 1; skipped <= maxAdvance; skipped++ {
-		candidateRound := round + uint32(skipped)
-		if maxRounds > 0 && candidateRound > maxRounds {
-			break
-		}
-		leaderID := LeaderForHeightFromSnapshot(height+uint64(candidateRound), base, registrySnapshot)
-		if leaderID == "" {
-			break
-		}
-		if liveMap[leaderID] {
-			return leaderID, candidateRound, skipped
-		}
-	}
 	return canonicalLeader, round, 0
 }
 
@@ -5597,24 +5598,6 @@ func effectiveConfiguredProposerRoundTimeout() time.Duration {
 		realTick = 2 * time.Second
 	}
 	return effectiveProposerRoundTimeout(ProposerRoundTimeout, ConsensusMinBlockInterval, realTick)
-}
-
-func leaderProposalStabilizationWindow(roundTimeout time.Duration, minBlockInterval time.Duration, realTick time.Duration) time.Duration {
-	timeout := effectiveProposerRoundTimeout(roundTimeout, minBlockInterval, realTick)
-	if timeout <= 0 {
-		timeout = minBlockInterval
-	}
-	if timeout <= 0 {
-		return 0
-	}
-	window := timeout / 2
-	if window <= 0 {
-		window = timeout
-	}
-	if minBlockInterval > 0 && window < minBlockInterval {
-		window = minBlockInterval
-	}
-	return window
 }
 
 func proposerRoundAdvanceFromAnchor(baseRound uint32, anchor time.Time, now time.Time, roundTimeout time.Duration) uint32 {
@@ -5706,9 +5689,6 @@ func (n *Node) setProposedRoundLocked(height uint64, round uint32) {
 				if n.lastProposedRoundAtByHeight != nil {
 					delete(n.lastProposedRoundAtByHeight, h)
 				}
-				if n.leaderConflictReplaceCount != nil {
-					delete(n.leaderConflictReplaceCount, h)
-				}
 			}
 		}
 	}
@@ -5740,60 +5720,6 @@ func (n *Node) proposedRoundAnchorForHeight(height uint64) (uint32, time.Time) {
 		return round, time.Time{}
 	}
 	return round, n.lastProposedRoundAtByHeight[height]
-}
-
-func (n *Node) recentLeaderProposalHoldState(epoch uint64, block Block, incomingRound uint32) (bool, string) {
-	if n == nil {
-		return false, ""
-	}
-	n.leaderMu.Lock()
-	defer n.leaderMu.Unlock()
-	return n.recentLeaderProposalHoldStateLocked(epoch, block, incomingRound)
-}
-
-func (n *Node) recentLeaderProposalHoldStateLocked(epoch uint64, block Block, incomingRound uint32) (bool, string) {
-	if n == nil || epoch == 0 || block.ID == 0 || incomingRound == 0 {
-		return false, ""
-	}
-	window := leaderProposalStabilizationWindow(ProposerRoundTimeout, ConsensusMinBlockInterval, 0)
-	if window <= 0 {
-		return false, ""
-	}
-	const leaderProposalStabilizationRoundGap = execProposalSwitchRoundGap * 2
-
-	if n.leaderConflictReplaceCount == nil || n.leaderConflictReplaceCount[epoch] == 0 {
-		return false, ""
-	}
-	if n.leaderBlocks == nil {
-		return false, ""
-	}
-	current, ok := n.leaderBlocks[epoch]
-	if !ok || current.ID != epoch {
-		return false, ""
-	}
-	currentHash := strings.TrimSpace(current.BlockHash)
-	blockHash := strings.TrimSpace(block.BlockHash)
-	if currentHash == "" || blockHash == "" || !strings.EqualFold(currentHash, blockHash) {
-		return false, ""
-	}
-	holdRound := block.Round
-	if current.Round > holdRound {
-		holdRound = current.Round
-	}
-	if incomingRound <= holdRound {
-		return false, ""
-	}
-	if proposalRoundGap(holdRound, incomingRound) > leaderProposalStabilizationRoundGap {
-		return false, ""
-	}
-	if n.lastProposedRoundAtByHeight == nil {
-		return false, ""
-	}
-	anchorAt := n.lastProposedRoundAtByHeight[epoch]
-	if anchorAt.IsZero() || time.Since(anchorAt) > window {
-		return false, ""
-	}
-	return true, "recent_candidate_sticky"
 }
 
 func (n *Node) localProposerRoundForHeight(height uint64) uint32 {
@@ -5871,9 +5797,6 @@ func (n *Node) storeLeaderBlock(block Block) bool {
 	if n.leaderBlocks == nil {
 		n.leaderBlocks = make(map[uint64]Block)
 	}
-	if n.leaderConflictReplaceCount == nil {
-		n.leaderConflictReplaceCount = make(map[uint64]uint32)
-	}
 	if current, ok := n.leaderBlocks[block.ID]; ok {
 		existing = current
 		if existing.BlockHash == block.BlockHash {
@@ -5900,26 +5823,11 @@ func (n *Node) storeLeaderBlock(block Block) bool {
 			stored = true
 		} else {
 			if block.Round > existing.Round {
-				if keepRecent, reason := n.recentLeaderProposalHoldStateLocked(block.ID, existing, block.Round); keepRecent {
-					if DebugConsensus {
-						fmt.Printf("[ROUND-FAILOVER] rejected rapid conflicting replacement height=%d held_round=%d held_block=%s incoming_round=%d incoming_block=%s reason=%s\n",
-							block.ID,
-							existing.Round,
-							ShortHash(existing.BlockHash),
-							block.Round,
-							ShortHash(block.BlockHash),
-							reason,
-						)
-					}
-					n.leaderMu.Unlock()
-					return false
-				}
 				if DebugConsensus {
 					fmt.Printf("[ROUND-FAILOVER] replacing leader block height=%d round=%d->%d have=%s got=%s\n",
 						block.ID, existing.Round, block.Round, ShortHash(existing.BlockHash), ShortHash(block.BlockHash))
 				}
 				n.leaderBlocks[block.ID] = block
-				n.leaderConflictReplaceCount[block.ID]++
 				n.setProposedRoundLocked(block.ID, block.Round)
 				replaced = true
 				stored = true
@@ -5944,7 +5852,6 @@ func (n *Node) storeLeaderBlock(block Block) bool {
 		}
 	} else {
 		n.leaderBlocks[block.ID] = block
-		delete(n.leaderConflictReplaceCount, block.ID)
 		n.setProposedRoundLocked(block.ID, block.Round)
 		stored = true
 	}
@@ -5985,9 +5892,6 @@ func (n *Node) clearLeaderBlock(epoch uint64) {
 		return
 	}
 	delete(n.leaderBlocks, epoch)
-	if n.leaderConflictReplaceCount != nil {
-		delete(n.leaderConflictReplaceCount, epoch)
-	}
 }
 
 func (n *Node) clearLeaderBlockIfBlock(epoch uint64, block Block) bool {
@@ -6004,9 +5908,6 @@ func (n *Node) clearLeaderBlockIfBlock(epoch uint64, block Block) bool {
 		return false
 	}
 	delete(n.leaderBlocks, epoch)
-	if n.leaderConflictReplaceCount != nil {
-		delete(n.leaderConflictReplaceCount, epoch)
-	}
 	return true
 }
 
@@ -28039,7 +27940,7 @@ func (n *Node) recordCommitVote(height uint64, hash string, from string) (int, i
 
 	if !allowed[from] {
 
-		required := n.executionQuorumRequired(height)
+		required := n.executionQuorumRequiredForEpoch(height)
 		if required == 0 {
 			required = strictExecSupermajority(len(validators))
 		}
@@ -28047,7 +27948,7 @@ func (n *Node) recordCommitVote(height uint64, hash string, from string) (int, i
 
 	}
 
-	required := n.executionQuorumRequired(height)
+	required := n.executionQuorumRequiredForEpoch(height)
 	if required == 0 {
 		required = strictExecSupermajority(len(validators))
 	}
@@ -28152,7 +28053,7 @@ func (n *Node) hasCommittedDifferentHash(height uint64, hash string) bool {
 
 func (n *Node) hasCommitQuorum(height uint64, hash string) bool {
 	validators := n.freezeValidatorSetForHeight(height, n.GetConsensusValidators(int(height)))
-	required := n.executionQuorumRequired(height)
+	required := n.executionQuorumRequiredForEpoch(height)
 	if required == 0 {
 		required = strictExecSupermajority(len(validators))
 	}
