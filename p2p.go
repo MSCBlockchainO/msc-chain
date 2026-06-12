@@ -862,6 +862,71 @@ func proposalVoteKeyParts(proposalKey string) (uint64, uint32, string, string, s
 	return height, uint32(round64), strings.TrimSpace(parts[2]), strings.TrimSpace(parts[3]), strings.TrimSpace(parts[4]), true
 }
 
+func canonicalExecutionResultHash(height uint64, blockHash string, execHash string, txMerkle string) string {
+	execHash = strings.TrimSpace(execHash)
+	if height == 0 || execHash == "" {
+		return ""
+	}
+	payload := fmt.Sprintf("MSC_EXEC_RESULT_V1\x00%d\x00%s\x00%s\x00%s",
+		height,
+		strings.TrimSpace(blockHash),
+		strings.TrimSpace(txMerkle),
+		execHash,
+	)
+	sum := sha256.Sum256([]byte(payload))
+	return hex.EncodeToString(sum[:])
+}
+
+func executionResultHashFromProposal(epoch uint64, proposalKey string, blockHashHint string, execHash string, txMerkle string) string {
+	height := epoch
+	blockHash := strings.TrimSpace(blockHashHint)
+	merkle := strings.TrimSpace(txMerkle)
+	if h, _, parsedBlockHash, parsedTxMerkle, _, ok := proposalVoteKeyParts(proposalKey); ok {
+		if height == 0 {
+			height = h
+		}
+		if blockHash == "" {
+			blockHash = parsedBlockHash
+		}
+		if merkle == "" {
+			merkle = parsedTxMerkle
+		}
+	}
+	return canonicalExecutionResultHash(height, blockHash, execHash, merkle)
+}
+
+func executionResultHashFromMessage(res ExecutionResultMsg) string {
+	return canonicalExecutionResultHash(res.HeightHint, res.BlockHashHint, res.ExecHash, res.TxMerkle)
+}
+
+func executionResultHashFromBlockResult(result ExecutionResult, block Block) string {
+	height := result.Height
+	if height == 0 {
+		height = block.ID
+	}
+	blockHash := strings.TrimSpace(result.BlockHash)
+	if blockHash == "" {
+		blockHash = executionVoteProposalHashForFinalBlock(block)
+	}
+	if blockHash == "" {
+		blockHash = strings.TrimSpace(block.BlockHash)
+	}
+	txMerkle := strings.TrimSpace(result.TxMerkle)
+	if txMerkle == "" {
+		txMerkle = strings.TrimSpace(block.MempoolRoot)
+	}
+	return canonicalExecutionResultHash(height, blockHash, result.ResultHash, txMerkle)
+}
+
+func executionResultHashMatches(claimed string, expected string) bool {
+	claimed = strings.TrimSpace(claimed)
+	if claimed == "" {
+		return true
+	}
+	expected = strings.TrimSpace(expected)
+	return expected != "" && strings.EqualFold(claimed, expected)
+}
+
 func proposalVoteKeyRound(proposalKey string) (uint32, bool) {
 	_, round, _, _, _, ok := proposalVoteKeyParts(proposalKey)
 	return round, ok
@@ -2200,18 +2265,20 @@ func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 	if sig, ok := n.signValidatorPayload(sigBytes); ok {
 		signature = hex.EncodeToString(sig)
 	}
+	executionResultHash := executionResultHashFromProposal(heightHint, proposalKey, blockHashHint, execHash, txMerkle)
 
 	msg := Message{
 		Type: MsgExecutionResult,
 		Data: MustJSON(ExecutionResultMsg{
-			HeightHint:    heightHint,
-			RoundHint:     roundHint,
-			BlockHashHint: blockHashHint,
-			SigVersion:    sigVersion,
-			ExecHash:      execHash,
-			TxMerkle:      txMerkle,
-			Signer:        n.ID,
-			Signature:     signature,
+			HeightHint:          heightHint,
+			RoundHint:           roundHint,
+			BlockHashHint:       blockHashHint,
+			SigVersion:          sigVersion,
+			ExecHash:            execHash,
+			TxMerkle:            txMerkle,
+			ExecutionResultHash: executionResultHash,
+			Signer:              n.ID,
+			Signature:           signature,
 		}),
 	}
 	// Production safety: do not rely on pubsub loopback for the local
@@ -2222,14 +2289,15 @@ func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 			return
 		}
 		n.handleExecutionResultMsg(ExecutionResultMsg{
-			HeightHint:    heightHint,
-			RoundHint:     roundHint,
-			BlockHashHint: blockHashHint,
-			SigVersion:    sigVersion,
-			ExecHash:      execHash,
-			TxMerkle:      txMerkle,
-			Signer:        n.ID,
-			Signature:     signature,
+			HeightHint:          heightHint,
+			RoundHint:           roundHint,
+			BlockHashHint:       blockHashHint,
+			SigVersion:          sigVersion,
+			ExecHash:            execHash,
+			TxMerkle:            txMerkle,
+			ExecutionResultHash: executionResultHash,
+			Signer:              n.ID,
+			Signature:           signature,
 		})
 	}
 	n.fanoutConsensusMessageToPeers(msg)
@@ -3452,6 +3520,9 @@ func recordExecResultGlobal(epoch uint64, proposalKey string, execHash string, t
 }
 
 func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHash string, txMerkle string, res ExecutionResult, requiredQuorum int) (int, bool, bool) {
+	proposalKey = strings.TrimSpace(proposalKey)
+	execHash = strings.TrimSpace(execHash)
+	txMerkle = strings.TrimSpace(txMerkle)
 	if epoch == 0 || execHash == "" || res.Signer == "" {
 		return 0, false, false
 	}
@@ -3462,6 +3533,17 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 		return 0, false, false
 	}
 	res.Signer = signer
+	if strings.TrimSpace(res.ResultHash) == "" {
+		res.ResultHash = execHash
+	}
+	if strings.TrimSpace(res.TxMerkle) == "" {
+		res.TxMerkle = txMerkle
+	}
+	expectedResultHash := executionResultHashFromProposal(epoch, proposalKey, res.BlockHash, execHash, txMerkle)
+	if !executionResultHashMatches(res.ExecutionResultHash, expectedResultHash) {
+		return 0, false, false
+	}
+	res.ExecutionResultHash = expectedResultHash
 
 	ExecPool.mu.Lock()
 	defer ExecPool.mu.Unlock()
@@ -4003,22 +4085,26 @@ merge_exec_snapshot:
 		if snapshot.TxMerkle != nil {
 			txMerkle = snapshot.TxMerkle[hash]
 		}
+		executionResultHash := executionResultHashFromProposal(snapshot.Epoch, proposalKey, proposalBlockHash, hash, txMerkle)
 		for _, signer := range signers {
 			if !n.isValidatorInSetForHeight(signer, snapshot.Epoch) {
 				continue
 			}
 			_, _, _ = recordExecResultGlobalWithRequired(snapshot.Epoch, proposalKey, hash, txMerkle, ExecutionResult{
-				Height:     snapshot.Epoch,
-				Signer:     signer,
-				ResultHash: hash,
-				TxMerkle:   txMerkle,
+				Height:              snapshot.Epoch,
+				BlockHash:           proposalBlockHash,
+				Signer:              signer,
+				ResultHash:          hash,
+				TxMerkle:            txMerkle,
+				ExecutionResultHash: executionResultHash,
 			}, requiredQuorum)
 			n.mirrorConsensusExecVote(snapshot.Epoch, proposalBlockHash, ExecutionResult{
-				Height:     snapshot.Epoch,
-				BlockHash:  proposalBlockHash,
-				Signer:     signer,
-				ResultHash: hash,
-				TxMerkle:   txMerkle,
+				Height:              snapshot.Epoch,
+				BlockHash:           proposalBlockHash,
+				Signer:              signer,
+				ResultHash:          hash,
+				TxMerkle:            txMerkle,
+				ExecutionResultHash: executionResultHash,
 			})
 		}
 	}
@@ -4541,6 +4627,9 @@ func executionResultSortLess(a ExecutionResult, b ExecutionResult) bool {
 	if a.TxMerkle != b.TxMerkle {
 		return a.TxMerkle < b.TxMerkle
 	}
+	if a.ExecutionResultHash != b.ExecutionResultHash {
+		return a.ExecutionResultHash < b.ExecutionResultHash
+	}
 	if a.BlockHash != b.BlockHash {
 		return a.BlockHash < b.BlockHash
 	}
@@ -4977,6 +5066,7 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		}
 		final.ExecutionResults[i].Height = final.ID
 		final.ExecutionResults[i].TxMerkle = txMerkle
+		final.ExecutionResults[i].ExecutionResultHash = executionResultHashFromBlockResult(final.ExecutionResults[i], final)
 	}
 	n.attachFinalityCommitments(&final)
 	final.BlockHash = HashBlock(final)
@@ -5276,6 +5366,12 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		n.logExecutionVoteDrop("tx_merkle_mismatch", res, proposalSnap)
 		return
 	}
+	expectedExecutionResultHash := executionResultHashFromProposal(targetEpoch, proposalSnap.ProposalKey, proposalSnap.BlockHash, res.ExecHash, res.TxMerkle)
+	if !executionResultHashMatches(res.ExecutionResultHash, expectedExecutionResultHash) {
+		n.logExecutionVoteDrop("execution_result_hash_mismatch", res, proposalSnap)
+		return
+	}
+	res.ExecutionResultHash = expectedExecutionResultHash
 	if allowed, reason := n.allowExecutionVoteIngress(res.Signer, res.HeightHint, proposalSnap.ProposalKey, res.ExecHash, res.TxMerkle); !allowed {
 		if reason == "replay_cache" {
 			if !committedEpoch && targetEpoch == currentEpoch && n.commitStallDuration() >= execQuorumEmergencyStallTimeout && n.canParticipateInConsensusNow() && res.ExecHash == expected {
@@ -5429,13 +5525,14 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		required = strictExecSupermajority(total)
 	}
 	storedCount, ok, equivocation := recordExecResultGlobalWithRequired(targetEpoch, proposalSnap.ProposalKey, res.ExecHash, res.TxMerkle, ExecutionResult{
-		Height:     targetEpoch,
-		Round:      res.RoundHint,
-		BlockHash:  proposalSnap.BlockHash,
-		Signer:     res.Signer,
-		ResultHash: res.ExecHash,
-		TxMerkle:   res.TxMerkle,
-		Signature:  strings.TrimSpace(res.Signature),
+		Height:              targetEpoch,
+		Round:               res.RoundHint,
+		BlockHash:           proposalSnap.BlockHash,
+		Signer:              res.Signer,
+		ResultHash:          res.ExecHash,
+		TxMerkle:            res.TxMerkle,
+		ExecutionResultHash: res.ExecutionResultHash,
+		Signature:           strings.TrimSpace(res.Signature),
 	}, required)
 	if equivocation {
 		if n.tryFinalizeExecutionQuorumFromPool(targetEpoch, proposalSnap, leaderBlock, res.ExecHash, res.TxMerkle, "equivocation_existing_quorum") {
@@ -5459,13 +5556,14 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 	// decisions were already made atomically by recordExecResultGlobalWithRequired.
 	_ = n.markExecSignerSeenForProposal(targetEpoch, proposalSnap.ProposalKey, res.Signer)
 	n.mirrorConsensusExecVote(targetEpoch, proposalSnap.BlockHash, ExecutionResult{
-		Height:     targetEpoch,
-		Round:      res.RoundHint,
-		BlockHash:  proposalSnap.BlockHash,
-		Signer:     res.Signer,
-		ResultHash: res.ExecHash,
-		TxMerkle:   res.TxMerkle,
-		Signature:  strings.TrimSpace(res.Signature),
+		Height:              targetEpoch,
+		Round:               res.RoundHint,
+		BlockHash:           proposalSnap.BlockHash,
+		Signer:              res.Signer,
+		ResultHash:          res.ExecHash,
+		TxMerkle:            res.TxMerkle,
+		ExecutionResultHash: res.ExecutionResultHash,
+		Signature:           strings.TrimSpace(res.Signature),
 	})
 	if committedEpoch {
 		n.storeVoteButIgnoreForCommit(targetEpoch, res, proposalSnap, storedCount)
@@ -5543,6 +5641,9 @@ func (n *Node) recordCandidateExecutionResult(res ExecutionResultMsg) bool {
 		return false
 	}
 	if !verifyExecutionResultSignature(res, []ed25519.PublicKey{pub}, sig) {
+		return false
+	}
+	if !executionResultHashMatches(res.ExecutionResultHash, executionResultHashFromMessage(res)) {
 		return false
 	}
 

@@ -1204,6 +1204,66 @@ func TestAllowExecutionVoteIngressScopesReplayByProposalAndSigner(t *testing.T) 
 	}
 }
 
+func TestProposalIdentityExcludesStateRootButExecutionResultHashSeparatesOutcomes(t *testing.T) {
+	height := uint64(9)
+	round := uint32(2)
+	blockHash := "block-9"
+	txMerkle := "tx-9"
+
+	emptyRootKey := proposalVoteKey(height, round, blockHash, txMerkle, "")
+	filledRootKey := proposalVoteKey(height, round, blockHash, txMerkle, "state-root-a")
+	if emptyRootKey != filledRootKey {
+		t.Fatalf("proposal identity must not split on StateRoot: empty=%q filled=%q", emptyRootKey, filledRootKey)
+	}
+
+	rootAHash := executionResultHashFromProposal(height, emptyRootKey, "", "state-root-a", txMerkle)
+	rootBHash := executionResultHashFromProposal(height, filledRootKey, "", "state-root-b", txMerkle)
+	if rootAHash == "" || rootBHash == "" {
+		t.Fatalf("expected execution result hashes to be populated")
+	}
+	if rootAHash == rootBHash {
+		t.Fatalf("different execution outcomes must have different execution result hashes")
+	}
+}
+
+func TestRecordExecResultGlobalRejectsMismatchedExecutionResultHash(t *testing.T) {
+	resetExecPoolForTest(t)
+
+	epoch := uint64(11)
+	proposalKey := proposalVoteKey(epoch, 0, "block-11", "tx-11", "")
+	badHash := executionResultHashFromProposal(epoch, proposalKey, "", "state-root-b", "tx-11")
+
+	count, ok, equivocation := recordExecResultGlobal(epoch, proposalKey, "state-root-a", "tx-11", ExecutionResult{
+		Height:              epoch,
+		Signer:              "A",
+		ResultHash:          "state-root-a",
+		TxMerkle:            "tx-11",
+		ExecutionResultHash: badHash,
+	})
+	if ok || equivocation || count != 0 {
+		t.Fatalf("expected mismatched execution result hash to be rejected, count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}
+
+	expectedHash := executionResultHashFromProposal(epoch, proposalKey, "", "state-root-a", "tx-11")
+	count, ok, equivocation = recordExecResultGlobal(epoch, proposalKey, "state-root-a", "tx-11", ExecutionResult{
+		Height:              epoch,
+		Signer:              "A",
+		ResultHash:          "state-root-a",
+		TxMerkle:            "tx-11",
+		ExecutionResultHash: expectedHash,
+	})
+	if !ok || equivocation || count != 1 {
+		t.Fatalf("expected matching execution result hash to be recorded, count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}
+	results, _, _, stored := getExecResultsGlobal(epoch, proposalKey, "state-root-a", "tx-11")
+	if !stored || len(results) != 1 {
+		t.Fatalf("expected one stored execution result, stored=%t len=%d", stored, len(results))
+	}
+	if results[0].ExecutionResultHash != expectedHash {
+		t.Fatalf("stored execution result hash mismatch: got=%s want=%s", results[0].ExecutionResultHash, expectedHash)
+	}
+}
+
 func TestAllowExecutionVoteNetworkIngressAllowsRecentLagAndDuplicateVoteIDRetries(t *testing.T) {
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	tip := Block{

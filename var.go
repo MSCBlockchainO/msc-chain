@@ -3152,24 +3152,26 @@ type MintResult struct {
 }
 
 type ExecutionResult struct {
-	Height     uint64
-	Round      uint32 `json:"round,omitempty"`
-	BlockHash  string
-	Signer     string
-	ResultHash string
-	TxMerkle   string
-	Signature  string `json:"sig,omitempty"`
+	Height              uint64
+	Round               uint32 `json:"round,omitempty"`
+	BlockHash           string
+	Signer              string
+	ResultHash          string
+	TxMerkle            string
+	ExecutionResultHash string `json:"execution_result_hash,omitempty"`
+	Signature           string `json:"sig,omitempty"`
 }
 
 type ExecutionResultMsg struct {
-	HeightHint    uint64 `json:"height_hint"`
-	RoundHint     uint32 `json:"round_hint,omitempty"`
-	BlockHashHint string `json:"block_hash_hint,omitempty"`
-	SigVersion    uint8  `json:"sig_v,omitempty"`
-	ExecHash      string `json:"exec_hash"`
-	TxMerkle      string `json:"tx_merkle"`
-	Signer        string `json:"signer"`
-	Signature     string `json:"sig"`
+	HeightHint          uint64 `json:"height_hint"`
+	RoundHint           uint32 `json:"round_hint,omitempty"`
+	BlockHashHint       string `json:"block_hash_hint,omitempty"`
+	SigVersion          uint8  `json:"sig_v,omitempty"`
+	ExecHash            string `json:"exec_hash"`
+	TxMerkle            string `json:"tx_merkle"`
+	ExecutionResultHash string `json:"execution_result_hash,omitempty"`
+	Signer              string `json:"signer"`
+	Signature           string `json:"sig"`
 }
 
 type CommitMsg struct {

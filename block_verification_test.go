@@ -188,6 +188,24 @@ func TestVerifyBlockRejectsInvalidExecutionResultSignature(t *testing.T) {
 	}
 }
 
+func TestVerifyBlockRejectsMismatchedExecutionResultHash(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	block := verificationTestFinalBlock(t, node)
+	block.ExecutionResults = []ExecutionResult{{
+		Height:              block.ID,
+		BlockHash:           block.BlockHash,
+		Signer:              "A",
+		ResultHash:          block.StateRoot,
+		TxMerkle:            block.MempoolRoot,
+		ExecutionResultHash: canonicalExecutionResultHash(block.ID, block.BlockHash, "different-state", block.MempoolRoot),
+	}}
+
+	err := node.VerifyBlock(block, node.Blockchain)
+	if err == nil || err.Error() != "execution_result_hash_mismatch" {
+		t.Fatalf("expected execution result hash mismatch rejection, got %v", err)
+	}
+}
+
 func TestVerifyBlockRejectsMainnetExecutionResultWithoutSignature(t *testing.T) {
 	old := IsTestnet
 	IsTestnet = false

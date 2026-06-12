@@ -265,6 +265,9 @@ func (n *Node) verifyBlockConsensusEvidence(block Block, validators []string) er
 		if strings.TrimSpace(result.TxMerkle) != "" && !strings.EqualFold(strings.TrimSpace(result.TxMerkle), strings.TrimSpace(block.MempoolRoot)) {
 			return errors.New("execution_result_tx_merkle_mismatch")
 		}
+		if !executionResultHashMatches(result.ExecutionResultHash, executionResultHashFromBlockResult(result, block)) {
+			return errors.New("execution_result_hash_mismatch")
+		}
 		if !IsTestnet && block.RequiredQuorum > 0 && strings.TrimSpace(result.Signature) == "" {
 			return errors.New("execution_result_signature_missing")
 		}
