@@ -125,9 +125,16 @@ func TestAcceptedProposalVoteCountIgnoresUncreditedSignerMarkers(t *testing.T) {
 			},
 		},
 	}
+	node.Consensus.ExecVotes = map[string]map[string]ExecutionResult{
+		block.BlockHash: {
+			"A": {Signer: "A", ResultHash: block.StateRoot},
+			"B": {Signer: "B", ResultHash: block.StateRoot},
+			"C": {Signer: "C", ResultHash: block.StateRoot},
+		},
+	}
 
 	if got := node.acceptedProposalVoteCountLocked(block.ID, proposalKey); got != 0 {
-		t.Fatalf("uncredited signer markers must not count as quorum evidence, got=%d", got)
+		t.Fatalf("uncredited signer and consensus mirrors must not count as quorum evidence, got=%d", got)
 	}
 	count, ok, equivocation := recordExecResultGlobal(block.ID, proposalKey, block.StateRoot, block.MempoolRoot, ExecutionResult{
 		Height:     block.ID,
@@ -142,6 +149,47 @@ func TestAcceptedProposalVoteCountIgnoresUncreditedSignerMarkers(t *testing.T) {
 	}
 	if got := node.acceptedProposalVoteCountLocked(block.ID, proposalKey); got != 1 {
 		t.Fatalf("credited payload vote should count, got=%d", got)
+	}
+}
+
+func TestStaleExecutionVoteMirrorsCannotKeepProposalLocked(t *testing.T) {
+	resetExecPoolForTest(t)
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+
+	block := Block{
+		ID:          83,
+		Round:       2,
+		BlockHash:   "block-83",
+		StateRoot:   "root-83",
+		MempoolRoot: "tx-83",
+	}
+	proposalKey := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot)
+	heightKey := acceptedProposalHeightKey(block.ID)
+	node.acceptedProposal = map[string]string{heightKey: proposalKey}
+	node.quorumLockedProposal = map[string]string{heightKey: proposalKey}
+	node.acceptedProposalBlocks = map[string]Block{proposalKey: block}
+	node.execSignerSeen = map[uint64]map[string]map[string]bool{
+		block.ID: {
+			execPoolScopeKey(block.ID, proposalKey): {
+				"A": true,
+				"B": true,
+				"C": true,
+			},
+		},
+	}
+	node.Consensus.ExecVotes = map[string]map[string]ExecutionResult{
+		block.BlockHash: {
+			"A": {Signer: "A", ResultHash: block.StateRoot},
+			"B": {Signer: "B", ResultHash: block.StateRoot},
+			"C": {Signer: "C", ResultHash: block.StateRoot},
+		},
+	}
+
+	if _, votes, keep, _ := node.acceptedProposalLockState(block.ID); keep || votes != 0 {
+		t.Fatalf("stale accepted-proposal mirrors must not hold a lock: keep=%t votes=%d", keep, votes)
+	}
+	if _, votes, keep, _ := node.quorumLockedProposalLockState(block.ID); keep || votes != 0 {
+		t.Fatalf("stale precommit mirrors must not hold a lock: keep=%t votes=%d", keep, votes)
 	}
 }
 
@@ -241,6 +289,135 @@ func TestLocalExecutionVoteGuardReleasesNonQuorumMarkerForNearQuorumProposal(t *
 	}
 	if _, ok := node.localExecVoteByRound[epoch][1]; ok {
 		t.Fatalf("stale marker should be deleted after near-quorum release")
+	}
+}
+
+func TestLocalExecutionVoteGuardCollapsesSameScopeRoundMarkers(t *testing.T) {
+	node := &Node{
+		ID:                   "B",
+		localExecVoteByRound: make(map[uint64]map[uint32]string),
+	}
+	epoch := uint64(183)
+	round0 := proposalVoteKey(epoch, 0, "same-block", "", "same-root")
+	round3 := proposalVoteKey(epoch, 3, "same-block", "", "same-root")
+
+	if !node.allowLocalExecutionVoteRound(epoch, 0, round0) {
+		t.Fatalf("expected first same-scope vote marker to be allowed")
+	}
+	if !node.allowLocalExecutionVoteRound(epoch, 3, round3) {
+		t.Fatalf("expected higher-round same-scope marker to be allowed")
+	}
+	if _, ok := node.localExecVoteByRound[epoch][0]; ok {
+		t.Fatalf("older same-scope marker should be collapsed")
+	}
+	if got := node.localExecVoteByRound[epoch][3]; got != round3 {
+		t.Fatalf("higher-round same-scope marker not stored: got=%q", got)
+	}
+}
+
+func TestLocalExecutionVoteGuardReleasesLowerRoundWithBetterEvidenceAfterStall(t *testing.T) {
+	resetExecPoolForTest(t)
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"B", "C", "D"})
+	node.ID = "B"
+	node.localExecVoteByRound = make(map[uint64]map[uint32]string)
+
+	epoch := uint64(181)
+	existing := proposalVoteKey(epoch, 6, "existing-block", "", "existing-root")
+	incoming := proposalVoteKey(epoch, 5, "incoming-block", "", "incoming-root")
+	node.localExecVoteByRound[epoch] = map[uint32]string{6: existing}
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = []Block{{ID: 0, BlockHash: "genesis"}, {ID: epoch - 1, BlockHash: "tip"}}
+	node.Blockchain.mu.Unlock()
+	node.commitMu.Lock()
+	node.lastCommitAt = time.Now().Add(-2 * execQuorumEmergencyStallTimeout)
+	node.commitMu.Unlock()
+
+	if count, ok, equivocation := recordExecResultGlobal(epoch, existing, "existing-root", "", ExecutionResult{
+		Height:     epoch,
+		Round:      6,
+		BlockHash:  "existing-block",
+		Signer:     "B",
+		ResultHash: "existing-root",
+		TxMerkle:   "",
+	}); !ok || equivocation || count != 1 {
+		t.Fatalf("seed existing vote count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}
+	for _, signer := range []string{"C", "D"} {
+		count, ok, equivocation := recordExecResultGlobal(epoch, incoming, "incoming-root", "", ExecutionResult{
+			Height:     epoch,
+			Round:      5,
+			BlockHash:  "incoming-block",
+			Signer:     signer,
+			ResultHash: "incoming-root",
+			TxMerkle:   "",
+		})
+		if !ok || equivocation || count <= 0 {
+			t.Fatalf("seed incoming near-quorum vote signer=%s count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
+		}
+	}
+	if !node.allowLocalExecutionVoteRound(epoch, 5, incoming) {
+		t.Fatalf("expected stalled marker to release to lower round with stronger near-quorum evidence")
+	}
+	if got := node.localExecVoteByRound[epoch][5]; got != incoming {
+		t.Fatalf("incoming marker not stored after evidence-based release: got=%q", got)
+	}
+	if _, ok := node.localExecVoteByRound[epoch][6]; ok {
+		t.Fatalf("existing marker should be deleted after evidence-based release")
+	}
+}
+
+func TestLocalExecutionVoteGuardKeepsHigherRoundOnLowerRoundEvidenceTieAfterStall(t *testing.T) {
+	resetExecPoolForTest(t)
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.ID = "D"
+	node.localExecVoteByRound = make(map[uint64]map[uint32]string)
+
+	epoch := uint64(182)
+	existing := proposalVoteKey(epoch, 5, "existing-block", "", "existing-root")
+	incoming := proposalVoteKey(epoch, 0, "incoming-block", "", "incoming-root")
+	node.localExecVoteByRound[epoch] = map[uint32]string{5: existing}
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = []Block{{ID: 0, BlockHash: "genesis"}, {ID: epoch - 1, BlockHash: "tip"}}
+	node.Blockchain.mu.Unlock()
+	node.commitMu.Lock()
+	node.lastCommitAt = time.Now().Add(-2 * execQuorumEmergencyStallTimeout)
+	node.commitMu.Unlock()
+
+	for _, signer := range []string{"C", "D"} {
+		count, ok, equivocation := recordExecResultGlobal(epoch, existing, "existing-root", "", ExecutionResult{
+			Height:     epoch,
+			Round:      5,
+			BlockHash:  "existing-block",
+			Signer:     signer,
+			ResultHash: "existing-root",
+			TxMerkle:   "",
+		})
+		if !ok || equivocation || count <= 0 {
+			t.Fatalf("seed existing near-quorum vote signer=%s count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
+		}
+	}
+	for _, signer := range []string{"A", "B"} {
+		count, ok, equivocation := recordExecResultGlobal(epoch, incoming, "incoming-root", "", ExecutionResult{
+			Height:     epoch,
+			Round:      0,
+			BlockHash:  "incoming-block",
+			Signer:     signer,
+			ResultHash: "incoming-root",
+			TxMerkle:   "",
+		})
+		if !ok || equivocation || count <= 0 {
+			t.Fatalf("seed incoming near-quorum vote signer=%s count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
+		}
+	}
+
+	if node.allowLocalExecutionVoteRound(epoch, 0, incoming) {
+		t.Fatalf("expected lower-round evidence tie to remain blocked after stall")
+	}
+	if got := node.localExecVoteByRound[epoch][5]; got != existing {
+		t.Fatalf("higher-round marker should remain on evidence tie, got=%q", got)
+	}
+	if got := node.localExecVoteByRound[epoch][0]; got != "" {
+		t.Fatalf("lower-round marker should not be stored on evidence tie, got=%q", got)
 	}
 }
 
@@ -444,6 +621,75 @@ func TestRecordExecResultGlobalKeepsQuorumChoiceLockedAcrossRounds(t *testing.T)
 	}
 	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 0 {
 		t.Fatalf("higher-round conflict should not gain vote, got %d", got)
+	}
+}
+
+func TestRecordExecResultGlobalUsesLiveRequiredQuorumForCrossRoundRelease(t *testing.T) {
+	resetExecPoolForTest(t)
+
+	epoch := uint64(89)
+	first := proposalVoteKey(epoch, 1, "block-a", "", "root-a")
+	higher := proposalVoteKey(epoch, 4, "block-b", "", "root-b")
+	for _, signer := range []string{"A", "B", "C"} {
+		if count, ok, equivocation := recordExecResultGlobalWithRequired(epoch, first, "root-a", "", ExecutionResult{
+			Height:     epoch,
+			Round:      1,
+			BlockHash:  "block-a",
+			Signer:     signer,
+			ResultHash: "root-a",
+		}, 4); !ok || equivocation || count <= 0 {
+			t.Fatalf("expected non-quorum seed vote for %s, got count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
+		}
+	}
+	if count, ok, equivocation := recordExecResultGlobalWithRequired(epoch, higher, "root-b", "", ExecutionResult{
+		Height:     epoch,
+		Round:      4,
+		BlockHash:  "block-b",
+		Signer:     "A",
+		ResultHash: "root-b",
+	}, 4); !ok || equivocation || count != 1 {
+		t.Fatalf("expected 3-of-4 lower-round choice to release, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}
+	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 2 {
+		t.Fatalf("released lower-round proposal should retain only two votes, got %d", got)
+	}
+	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 1 {
+		t.Fatalf("higher-round proposal should gain released vote, got %d", got)
+	}
+}
+
+func TestQueuedExecutionVoteDropsAreThrottled(t *testing.T) {
+	for _, reason := range []string{
+		"queued_syncing",
+		"queued_sync_incomplete",
+		"queued_recompute_pause",
+		"queued_missing_validator_set",
+		"queued_proposal_unresolved",
+	} {
+		if !shouldThrottleExecutionVoteDrop(reason) {
+			t.Fatalf("expected queued execution vote drop %q to be throttled", reason)
+		}
+	}
+	if shouldThrottleExecutionVoteDrop("invalid_signature") {
+		t.Fatal("security-significant invalid signature drop must remain immediately visible")
+	}
+}
+
+func TestQueuedExecutionVoteDropThrottleStaysCoarseInDebugMode(t *testing.T) {
+	oldDebugSync := DebugSync
+	DebugSync = true
+	t.Cleanup(func() {
+		DebugSync = oldDebugSync
+	})
+
+	node := &Node{}
+	first := ExecutionResultMsg{HeightHint: 100, RoundHint: 1, Signer: "A", ExecHash: "root-a"}
+	second := ExecutionResultMsg{HeightHint: 101, RoundHint: 4, Signer: "A", ExecHash: "root-b"}
+	if !node.shouldLogExecutionVoteDrop("queued_syncing", first, execProposalSnapshot{}) {
+		t.Fatal("expected first queued drop to be logged")
+	}
+	if node.shouldLogExecutionVoteDrop("queued_syncing", second, execProposalSnapshot{}) {
+		t.Fatal("queued drop throttle must not be bypassed by per-vote debug keys")
 	}
 }
 

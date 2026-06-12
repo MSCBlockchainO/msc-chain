@@ -1148,9 +1148,22 @@ func (n *Node) rebuildLocalChainBlocksForRewind(height uint64, anchor Block) ([]
 			block, ok = existingByHeight[h]
 		}
 		if !ok || block.ID != h || strings.TrimSpace(block.BlockHash) == "" {
+			if n.canUseSparseSnapshotRewind(height, anchor, existing, h) {
+				return []Block{anchor}, nil
+			}
 			return nil, fmt.Errorf("missing_block_%d", h)
 		}
 		prev := rebuilt[len(rebuilt)-1]
+		if h == 1 && prev.ID == 0 &&
+			strings.TrimSpace(block.PrevHash) != "" &&
+			strings.TrimSpace(prev.BlockHash) != "" &&
+			!strings.EqualFold(strings.TrimSpace(block.PrevHash), strings.TrimSpace(prev.BlockHash)) {
+			// Rewind reconstruction may run after snapshot bootstrap, where the
+			// in-memory genesis is only a process default. Trust persisted block
+			// one's parent hash so the contiguous historical chain can be rebuilt.
+			rebuilt[0].BlockHash = strings.TrimSpace(block.PrevHash)
+			prev = rebuilt[0]
+		}
 		if strings.TrimSpace(block.PrevHash) != "" &&
 			strings.TrimSpace(prev.BlockHash) != "" &&
 			!strings.EqualFold(strings.TrimSpace(block.PrevHash), strings.TrimSpace(prev.BlockHash)) {
@@ -1159,6 +1172,32 @@ func (n *Node) rebuildLocalChainBlocksForRewind(height uint64, anchor Block) ([]
 		rebuilt = append(rebuilt, block)
 	}
 	return rebuilt, nil
+}
+
+func (n *Node) canUseSparseSnapshotRewind(height uint64, anchor Block, existing []Block, missingHeight uint64) bool {
+	if n == nil || height == 0 || missingHeight == 0 || missingHeight >= height {
+		return false
+	}
+	if anchor.ID != height || strings.TrimSpace(anchor.BlockHash) == "" {
+		return false
+	}
+	sparse := false
+	if len(existing) > 0 && existing[0].ID != 0 {
+		sparse = true
+	}
+	for i := 1; i < len(existing); i++ {
+		if existing[i].ID != existing[i-1].ID+1 {
+			sparse = true
+			break
+		}
+	}
+	if !sparse {
+		return false
+	}
+	if snap, _, ok := n.resolveTrustedExecutionSnapshotFromStorage(height); ok && snap != nil {
+		return strings.EqualFold(strings.TrimSpace(snap.BlockHash), strings.TrimSpace(anchor.BlockHash))
+	}
+	return false
 }
 
 func (n *Node) loadPersistedBlockForRewind(height uint64) (Block, bool) {

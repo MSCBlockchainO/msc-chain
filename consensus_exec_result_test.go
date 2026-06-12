@@ -3518,6 +3518,16 @@ func TestMaybeBroadcastExecutionVoteForBlockDefersWhileConsensusPaused(t *testin
 	if len(node.execBroadcastedByValidator) != 0 {
 		t.Fatalf("validator exec broadcast marker should stay empty while paused, got=%v", node.execBroadcastedByValidator)
 	}
+
+	// The periodic recovery loop calls this lower-level path directly.
+	// It must enforce the same pause/sync gate as the normal broadcast wrapper.
+	node.broadcastExecutionResultForBlockInternal(block, block.StateRoot, block.MempoolRoot, true)
+	if len(node.execBroadcasted) != 0 {
+		t.Fatalf("direct execution vote should be deferred while paused, got=%v", node.execBroadcasted)
+	}
+	if len(node.execBroadcastedByValidator) != 0 {
+		t.Fatalf("direct validator exec broadcast marker should stay empty while paused, got=%v", node.execBroadcastedByValidator)
+	}
 }
 
 func TestMaybeExitSyncModeBroadcastsDeferredLeaderExecutionVote(t *testing.T) {

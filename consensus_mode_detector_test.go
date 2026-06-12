@@ -163,6 +163,31 @@ func TestDetectConsensusModePriorityAndModes(t *testing.T) {
 			want: ConsensusDetectorDegraded,
 		},
 		{
+			name: "emergency after thirty second block timeout",
+			in: ConsensusDetectorMetrics{
+				TotalValidators:  4,
+				ActiveValidators: 4,
+				Quorum:           3,
+				LastFinalitySec:  31,
+				DegradedAfterSec: 15,
+				HaltedAfterSec:   60,
+			},
+			want: ConsensusDetectorEmergency,
+		},
+		{
+			name: "syncing validator uses recovery at thirty second timeout",
+			in: ConsensusDetectorMetrics{
+				TotalValidators:   4,
+				ActiveValidators:  4,
+				Quorum:            3,
+				SyncingValidators: 1,
+				LastFinalitySec:   31,
+				DegradedAfterSec:  15,
+				HaltedAfterSec:    60,
+			},
+			want: ConsensusDetectorRecovery,
+		},
+		{
 			name: "degraded finality lag",
 			in: ConsensusDetectorMetrics{
 				Height:           101,

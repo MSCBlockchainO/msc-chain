@@ -403,6 +403,28 @@ func TestOnboardingStrictGateAdmitsReadyCandidate(t *testing.T) {
 	}
 }
 
+func TestAdaptiveCommitteeKeepsActiveSmallSetMember(t *testing.T) {
+	defer withOnboardingStrictActivationGlobals(t)()
+	configureStrictActivationDefaults()
+	height := uint64(50)
+	loadStrictActivationRegistry(1)
+	setStrictActivationPubKeys(true)
+
+	snapshot := GlobalValidatorRegistry.Snapshot()
+	rec := snapshot["F"]
+	rec.Status = ValidatorActive
+	rec.JoinHeight = 1
+	rec.ConsensusPubKey = strings.ToLower(hex.EncodeToString(strictActivationTestPub(15)))
+	snapshot["F"] = rec
+	GlobalValidatorRegistry.Load(snapshot)
+
+	n := makeStrictActivationNode(height)
+	got := n.getEligibleSortedValidatorIDs(height, nil)
+	if !containsValidatorIDInSet(got, "F") {
+		t.Fatalf("expected active staked validator to remain in small active set, got=%v", got)
+	}
+}
+
 func TestOnboardingStrictGateUsesAnchoredSnapshotPubkeyAfterRestart(t *testing.T) {
 	defer withOnboardingStrictActivationGlobals(t)()
 	configureStrictActivationDefaults()

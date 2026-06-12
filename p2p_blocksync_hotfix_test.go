@@ -1051,6 +1051,108 @@ func TestRewindLocalChainPrefersPersistedBlocksOverStaleMemory(t *testing.T) {
 	}
 }
 
+func TestRewindLocalChainRebuildsWithPersistedGenesisParentHash(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	defaultGenesis := node.Blockchain.Blocks[0]
+	persistedGenesisHash := "persisted-genesis-parent"
+	block1 := Block{ID: 1, PrevHash: persistedGenesisHash, BlockHash: "block-1", StateRoot: "state-1"}
+	block2 := Block{ID: 2, PrevHash: block1.BlockHash, BlockHash: "block-2", StateRoot: "state-2"}
+	forkTip := Block{ID: 3, PrevHash: block2.BlockHash, BlockHash: "fork-3", StateRoot: "fork-state"}
+	node.StoreBlock(block1)
+	node.StoreBlock(block2)
+	node.StoreBlock(forkTip)
+
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = []Block{defaultGenesis, block2, forkTip}
+	node.Blockchain.mu.Unlock()
+	node.commitMu.Lock()
+	node.committedHeight = forkTip.ID
+	node.finalizedHeight = forkTip.ID
+	node.committed[forkTip.ID] = forkTip.BlockHash
+	node.commitMu.Unlock()
+
+	if !node.rewindLocalChainToHeight(block2.ID, "test_rebuild_persisted_genesis_parent") {
+		t.Fatal("expected rewind to rebuild from persisted block-one parent hash")
+	}
+
+	node.Blockchain.mu.RLock()
+	rebuilt := append([]Block(nil), node.Blockchain.Blocks...)
+	node.Blockchain.mu.RUnlock()
+	if len(rebuilt) != 3 {
+		t.Fatalf("expected genesis plus blocks 1..2 after rewind, got %d blocks: %#v", len(rebuilt), rebuilt)
+	}
+	if rebuilt[0].BlockHash != persistedGenesisHash {
+		t.Fatalf("expected rebuilt genesis hash %q, got %q", persistedGenesisHash, rebuilt[0].BlockHash)
+	}
+	if rebuilt[1].PrevHash != persistedGenesisHash || rebuilt[2].PrevHash != block1.BlockHash {
+		t.Fatalf("rebuilt chain is not contiguous: %#v", rebuilt)
+	}
+}
+
+func TestRewindLocalChainUsesSparseSnapshotAnchorWhenHistoryPruned(t *testing.T) {
+	validators := []string{"A", "B", "C", "D"}
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	ledger := NewLedger()
+	vhash := ValidatorSetHash(validators)
+	anchor := Block{
+		ID:                   50,
+		Height:               50,
+		Type:                 BlockTypeTime,
+		PrevHash:             "block-49",
+		Proposer:             "A",
+		ValidatorSetHash:     vhash,
+		NextValidatorSetHash: vhash,
+		BlockTime:            LogicalTimeForEpoch(50),
+	}
+	anchor.Timestamp = int64(SystemTimeUnits(anchor.BlockTime))
+	anchor.StateRoot = ComputeExecHashVersioned(anchor, HashLedger(ledger), executionStateRootVersionForHeight(anchor.ID))
+	anchor.BlockHash = HashBlock(anchor)
+	node.StoreBlock(anchor)
+	storeExecutionSnapshotForTest(t, node, anchor, ledger, SnapshotVersion, snapshotLedgerStageExecution)
+
+	forkTip := Block{
+		ID:        51,
+		Height:    51,
+		Type:      BlockTypeTime,
+		PrevHash:  "fork-parent",
+		BlockHash: "fork-51",
+		StateRoot: "fork-state",
+		BlockTime: LogicalTimeForEpoch(51),
+	}
+	node.StoreBlock(forkTip)
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = []Block{anchor, forkTip}
+	node.Blockchain.mu.Unlock()
+	node.commitMu.Lock()
+	node.committedHeight = forkTip.ID
+	node.finalizedHeight = forkTip.ID
+	node.committed[forkTip.ID] = forkTip.BlockHash
+	node.commitMu.Unlock()
+
+	if !node.rewindLocalChainToHeight(anchor.ID, "test_sparse_snapshot_anchor") {
+		t.Fatal("expected sparse snapshot rewind to anchor")
+	}
+	node.Blockchain.mu.RLock()
+	rewound := append([]Block(nil), node.Blockchain.Blocks...)
+	node.Blockchain.mu.RUnlock()
+	if len(rewound) != 1 || rewound[0].ID != anchor.ID || rewound[0].BlockHash != anchor.BlockHash {
+		t.Fatalf("expected sparse anchor-only chain after rewind, got %#v", rewound)
+	}
+	if got := node.Blockchain.Height(); got != anchor.ID {
+		t.Fatalf("expected height %d after sparse rewind, got %d", anchor.ID, got)
+	}
+	if _, ok := node.LoadBlock(int(forkTip.ID)); ok {
+		t.Fatalf("expected fork tip %d to be pruned from storage", forkTip.ID)
+	}
+	node.commitMu.Lock()
+	committedHeight := node.committedHeight
+	_, forkCommitted := node.committed[forkTip.ID]
+	node.commitMu.Unlock()
+	if committedHeight != anchor.ID || forkCommitted {
+		t.Fatalf("unexpected commit state after sparse rewind: height=%d fork_committed=%t", committedHeight, forkCommitted)
+	}
+}
+
 func TestReceiveBlockBackfillsExactNextWhenFinalizedWatermarkAhead(t *testing.T) {
 	validators := []string{"A", "B", "C", "D"}
 	oldRegistry := GlobalValidatorRegistry.Snapshot()

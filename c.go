@@ -2937,9 +2937,32 @@ func (n *Node) handleConsensusEnvelopeFromPeer(data []byte, peerID string) bool 
 func (n *Node) listenConsensus(ctx context.Context) {
 	sub := n.ConsensusSub
 	if sub == nil {
-		log.Println("ConsensusSub is nil")
-		return
+		if n.PubSub == nil {
+			log.Println("ConsensusSub is nil")
+			return
+		}
+		var err error
+		if n.ConsensusTopic == nil {
+			n.ConsensusTopic, err = n.PubSub.Join(TopicConsensus)
+			if err != nil {
+				log.Printf("consensus topic rejoin failed: %v", err)
+				return
+			}
+		}
+		sub, err = n.ConsensusTopic.Subscribe()
+		if err != nil {
+			log.Printf("consensus subscription rejoin failed: %v", err)
+			return
+		}
+		n.ConsensusSub = sub
+		log.Println("[GOSSIP-REPAIR] consensus subscription restored")
 	}
+	defer func() {
+		if n.ConsensusSub == sub {
+			n.ConsensusSub = nil
+		}
+		sub.Cancel()
+	}()
 
 	for {
 		msg, err := sub.Next(ctx)
@@ -2957,9 +2980,32 @@ func (n *Node) listenConsensus(ctx context.Context) {
 func (n *Node) listenValidators(ctx context.Context) {
 	sub := n.ValidatorSub
 	if sub == nil {
-		log.Println("ValidatorSub is nil")
-		return
+		if n.PubSub == nil {
+			log.Println("ValidatorSub is nil")
+			return
+		}
+		var err error
+		if n.ValidatorTopic == nil {
+			n.ValidatorTopic, err = n.PubSub.Join(TopicValidator)
+			if err != nil {
+				log.Printf("validator topic rejoin failed: %v", err)
+				return
+			}
+		}
+		sub, err = n.ValidatorTopic.Subscribe()
+		if err != nil {
+			log.Printf("validator subscription rejoin failed: %v", err)
+			return
+		}
+		n.ValidatorSub = sub
+		log.Println("[GOSSIP-REPAIR] validator subscription restored")
 	}
+	defer func() {
+		if n.ValidatorSub == sub {
+			n.ValidatorSub = nil
+		}
+		sub.Cancel()
+	}()
 
 	for {
 		msg, err := sub.Next(ctx)

@@ -70,6 +70,7 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 	}
 	degradedAfterSec := consensusDetectorMetricDegradedAfterSec(m)
 	haltedAfterSec := consensusDetectorMetricHaltedAfterSec(m)
+	emergencyAfterSec := consensusDetectorMetricEmergencyAfterSec(degradedAfterSec, haltedAfterSec)
 	recoveryLagBlocks := consensusDetectorMetricRecoveryValidatorLagBlocks(m)
 
 	result := ConsensusDetectorResult{
@@ -127,6 +128,9 @@ func DetectConsensusMode(m ConsensusDetectorMetrics) ConsensusDetectorResult {
 	case syncingNeedsRecovery || m.MaxValidatorLag > recoveryLagBlocks:
 		result.Mode = ConsensusDetectorRecovery
 		result.Reason = "validator_recovery"
+	case m.LastFinalitySec > emergencyAfterSec || m.BlockTimeMS > emergencyAfterSec*1000:
+		result.Mode = ConsensusDetectorEmergency
+		result.Reason = "block_production_timeout"
 	case m.Quorum > 0 && m.ActiveValidators == m.Quorum:
 		result.Mode = ConsensusDetectorStrict
 		result.Reason = "minimum_quorum_active"
@@ -174,6 +178,20 @@ func consensusDetectorMetricHaltedAfterSec(m ConsensusDetectorMetrics) int64 {
 	sec := int64(ConsensusDetectorHaltedAfter / time.Second)
 	if sec <= 0 {
 		return 60
+	}
+	return sec
+}
+
+func consensusDetectorMetricEmergencyAfterSec(degradedAfterSec, haltedAfterSec int64) int64 {
+	sec := degradedAfterSec * 2
+	if sec < 30 {
+		sec = 30
+	}
+	if haltedAfterSec > 0 && sec >= haltedAfterSec {
+		sec = haltedAfterSec - 1
+	}
+	if sec < degradedAfterSec {
+		return degradedAfterSec
 	}
 	return sec
 }

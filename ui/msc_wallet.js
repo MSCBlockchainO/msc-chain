@@ -1705,6 +1705,15 @@ const setMetricText = (node, text) => {
   if (node) node.textContent = text;
 };
 
+const blockAgeStateLabel = (seconds) => {
+  const age = Number(seconds);
+  if (!Number.isFinite(age) || age < 0) return "";
+  if (age >= 60) return "halted";
+  if (age >= 15) return "degraded";
+  if (age >= 10) return "slow";
+  return "healthy";
+};
+
 const WALLET_PAGE_ROUTES = Object.freeze({
   "": { page: "dashboard", target: "walletDashboard" },
   "index.html": { page: "dashboard", target: "walletDashboard" },
@@ -1945,7 +1954,7 @@ const renderNetworkDiagnostics = (status, chainValue = MSC_ONLY_CHAIN_ID) => {
   );
   setMetricText(
     networkBlockProduction,
-    `${blockStatus}${lastBlockAge === null ? "" : ` | age=${lastBlockAge}s`}${blockReason === "—" ? "" : ` | ${blockReason}`}`,
+    `${blockStatus}${lastBlockAge === null ? "" : ` | age=${lastBlockAge}s ${blockAgeStateLabel(lastBlockAge)}`}${blockReason === "—" ? "" : ` | ${blockReason}`}`,
   );
   setMetricText(
     networkTxLane,

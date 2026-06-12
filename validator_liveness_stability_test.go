@@ -109,6 +109,38 @@ func TestValidatorLivenessOutOfSetIsOffline(t *testing.T) {
 	}
 }
 
+func TestValidatorLivenessCountsConsensusWaitingPeerDuringCommitStall(t *testing.T) {
+	withLivenessSettings(t, 25, 10, 8)
+
+	now := time.Now()
+	bc := NewBlockchain()
+	n := &Node{
+		Blockchain:            &bc,
+		GenesisValidators:     []string{"F"},
+		validatorStatus:       make(map[string]*ValidatorStatus),
+		validatorOfflineSince: make(map[string]time.Time),
+		peerToValidator:       map[string]string{"peerF": "F"},
+		connectedPeers:        map[string]bool{"peerF": true},
+	}
+	n.lastCommitAt = now.Add(-20 * time.Second)
+	st := &ValidatorStatus{
+		LastSeen:            now.Add(-5 * time.Second),
+		Active:              true,
+		Enabled:             false,
+		ConsensusReadyKnown: true,
+		ReportedHeight:      100,
+		FinalizedHeight:     100,
+		ExecEpoch:           101,
+		ValidatorSetHeight:  101,
+	}
+	n.validatorStatus["F"] = st
+
+	eval := n.evaluateValidatorLivenessLocked("F", st, now, 100)
+	if !eval.LiveStrict {
+		t.Fatalf("fresh quorum-waiting validator should count live during commit stall, reason=%s", eval.FailReason)
+	}
+}
+
 func TestValidatorLivenessDeepLagExcluded(t *testing.T) {
 	withLivenessSettings(t, 25, 10, 8)
 

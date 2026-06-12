@@ -192,6 +192,24 @@ a {
   word-break: break-word;
 }
 
+.value.success,
+.mono.success,
+strong.success {
+  color: var(--success);
+}
+
+.value.warn,
+.mono.warn,
+strong.warn {
+  color: #ffd166;
+}
+
+.value.error,
+.mono.error,
+strong.error {
+  color: var(--danger);
+}
+
 .mono {
   font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
@@ -233,6 +251,11 @@ a {
 .pill.success {
   background: rgba(0, 214, 143, 0.14);
   color: var(--success);
+}
+
+.pill.warn {
+  background: rgba(255, 209, 102, 0.14);
+  color: #ffd166;
 }
 
 .pill.error {

@@ -175,6 +175,51 @@ func TestStartupNetworkValidatorSetSampleStatusCountsLocalValidatorTowardQuorum(
 	if votes != 1 {
 		t.Fatalf("votes = %d, want 1", votes)
 	}
+
+	node.peerStateMu.Lock()
+	if node.peerRole == nil {
+		node.peerRole = make(map[string]string)
+	}
+	if node.peerHelloOK == nil {
+		node.peerHelloOK = make(map[string]bool)
+	}
+	if node.peerToValidator == nil {
+		node.peerToValidator = make(map[string]string)
+	}
+	if node.peerSetHash == nil {
+		node.peerSetHash = make(map[string]string)
+	}
+	if node.peerAckHeight == nil {
+		node.peerAckHeight = make(map[string]uint64)
+	}
+	node.peerRole["peerC"] = "validator"
+	node.peerHelloOK["peerC"] = true
+	node.peerToValidator["peerC"] = "C"
+	node.peerSetHash["peerC"] = setHash
+	node.peerAckHeight["peerC"] = 340
+	node.peerRole["peerD"] = "validator"
+	node.peerHelloOK["peerD"] = true
+	node.peerToValidator["peerD"] = "D"
+	node.peerSetHash["peerD"] = setHash
+	node.peerAckHeight["peerD"] = 340
+	node.peerStateMu.Unlock()
+
+	ready, reason, networkHeight, votes, gotHash = node.startupNetworkValidatorSetSampleStatus(106)
+	if !ready {
+		t.Fatalf("expected validated peer sample to satisfy startup quorum, reason=%s votes=%d", reason, votes)
+	}
+	if reason != "network_validator_set_sample" {
+		t.Fatalf("unexpected ready reason from peer sample: %s", reason)
+	}
+	if votes != 2 {
+		t.Fatalf("peer-backed votes = %d, want 2", votes)
+	}
+	if networkHeight != 340 {
+		t.Fatalf("peer-backed network height = %d, want 340", networkHeight)
+	}
+	if gotHash != strings.ToLower(setHash) {
+		t.Fatalf("peer-backed hash = %q, want %q", gotHash, strings.ToLower(setHash))
+	}
 }
 
 func TestStartupNetworkValidatorSetSampleStatusSkipsQuorumForInactiveCandidate(t *testing.T) {

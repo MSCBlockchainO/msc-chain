@@ -79,6 +79,23 @@ func (n *Node) deterministicPreCommitRegistrySnapshot(block Block) (map[string]V
 	if got := deterministicRegistryHash(runtime); got != "" && strings.EqualFold(got, expectedHash) {
 		return runtime, "runtime", nil
 	}
+	if projected, projectedHash, ok := n.projectedValidatorUpdateRegistrySnapshotForBlock(block); ok &&
+		strings.TrimSpace(projectedHash) != "" &&
+		strings.EqualFold(strings.TrimSpace(projectedHash), expectedHash) {
+		return projected, "block_tx_registry_projection", nil
+	}
+	if block.ID > 1 {
+		if repaired, repairedHash, ok := n.repairCommittedValidatorRegistrySnapshotFromCommittedSnapshot(block.ID-1, expectedHash); ok &&
+			len(repaired) > 0 &&
+			strings.EqualFold(strings.TrimSpace(repairedHash), expectedHash) {
+			return repaired, "committed_parent_state_snapshot_repair", nil
+		}
+	}
+	if repaired, repairedHash, ok := n.repairCommittedValidatorRegistrySnapshotFromCommittedSnapshot(block.ID, expectedHash); ok &&
+		len(repaired) > 0 &&
+		strings.EqualFold(strings.TrimSpace(repairedHash), expectedHash) {
+		return repaired, "committed_state_snapshot_repair", nil
+	}
 	if carryForward, _, ok := n.findCommittedValidatorRegistrySnapshotByHashAtOrBelow(block.ID, expectedHash); ok && len(carryForward) > 0 {
 		return carryForward, "committed_carry_forward", nil
 	}

@@ -180,6 +180,70 @@ func TestValidatorUpdateTxAcceptedWithThresholdCert(t *testing.T) {
 	}
 }
 
+func TestExpectedNextValidatorSetCarriesActiveSetWithoutVisibleTransition(t *testing.T) {
+	defer withValidatorUpdateTestGlobals(t)()
+
+	oldMode := ValidatorActiveSetMode
+	oldFrozen := GenesisValidatorSetFrozen
+	oldFrozenSize := GenesisFrozenValidatorSetSize
+	defer func() {
+		ValidatorActiveSetMode = oldMode
+		GenesisValidatorSetFrozen = oldFrozen
+		GenesisFrozenValidatorSetSize = oldFrozenSize
+	}()
+
+	ValidatorSetCommitmentV2Height = 1
+	ValidatorSetActivationDelay = 1
+	DynamicValidatorSelectionEnabled = true
+	DeterministicValidatorSelection = true
+	ValidatorActiveSetMode = "adaptive_committee"
+	GenesisValidatorSetFrozen = true
+	GenesisFrozenValidatorSetSize = 4
+	ConfigAuthCoreValidators = []string{"A", "B", "C", "D"}
+
+	n := newValidatorUpdateTestNode()
+	installValidatorUpdateRegistryForIDs(t, []string{"A", "B", "C", "D"})
+	registry := GlobalValidatorRegistry.Snapshot()
+	registryHash := ValidatorRegistrySnapshotHash(registry)
+	active := []string{"A", "B", "C"}
+	activeHash := validatorSetHashFromSnapshotForHeight(10, active, registry)
+	if activeHash == "" {
+		t.Fatalf("active hash empty")
+	}
+	fullHash := validatorSetHashFromSnapshotForHeight(11, []string{"A", "B", "C", "D"}, registry)
+	if fullHash == "" || strings.EqualFold(activeHash, fullHash) {
+		t.Fatalf("test requires distinct active/full hashes active=%s full=%s", activeHash, fullHash)
+	}
+
+	n.Blockchain.AddBlock(Block{
+		ID:                     9,
+		BlockHash:              "parent-9",
+		ValidatorSetHash:       activeHash,
+		ValidatorRegistryHash:  registryHash,
+		NextValidatorSetHash:   activeHash,
+		NextValidatorSetRoot:   ValidatorSetMerkleRoot(10, active, registry),
+		NextValidatorSetHeight: 10,
+		ActivationHeight:       10,
+	})
+
+	block := Block{
+		ID:                    10,
+		PrevHash:              "parent-9",
+		BlockHash:             "block-10",
+		ValidatorSetHash:      activeHash,
+		ValidatorSetRoot:      ValidatorSetMerkleRoot(10, active, registry),
+		ValidatorRegistryHash: registryHash,
+	}
+
+	nextHash, _, source := n.expectedNextValidatorSetCommitmentForBlock(block)
+	if !strings.EqualFold(nextHash, activeHash) {
+		t.Fatalf("expected active-set carry-forward, got hash=%s source=%s want=%s", nextHash, source, activeHash)
+	}
+	if source != "carry_forward" {
+		t.Fatalf("expected carry_forward source, got %s", source)
+	}
+}
+
 func TestValidatorUpdateTxRejectsInsufficientGovernanceSignatures(t *testing.T) {
 	defer withValidatorUpdateTestGlobals(t)()
 
@@ -204,6 +268,100 @@ func TestValidatorUpdateTxRejectsInsufficientGovernanceSignatures(t *testing.T) 
 	}
 	if !strings.Contains(reason, "insufficient") {
 		t.Fatalf("unexpected reject reason: %s", reason)
+	}
+}
+
+func TestValidatorUpdateAddUsesCommittedCommitteeOverRegistryProjection(t *testing.T) {
+	defer withValidatorUpdateTestGlobals(t)()
+
+	ValidatorSetCommitmentV2Height = 1
+	ValidatorSetActivationDelay = 1
+	DynamicValidatorSelectionEnabled = true
+	DeterministicValidatorSelection = true
+	ConfigAuthCoreValidators = []string{"A", "B", "C", "D"}
+	oldMaxActive := ValidatorHybridMaxActiveValidators
+	ValidatorHybridMaxActiveValidators = 4
+	defer func() { ValidatorHybridMaxActiveValidators = oldMaxActive }()
+
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	n := newValidatorUpdateTestNode()
+	n.DB = db
+	signerKeys := installValidatorUpdateRegistryForIDs(t, []string{"A", "B", "C", "D"})
+	registry := GlobalValidatorRegistry.Snapshot()
+	for id, rec := range registry {
+		rec.Reputation = ValidatorReputationInitial
+		registry[id] = rec
+	}
+	GlobalValidatorRegistry.Load(registry)
+	parentRegistryHash := ValidatorRegistrySnapshotHash(registry)
+	committedCommittee := []string{"B", "C", "D"}
+	committedHash := validatorSetHashFromSnapshotForHeight(2, committedCommittee, registry)
+	registryProjectionHash := validatorSetHashFromSnapshotForHeight(2, []string{"A", "B", "C", "D"}, registry)
+	if committedHash == "" || registryProjectionHash == "" || strings.EqualFold(committedHash, registryProjectionHash) {
+		t.Fatalf("test requires distinct committed/projection hashes committed=%s projection=%s", committedHash, registryProjectionHash)
+	}
+
+	parent := Block{
+		ID:                     1,
+		BlockHash:              "block-1",
+		StateRoot:              "state-1",
+		Signatures:             committedCommittee,
+		ValidatorSetHash:       committedHash,
+		ValidatorRegistryHash:  parentRegistryHash,
+		NextValidatorSetHash:   committedHash,
+		NextValidatorSetHeight: 2,
+		ActivationHeight:       2,
+	}
+	n.Blockchain = &Blockchain{Blocks: []Block{parent}}
+	storeCanonicalValidatorRegistrySnapshotRecord(t, db, 1, registry)
+	parentSnapshot := StateSnapshot{
+		Version:                SnapshotVersion,
+		Height:                 1,
+		BlockHash:              parent.BlockHash,
+		StateRoot:              parent.StateRoot,
+		Ledger:                 n.Ledger.Clone(),
+		LedgerHash:             HashLedger(n.Ledger),
+		GenesisHash:            GenesisHash,
+		Validators:             map[string]bool{"B": true, "C": true, "D": true},
+		ValidatorSetHash:       committedHash,
+		ValidatorRegistry:      copyValidatorRegistrySnapshot(registry),
+		ValidatorRegistryHash:  parentRegistryHash,
+		NextValidatorSetHash:   committedHash,
+		NextValidatorSetHeight: 2,
+		ActivationHeight:       2,
+	}
+	storeSnapshotForHeight(t, db, parentSnapshot)
+
+	if got := n.plannedValidatorSetForHeightFromChain(2); !containsValidatorID(got, "A") {
+		t.Fatalf("test setup expected registry projection to include A, got=%v", got)
+	}
+	if got := n.consensusValidatorsForHeight(2); !sameStringSlice(got, committedCommittee) {
+		t.Fatalf("test setup expected committed committee, got=%v want=%v", got, committedCommittee)
+	}
+	if got := n.validatorUpdateActiveSetForHeight(2); containsValidatorID(got, "A") || !sameStringSlice(got, committedCommittee) {
+		t.Fatalf("validator update active set must use committed committee, got=%v want=%v", got, committedCommittee)
+	}
+
+	_, relayerPriv, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatalf("generate relayer key: %v", err)
+	}
+	tx := buildValidatorUpdateTestTx(t, relayerPriv, "add", "A", parentRegistryHash, 101, 1, []string{"B", "C", "D"}, signerKeys)
+	ctx := n.newValidatorUpdateExecutionContext(2)
+	if ctx == nil {
+		t.Fatalf("expected validator update execution context")
+	}
+	if ctx.activeSetContains("A") {
+		t.Fatalf("A must not be treated active before reconciliation add")
+	}
+	ledger := n.Ledger.Clone()
+	if _, err := ExecuteTransactionWithNodeContext(n, ctx, &ledger, tx, 2); err != nil {
+		t.Fatalf("expected add:A reconciliation tx to apply, got %v", err)
+	}
+	if _, ok := ctx.pendingAdds["A"]; !ok {
+		t.Fatalf("expected A to be queued as pending add")
 	}
 }
 
@@ -453,6 +611,77 @@ func TestValidatorUpdateDelayOneCommitsNextSetHash(t *testing.T) {
 	}
 }
 
+func TestValidatorUpdateProjectsMissingLedgerCandidateIntoRegistryCommitment(t *testing.T) {
+	defer withValidatorUpdateTestGlobals(t)()
+
+	ValidatorSetCommitmentV2Height = 1
+	ValidatorSetActivationDelay = 1
+	DynamicValidatorSelectionEnabled = true
+	DeterministicValidatorSelection = true
+	ConfigAuthCoreValidators = []string{"A", "B", "C", "D"}
+
+	n := newValidatorUpdateTestNode()
+	signerKeys := installValidatorUpdateRegistryForIDs(t, []string{"A", "B", "C", "D"})
+	parentRegistryHash := ValidatorRegistrySnapshotHash(GlobalValidatorRegistry.Snapshot())
+	_, relayerPriv, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatalf("generate relayer key: %v", err)
+	}
+	fPub, _, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatalf("generate F key: %v", err)
+	}
+	fPubHex := strings.ToLower(hex.EncodeToString(fPub))
+	n.Ledger.Stakes[stakeKey("wallet-f", "F")] = StakeLock{
+		ValidatorID:     "F",
+		ConsensusPubKey: fPubHex,
+		Amount:          1000,
+		LockedUntil:     1000,
+	}
+
+	tx := buildValidatorUpdateTestTx(t, relayerPriv, "add", "F", parentRegistryHash, 1, 1, []string{"A", "B", "C"}, signerKeys)
+	n.Mempool.Transactions = []Transaction{tx}
+
+	block := n.BuildDeterministicBlock(n.Blockchain)
+	projected, projectedHash, ok := n.projectedValidatorUpdateRegistrySnapshotForBlock(block)
+	if !ok {
+		t.Fatalf("expected validator update registry projection")
+	}
+	if strings.EqualFold(projectedHash, parentRegistryHash) {
+		t.Fatalf("projected registry hash should include F, got parent hash %s", projectedHash)
+	}
+	if block.ValidatorRegistryHash != projectedHash {
+		t.Fatalf("block registry hash = %s, want projected %s", block.ValidatorRegistryHash, projectedHash)
+	}
+	rec, ok := projected["F"]
+	if !ok {
+		t.Fatalf("projected registry missing F")
+	}
+	if rec.Status != ValidatorActive {
+		t.Fatalf("F projected status = %s, want %s", rec.Status, ValidatorActive)
+	}
+	if !strings.EqualFold(rec.ConsensusPubKey, fPubHex) {
+		t.Fatalf("F projected pubkey mismatch")
+	}
+	if err := n.validateBlockValidatorRegistryCommitment(block); err != nil {
+		t.Fatalf("projected registry commitment should validate: %v", err)
+	}
+	preCommit, source, err := n.deterministicPreCommitRegistrySnapshot(block)
+	if err != nil {
+		t.Fatalf("precommit registry projection failed: %v", err)
+	}
+	if source != "block_tx_registry_projection" {
+		t.Fatalf("precommit source = %s, want block_tx_registry_projection", source)
+	}
+	if preCommit["F"].Status != ValidatorActive {
+		t.Fatalf("precommit F status = %s, want %s", preCommit["F"].Status, ValidatorActive)
+	}
+	wantNext := validatorSetHashFromSnapshotForHeight(2, []string{"A", "B", "C", "D", "F"}, projected)
+	if block.NextValidatorSetHash != wantNext {
+		t.Fatalf("next validator set hash = %s, want %s", block.NextValidatorSetHash, wantNext)
+	}
+}
+
 func TestValidatorUpdateCommitmentHeightUsesStrictParentCommitmentPath(t *testing.T) {
 	defer withValidatorUpdateTestGlobals(t)()
 
@@ -478,5 +707,41 @@ func TestValidatorRegistryHashIncludesGovernanceSignerFlag(t *testing.T) {
 	other := ValidatorRegistrySnapshotHash(mutated)
 	if base == other {
 		t.Fatalf("expected governance signer flag to affect registry hash")
+	}
+}
+
+func TestExpectedValidatorSetRootUsesParentCommittedNextRoot(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D", "F"})
+	parent := Block{
+		ID:                   1,
+		BlockHash:            "parent-block",
+		ValidatorSetHash:     "parent-set",
+		ValidatorSetRoot:     "parent-root",
+		NextValidatorSetHash: "child-set",
+		NextValidatorSetRoot: "child-root",
+	}
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = []Block{{ID: 0, BlockHash: "genesis"}, parent}
+	node.Blockchain.mu.Unlock()
+
+	got, source := node.expectedValidatorSetRootWithSource(2)
+	if got != parent.NextValidatorSetRoot || source != "chain_parent_commitment" {
+		t.Fatalf("expected parent-committed child root, got root=%q source=%q", got, source)
+	}
+}
+
+func TestCarryForwardNextValidatorSetIgnoresLocalPendingRemoval(t *testing.T) {
+	node := &Node{
+		pendingValidatorRemovals: map[string]uint64{"F": 3},
+	}
+	block := Block{
+		ID:               2,
+		ValidatorSetHash: "active-set",
+		ValidatorSetRoot: "active-root",
+	}
+
+	hash, root, source := node.carryForwardNextValidatorSetCommitmentForBlock(block)
+	if hash != block.ValidatorSetHash || root != block.ValidatorSetRoot || source != "carry_forward" {
+		t.Fatalf("expected strict carry-forward without on-chain update, got hash=%q root=%q source=%q", hash, root, source)
 	}
 }

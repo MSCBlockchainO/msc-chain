@@ -3363,6 +3363,134 @@ func (n *Node) GetSnapshotKey(key []byte) (*StateSnapshot, error) {
 	return readSnapshotFromStores(n.DB.SnapshotStoresForRead(), key)
 }
 
+func snapshotAnchorBlock(snapshot StateSnapshot) Block {
+	nextActivation := snapshotActivationHeight(&snapshot)
+	if nextActivation == 0 {
+		nextActivation = snapshot.Height + 1
+	}
+	nextHash := strings.TrimSpace(snapshot.NextValidatorSetHash)
+	if nextHash == "" {
+		nextHash = strings.TrimSpace(snapshot.ValidatorSetHash)
+	}
+	anchor := Block{
+		ID:                        snapshot.Height,
+		Height:                    snapshot.Height,
+		BlockHash:                 strings.TrimSpace(snapshot.BlockHash),
+		PrevHash:                  strings.TrimSpace(snapshot.PrevHash),
+		Type:                      BlockTypeReceipt,
+		BlockTime:                 LogicalTimeForEpoch(snapshot.Height),
+		StateRoot:                 strings.TrimSpace(snapshot.StateRoot),
+		ValidatorSetHash:          strings.TrimSpace(snapshot.ValidatorSetHash),
+		ValidatorSetRoot:          strings.TrimSpace(snapshot.ValidatorSetRoot),
+		ValidatorRegistryHash:     strings.TrimSpace(snapshotValidatorRegistryHash(&snapshot)),
+		PromotionWindowHash:       strings.TrimSpace(snapshotPromotionWindowHash(&snapshot)),
+		NextValidatorSetHash:      nextHash,
+		NextValidatorSetRoot:      strings.TrimSpace(snapshot.NextValidatorSetRoot),
+		NextValidatorSetHeight:    nextActivation,
+		ActivationHeight:          nextActivation,
+		FinalizedEpoch:            snapshot.FinalizedEpoch,
+		FinalizedHeight:           snapshot.FinalizedHeight,
+		FinalizedStateRoot:        strings.TrimSpace(snapshot.FinalizedStateRoot),
+		FinalizedValidatorSetHash: strings.TrimSpace(snapshot.FinalizedValidatorSetHash),
+		FinalizedValidatorSetRoot: strings.TrimSpace(snapshot.FinalizedValidatorSetRoot),
+		EpochAnchorHash:           strings.TrimSpace(snapshot.EpochAnchorHash),
+		PreviousEpochAnchorHash:   strings.TrimSpace(snapshot.PreviousEpochAnchorHash),
+		FinalityRoot:              strings.TrimSpace(snapshot.FinalityRoot),
+		FinalityCertificate:       copyFinalizedEpochCertificate(snapshot.FinalityCertificate),
+		Signatures:                validatorsFromSnapshot(&snapshot),
+	}
+	if cert := snapshot.FinalityCertificate; cert != nil {
+		anchor.ConsensusMode = strings.TrimSpace(cert.ConsensusMode)
+		anchor.QuorumPolicyVersion = strings.TrimSpace(cert.QuorumPolicyVersion)
+		anchor.ActiveReadyCount = cert.ActiveReadyCount
+		anchor.RequiredQuorum = cert.RequiredQuorum
+		anchor.StrictQuorum = cert.StrictQuorum
+		if len(anchor.Signatures) == 0 {
+			anchor.Signatures = canonicalValidatorIDs(cert.Signers)
+		}
+	}
+	if strings.TrimSpace(anchor.NextValidatorSetRoot) == "" &&
+		strings.TrimSpace(anchor.ValidatorSetRoot) != "" &&
+		strings.EqualFold(strings.TrimSpace(anchor.NextValidatorSetHash), strings.TrimSpace(anchor.ValidatorSetHash)) {
+		anchor.NextValidatorSetRoot = strings.TrimSpace(anchor.ValidatorSetRoot)
+	}
+	anchor.Timestamp = int64(SystemTimeUnits(anchor.BlockTime))
+	return anchor
+}
+
+func (n *Node) loadDurableBlock(height uint64) (Block, bool) {
+	if n == nil || height == 0 {
+		return Block{}, false
+	}
+	var blk Block
+	if n.DB != nil && n.DB.Blocks != nil {
+		err := n.DB.Blocks.View(func(txn *Txn) error {
+			item, err := txn.Get([]byte(fmt.Sprintf("block:%d", height)))
+			if err != nil {
+				return err
+			}
+			return item.Value(func(v []byte) error {
+				plain, derr := decryptDBValue(v)
+				if derr != nil {
+					return derr
+				}
+				return json.Unmarshal(plain, &blk)
+			})
+		})
+		if err == nil && blk.ID == height && strings.TrimSpace(blk.BlockHash) != "" {
+			return blk, true
+		}
+	}
+	if blk, ok := n.loadBlockFile(height); ok {
+		return blk, true
+	}
+	return Block{}, false
+}
+
+func (n *Node) ensureSnapshotAnchorBlockStored(anchor Block) {
+	if n == nil || anchor.ID == 0 || strings.TrimSpace(anchor.BlockHash) == "" {
+		return
+	}
+	if existing, ok := n.loadDurableBlock(anchor.ID); ok &&
+		strings.EqualFold(strings.TrimSpace(existing.BlockHash), strings.TrimSpace(anchor.BlockHash)) &&
+		strings.TrimSpace(existing.StateRoot) != "" {
+		n.StoreBlock(existing)
+		return
+	}
+	n.StoreBlock(anchor)
+}
+
+func (n *Node) persistAppliedSnapshotExecutionAuthority(snapshot StateSnapshot, reason string) bool {
+	if n == nil || snapshot.Height == 0 {
+		return false
+	}
+	anchor, ok := n.snapshotAnchorBlockForLedgerReplay(snapshot)
+	if !ok {
+		return false
+	}
+	ledgerHash := HashLedger(snapshot.Ledger)
+	expectedRoot := ComputeExecHashVersioned(anchor, ledgerHash, executionStateRootVersionForHeight(anchor.ID))
+	if expectedRoot == "" ||
+		!strings.EqualFold(strings.TrimSpace(expectedRoot), strings.TrimSpace(anchor.StateRoot)) ||
+		!strings.EqualFold(strings.TrimSpace(snapshot.StateRoot), strings.TrimSpace(anchor.StateRoot)) {
+		return false
+	}
+	upgraded := cloneStateSnapshot(&snapshot)
+	if upgraded == nil {
+		return false
+	}
+	upgraded.LedgerStage = snapshotLedgerStageExecution
+	populateSnapshotDerivedFields(upgraded)
+	if err := n.storeCommittedStateSnapshotRecord(upgraded, "snapshot_apply_execution_upgrade"); err != nil {
+		log.Printf("[WARN] applied snapshot execution authority persist failed height=%d reason=%s err=%v",
+			snapshot.Height, strings.TrimSpace(reason), err)
+		return false
+	}
+	log.Printf("[SNAPSHOT-ANCHOR] status=execution_snapshot_stored height=%d reason=%s",
+		snapshot.Height, strings.TrimSpace(reason))
+	return true
+}
+
 func (n *Node) ApplySnapshotForSync(snapshot StateSnapshot) (applied bool) {
 	started := time.Now()
 	defer func() {
@@ -3415,49 +3543,31 @@ func (n *Node) ApplySnapshotForSync(snapshot StateSnapshot) (applied bool) {
 	}
 
 	// Anchor chain tip to snapshot height so subsequent blocks can apply.
+	anchor := snapshotAnchorBlock(snapshot)
+	shouldStoreAnchor := false
 	n.Blockchain.mu.Lock()
 	currentHeight := uint64(0)
 	if len(n.Blockchain.Blocks) > 0 {
 		currentHeight = n.Blockchain.Blocks[len(n.Blockchain.Blocks)-1].ID
 	}
 	if currentHeight < snapshot.Height {
-		nextActivation := snapshotActivationHeight(&snapshot)
-		if nextActivation == 0 {
-			nextActivation = snapshot.Height + 1
-		}
-		nextHash := strings.TrimSpace(snapshot.NextValidatorSetHash)
-		if nextHash == "" {
-			nextHash = strings.TrimSpace(snapshot.ValidatorSetHash)
-		}
-		anchor := Block{
-			ID:                     snapshot.Height,
-			Height:                 snapshot.Height,
-			BlockHash:              snapshot.BlockHash,
-			PrevHash:               snapshot.PrevHash,
-			Type:                   BlockTypeReceipt,
-			BlockTime:              LogicalTimeForEpoch(snapshot.Height),
-			ValidatorSetHash:       strings.TrimSpace(snapshot.ValidatorSetHash),
-			ValidatorSetRoot:       strings.TrimSpace(snapshot.ValidatorSetRoot),
-			ValidatorRegistryHash:  strings.TrimSpace(snapshotValidatorRegistryHash(&snapshot)),
-			PromotionWindowHash:    strings.TrimSpace(snapshotPromotionWindowHash(&snapshot)),
-			NextValidatorSetHash:   nextHash,
-			NextValidatorSetRoot:   strings.TrimSpace(snapshot.NextValidatorSetRoot),
-			NextValidatorSetHeight: nextActivation,
-			ActivationHeight:       nextActivation,
-		}
-		if strings.TrimSpace(anchor.NextValidatorSetRoot) == "" &&
-			strings.TrimSpace(anchor.ValidatorSetRoot) != "" &&
-			strings.EqualFold(strings.TrimSpace(anchor.NextValidatorSetHash), strings.TrimSpace(anchor.ValidatorSetHash)) {
-			anchor.NextValidatorSetRoot = strings.TrimSpace(anchor.ValidatorSetRoot)
-		}
-		anchor.Timestamp = int64(SystemTimeUnits(anchor.BlockTime))
 		n.Blockchain.Blocks = []Block{anchor}
+		shouldStoreAnchor = true
+	} else if currentHeight == snapshot.Height {
+		if ln := len(n.Blockchain.Blocks); ln > 0 &&
+			strings.EqualFold(strings.TrimSpace(n.Blockchain.Blocks[ln-1].BlockHash), strings.TrimSpace(snapshot.BlockHash)) {
+			shouldStoreAnchor = true
+		}
 	}
 	n.Blockchain.mu.Unlock()
 
 	n.applySnapshotValidators(snapshot)
 	n.applySnapshotValidatorTransitions(snapshot)
 	n.applySnapshotValidatorRegistry(snapshot)
+	if shouldStoreAnchor {
+		n.ensureSnapshotAnchorBlockStored(anchor)
+	}
+	n.persistAppliedSnapshotExecutionAuthority(snapshot, "snapshot_sync")
 	resumeLedger = n.applySnapshotExecutionTipLedger(snapshot, "snapshot_sync")
 	n.snapshotEpochValidators(snapshot.Height + 1)
 
@@ -3570,6 +3680,8 @@ func (n *Node) ApplySnapshotForRecovery(snapshot StateSnapshot) (applied bool) {
 				n.applySnapshotValidatorTransitions(snapshot)
 				n.applySnapshotValidatorRegistry(snapshot)
 				n.snapshotEpochValidators(snapshot.Height + 1)
+				n.ensureSnapshotAnchorBlockStored(snapshotAnchorBlock(snapshot))
+				n.persistAppliedSnapshotExecutionAuthority(snapshot, "snapshot_recovery_same_height")
 				n.applySnapshotExecutionTipLedger(snapshot, "snapshot_recovery_same_height")
 				applied = true
 				return
@@ -3612,35 +3724,7 @@ func (n *Node) ApplySnapshotForRecovery(snapshot StateSnapshot) (applied bool) {
 	n.applyMu.Lock()
 	defer n.applyMu.Unlock()
 
-	anchor := Block{
-		ID:                     snapshot.Height,
-		Height:                 snapshot.Height,
-		BlockHash:              snapshot.BlockHash,
-		PrevHash:               snapshot.PrevHash,
-		Type:                   BlockTypeReceipt,
-		BlockTime:              LogicalTimeForEpoch(snapshot.Height),
-		ValidatorSetHash:       strings.TrimSpace(snapshot.ValidatorSetHash),
-		ValidatorSetRoot:       strings.TrimSpace(snapshot.ValidatorSetRoot),
-		ValidatorRegistryHash:  strings.TrimSpace(snapshotValidatorRegistryHash(&snapshot)),
-		PromotionWindowHash:    strings.TrimSpace(snapshotPromotionWindowHash(&snapshot)),
-		NextValidatorSetHash:   strings.TrimSpace(snapshot.NextValidatorSetHash),
-		NextValidatorSetRoot:   strings.TrimSpace(snapshot.NextValidatorSetRoot),
-		NextValidatorSetHeight: snapshotActivationHeight(&snapshot),
-		ActivationHeight:       snapshotActivationHeight(&snapshot),
-	}
-	if strings.TrimSpace(anchor.NextValidatorSetHash) == "" {
-		anchor.NextValidatorSetHash = strings.TrimSpace(snapshot.ValidatorSetHash)
-	}
-	if strings.TrimSpace(anchor.NextValidatorSetRoot) == "" &&
-		strings.TrimSpace(anchor.ValidatorSetRoot) != "" &&
-		strings.EqualFold(strings.TrimSpace(anchor.NextValidatorSetHash), strings.TrimSpace(anchor.ValidatorSetHash)) {
-		anchor.NextValidatorSetRoot = strings.TrimSpace(anchor.ValidatorSetRoot)
-	}
-	if blockActivationHeight(anchor) == 0 {
-		anchor.NextValidatorSetHeight = snapshot.Height + 1
-		anchor.ActivationHeight = snapshot.Height + 1
-	}
-	anchor.Timestamp = int64(SystemTimeUnits(anchor.BlockTime))
+	anchor := snapshotAnchorBlock(snapshot)
 
 	n.Blockchain.mu.Lock()
 	n.Blockchain.Blocks = []Block{anchor}
@@ -3667,6 +3751,8 @@ func (n *Node) ApplySnapshotForRecovery(snapshot StateSnapshot) (applied bool) {
 		n.validatorSetMu.Unlock()
 	}
 	n.applySnapshotValidatorRegistry(snapshot)
+	n.ensureSnapshotAnchorBlockStored(anchor)
+	n.persistAppliedSnapshotExecutionAuthority(snapshot, "snapshot_recovery")
 	resumeLedger = n.applySnapshotExecutionTipLedger(snapshot, "snapshot_recovery")
 	n.snapshotEpochValidators(snapshot.Height + 1)
 	n.syncFrozenValidatorSetHashesFromChain()

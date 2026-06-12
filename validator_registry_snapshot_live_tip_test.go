@@ -408,6 +408,66 @@ func TestValidatorRegistrySnapshotForHeightDoesNotRepairHistoricalParent(t *test
 	}
 }
 
+func TestResolveCommittedValidatorRegistrySnapshotFallsBackToStoredBlock(t *testing.T) {
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	registry := testValidatorSetMaterializationRegistry()
+	hash := ValidatorRegistrySnapshotHash(registry)
+	n := testNodeWithRegistryBlocks(db, []Block{{ID: 21, BlockHash: "tip-21"}})
+	if err := n.storeValidatorRegistrySnapshotRecord(10, registry); err != nil {
+		t.Fatalf("store carry-forward registry snapshot: %v", err)
+	}
+	block20 := Block{ID: 20, BlockHash: "block-20", ValidatorRegistryHash: hash}
+	if err := db.StoreBlock(block20); err != nil {
+		t.Fatalf("store block 20: %v", err)
+	}
+
+	got, gotHash, source, ok := n.resolveCommittedValidatorRegistrySnapshot(20)
+	if !ok {
+		t.Fatalf("expected registry snapshot resolved from stored block commitment")
+	}
+	if source != "committed_carry_forward_repair" {
+		t.Fatalf("unexpected source: got=%q", source)
+	}
+	if !strings.EqualFold(gotHash, hash) {
+		t.Fatalf("unexpected hash: got=%q want=%q", gotHash, hash)
+	}
+	if len(got) != len(registry) {
+		t.Fatalf("unexpected registry size: got=%d want=%d", len(got), len(registry))
+	}
+}
+
+func TestChainParentCommittedValidatorSetHashFallsBackToStoredBlock(t *testing.T) {
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	parentHash := strings.Repeat("a", 64)
+	parentNextHash := strings.Repeat("b", 64)
+	n := &Node{
+		DB: db,
+		Blockchain: &Blockchain{Blocks: []Block{
+			{ID: 1, BlockHash: "genesis"},
+		}},
+	}
+	n.StoreBlock(Block{
+		ID:                   90553,
+		Height:               90553,
+		BlockHash:            parentHash,
+		PrevHash:             strings.Repeat("c", 64),
+		ValidatorSetHash:     strings.Repeat("d", 64),
+		NextValidatorSetHash: parentNextHash,
+	})
+
+	got, ok := n.chainParentCommittedValidatorSetHash(90554)
+	if !ok {
+		t.Fatal("expected parent commitment from stored block")
+	}
+	if got != parentNextHash {
+		t.Fatalf("unexpected parent commitment: got=%q want=%q", got, parentNextHash)
+	}
+}
+
 func TestValidatorRegistrySnapshotForHeightDoesNotScheduleFutureParentRebuild(t *testing.T) {
 	db, cleanup := openNodeDBForTest(t)
 	defer cleanup()
@@ -480,6 +540,106 @@ func TestValidatorRegistrySnapshotForHeightRepairsHistoricalParentFromCommittedS
 	}
 	if !n.registrySnapshotExists(2) {
 		t.Fatalf("expected historical committed snapshot repair to backfill parent height")
+	}
+}
+
+func TestValidatorRegistrySnapshotForHeightUsesCurrentSparseAnchorSnapshot(t *testing.T) {
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	registry := testValidatorSetMaterializationRegistry()
+	hash := ValidatorRegistrySnapshotHash(registry)
+	validators := canonicalValidatorIDs([]string{"A", "B", "C", "D"})
+	vhash := ValidatorSetHash(validators)
+	ledger := NewLedger()
+	anchor := Block{
+		ID:                    10,
+		Height:                10,
+		BlockHash:             "",
+		PrevHash:              "block-9",
+		Type:                  BlockTypeTime,
+		Proposer:              "A",
+		ValidatorSetHash:      vhash,
+		NextValidatorSetHash:  vhash,
+		ValidatorRegistryHash: hash,
+		BlockTime:             LogicalTimeForEpoch(10),
+	}
+	anchor.Timestamp = int64(SystemTimeUnits(anchor.BlockTime))
+	anchor.StateRoot = ComputeExecHashVersioned(anchor, HashLedger(ledger), executionStateRootVersionForHeight(anchor.ID))
+	anchor.BlockHash = HashBlock(anchor)
+	storeSnapshotForHeight(t, db, StateSnapshot{
+		Version:               SnapshotVersion,
+		Height:                anchor.ID,
+		BlockHash:             anchor.BlockHash,
+		PrevHash:              anchor.PrevHash,
+		StateRoot:             anchor.StateRoot,
+		StateMerkleRoot:       LedgerStateMerkleRoot(ledger),
+		LedgerHash:            HashLedger(ledger),
+		LedgerStage:           snapshotLedgerStageExecution,
+		Ledger:                ledger.Clone(),
+		Validators:            map[string]bool{"A": true, "B": true, "C": true, "D": true},
+		ValidatorSetHash:      vhash,
+		NextValidatorSetHash:  vhash,
+		ValidatorRegistry:     registry,
+		ValidatorRegistryHash: hash,
+		GenesisHash:           GenesisHash,
+	})
+	staleParent := copyValidatorRegistrySnapshot(registry)
+	stale := staleParent["A"]
+	stale.Stake++
+	staleParent["A"] = stale
+	storeCanonicalValidatorRegistrySnapshotRecord(t, db, anchor.ID-1, staleParent)
+
+	n := testNodeWithRegistryBlocks(db, []Block{anchor})
+	got := n.validatorRegistrySnapshotForHeight(anchor.ID)
+	if gotHash := ValidatorRegistrySnapshotHash(got); !strings.EqualFold(gotHash, hash) {
+		t.Fatalf("expected sparse anchor registry hash %q, got %q", hash, gotHash)
+	}
+	if gotHash := ValidatorRegistrySnapshotHash(got); strings.EqualFold(gotHash, ValidatorRegistrySnapshotHash(staleParent)) {
+		t.Fatalf("sparse anchor fallback must reject an unprovable persisted parent registry snapshot")
+	}
+	parent, parentHash, parentSource, ok := n.resolveCommittedValidatorRegistrySnapshot(anchor.ID - 1)
+	if !ok {
+		t.Fatalf("expected sparse anchor parent projection to resolve")
+	}
+	if parentSource != "sparse_anchor_parent_projection" {
+		t.Fatalf("unexpected parent projection source: got=%q", parentSource)
+	}
+	if !strings.EqualFold(parentHash, hash) {
+		t.Fatalf("unexpected parent projection hash: got=%q want=%q", parentHash, hash)
+	}
+	if gotHash := ValidatorRegistrySnapshotHash(parent); strings.EqualFold(gotHash, ValidatorRegistrySnapshotHash(staleParent)) {
+		t.Fatalf("sparse anchor parent projection must reject stale persisted parent registry snapshot")
+	}
+	stillStale, err := n.loadValidatorRegistrySnapshot(anchor.ID - 1)
+	if err != nil {
+		t.Fatalf("expected stale parent fixture to remain loadable: %v", err)
+	}
+	if gotHash := ValidatorRegistrySnapshotHash(stillStale); !strings.EqualFold(gotHash, ValidatorRegistrySnapshotHash(staleParent)) {
+		t.Fatalf("sparse anchor parent projection must not overwrite parent snapshot: got=%q want=%q", gotHash, ValidatorRegistrySnapshotHash(staleParent))
+	}
+	next := Block{
+		ID:                    anchor.ID + 1,
+		Height:                anchor.ID + 1,
+		BlockHash:             "block-11",
+		PrevHash:              anchor.BlockHash,
+		ValidatorSetHash:      vhash,
+		NextValidatorSetHash:  vhash,
+		ValidatorRegistryHash: hash,
+	}
+	n.Blockchain.Blocks = []Block{anchor, next}
+	advancedParent, advancedHash, advancedSource, ok := n.resolveCommittedValidatorRegistrySnapshot(anchor.ID - 1)
+	if !ok {
+		t.Fatalf("expected advanced sparse anchor parent projection to resolve")
+	}
+	if advancedSource != "sparse_anchor_parent_projection" {
+		t.Fatalf("unexpected advanced parent projection source: got=%q", advancedSource)
+	}
+	if !strings.EqualFold(advancedHash, hash) {
+		t.Fatalf("unexpected advanced parent projection hash: got=%q want=%q", advancedHash, hash)
+	}
+	if gotHash := ValidatorRegistrySnapshotHash(advancedParent); strings.EqualFold(gotHash, ValidatorRegistrySnapshotHash(staleParent)) {
+		t.Fatalf("advanced sparse anchor parent projection must reject stale persisted parent registry snapshot")
 	}
 }
 

@@ -76,6 +76,13 @@
     if (n < 3600) return `${Math.round(n / 60)}m`;
     return `${Math.round(n / 3600)}h`;
   };
+  const blockAgeTone = (seconds) => {
+    const n = Number(seconds);
+    if (!Number.isFinite(n) || n < 0) return "";
+    if (n >= 15) return "bad";
+    if (n >= 10) return "warn";
+    return "good";
+  };
   const unwrap = (data) => data && data.success && data.data !== undefined ? data.data : data;
 
   async function fetchJSON(path, key, ttl) {
@@ -91,6 +98,14 @@
   function setText(id, value) {
     const node = $(id);
     if (node) node.textContent = value ?? "-";
+  }
+
+  function setTone(id, tone = "") {
+    const node = $(id);
+    if (!node) return;
+    node.classList.toggle("good", tone === "good");
+    node.classList.toggle("warn", tone === "warn");
+    node.classList.toggle("bad", tone === "bad");
   }
 
   function navHTML() {
@@ -471,7 +486,14 @@ curl -fsSL https://install.mscchain.io | bash
       setText("testnetNetwork", data.network_health || data.health || "Connected");
       setText("explorerFinality", finalized ? `h ${fmt(finalized)}` : "-");
       setText("explorerTPS", fmt(data.tps || data.current_tps || 0));
-      setText("statusBlockTime", data.block_time_ms ? `${Math.round(Number(data.block_time_ms))}ms` : "Live");
+      const statusAge = Number(data.last_block_age_seconds);
+      if (Number.isFinite(statusAge)) {
+        setText("statusBlockTime", ageText(statusAge));
+        setTone("statusBlockTime", blockAgeTone(statusAge));
+      } else {
+        setText("statusBlockTime", data.block_time_ms ? `${Math.round(Number(data.block_time_ms))}ms` : "Live");
+        setTone("statusBlockTime", "");
+      }
       setText("statusTPS", fmt(data.tps || data.current_tps || 0));
       setText("statusPeers", fmt(data.peer_count || data.peers || 0));
     } catch (_) {
@@ -719,6 +741,7 @@ curl -fsSL https://install.mscchain.io | bash
     const age = secondsAge();
     if (age !== null) {
       setText("statusBlockTime", ageText(age));
+      setTone("statusBlockTime", blockAgeTone(age));
     }
   }
 

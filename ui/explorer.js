@@ -287,9 +287,10 @@
     const age = asIntOrNull(status.last_block_age_seconds);
     if (age === null) return "";
     const haltedAfter = asIntOrNull(status.halted_after_seconds) || 60;
-    const degradedAfter = asIntOrNull(status.degraded_after_seconds) || 12;
+    const degradedAfter = asIntOrNull(status.degraded_after_seconds) || 15;
     if (age >= haltedAfter) return "bad";
-    if (age >= degradedAfter) return "warn";
+    if (age >= degradedAfter) return "bad";
+    if (age >= 10) return "warn";
     return "ok";
   };
 

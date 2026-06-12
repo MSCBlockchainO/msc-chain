@@ -192,6 +192,59 @@ func TestApplySnapshotForSyncPersistsCrashRecoveryEnvelope(t *testing.T) {
 	assertSnapshotCommitSafetyPersisted(t, node, snapshot.Height, snapshot.BlockHash)
 }
 
+func TestApplySnapshotForSyncPersistsAnchorBlockToDurableStorage(t *testing.T) {
+	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), []string{"A", "B", "C"})
+	node.Consensus = nil
+	ledger := GenesisLedger()
+	snapshot := StateSnapshot{
+		Version:                SnapshotVersion,
+		Height:                 52,
+		PrevHash:               "hash-51",
+		BlockHash:              "hash-52",
+		StateRoot:              "state-52",
+		GenesisHash:            GenesisHash,
+		Ledger:                 ledger,
+		LedgerHash:             HashLedger(ledger),
+		Validators:             map[string]bool{"A": true, "B": true, "C": true},
+		ValidatorSetHash:       "set-52",
+		ValidatorSetRoot:       "set-root-52",
+		NextValidatorSetHash:   "set-53",
+		NextValidatorSetRoot:   "set-root-53",
+		NextValidatorSetHeight: 53,
+		ActivationHeight:       53,
+		ValidatorRegistry: map[string]ValidatorRecord{
+			"A": {ID: "A", Stake: 100, Status: ValidatorActive},
+			"B": {ID: "B", Stake: 100, Status: ValidatorActive},
+			"C": {ID: "C", Stake: 100, Status: ValidatorActive},
+		},
+	}
+
+	if !node.ApplySnapshotForSync(snapshot) {
+		t.Fatalf("expected snapshot sync apply to succeed")
+	}
+	if !blockStoreFileExists(node.DataDir, node.ID, snapshot.Height) {
+		t.Fatalf("expected snapshot anchor block file at height %d", snapshot.Height)
+	}
+
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = nil
+	node.Blockchain.mu.Unlock()
+
+	loaded, ok := node.LoadBlock(int(snapshot.Height))
+	if !ok {
+		t.Fatalf("expected snapshot anchor to load from durable storage")
+	}
+	if loaded.BlockHash != snapshot.BlockHash {
+		t.Fatalf("unexpected durable anchor hash: got=%q want=%q", loaded.BlockHash, snapshot.BlockHash)
+	}
+	if loaded.StateRoot != snapshot.StateRoot {
+		t.Fatalf("unexpected durable anchor state root: got=%q want=%q", loaded.StateRoot, snapshot.StateRoot)
+	}
+	if loaded.NextValidatorSetHash != snapshot.NextValidatorSetHash {
+		t.Fatalf("unexpected durable anchor next set hash: got=%q want=%q", loaded.NextValidatorSetHash, snapshot.NextValidatorSetHash)
+	}
+}
+
 func TestApplySnapshotForRecoveryPersistsCrashRecoveryEnvelope(t *testing.T) {
 	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), []string{"A", "B", "C"})
 	node.Consensus = nil
@@ -210,6 +263,58 @@ func TestApplySnapshotForRecoveryPersistsCrashRecoveryEnvelope(t *testing.T) {
 
 	node.ApplySnapshotForRecovery(snapshot)
 	assertSnapshotCommitSafetyPersisted(t, node, snapshot.Height, snapshot.BlockHash)
+}
+
+func TestApplySnapshotForRecoverySameHeightPersistsMissingAnchorBlock(t *testing.T) {
+	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), []string{"A", "B", "C"})
+	node.Consensus = nil
+	ledger := GenesisLedger()
+	snapshot := StateSnapshot{
+		Version:                SnapshotVersion,
+		Height:                 54,
+		PrevHash:               "hash-53",
+		BlockHash:              "hash-54",
+		StateRoot:              "state-54",
+		GenesisHash:            GenesisHash,
+		Ledger:                 ledger,
+		LedgerHash:             HashLedger(ledger),
+		Validators:             map[string]bool{"A": true, "B": true, "C": true},
+		ValidatorSetHash:       "set-54",
+		NextValidatorSetHash:   "set-55",
+		NextValidatorSetHeight: 55,
+		ActivationHeight:       55,
+	}
+	anchor := snapshotAnchorBlock(snapshot)
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = []Block{anchor}
+	node.Blockchain.mu.Unlock()
+	node.commitMu.Lock()
+	node.committed = map[uint64]string{snapshot.Height: snapshot.BlockHash}
+	node.committedHeight = snapshot.Height
+	node.lastCommitHeight = snapshot.Height
+	node.commitMu.Unlock()
+
+	if blockStoreFileExists(node.DataDir, node.ID, snapshot.Height) {
+		t.Fatalf("test setup expected missing durable anchor")
+	}
+	if !node.ApplySnapshotForRecovery(snapshot) {
+		t.Fatalf("expected same-height recovery apply to succeed")
+	}
+	if !blockStoreFileExists(node.DataDir, node.ID, snapshot.Height) {
+		t.Fatalf("expected same-height recovery to persist missing anchor file")
+	}
+
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = nil
+	node.Blockchain.mu.Unlock()
+
+	loaded, ok := node.LoadBlock(int(snapshot.Height))
+	if !ok {
+		t.Fatalf("expected same-height recovery anchor to load from durable storage")
+	}
+	if loaded.BlockHash != snapshot.BlockHash || loaded.StateRoot != snapshot.StateRoot {
+		t.Fatalf("unexpected durable recovery anchor: hash=%q state=%q", loaded.BlockHash, loaded.StateRoot)
+	}
 }
 
 func TestApplySnapshotForRecoverySameHeightRealignsPostCommitLedger(t *testing.T) {

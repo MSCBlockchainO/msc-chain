@@ -1832,6 +1832,9 @@ func (n *Node) chainParentCommittedValidatorSetHash(height uint64) (string, bool
 	}
 	parent, ok := n.Blockchain.GetBlock(parentHeight)
 	if !ok {
+		parent, ok = n.LoadBlock(int(parentHeight))
+	}
+	if !ok {
 		return "", false
 	}
 	hash := strings.TrimSpace(parent.NextValidatorSetHash)
@@ -1890,6 +1893,9 @@ func (n *Node) chainParentCommittedValidatorRegistryHash(height uint64) (string,
 		return "", false
 	}
 	parent, ok := n.Blockchain.GetBlock(parentHeight)
+	if !ok {
+		parent, ok = n.LoadBlock(int(parentHeight))
+	}
 	if !ok {
 		return "", false
 	}
@@ -2447,6 +2453,9 @@ func (n *Node) resolveCommittedValidatorRegistrySnapshot(height uint64) (map[str
 	if n == nil || height == 0 {
 		return nil, "", "none", false
 	}
+	if registry, hash, ok := n.sparseCommittedAnchorParentRegistrySnapshot(height); ok && len(registry) > 0 {
+		return registry, hash, "sparse_anchor_parent_projection", true
+	}
 	if snap, err := n.loadValidatorRegistrySnapshot(height); err == nil && len(snap) > 0 {
 		hash := strings.TrimSpace(ValidatorRegistrySnapshotHash(snap))
 		return snap, hash, "registry_snapshot", true
@@ -2468,6 +2477,9 @@ func (n *Node) resolveCommittedValidatorRegistrySnapshot(height uint64) (map[str
 		return nil, "", "pending_future_block", false
 	}
 	block, ok := n.Blockchain.GetBlock(height)
+	if !ok {
+		block, ok = n.LoadBlock(int(height))
+	}
 	if !ok {
 		key := fmt.Sprintf("registry_missing_block:%d", height)
 		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
@@ -2643,6 +2655,85 @@ func (n *Node) resolveCommittedValidatorRegistrySnapshot(height uint64) (map[str
 	return runtimeRegistry, targetHash, "live_tip_runtime_repair", true
 }
 
+func (n *Node) sparseCommittedAnchorRegistrySnapshot(height uint64) map[string]ValidatorRecord {
+	if n == nil || height <= 1 || n.Blockchain == nil || n.Blockchain.Height() != height {
+		return nil
+	}
+	if _, ok := n.Blockchain.GetBlock(height - 1); ok {
+		return nil
+	}
+	if _, ok := n.loadDurableBlock(height - 1); ok {
+		return nil
+	}
+	anchor, ok := n.Blockchain.GetBlock(height)
+	if !ok {
+		return nil
+	}
+	expectedHash := strings.TrimSpace(anchor.ValidatorRegistryHash)
+	if expectedHash == "" {
+		return nil
+	}
+	if registry, err := n.loadValidatorRegistrySnapshot(height); err == nil && len(registry) > 0 {
+		if hash := strings.TrimSpace(ValidatorRegistrySnapshotHash(registry)); hash != "" && strings.EqualFold(hash, expectedHash) {
+			return registry
+		}
+	}
+	if snapshot, _, ok := n.resolveCommittedStateSnapshotFromStorage(height); ok && snapshot != nil && len(snapshot.ValidatorRegistry) > 0 {
+		registry := copyValidatorRegistrySnapshot(snapshot.ValidatorRegistry)
+		hash := strings.TrimSpace(snapshotValidatorRegistryHash(snapshot))
+		if hash == "" {
+			hash = strings.TrimSpace(ValidatorRegistrySnapshotHash(registry))
+		}
+		if hash != "" && strings.EqualFold(hash, expectedHash) {
+			return registry
+		}
+	}
+	return nil
+}
+
+func (n *Node) sparseCommittedAnchorParentRegistrySnapshot(parentHeight uint64) (map[string]ValidatorRecord, string, bool) {
+	if n == nil || parentHeight == 0 || n.Blockchain == nil {
+		return nil, "", false
+	}
+	anchorHeight := parentHeight + 1
+	if chainHeight := n.Blockchain.Height(); chainHeight > 0 && anchorHeight > chainHeight {
+		return nil, "", false
+	}
+	if _, ok := n.Blockchain.GetBlock(parentHeight); ok {
+		return nil, "", false
+	}
+	if _, ok := n.LoadBlock(int(parentHeight)); ok {
+		return nil, "", false
+	}
+	anchor, ok := n.Blockchain.GetBlock(anchorHeight)
+	if !ok {
+		anchor, ok = n.loadDurableBlock(anchorHeight)
+	}
+	if !ok {
+		return nil, "", false
+	}
+	expectedHash := strings.TrimSpace(anchor.ValidatorRegistryHash)
+	if expectedHash == "" {
+		return nil, "", false
+	}
+	if registry, err := n.loadValidatorRegistrySnapshot(anchorHeight); err == nil && len(registry) > 0 {
+		if hash := strings.TrimSpace(ValidatorRegistrySnapshotHash(registry)); hash != "" && strings.EqualFold(hash, expectedHash) {
+			return registry, expectedHash, true
+		}
+	}
+	if snapshot, _, ok := n.resolveCommittedStateSnapshotFromStorage(anchorHeight); ok && snapshot != nil && len(snapshot.ValidatorRegistry) > 0 {
+		registry := copyValidatorRegistrySnapshot(snapshot.ValidatorRegistry)
+		hash := strings.TrimSpace(snapshotValidatorRegistryHash(snapshot))
+		if hash == "" {
+			hash = strings.TrimSpace(ValidatorRegistrySnapshotHash(registry))
+		}
+		if hash != "" && strings.EqualFold(hash, expectedHash) {
+			return registry, expectedHash, true
+		}
+	}
+	return nil, "", false
+}
+
 func (n *Node) validatorRegistrySnapshotForHeight(height uint64) map[string]ValidatorRecord {
 	if n == nil {
 		return nil
@@ -2660,6 +2751,13 @@ func (n *Node) validatorRegistrySnapshotForHeight(height uint64) map[string]Vali
 	chainHeight := uint64(0)
 	if n.Blockchain != nil {
 		chainHeight = n.Blockchain.Height()
+	}
+	// A verified sparse snapshot anchor is the only committed authority available
+	// when its historical parent block was intentionally not retained. Resolve it
+	// before consulting unprovable parent-height registry records or scheduling
+	// an expensive historical rebuild.
+	if registry := n.sparseCommittedAnchorRegistrySnapshot(height); len(registry) > 0 {
+		return registry
 	}
 	parentAheadOfChain := chainHeight > 0 && parentHeight > chainHeight
 	const historicalRegistryRepairWindow uint64 = 128
@@ -2683,6 +2781,11 @@ func (n *Node) validatorRegistrySnapshotForHeight(height uint64) map[string]Vali
 		if n.ensureDeterministicRegistryHistoryUpTo(parentHeight) {
 			if snap, _, _, ok := n.resolveCommittedValidatorRegistrySnapshot(parentHeight); ok && len(snap) > 0 {
 				return snap
+			}
+		}
+		if height == chainHeight {
+			if snap, _, ok := n.resolveCommittedStateSnapshotFromStorage(height); ok && snap != nil && len(snap.ValidatorRegistry) > 0 {
+				return copyValidatorRegistrySnapshot(snap.ValidatorRegistry)
 			}
 		}
 		if snap, _, ok := n.committedParentProjectionSnapshot(height); ok && snap != nil && len(snap.ValidatorRegistry) > 0 {
@@ -2720,7 +2823,7 @@ func (n *Node) validatorRegistrySnapshotForHeight(height uint64) map[string]Vali
 					parentHeight, chainHeight, dbState)
 			}
 		}
-		if parentHeight > 1 && !parentAheadOfChain && !historyPruned && n.DB != nil && n.DB.State != nil {
+		if parentHeight > 1 && !parentAheadOfChain && !historyPruned && n.DB != nil && n.DB.State != nil && n.startupExecutionSnapshotCanRebuildLocally(parentHeight) {
 			n.maybeScheduleRegistryHistoryRebuild(parentHeight, "registry_snapshot_missing")
 		}
 		if parentHeight <= 1 || chainHeight <= 1 {
@@ -2847,6 +2950,18 @@ func (n *Node) expectedValidatorSetRootWithSource(height uint64) (string, string
 			}
 		}
 	}
+	if height > 1 && n.Blockchain != nil {
+		parentHeight := height - 1
+		parent, ok := n.Blockchain.GetBlock(parentHeight)
+		if !ok {
+			parent, ok = n.LoadBlock(int(parentHeight))
+		}
+		if ok &&
+			strings.TrimSpace(parent.NextValidatorSetHash) != "" &&
+			strings.TrimSpace(parent.NextValidatorSetRoot) != "" {
+			return strings.TrimSpace(parent.NextValidatorSetRoot), "chain_parent_commitment"
+		}
+	}
 	if snap, source, ok := n.committedParentProjectionSnapshot(height); ok && snap != nil {
 		validators := n.plannedValidatorSetForHeightFromChain(height)
 		if len(validators) == 0 {
@@ -2910,14 +3025,8 @@ func (n *Node) deterministicNextValidatorSetHashWithSource(height uint64, active
 	if committed, ok := n.chainParentCommittedValidatorSetHash(nextHeight); ok {
 		return strings.TrimSpace(committed), "chain_parent_commitment"
 	}
-	if ctx := n.newValidatorUpdateExecutionContext(height); ctx != nil {
-		if projectedHash, _, _ := ctx.plannedNextCommitment(height); strings.TrimSpace(projectedHash) != "" {
-			if strings.TrimSpace(activeHash) != "" &&
-				strings.EqualFold(strings.TrimSpace(projectedHash), strings.TrimSpace(activeHash)) {
-				return strings.TrimSpace(activeHash), "carry_forward"
-			}
-			return strings.TrimSpace(projectedHash), "chain_planned_transition"
-		}
+	if strings.TrimSpace(activeHash) != "" {
+		return strings.TrimSpace(activeHash), "carry_forward"
 	}
 	if planned := n.plannedValidatorSetForHeightFromChain(nextHeight); len(planned) > 0 {
 		if hash := n.validatorSetHashFromFinalizedSnapshot(nextHeight, planned); strings.TrimSpace(hash) != "" {
@@ -2926,9 +3035,6 @@ func (n *Node) deterministicNextValidatorSetHashWithSource(height uint64, active
 	}
 	if hash, ok := n.chainValidatorSetHash(nextHeight); ok {
 		return strings.TrimSpace(hash), "chain"
-	}
-	if strings.TrimSpace(activeHash) != "" {
-		return strings.TrimSpace(activeHash), "carry_forward"
 	}
 	return "", "none"
 }
@@ -2983,6 +3089,10 @@ func (n *Node) fillBlockNextValidatorSetCommitment(block *Block) {
 			registryHash = strings.TrimSpace(derivedHash)
 			registrySource = derivedSource
 		}
+	}
+	if _, projectedHash, ok := n.projectedValidatorUpdateRegistrySnapshotForBlock(*block); ok && strings.TrimSpace(projectedHash) != "" {
+		registryHash = strings.TrimSpace(projectedHash)
+		registrySource = "block_tx_registry_projection"
 	}
 	block.ValidatorRegistryHash = strings.TrimSpace(registryHash)
 	if promotionHash, _ := n.expectedPromotionWindowHashWithSource(block.ID); strings.TrimSpace(promotionHash) != "" {
@@ -3234,6 +3344,11 @@ func (n *Node) validateBlockValidatorRegistryCommitment(block Block) error {
 		)
 	}
 	if resolvedExpected != "" && !strings.EqualFold(resolvedExpected, got) {
+		if _, projectedHash, ok := n.projectedValidatorUpdateRegistrySnapshotForBlock(block); ok &&
+			strings.TrimSpace(projectedHash) != "" &&
+			strings.EqualFold(strings.TrimSpace(projectedHash), got) {
+			return nil
+		}
 		return errors.New("validator_registry_hash_mismatch")
 	}
 	return nil
@@ -3310,11 +3425,92 @@ func activeSetModeAdaptiveCommittee() bool {
 	return normalizeActiveSetMode(ValidatorActiveSetMode) == "adaptive_committee"
 }
 
+func activeSetModeUsesRegistrySmallSet() bool {
+	if GenesisValidatorSetFrozen && GenesisFrozenValidatorSetSize > 0 {
+		return false
+	}
+	switch normalizeActiveSetMode(ValidatorActiveSetMode) {
+	case "adaptive_committee", "hybrid_score_rotation":
+		return true
+	default:
+		return false
+	}
+}
+
 func displayActiveSetMode() string {
 	if GenesisValidatorSetFrozen && GenesisFrozenValidatorSetSize > 0 {
 		return "genesis_frozen"
 	}
 	return normalizeActiveSetMode(ValidatorActiveSetMode)
+}
+
+func activeRegistrySmallValidatorSetFromSnapshot(height uint64, snapshot map[string]ValidatorRecord, requireRecordedActive bool) []string {
+	if height == 0 || len(snapshot) == 0 {
+		return nil
+	}
+	maxActive := validatorHybridMaxActiveValidators()
+	if maxActive <= 0 {
+		return nil
+	}
+	out := make([]string, 0, len(snapshot))
+	for _, recVal := range snapshot {
+		rec := recVal
+		if strings.TrimSpace(rec.ID) == "" {
+			continue
+		}
+		id := normalizeValidatorID(rec.ID)
+		if id == "" || isValidatorBanned(id) {
+			continue
+		}
+		if requireRecordedActive && rec.Status != ValidatorActive {
+			continue
+		}
+		rec.ID = id
+		ValidatorStateMachine{}.Update(&rec, height)
+		if rec.Status != ValidatorActive {
+			continue
+		}
+		if rec.JailUntilHeight > 0 && height < rec.JailUntilHeight {
+			continue
+		}
+		if rec.JoinHeight > 0 && height < rec.JoinHeight {
+			continue
+		}
+		if !validatorPassesStakeGate(id, rec.Stake) {
+			continue
+		}
+		out = append(out, id)
+	}
+	out = canonicalValidatorIDs(out)
+	if len(out) == 0 || len(out) > maxActive {
+		return nil
+	}
+	return deterministicStakeHashOrderedValidatorIDs(out, snapshot)
+}
+
+func (n *Node) trustedRegistrySmallValidatorSetForHeight(height uint64, requireParentCommitment bool) ([]string, map[string]ValidatorRecord) {
+	if n == nil || height == 0 || !activeSetModeUsesRegistrySmallSet() {
+		return nil, nil
+	}
+	registrySnapshot := n.validatorRegistrySnapshotForHeight(height)
+	if len(registrySnapshot) == 0 {
+		return nil, nil
+	}
+	if requireParentCommitment && height > 1 && validatorSetCommitmentV2EnabledAt(height-1) {
+		expected, ok := n.chainParentCommittedValidatorRegistryHash(height)
+		if !ok || strings.TrimSpace(expected) == "" {
+			return nil, nil
+		}
+		got := strings.TrimSpace(ValidatorRegistrySnapshotHash(registrySnapshot))
+		if got == "" || !strings.EqualFold(got, strings.TrimSpace(expected)) {
+			return nil, nil
+		}
+	}
+	active := activeRegistrySmallValidatorSetFromSnapshot(height, registrySnapshot, true)
+	if len(active) == 0 {
+		return nil, nil
+	}
+	return active, registrySnapshot
 }
 
 type validatorOnboardingEval struct {
@@ -4331,6 +4527,15 @@ func (n *Node) selfActiveValidatorAt(height uint64) (bool, string) {
 	if selfID == "" {
 		return false, "activation_pending_not_in_frozen_set"
 	}
+	// Once a parent block has committed this height's validator-set hash, the
+	// frozen/chain-derived set is authoritative. Registry lifecycle state may
+	// include validators that are not in the current committee yet.
+	if activeSetModeUsesRegistrySmallSet() && (height <= 1 || !validatorSetCommitmentV2EnabledAt(height-1)) {
+		if active, _ := n.trustedRegistrySmallValidatorSetForHeight(height, true); containsNormalizedValidatorID(active, selfID) {
+			n.clearSelfActivationPendingState()
+			return true, "active"
+		}
+	}
 	frozen := n.frozenValidatorsForHeight(height)
 	missingCommittedSnapshot := height > 1 && n.missingPersistedCommittedSnapshotForHeight(height-1)
 	if !containsNormalizedValidatorID(frozen, selfID) {
@@ -4581,7 +4786,7 @@ func (n *Node) getEligibleSortedValidatorIDs(height uint64, hint []string) []str
 		}
 	}
 	base := canonicalValidatorIDs(append([]string{}, hint...))
-	if activeSetModeAdaptiveCommittee() {
+	if activeSetModeUsesRegistrySmallSet() {
 		if fromRegistry := selectAllStakedValidatorsFromSnapshot(height, registrySnapshot); len(fromRegistry) > 0 {
 			base = canonicalValidatorIDs(fromRegistry)
 		}
@@ -4614,6 +4819,42 @@ func (n *Node) getEligibleSortedValidatorIDs(height uint64, hint []string) []str
 	n.validatorSetMu.RUnlock()
 	if cachedVersion == version && len(cachedEligible) > 0 {
 		return cachedEligible
+	}
+
+	if activeSetModeUsesRegistrySmallSet() && len(registrySnapshot) > 0 {
+		safeStaked := selectAllStakedValidatorsFromSnapshot(height, registrySnapshot)
+		if len(safeStaked) > 0 && len(safeStaked) <= validatorHybridMaxActiveValidators() {
+			filtered := make([]string, 0, len(safeStaked))
+			for _, id := range safeStaked {
+				norm := normalizeValidatorID(id)
+				if norm == "" {
+					continue
+				}
+				rec, ok := validatorRegistryRecordFromSnapshot(registrySnapshot, norm)
+				if ok {
+					rec.ID = norm
+				}
+				if ok && rec.Status == ValidatorActive {
+					filtered = append(filtered, norm)
+					continue
+				}
+				if validatorOnboardingStrictActivationEnabled() {
+					ready, _ := n.onboardingActivationReady(norm, height, registrySnapshot)
+					if !ready {
+						continue
+					}
+				}
+				filtered = append(filtered, norm)
+			}
+			filtered = deterministicStakeHashOrderedValidatorIDs(filtered, registrySnapshot)
+			if len(filtered) > 0 {
+				n.validatorSetMu.Lock()
+				n.eligibleIndexVersion = version
+				n.eligibleSortedValidators = append([]string{}, filtered...)
+				n.validatorSetMu.Unlock()
+				return filtered
+			}
+		}
 	}
 
 	window := validatorSelectionActivityWindowBlocks()
@@ -4942,13 +5183,109 @@ func (n *Node) pruneCommitteeStateLocked(height uint64) {
 	pruneDurMap(n.safeModeWindowByHeight)
 }
 
+func (n *Node) replaceFrozenValidatorSetForCommittedHash(height uint64, validators []string, hash string) []string {
+	if n == nil || height == 0 {
+		return nil
+	}
+	canonical := canonicalValidatorIDs(validators)
+	hash = strings.TrimSpace(hash)
+	if len(canonical) == 0 || hash == "" {
+		return nil
+	}
+
+	n.validatorSetMu.Lock()
+	if n.frozenValidatorsByHeight == nil {
+		n.frozenValidatorsByHeight = make(map[uint64][]string)
+	}
+	if n.frozenValidatorHashByHeight == nil {
+		n.frozenValidatorHashByHeight = make(map[uint64]string)
+	}
+	n.frozenValidatorsByHeight[height] = append([]string{}, canonical...)
+	n.frozenValidatorHashByHeight[height] = hash
+	if n.committeeByHeight != nil {
+		n.committeeByHeight[height] = append([]string{}, canonical...)
+	}
+	if n.committeeHashByHeight != nil {
+		n.committeeHashByHeight[height] = hash
+	}
+	n.pruneCommitteeStateLocked(height)
+	n.validatorSetMu.Unlock()
+
+	n.persistValidatorFreezeEntry(height, canonical, hash)
+	if DebugConsensus && n.shouldLogLivenessReason(fmt.Sprintf("frozen_set_repair:%d:%s", height, strings.ToLower(hash)), livenessReasonLogCooldown) {
+		fmt.Printf("[SET-FREEZE-REPAIR] height=%d vhash=%s size=%d source=committed_parent\n",
+			height, ShortHash(hash), len(canonical))
+	}
+	return canonical
+}
+
+func (n *Node) repairFrozenValidatorSetForCommittedHash(height uint64, targetHash string, candidates ...[]string) ([]string, bool) {
+	if n == nil || height == 0 {
+		return nil, false
+	}
+	targetHash = strings.TrimSpace(targetHash)
+	if targetHash == "" {
+		return nil, false
+	}
+	registrySnapshot := n.validatorRegistrySnapshotForHeight(height)
+	tryCandidate := func(values []string) ([]string, bool) {
+		if matched, ok := n.validatorSetCandidateMatchesTarget(height, targetHash, values, registrySnapshot); ok {
+			return n.replaceFrozenValidatorSetForCommittedHash(height, matched, targetHash), true
+		}
+		return nil, false
+	}
+	for _, candidate := range candidates {
+		if repaired, ok := tryCandidate(candidate); ok {
+			return repaired, true
+		}
+	}
+	if resolved, resolvedHash, _, ok := n.resolveCommittedValidatorSetForHeight(height); ok &&
+		strings.EqualFold(strings.TrimSpace(resolvedHash), targetHash) {
+		if repaired, ok := tryCandidate(resolved); ok {
+			return repaired, true
+		}
+		return n.replaceFrozenValidatorSetForCommittedHash(height, resolved, targetHash), true
+	}
+	if height > 1 {
+		if frozen, ok := n.committedFrozenValidatorSetCandidate(targetHash, height-1); ok {
+			if repaired, ok := tryCandidate(frozen); ok {
+				return repaired, true
+			}
+		}
+	}
+	if reconstructed, ok := n.reconstructValidatorSetCandidateForTarget(height, targetHash, registrySnapshot, candidates...); ok {
+		return n.replaceFrozenValidatorSetForCommittedHash(height, reconstructed, targetHash), true
+	}
+	return nil, false
+}
+
 func (n *Node) freezeValidatorSetForHeight(height uint64, hint []string) []string {
 	if n == nil || height == 0 {
 		return nil
 	}
 
+	expectedHash := ""
+	if height > 1 && validatorSetCommitmentV2EnabledAt(height-1) {
+		if committed, ok := n.chainParentCommittedValidatorSetHash(height); ok {
+			expectedHash = strings.TrimSpace(committed)
+		}
+	}
+
 	if frozen := n.frozenValidatorsForHeight(height); len(frozen) > 0 {
-		return frozen
+		if expectedHash == "" {
+			return frozen
+		}
+		if matched, ok := n.validatorSetCandidateMatchesTarget(height, expectedHash, frozen, nil); ok {
+			return matched
+		}
+		if repaired, ok := n.repairFrozenValidatorSetForCommittedHash(height, expectedHash, hint, frozen); ok {
+			return repaired
+		}
+		if DebugConsensus && n.shouldLogLivenessReason(fmt.Sprintf("stale_frozen_set:%d", height), livenessReasonLogCooldown) {
+			fmt.Printf("[SET-FREEZE-REJECT] height=%d expected=%s stale_size=%d reason=committed_parent_hash_mismatch\n",
+				height, ShortHash(expectedHash), len(frozen))
+		}
+		return nil
 	}
 
 	candidate := canonicalValidatorIDs(append([]string{}, hint...))
@@ -4999,9 +5336,26 @@ func (n *Node) freezeValidatorSetForHeight(height uint64, hint []string) []strin
 		return nil
 	}
 
-	hash := n.validatorSetHashFromFinalizedSnapshot(height, candidate)
+	hash := ""
+	if expectedHash != "" {
+		if matched, ok := n.validatorSetCandidateMatchesTarget(height, expectedHash, candidate, nil); ok {
+			candidate = matched
+			hash = expectedHash
+		} else if repaired, ok := n.repairFrozenValidatorSetForCommittedHash(height, expectedHash, hint, candidate); ok {
+			return repaired
+		} else {
+			if DebugConsensus && n.shouldLogLivenessReason(fmt.Sprintf("candidate_set_mismatch:%d", height), livenessReasonLogCooldown) {
+				fmt.Printf("[SET-FREEZE-REJECT] height=%d expected=%s candidate_size=%d reason=committed_parent_hash_mismatch\n",
+					height, ShortHash(expectedHash), len(candidate))
+			}
+			return nil
+		}
+	}
 	if strings.TrimSpace(hash) == "" {
-		hash = ValidatorSetHash(candidate)
+		hash = n.validatorSetHashFromFinalizedSnapshot(height, candidate)
+		if strings.TrimSpace(hash) == "" {
+			hash = ValidatorSetHash(candidate)
+		}
 	}
 	n.validatorSetMu.Lock()
 	if n.frozenValidatorsByHeight == nil {
@@ -10766,11 +11120,16 @@ func (n *Node) bestObservedValidatorSetHash() (string, int, uint64, bool) {
 			bestVotes = votes
 		}
 	}
-	if bestHash == "" || bestVotes == 0 {
-		peerHash, peerVotes, peerHeight, peerOK := n.bestObservedValidatorSetHashFromPeerState()
-		if peerOK {
+	peerHash, peerVotes, peerHeight, peerOK := n.bestObservedValidatorSetHashFromPeerState()
+	if peerOK {
+		if bestHash == "" || bestVotes == 0 || peerVotes > bestVotes {
 			return peerHash, peerVotes, peerHeight, true
 		}
+		if strings.EqualFold(peerHash, bestHash) && peerHeight > bestFinalized {
+			bestFinalized = peerHeight
+		}
+	}
+	if bestHash == "" || bestVotes == 0 {
 		return "", 0, bestFinalized, false
 	}
 	return bestHash, bestVotes, bestFinalized, true
@@ -10880,11 +11239,16 @@ func (n *Node) startupRemoteObservedValidatorSetHash() (string, int, uint64, boo
 			bestVotes = votes
 		}
 	}
-	if bestHash == "" || bestVotes == 0 {
-		peerHash, peerVotes, peerHeight, peerOK := n.bestObservedValidatorSetHashFromPeerState()
-		if peerOK {
+	peerHash, peerVotes, peerHeight, peerOK := n.bestObservedValidatorSetHashFromPeerState()
+	if peerOK {
+		if bestHash == "" || bestVotes == 0 || peerVotes > bestVotes {
 			return peerHash, peerVotes, peerHeight, true
 		}
+		if strings.EqualFold(peerHash, bestHash) && peerHeight > bestFinalized {
+			bestFinalized = peerHeight
+		}
+	}
+	if bestHash == "" || bestVotes == 0 {
 		return "", 0, bestFinalized, false
 	}
 	return bestHash, bestVotes, bestFinalized, true
@@ -12044,6 +12408,7 @@ func (n *Node) maybeExitSyncMode(reason string) bool {
 		n.setSyncAction("idle", 0, "up_to_date")
 		n.setSyncProvider("")
 		n.closeSnapshotSession(true, "sync_cleared")
+		n.persistDurableSyncAnchorAsync(localHeight, reason)
 		n.syncMu.Lock()
 		n.syncStallSeconds = 0
 		n.syncMu.Unlock()
@@ -12851,6 +13216,7 @@ func (n *Node) forceSnapshotSyncToHeight(targetHeight uint64, reason string) {
 		n.setSyncAction("idle", 0, "up_to_date")
 		n.setSyncProvider("")
 		n.clearSyncResumeState()
+		n.persistDurableSyncAnchorAsync(localAfter, reason)
 		n.armSyncWarmupAfterCatchup(reason, localAfter, targetHeight)
 		n.replayQueuedExecutionVotes()
 	}
@@ -14837,6 +15203,23 @@ func (n *Node) startupValidatorSetSelfCheck() (bool, string) {
 			return false, reason
 		}
 		n.logStartupCommitmentCheck(checkHeight, expected, expectedSource)
+		if n.DB != nil && n.DB.State != nil {
+			if snap, err := n.GetSnapshot(finalized); err == nil && snap != nil {
+				if snapshotValidators := validatorsFromSnapshot(snap); len(snapshotValidators) > 0 {
+					if _, match := n.validatorSetCandidateMatchesTarget(checkHeight, expected, snapshotValidators, validatorRegistrySnapshotFromStateSnapshot(snap)); !match {
+						reason := fmt.Sprintf("startup_validator_set_mismatch_h_%d", checkHeight)
+						got := strings.TrimSpace(n.preferredValidatorSetHashForHeight(checkHeight, snapshotValidators, validatorRegistrySnapshotFromStateSnapshot(snap)))
+						if got == "" {
+							got = strings.TrimSpace(ValidatorSetHash(snapshotValidators))
+						}
+						n.setValidatorStartupCheckStatus(false, checkHeight, expected, got, reason)
+						n.recordValidatorAutohealWait(reason, checkHeight, expected, got)
+						n.requestConsensusRecomputePause(checkHeight, "startup_validator_set_snapshot_mismatch")
+						return false, reason
+					}
+				}
+			}
+		}
 		_, localHash, localSource, ok := n.startupResolvedValidatorSetHash(checkHeight)
 		if !ok || strings.TrimSpace(localHash) == "" {
 			if source, repaired := n.ensureCommittedTipStateSnapshot(finalized, "startup"); repaired {
@@ -17772,40 +18155,48 @@ func (n *Node) pickSyncPeers(targetHeight uint64, exclude map[peer.ID]struct{}, 
 	}
 
 	avoidProvider := n.consumeSyncAvoidProviderOnce()
-	candidates := make([]syncPeerCandidate, 0, len(peers))
-	for _, pid := range peers {
-		if _, skip := exclude[pid]; skip {
-			continue
-		}
-		if avoidProvider != "" && strings.EqualFold(pid.String(), avoidProvider) {
-			continue
-		}
-		if n.isPeerQuarantined(pid.String()) {
-			continue
-		}
-
-		candidate := syncPeerCandidate{
-			PID:        pid,
-			Reputation: n.syncPeerReputationValue(pid.String()),
-			Score:      n.syncPeerScoreValue(pid.String()),
-			Priority:   2,
-		}
-
-		peerHeight, peerFinalized := n.peerHeightSnapshot(pid.String())
-		if peerFinalized > candidate.Height {
-			candidate.Height = peerFinalized
-		}
-		if peerHeight > candidate.Height {
-			candidate.Height = peerHeight
-		}
-		if candidate.Height > 0 {
-			candidate.Priority = 1
-			if candidate.Height >= targetHeight {
-				candidate.Priority = 0
+	buildCandidates := func(skipAvoid bool) []syncPeerCandidate {
+		candidates := make([]syncPeerCandidate, 0, len(peers))
+		for _, pid := range peers {
+			if _, skip := exclude[pid]; skip {
+				continue
 			}
-		}
+			if skipAvoid && avoidProvider != "" && strings.EqualFold(pid.String(), avoidProvider) {
+				continue
+			}
+			if n.isPeerQuarantined(pid.String()) {
+				continue
+			}
 
-		candidates = append(candidates, candidate)
+			candidate := syncPeerCandidate{
+				PID:        pid,
+				Reputation: n.syncPeerReputationValue(pid.String()),
+				Score:      n.syncPeerScoreValue(pid.String()),
+				Priority:   2,
+			}
+
+			peerHeight, peerFinalized := n.peerHeightSnapshot(pid.String())
+			if peerFinalized > candidate.Height {
+				candidate.Height = peerFinalized
+			}
+			if peerHeight > candidate.Height {
+				candidate.Height = peerHeight
+			}
+			if candidate.Height > 0 {
+				candidate.Priority = 1
+				if candidate.Height >= targetHeight {
+					candidate.Priority = 0
+				}
+			}
+
+			candidates = append(candidates, candidate)
+		}
+		return candidates
+	}
+
+	candidates := buildCandidates(true)
+	if len(candidates) == 0 && avoidProvider != "" {
+		candidates = buildCandidates(false)
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {
@@ -20245,7 +20636,10 @@ func (n *Node) plannedValidatorSetForHeightFromChain(height uint64) []string {
 	if !ok || snapshot == nil {
 		return nil
 	}
-	current := validatorsFromSnapshot(snapshot)
+	current := activeRegistrySmallValidatorSetFromSnapshot(height, snapshot.ValidatorRegistry, true)
+	if len(current) == 0 {
+		current = validatorsFromSnapshot(snapshot)
+	}
 	if len(current) == 0 {
 		return nil
 	}
@@ -24533,14 +24927,27 @@ func StartNode(
 	// =====================================================
 
 	startupChainTruncated := false
+	var startupRecoverySnapshot *StateSnapshot
+	var startupRecoveryAnchor Block
 	blocks := node.LoadBlocksFromDB()
 	if sanitized, tip, err := sanitizeContiguousLoadedBlocks(blocks); err != nil {
+		if snap, anchor, reason := node.loadBestAnchoredStartupRecoverySnapshot(); snap != nil {
+			startupRecoverySnapshot = snap
+			startupRecoveryAnchor = anchor
+			log.Printf("[SNAPSHOT-RECOVERY] preserve_verified_sparse_anchor height=%d tip=%d hash=%s",
+				snap.Height, tip, ShortHash(snap.BlockHash))
+		} else if strings.TrimSpace(reason) != "" {
+			log.Printf("[SNAPSHOT-RECOVERY] no_verified_sparse_anchor tip=%d reason=%s", tip, strings.TrimSpace(reason))
+		}
 		blocks = sanitized
 		startupChainTruncated = true
 		log.Printf("[CHAIN-AUDIT] startup_truncate_sparse_blocks tip=%d reason=%s", tip, err)
 		node.pruneBlocksAboveHeight(tip)
 		if err := node.pruneFinalizedHashInvariantsAboveHeight(tip); err != nil {
 			log.Printf("[WARN] finalized hash invariant prune failed height=%d err=%v", tip, err)
+		}
+		if startupRecoverySnapshot != nil {
+			node.StoreBlock(startupRecoveryAnchor)
 		}
 	}
 
@@ -24569,18 +24976,33 @@ func StartNode(
 	// - never hydrate validator-set state from stale snapshots below chain tip
 	// - at equal height, require block-hash match before using snapshot metadata
 	if node.DB != nil && node.DB.State != nil {
+		if startupRecoverySnapshot == nil {
+			snap, err := node.LoadBestSnapshot()
+			if err == nil && snap != nil {
+				if ok, _ := node.canApplyUnanchoredStartupRecoverySnapshot(snap, startupChainTruncated); ok {
+					startupRecoverySnapshot = snap
+				}
+			}
+		}
 		if scrubbed, scrubErr := node.scrubInvalidStoredSnapshots(node.Blockchain.Height()); scrubErr != nil {
 			log.Printf("[WARN] startup snapshot scrub failed: %v", scrubErr)
 		} else if scrubbed > 0 {
 			log.Printf("[SNAPSHOT-SCRUB] removed=%d tip=%d", scrubbed, node.Blockchain.Height())
 		}
-		if pruned, pruneErr := node.pruneStoredSnapshotsAboveHeight(node.Blockchain.Height()); pruneErr != nil {
-			log.Printf("[WARN] startup future snapshot prune failed: %v", pruneErr)
-		} else if pruned > 0 {
-			log.Printf("[SNAPSHOT-SCRUB] pruned_future=%d tip=%d chain_truncated=%t", pruned, node.Blockchain.Height(), startupChainTruncated)
+		if startupRecoverySnapshot == nil {
+			if pruned, pruneErr := node.pruneStoredSnapshotsAboveHeight(node.Blockchain.Height()); pruneErr != nil {
+				log.Printf("[WARN] startup future snapshot prune failed: %v", pruneErr)
+			} else if pruned > 0 {
+				log.Printf("[SNAPSHOT-SCRUB] pruned_future=%d tip=%d chain_truncated=%t", pruned, node.Blockchain.Height(), startupChainTruncated)
+			}
+		} else {
+			log.Printf("[SNAPSHOT-SCRUB] preserve_future_recovery_import height=%d tip=%d chain_truncated=%t",
+				startupRecoverySnapshot.Height, node.Blockchain.Height(), startupChainTruncated)
 		}
 
-		if snap, err := node.LoadBestSnapshot(); err == nil && snap != nil {
+		if startupRecoverySnapshot != nil {
+			node.applyStartupBestSnapshot(startupRecoverySnapshot, startupChainTruncated)
+		} else if snap, err := node.LoadBestSnapshot(); err == nil && snap != nil {
 			node.applyStartupBestSnapshot(snap, startupChainTruncated)
 
 		} else if err != nil && !errors.Is(err, ErrKeyNotFound) {
@@ -26418,15 +26840,6 @@ func (n *Node) evaluateValidatorLivenessLocked(id string, st *ValidatorStatus, n
 		out.FailReason = "inactive"
 		return out
 	}
-	if !st.ConsensusReadyKnown {
-		out.FailReason = "consensus_ready_unknown"
-		return out
-	}
-	if !st.Enabled {
-		out.FailReason = "consensus_not_ready"
-		return out
-	}
-
 	ttl := validatorLivenessHeartbeatTTL()
 	grace := validatorLivenessGrace()
 	age := now.Sub(st.LastSeen)
@@ -26484,9 +26897,40 @@ func (n *Node) evaluateValidatorLivenessLocked(id string, st *ValidatorStatus, n
 			}
 		}
 	}
+	if !st.ConsensusReadyKnown {
+		if !n.shouldCountConsensusWaitingValidatorLive(normID, out) {
+			out.FailReason = "consensus_ready_unknown"
+			return out
+		}
+	} else if !st.Enabled {
+		if !n.shouldCountConsensusWaitingValidatorLive(normID, out) {
+			out.FailReason = "consensus_not_ready"
+			return out
+		}
+	}
 	out.LiveStrict = true
 	out.FailReason = "live"
 	return out
+}
+
+func (n *Node) shouldCountConsensusWaitingValidatorLive(id string, eval validatorLivenessEvaluation) bool {
+	if n == nil || normalizeValidatorID(id) == "" {
+		return false
+	}
+	if !eval.FreshHeartbeat || !eval.InAnyHeartbeatSet || !eval.WithinDrift {
+		return false
+	}
+	if !n.validatorHasConnectedPeer(id) {
+		return false
+	}
+	stall := n.commitStallDuration()
+	if stall >= 15*time.Second {
+		return true
+	}
+	if stall >= execQuorumEmergencyStallTimeout {
+		return true
+	}
+	return false
 }
 
 func (n *Node) isValidatorLiveForConsensusLocked(id string, st *ValidatorStatus, now time.Time, localFinalized uint64) bool {
@@ -29455,8 +29899,8 @@ func applyConsensusDetectorConfig(cc ConsensusConfig) bool {
 	changed := false
 	if cc.DetectorDegradedAfterSeconds > 0 {
 		ConsensusDetectorDegradedAfter = time.Duration(cc.DetectorDegradedAfterSeconds) * time.Second
-		if ConsensusDetectorDegradedAfter < 30*time.Second {
-			ConsensusDetectorDegradedAfter = 30 * time.Second
+		if ConsensusDetectorDegradedAfter < time.Second {
+			ConsensusDetectorDegradedAfter = time.Second
 		}
 		changed = true
 	}
@@ -36601,6 +37045,10 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 			}
 			startupSetReady = ok
 			startupNetworkReady, startupNetworkReason, _, _, _ = n.startupNetworkValidatorSetSampleStatus(out.Height)
+			if !startupNetworkReady && consensusLoopRunning && n.committedHeight > 0 && out.SyncComplete && !out.Syncing && !snapshotSessionActive {
+				startupNetworkReady = true
+				startupNetworkReason = "steady_state_committed_tip"
+			}
 			strictActivationReady, strictActivationReason = n.selfActiveValidatorAt(nextHeight)
 			if strings.TrimSpace(strictActivationReason) == "" {
 				if strictActivationReady {
@@ -36867,9 +37315,16 @@ func (s *Server) handleStatus(
 	if statusFastPath {
 		committeeSizeLite := runtime.RequiredQuorum
 		committeeTargetLite := runtime.RequiredQuorum
-		if GenesisValidatorSetFrozen && GenesisFrozenValidatorSetSize > 0 {
+		nextHeightLite := runtime.Height + 1
+		if frozen := s.Node.frozenValidatorsForHeight(nextHeightLite); len(frozen) > 0 {
+			committeeSizeLite = len(frozen)
+			committeeTargetLite = len(frozen)
+		} else if GenesisValidatorSetFrozen && GenesisFrozenValidatorSetSize > 0 {
 			committeeSizeLite = GenesisFrozenValidatorSetSize
 			committeeTargetLite = GenesisFrozenValidatorSetSize
+		}
+		if target := s.Node.activeSetTarget(); target > committeeTargetLite {
+			committeeTargetLite = target
 		}
 		selfInFrozenSetNextLite := runtime.SelfInFrozenSetNext
 		onboardingStateLite := runtime.OnboardingState
@@ -37159,6 +37614,9 @@ func (s *Server) handleStatus(
 		committeeHash, committeeHashSource, committeeRuntimeHash = s.Node.authoritativeCommitteeHashesForHeight(committeeHeight)
 	}
 	committeeTarget := committeeSize
+	if target := s.Node.activeSetTarget(); target > committeeTarget {
+		committeeTarget = target
+	}
 	validatorPool := s.Node.validatorPoolSnapshotForHeight(committeeHeight, registrySnap)
 	promotionWindowStatus := s.Node.currentPromotionWindowStatus(committeeHeight)
 	onboardingCandidates := []string{}
@@ -37169,7 +37627,9 @@ func (s *Server) handleStatus(
 	selfBootstrapLaneAdmittedNext := false
 	if activeSetModeAdaptiveCommittee() && !statusFastPath {
 		eligible := s.Node.getEligibleSortedValidatorIDs(committeeHeight, s.Node.GetConsensusValidators(int(committeeHeight)))
-		committeeTarget = s.Node.adaptiveCommitteeTarget(len(eligible))
+		if adaptiveTarget := s.Node.adaptiveCommitteeTarget(len(eligible)); adaptiveTarget > committeeTarget {
+			committeeTarget = adaptiveTarget
+		}
 		baseForOnboarding := canonicalValidatorIDs(s.Node.GetConsensusValidators(int(committeeHeight)))
 		registrySnapshot := s.Node.validatorRegistrySnapshotForHeight(committeeHeight)
 		if fromRegistry := selectAllStakedValidatorsFromSnapshot(committeeHeight, registrySnapshot); len(fromRegistry) > 0 {
@@ -43484,9 +43944,12 @@ func (s *Server) collectExplorerPeers() []explorerPeerEntry {
 	}
 
 	keySet := make(map[string]struct{})
+	livePeers := make(map[string]bool)
+	livePeerStateAvailable := s.Node.Host != nil
 	if s.Node.Host != nil {
 		for _, pid := range s.Node.Host.Network().Peers() {
 			keySet[pid.String()] = struct{}{}
+			livePeers[pid.String()] = true
 		}
 	}
 
@@ -43582,11 +44045,15 @@ func (s *Server) collectExplorerPeers() []explorerPeerEntry {
 		if peerRole == "validator" && strings.TrimSpace(s.Node.peerToValidator[pid]) == "" {
 			peerRole = "full"
 		}
+		connected := s.Node.connectedPeers[pid]
+		if livePeerStateAvailable {
+			connected = livePeers[pid]
+		}
 		out = append(out, explorerPeerEntry{
 			PeerID:          pid,
 			Role:            peerRole,
 			ValidatorID:     s.Node.peerToValidator[pid],
-			Connected:       s.Node.connectedPeers[pid],
+			Connected:       connected,
 			SyncScore:       s.Node.syncPeerScoreValue(pid),
 			Reputation:      s.Node.syncPeerReputationValue(pid),
 			ReputationClass: s.Node.syncPeerReputationClass(pid),

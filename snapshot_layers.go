@@ -664,8 +664,11 @@ func (n *Node) pruneSnapshotDeltasBelowHeight(retainFromHeight uint64) error {
 }
 
 func (n *Node) storeCommittedStateSnapshotRecord(snapshot *StateSnapshot, source string) error {
-	if n == nil || snapshot == nil || snapshot.Height == 0 || n.DB == nil || n.DB.SnapshotStore() == nil {
-		return nil
+	if n == nil || snapshot == nil || snapshot.Height == 0 {
+		return errors.New("snapshot record invalid")
+	}
+	if n.DB == nil || n.DB.SnapshotStore() == nil {
+		return errors.New("snapshot db not initialized")
 	}
 	n.attachPromotionWindowStateToSnapshot(snapshot)
 	populateSnapshotDerivedFields(snapshot)
@@ -683,6 +686,15 @@ func (n *Node) storeCommittedStateSnapshotRecord(snapshot *StateSnapshot, source
 		return txn.Set(key, enc)
 	}); err != nil {
 		return err
+	}
+	stored, err := readSnapshotFromStores([]*DB{n.DB.SnapshotStore()}, key)
+	if err != nil {
+		return fmt.Errorf("snapshot write verification failed height=%d: %w", snapshot.Height, err)
+	}
+	if stored == nil ||
+		stored.Height != snapshot.Height ||
+		!strings.EqualFold(strings.TrimSpace(stored.SnapshotHash), strings.TrimSpace(snapshot.SnapshotHash)) {
+		return fmt.Errorf("snapshot write verification mismatch height=%d", snapshot.Height)
 	}
 	if n.DB.SnapshotMetaStore() == nil {
 		return errors.New("snapshot meta db not initialized")
@@ -841,7 +853,7 @@ func shouldAutoCreateSnapshotAtHeight(height uint64) bool {
 
 func shouldBypassSnapshotCheckpointDeferral(reason string) bool {
 	switch strings.TrimSpace(reason) {
-	case "resolver_tip_missing", "integrity_monitor", "startup":
+	case "resolver_tip_missing", "integrity_monitor", "startup", "sync_complete":
 		return true
 	default:
 		return false
@@ -850,11 +862,32 @@ func shouldBypassSnapshotCheckpointDeferral(reason string) bool {
 
 func shouldPeerFetchCommittedTipSnapshot(reason string) bool {
 	switch strings.TrimSpace(reason) {
-	case "resolver_tip_missing", "integrity_monitor", "startup", "snapshot_create_worker":
+	case "resolver_tip_missing", "integrity_monitor", "startup", "snapshot_create_worker", "sync_complete":
 		return true
 	default:
 		return false
 	}
+}
+
+func (n *Node) persistDurableSyncAnchorAsync(height uint64, reason string) {
+	if n == nil || height == 0 {
+		return
+	}
+	n.SafeGo(fmt.Sprintf("durable_sync_anchor_%d", height), func() {
+		source, ok := n.ensureCommittedTipStateSnapshot(height, "sync_complete")
+		if !ok {
+			key := fmt.Sprintf("durable_sync_anchor_failed:%d", height)
+			if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+				log.Printf("[SNAPSHOT-ANCHOR] status=failed height=%d reason=%s", height, strings.TrimSpace(reason))
+			}
+			return
+		}
+		key := fmt.Sprintf("durable_sync_anchor_stored:%d", height)
+		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+			log.Printf("[SNAPSHOT-ANCHOR] status=stored height=%d reason=%s source=%s",
+				height, strings.TrimSpace(reason), strings.TrimSpace(source))
+		}
+	})
 }
 
 func (n *Node) fetchCommittedTipSnapshotFromPeers(height uint64, reason string) (string, bool) {

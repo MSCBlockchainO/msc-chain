@@ -936,38 +936,10 @@ func (n *Node) acceptedProposalVoteCountLocked(epoch uint64, proposalKey string)
 	if n == nil || epoch == 0 || proposalKey == "" {
 		return 0
 	}
-	count := 0
-	if n.acceptedProposalBlocks != nil {
-		if block, ok := n.acceptedProposalBlocks[proposalKey]; ok && block.ID == epoch {
-			execHash := strings.TrimSpace(block.StateRoot)
-			if execHash == "" {
-				execHash = strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
-			}
-			if execHash != "" {
-				if global := getExecCountGlobal(epoch, proposalKey, execHash, block.MempoolRoot); global > count {
-					count = global
-				}
-			}
-			if n.Consensus != nil && strings.TrimSpace(block.BlockHash) != "" {
-				n.Consensus.mu.Lock()
-				if votes := n.Consensus.ExecVotes[strings.TrimSpace(block.BlockHash)]; len(votes) > count {
-					count = len(votes)
-				}
-				n.Consensus.mu.Unlock()
-			}
-		}
-	}
-	if scoped := execPoolScopeKey(epoch, proposalKey); scoped != "" && n.execSignerSeen != nil {
-		if byProposal := n.execSignerSeen[epoch]; byProposal != nil {
-			if signers := byProposal[scoped]; len(signers) > count {
-				count = len(signers)
-			}
-		}
-	}
-	if global := getExecCountForProposalScopeGlobal(epoch, proposalKey, ""); global > count {
-		count = global
-	}
-	return count
+	// ExecPool is the authoritative execution-vote state machine. The node-local
+	// signer and Consensus.ExecVotes maps are mirrors for diagnostics/rebroadcast
+	// only; counting them here lets stale mirrors fabricate a proposal lock.
+	return getExecCountForProposalScopeGlobal(epoch, proposalKey, "")
 }
 
 func execVoteCreditedGlobal(epoch uint64, proposalKey string, signer string, execHash string, txMerkle string) bool {
@@ -2245,7 +2217,7 @@ func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 	// Production safety: do not rely on pubsub loopback for the local
 	// validator's own execution vote. Record it immediately so transport
 	// hiccups cannot stall quorum formation.
-	if !force || !n.hasExecSignerSeenForProposal(heightHint, proposalKey, n.ID) {
+	if !force || !execVoteCreditedGlobal(heightHint, proposalKey, n.ID, execHash, txMerkle) {
 		if n.isShuttingDown() {
 			return
 		}
@@ -2277,6 +2249,16 @@ func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 }
 
 func (n *Node) broadcastExecutionResultForBlockInternal(block Block, execHash string, txMerkle string, force bool) {
+	if ready, reason := n.localExecutionBroadcastReady(block.ID); !ready {
+		log.Printf("[EXEC-BROADCAST-DEFER] validator=%s height=%d reason=%s trigger=direct_block_publish block=%s prev=%s",
+			ShortID(n.ID),
+			block.ID,
+			reason,
+			ShortHash(block.BlockHash),
+			ShortHash(block.PrevHash),
+		)
+		return
+	}
 	ctx, ok := n.prepareExecutionBroadcastForBlock(block, execHash, txMerkle)
 	if !ok {
 		return
@@ -2678,6 +2660,7 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 				continue
 			}
 			if existingKey == proposalKey || execPoolScopeKey(epoch, existingKey) == execPoolScopeKey(epoch, proposalKey) {
+				delete(n.localExecVoteByRound[epoch], existingRound)
 				continue
 			}
 			if n.releaseStaleLocalExecutionVoteMarkerLocked(epoch, existingRound, round, existingKey, proposalKey) {
@@ -2728,6 +2711,21 @@ func (n *Node) releaseStaleLocalExecutionVoteMarkerLocked(epoch uint64, existing
 	if existingKey == "" || incomingKey == "" || existingKey == incomingKey {
 		return false
 	}
+	if ok, existingVotes, incomingVotes, required := n.releaseToBetterStalledNearQuorumMarkerLocked(epoch, existingRound, incomingRound, existingKey, incomingKey); ok {
+		log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=release_stalled_better_near_quorum_marker existing_round=%d existing=%s incoming=%s existing_votes=%d incoming_votes=%d required=%d stall=%s",
+			ShortID(n.ID),
+			epoch,
+			incomingRound,
+			existingRound,
+			existingKey,
+			incomingKey,
+			existingVotes,
+			incomingVotes,
+			required,
+			n.commitStallDuration().Truncate(time.Second),
+		)
+		return true
+	}
 	if incomingRound <= existingRound {
 		return false
 	}
@@ -2771,6 +2769,64 @@ func (n *Node) releaseStaleLocalExecutionVoteMarkerLocked(epoch uint64, existing
 		incomingKey,
 	)
 	return true
+}
+
+func (n *Node) releaseToBetterStalledNearQuorumMarkerLocked(epoch uint64, existingRound uint32, incomingRound uint32, existingKey string, incomingKey string) (bool, int, int, int) {
+	if n == nil || epoch == 0 || existingKey == "" || incomingKey == "" {
+		return false, 0, 0, 0
+	}
+	if n.Blockchain == nil || n.Blockchain.Height()+1 != epoch {
+		return false, 0, 0, 0
+	}
+	if n.commitStallDuration() < execQuorumEmergencyStallTimeout {
+		return false, 0, 0, 0
+	}
+	required := n.localExecutionVoteMarkerQuorumRequiredLocked(epoch)
+	if required <= 1 {
+		return false, 0, 0, required
+	}
+	incomingVotes := n.localExecutionVoteMarkerEvidenceCountLocked(epoch, incomingKey)
+	nearQuorum := incomingVotes >= required
+	if required > 1 {
+		nearQuorum = incomingVotes >= required-1
+	}
+	if !nearQuorum {
+		return false, 0, incomingVotes, required
+	}
+	existingVotes := n.localExecutionVoteMarkerEvidenceCountLocked(epoch, existingKey)
+	if existingVotes >= required {
+		return false, existingVotes, incomingVotes, required
+	}
+	if incomingVotes > existingVotes {
+		return true, existingVotes, incomingVotes, required
+	}
+	if incomingVotes == existingVotes && incomingRound > existingRound {
+		return true, existingVotes, incomingVotes, required
+	}
+	return false, existingVotes, incomingVotes, required
+}
+
+func (n *Node) localExecutionVoteMarkerQuorumRequiredLocked(epoch uint64) int {
+	if n == nil || epoch == 0 {
+		return 0
+	}
+	required := n.executionQuorumRequiredForEpoch(epoch)
+	if required > 1 {
+		return required
+	}
+	total := 0
+	n.validatorSetMu.RLock()
+	if validators := canonicalValidatorIDs(n.epochValidators[epoch]); len(validators) > total {
+		total = len(validators)
+	}
+	if validators := canonicalValidatorIDs(n.GenesisValidators); len(validators) > total {
+		total = len(validators)
+	}
+	n.validatorSetMu.RUnlock()
+	if total > 1 {
+		return strictExecSupermajority(total)
+	}
+	return required
 }
 
 func (n *Node) releaseStalledQuorumBackedLocalExecutionVoteMarkerLocked(epoch uint64, existingRound uint32, incomingRound uint32, existingKey string, incomingKey string) bool {
@@ -2836,7 +2892,7 @@ func (n *Node) localExecutionVoteMarkerNearQuorumLocked(epoch uint64, proposalKe
 	if evidenceCount <= 0 {
 		return false
 	}
-	required := n.executionQuorumRequiredForEpoch(epoch)
+	required := n.localExecutionVoteMarkerQuorumRequiredLocked(epoch)
 	if required <= 1 {
 		return evidenceCount > 0
 	}
@@ -2851,9 +2907,9 @@ func (n *Node) localExecutionVoteMarkerHasEvidenceLocked(epoch uint64, proposalK
 	if evidenceCount <= 0 {
 		return false
 	}
-	required := n.executionQuorumRequiredForEpoch(epoch)
+	required := n.localExecutionVoteMarkerQuorumRequiredLocked(epoch)
 	if required <= 0 {
-		return true
+		return false
 	}
 	return evidenceCount >= required
 }
@@ -2919,8 +2975,12 @@ func (n *Node) allowExecutionVoteIngress(signer string, epoch uint64, proposalKe
 }
 
 func shouldThrottleExecutionVoteDrop(reason string) bool {
-	switch strings.TrimSpace(reason) {
-	case "duplicate_exec_vote", "duplicate_signer_proposal", "rate_limited", "replay_cache", "stale_committed_height", "queued_future_epoch":
+	reason = strings.TrimSpace(reason)
+	if strings.HasPrefix(reason, "queued_") {
+		return true
+	}
+	switch reason {
+	case "duplicate_exec_vote", "duplicate_signer_proposal", "rate_limited", "replay_cache", "stale_committed_height":
 		return true
 	default:
 		return false
@@ -2932,7 +2992,11 @@ func (n *Node) shouldLogExecutionVoteDrop(reason string, res ExecutionResultMsg,
 		return true
 	}
 	key := fmt.Sprintf("exec_vote_drop:%s:%s", reason, normalizeValidatorID(res.Signer))
-	if DebugConsensus || DebugSync || log.Writer() != os.Stderr {
+	// Queue-state drops can arrive once per signer for every future height while
+	// catching up. Keep their key coarse even in debug/file logging mode, or the
+	// per-vote key defeats throttling and creates a sync-amplifying log storm.
+	if !strings.HasPrefix(strings.TrimSpace(reason), "queued_") &&
+		(DebugConsensus || DebugSync || log.Writer() != os.Stderr) {
 		key = fmt.Sprintf("exec_vote_drop:%s:%d:%d:%s:%s:%s:%s",
 			reason,
 			res.HeightHint,
@@ -3384,6 +3448,10 @@ func execResultPubKeyCandidates(signer string) []ed25519.PublicKey {
 }
 
 func recordExecResultGlobal(epoch uint64, proposalKey string, execHash string, txMerkle string, res ExecutionResult) (int, bool, bool) {
+	return recordExecResultGlobalWithRequired(epoch, proposalKey, execHash, txMerkle, res, 0)
+}
+
+func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHash string, txMerkle string, res ExecutionResult, requiredQuorum int) (int, bool, bool) {
 	if epoch == 0 || execHash == "" || res.Signer == "" {
 		return 0, false, false
 	}
@@ -3452,7 +3520,7 @@ func recordExecResultGlobal(epoch uint64, proposalKey string, execHash string, t
 	epochChoiceKey := execEpochChoiceSignerKey(res.Signer, proposalKey)
 	if epochChoiceKey != "" {
 		if prev, exists := ExecPool.epochChoice[epoch][epochChoiceKey]; exists && prev != epochChoice {
-			if !releaseStaleExecPoolSignerChoiceLocked(epoch, signer, proposalKey, poolScopeKey, choice, res.Round) {
+			if !releaseStaleExecPoolSignerChoiceLocked(epoch, signer, proposalKey, poolScopeKey, choice, res.Round, requiredQuorum) {
 				return 0, false, true
 			}
 			if _, ok := ExecPool.pool[epoch]; !ok {
@@ -3509,7 +3577,7 @@ func recordExecResultGlobal(epoch uint64, proposalKey string, execHash string, t
 	return len(ExecPool.pool[epoch][scopedExecKey]), true, false
 }
 
-func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomingProposalKey string, incomingScope string, incomingChoice string, incomingRound uint32) bool {
+func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomingProposalKey string, incomingScope string, incomingChoice string, incomingRound uint32, requiredQuorum int) bool {
 	if epoch == 0 || signer == "" || incomingScope == "" || incomingChoice == "" {
 		return false
 	}
@@ -3549,7 +3617,7 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 	if frozen := strings.TrimSpace(ExecPool.frozen[epoch][previousScope]); frozen != "" {
 		return false
 	}
-	if execPoolScopeHasQuorumLocked(epoch, previousScope) {
+	if execPoolScopeHasQuorumLocked(epoch, previousScope, requiredQuorum) {
 		return false
 	}
 	if byHash, ok := ExecPool.pool[epoch]; ok {
@@ -3598,12 +3666,14 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 	return true
 }
 
-func execPoolScopeHasQuorumLocked(epoch uint64, scope string) bool {
+func execPoolScopeHasQuorumLocked(epoch uint64, scope string, requiredQuorum int) bool {
 	if epoch == 0 || strings.TrimSpace(scope) == "" {
 		return false
 	}
-	required := strictExecSupermajority(len(GenesisValidatorPubKeys))
-	if required <= 0 {
+	if requiredQuorum <= 0 {
+		requiredQuorum = strictExecSupermajority(len(GenesisValidatorPubKeys))
+	}
+	if requiredQuorum <= 0 {
 		return false
 	}
 	maxCount := 0
@@ -3618,7 +3688,7 @@ func execPoolScopeHasQuorumLocked(epoch uint64, scope string) bool {
 			}
 		}
 	}
-	return maxCount >= required
+	return maxCount >= requiredQuorum
 }
 
 func freezeExecPool(epoch uint64, proposalKey string, execHash string) {
@@ -3924,6 +3994,10 @@ merge_exec_snapshot:
 	if strings.TrimSpace(proposalBlockHash) == "" {
 		return
 	}
+	requiredQuorum := n.executionQuorumRequired(snapshot.Epoch)
+	if requiredQuorum == 0 {
+		requiredQuorum = strictExecSupermajority(len(n.freezeValidatorSetForHeight(snapshot.Epoch, n.GetConsensusValidators(int(snapshot.Epoch)))))
+	}
 	for hash, signers := range snapshot.Hashes {
 		txMerkle := ""
 		if snapshot.TxMerkle != nil {
@@ -3933,12 +4007,12 @@ merge_exec_snapshot:
 			if !n.isValidatorInSetForHeight(signer, snapshot.Epoch) {
 				continue
 			}
-			_, _, _ = recordExecResultGlobal(snapshot.Epoch, proposalKey, hash, txMerkle, ExecutionResult{
+			_, _, _ = recordExecResultGlobalWithRequired(snapshot.Epoch, proposalKey, hash, txMerkle, ExecutionResult{
 				Height:     snapshot.Epoch,
 				Signer:     signer,
 				ResultHash: hash,
 				TxMerkle:   txMerkle,
-			})
+			}, requiredQuorum)
 			n.mirrorConsensusExecVote(snapshot.Epoch, proposalBlockHash, ExecutionResult{
 				Height:     snapshot.Epoch,
 				BlockHash:  proposalBlockHash,
@@ -5203,8 +5277,15 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		return
 	}
 	if allowed, reason := n.allowExecutionVoteIngress(res.Signer, res.HeightHint, proposalSnap.ProposalKey, res.ExecHash, res.TxMerkle); !allowed {
-		if reason == "replay_cache" && n.tryFinalizeExecutionQuorumFromPool(targetEpoch, proposalSnap, leaderBlock, res.ExecHash, res.TxMerkle, reason) {
-			return
+		if reason == "replay_cache" {
+			if !committedEpoch && targetEpoch == currentEpoch && n.commitStallDuration() >= execQuorumEmergencyStallTimeout && n.canParticipateInConsensusNow() && res.ExecHash == expected {
+				if n.maybeBroadcastExecutionVoteForBlock(leaderBlock, "replay_cache_stalled_marker_refresh") {
+					return
+				}
+			}
+			if n.tryFinalizeExecutionQuorumFromPool(targetEpoch, proposalSnap, leaderBlock, res.ExecHash, res.TxMerkle, reason) {
+				return
+			}
 		}
 		n.logExecutionVoteDrop(reason, res, proposalSnap)
 		return
@@ -5341,7 +5422,13 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 			res.HeightHint, res.Signer, ShortHash(res.ExecHash))
 	}
 
-	storedCount, ok, equivocation := recordExecResultGlobal(targetEpoch, proposalSnap.ProposalKey, res.ExecHash, res.TxMerkle, ExecutionResult{
+	epochValidators := n.freezeValidatorSetForHeight(targetEpoch, n.GetConsensusValidators(int(targetEpoch)))
+	total := len(epochValidators)
+	required := n.executionQuorumRequired(targetEpoch)
+	if required == 0 {
+		required = strictExecSupermajority(total)
+	}
+	storedCount, ok, equivocation := recordExecResultGlobalWithRequired(targetEpoch, proposalSnap.ProposalKey, res.ExecHash, res.TxMerkle, ExecutionResult{
 		Height:     targetEpoch,
 		Round:      res.RoundHint,
 		BlockHash:  proposalSnap.BlockHash,
@@ -5349,7 +5436,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		ResultHash: res.ExecHash,
 		TxMerkle:   res.TxMerkle,
 		Signature:  strings.TrimSpace(res.Signature),
-	})
+	}, required)
 	if equivocation {
 		if n.tryFinalizeExecutionQuorumFromPool(targetEpoch, proposalSnap, leaderBlock, res.ExecHash, res.TxMerkle, "equivocation_existing_quorum") {
 			return
@@ -5368,13 +5455,9 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		n.logExecutionVoteDrop("duplicate_exec_vote", res, proposalSnap)
 		return
 	}
-	if !n.markExecSignerSeenForProposal(targetEpoch, proposalSnap.ProposalKey, res.Signer) {
-		if n.tryFinalizeExecutionQuorumFromPool(targetEpoch, proposalSnap, leaderBlock, res.ExecHash, res.TxMerkle, "duplicate_signer_proposal") {
-			return
-		}
-		n.logExecutionVoteDrop("duplicate_signer_proposal", res, proposalSnap)
-		return
-	}
+	// Keep the local signer map as a best-effort mirror. Duplicate/equivocation
+	// decisions were already made atomically by recordExecResultGlobalWithRequired.
+	_ = n.markExecSignerSeenForProposal(targetEpoch, proposalSnap.ProposalKey, res.Signer)
 	n.mirrorConsensusExecVote(targetEpoch, proposalSnap.BlockHash, ExecutionResult{
 		Height:     targetEpoch,
 		Round:      res.RoundHint,
@@ -5399,12 +5482,6 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 	}
 	n.setLogicalTick(targetEpoch, TickVote)
 
-	epochValidators := n.freezeValidatorSetForHeight(targetEpoch, n.GetConsensusValidators(int(targetEpoch)))
-	total := len(epochValidators)
-	required := n.executionQuorumRequired(targetEpoch)
-	if required == 0 {
-		required = strictExecSupermajority(total)
-	}
 	if total == 0 || required == 0 {
 		return
 	}
@@ -9050,10 +9127,13 @@ func (n *Node) maintainValidatorMesh(ctx context.Context) {
 		case <-n.shutdownCh:
 			return
 		case <-ticker.C:
-			if n.Role != "validator" {
-				continue
+			// Persistent peers are an operator-requested topology for every
+			// node role. Full/archive observers must redial them after transient
+			// disconnects just as validators do.
+			targets := n.persistentPeersSnapshot()
+			if n.Role == "validator" {
+				targets = mergePeerLists(targets, n.validatorMeshTargets())
 			}
-			targets := n.validatorMeshTargets()
 			if len(targets) == 0 {
 				continue
 			}

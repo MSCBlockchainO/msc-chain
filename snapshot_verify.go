@@ -156,7 +156,7 @@ func (n *Node) snapshotLocalFinalityRejectReason(snapshot *StateSnapshot) string
 	// block anchor while a full node is catching up. Snapshot regression checks
 	// must only use locally anchored finality, otherwise a valid catch-up
 	// snapshot below the remote-observed network head is rejected before apply.
-	if localHeight > 0 && committed <= localHeight && committed > localFinalized {
+	if committed > localFinalized {
 		localFinalized = committed
 	}
 	if localHeight > 0 && nodeFinalized <= localHeight && nodeFinalized > localFinalized {

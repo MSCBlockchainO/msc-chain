@@ -509,6 +509,75 @@ func TestDeterministicPreCommitRegistrySnapshotUsesCommittedParentSnapshotWhenHe
 	}
 }
 
+func TestDeterministicPreCommitRegistrySnapshotRepairsMissingRegistryIndexFromParentStateSnapshot(t *testing.T) {
+	prev := ValidatorSetCommitmentV2Height
+	ValidatorSetCommitmentV2Height = 1
+	defer func() { ValidatorSetCommitmentV2Height = prev }()
+
+	oldRegistry := GlobalValidatorRegistry.Snapshot()
+	t.Cleanup(func() { GlobalValidatorRegistry.Load(oldRegistry) })
+
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	committed := map[string]ValidatorRecord{
+		"A": {ID: "A", Stake: 100, Status: ValidatorActive},
+		"B": {ID: "B", Stake: 100, Status: ValidatorActive},
+		"C": {ID: "C", Stake: 100, Status: ValidatorActive},
+	}
+	expectedHash := ValidatorRegistrySnapshotHash(committed)
+	validatorSetHash := ValidatorSetHash([]string{"A", "B", "C"})
+	ledger := NewLedger()
+	parent := Block{
+		ID:                    1,
+		BlockHash:             "parent-1",
+		ValidatorSetHash:      validatorSetHash,
+		NextValidatorSetHash:  validatorSetHash,
+		ValidatorRegistryHash: expectedHash,
+	}
+	parent.StateRoot = ComputeExecHashVersioned(parent, HashLedger(ledger), executionStateRootVersionForHeight(parent.ID))
+	storeSnapshotForHeight(t, db, StateSnapshot{
+		Version:               SnapshotVersion,
+		Height:                parent.ID,
+		BlockHash:             parent.BlockHash,
+		StateRoot:             parent.StateRoot,
+		Ledger:                ledger,
+		LedgerHash:            HashLedger(ledger),
+		GenesisHash:           GenesisHash,
+		Validators:            map[string]bool{"A": true, "B": true, "C": true},
+		ValidatorSetHash:      validatorSetHash,
+		ValidatorRegistry:     copyValidatorRegistrySnapshot(committed),
+		ValidatorRegistryHash: expectedHash,
+	})
+	GlobalValidatorRegistry.Load(map[string]ValidatorRecord{
+		"Z": {ID: "Z", Stake: 300, Status: ValidatorActive},
+	})
+
+	node := &Node{
+		DB:         db,
+		Ledger:     ledger,
+		Blockchain: &Blockchain{Blocks: []Block{parent}},
+	}
+	got, source, err := node.deterministicPreCommitRegistrySnapshot(Block{
+		ID:                    2,
+		BlockHash:             "block-2",
+		PrevHash:              parent.BlockHash,
+		ValidatorRegistryHash: expectedHash,
+	})
+	if err != nil {
+		t.Fatalf("expected parent state snapshot repair to resolve precommit registry: %v", err)
+	}
+	if source != "committed_parent_state_snapshot_repair" {
+		t.Fatalf("unexpected source: got=%q want=committed_parent_state_snapshot_repair", source)
+	}
+	if gotHash := ValidatorRegistrySnapshotHash(got); !strings.EqualFold(gotHash, expectedHash) {
+		t.Fatalf("unexpected repaired registry hash: got=%q want=%q", gotHash, expectedHash)
+	}
+	if !node.registrySnapshotExists(parent.ID) {
+		t.Fatalf("expected parent registry index to be repaired")
+	}
+}
+
 func TestSafeModeHeartbeatFallbackExits(t *testing.T) {
 	validators := []string{"A", "B", "C", "D"}
 	node := newTestNodeForResultGossip(t, t.TempDir(), validators)

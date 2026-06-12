@@ -29,6 +29,8 @@ func newBackupRecoveryTestNode(t *testing.T, baseDir string, id string) (*Node, 
 func storeBackupRecoverySnapshot(t *testing.T, node *Node, height uint64, prevHash string, ledger Ledger) (Block, StateSnapshot) {
 	t.Helper()
 	block, snapshot := makeSnapshotLayerFixture(height, prevHash, ledger, testValidatorSetMaterializationRegistry())
+	snapshot.Version = SnapshotVersion
+	snapshot.LedgerStage = snapshotLedgerStageExecution
 	if err := node.storeCommittedStateSnapshotRecord(&snapshot, "backup_recovery_test"); err != nil {
 		t.Fatalf("store snapshot: %v", err)
 	}
@@ -74,6 +76,45 @@ func TestSnapshotBackupExportImportRoundTrip(t *testing.T) {
 	}
 	if got := target.Blockchain.Height(); got != snapshot.Height {
 		t.Fatalf("backup apply should restore chain anchor height got=%d want=%d", got, snapshot.Height)
+	}
+}
+
+func TestStartupAppliesBackupImportSnapshotAboveEmptyTip(t *testing.T) {
+	base := t.TempDir()
+	source, cleanupSource := newBackupRecoveryTestNode(t, filepath.Join(base, "source"), "A")
+	defer cleanupSource()
+
+	ledger := NewLedger()
+	ledger.Balances["alice"] = 100
+	_, snapshot := storeBackupRecoverySnapshot(t, source, 11, "block-10", ledger)
+
+	backup, err := source.ExportSnapshotBackup(snapshot.Height, "startup_import")
+	if err != nil {
+		t.Fatalf("ExportSnapshotBackup: %v", err)
+	}
+
+	target, cleanupTarget := newBackupRecoveryTestNode(t, filepath.Join(base, "target"), "B")
+	defer cleanupTarget()
+	result, err := target.ImportSnapshotBackup(backup.BackupDir, false)
+	if err != nil {
+		t.Fatalf("ImportSnapshotBackup store-only: %v", err)
+	}
+	if !result.Stored || result.Applied {
+		t.Fatalf("unexpected store-only import result: %+v", result)
+	}
+	if got := target.Blockchain.Height(); got != 0 {
+		t.Fatalf("store-only import should not move chain height got=%d", got)
+	}
+
+	loaded, err := target.LoadBestSnapshot()
+	if err != nil {
+		t.Fatalf("LoadBestSnapshot after store-only import: %v", err)
+	}
+	if applied := target.applyStartupBestSnapshot(loaded, false); !applied {
+		t.Fatal("startup should apply backup-import snapshot above empty local tip")
+	}
+	if got := target.Blockchain.Height(); got != snapshot.Height {
+		t.Fatalf("startup recovery snapshot height got=%d want=%d", got, snapshot.Height)
 	}
 }
 

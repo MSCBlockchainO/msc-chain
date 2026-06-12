@@ -240,6 +240,14 @@ function setText(id, value) {
   if (node) node.textContent = value ?? "-";
 }
 
+function setTone(id, tone = "") {
+  const node = $(id);
+  if (!node) return;
+  node.classList.toggle("success", tone === "success");
+  node.classList.toggle("warn", tone === "warn");
+  node.classList.toggle("error", tone === "error");
+}
+
 function setValue(id, value) {
   const node = $(id);
   if (node) node.value = value ?? "";
@@ -250,6 +258,7 @@ function setStatus(id, text, tone = "") {
   if (!node) return;
   node.textContent = text;
   node.classList.toggle("success", tone === "success");
+  node.classList.toggle("warn", tone === "warn");
   node.classList.toggle("error", tone === "error");
 }
 
@@ -393,6 +402,14 @@ function currentLastBlockAge() {
   return Math.trunc(base) + elapsed;
 }
 
+function blockAgeTone(seconds) {
+  const age = Number(seconds);
+  if (!Number.isFinite(age) || age < 0) return "";
+  if (age >= 15) return "error";
+  if (age >= 10) return "warn";
+  return "success";
+}
+
 function setLastBlockAgeBase(seconds) {
   const age = Number(seconds);
   if (!Number.isFinite(age) || age < 0) return;
@@ -402,7 +419,9 @@ function setLastBlockAgeBase(seconds) {
 }
 
 function renderLastBlockAge() {
-  setText("topLastBlockAge", formatAge(currentLastBlockAge()));
+  const age = currentLastBlockAge();
+  setText("topLastBlockAge", formatAge(age));
+  setTone("topLastBlockAge", blockAgeTone(age));
 }
 
 function renderEventDelay() {
@@ -1234,6 +1253,7 @@ function renderPublicStatus(data) {
   setText("statusFinalized", formatNumber(chain.finalized_height || 0));
   setText("statusFinalityLag", formatBlocks(chain.finality_lag || 0));
   setText("statusLastBlockAge", formatAge(chain.last_block_age_seconds || 0));
+  setTone("statusLastBlockAge", blockAgeTone(chain.last_block_age_seconds || 0));
   setText("statusCMD", chain.cmd || "-");
   setText("statusNetwork", chain.network_health || "-");
   setText("statusValidators", `${validators.active_ready || 0}/${validators.strict_quorum || validators.required_quorum || 0} ready`);

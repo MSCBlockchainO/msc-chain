@@ -355,6 +355,18 @@ select {
   letter-spacing: -0.05em;
 }
 
+.value.good {
+  color: var(--success);
+}
+
+.value.warn {
+  color: var(--warning);
+}
+
+.value.bad {
+  color: var(--danger);
+}
+
 .mono,
 code,
 pre {

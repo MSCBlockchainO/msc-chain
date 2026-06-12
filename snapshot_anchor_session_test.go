@@ -1044,6 +1044,58 @@ func TestRuntimeStatusWaitsForNetworkValidatorSetSampleWhenTransportReady(t *tes
 	}
 }
 
+func TestRuntimeStatusKeepsCommittedValidatorEnabledWithoutStartupSample(t *testing.T) {
+	defer withOnboardingStrictActivationGlobals(t)()
+	configureStrictActivationDefaults()
+
+	ConfigAuthRequireWallet = false
+	ValidatorRequireStake = false
+
+	host, err := libp2p.New()
+	if err != nil {
+		t.Fatalf("failed to create host: %v", err)
+	}
+	defer host.Close()
+
+	hash := ValidatorSetHash([]string{"A", "B", "C", "D"})
+	n := newStartupSampleNode(50, hash)
+	n.Host = host
+	n.DataDir = t.TempDir()
+	now := time.Now()
+	for _, id := range []string{"A", "B", "C", "D"} {
+		n.validatorStatus[id] = &ValidatorStatus{
+			ID:                 id,
+			ReportedHeight:     50,
+			FinalizedHeight:    50,
+			ExecEpoch:          51,
+			ValidatorSetHeight: 51,
+			ValidatorSetHash:   hash,
+			LastSeen:           now,
+			Active:             true,
+		}
+	}
+	n.committedHeight = 50
+	n.lastCommitHeight = n.committedHeight
+	n.setValidatorStartupCheckStatus(true, 51, hash, hash, "startup_validator_set_ok")
+
+	prevStarted := consensusStarted.Load()
+	consensusStarted.Store(true)
+	t.Cleanup(func() {
+		consensusStarted.Store(prevStarted)
+	})
+
+	status := n.runtimeStatusSnapshot()
+	if status.WaitReason == "waiting_network_validator_set_sample" {
+		t.Fatalf("committed steady-state validator must not wait on startup network sample")
+	}
+	if status.ConsensusMode != "validator" || !status.VoteEnabled || !status.ProposeEnabled {
+		t.Fatalf("expected committed validator to remain enabled, status=%+v", status)
+	}
+	if status.Role != "validator" || !status.IsValidator {
+		t.Fatalf("expected validator role to remain effective, got role=%s is_validator=%t", status.Role, status.IsValidator)
+	}
+}
+
 func newStartupSampleNode(localHeight uint64, hash string) *Node {
 	validators := []string{"A", "B", "C", "D"}
 	return &Node{

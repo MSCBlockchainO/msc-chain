@@ -123,7 +123,10 @@ func (n *Node) frozenValidatorsForCommittedHash(targetHash string, preferredHeig
 			if strings.EqualFold(strings.TrimSpace(n.frozenValidatorHashByHeight[height]), target) {
 				if values := canonicalValidatorIDs(n.frozenValidatorsByHeight[height]); len(values) > 0 {
 					n.validatorSetMu.RUnlock()
-					return values
+					if matched, ok := n.validatorSetCandidateMatchesTarget(height, target, values, nil); ok {
+						return matched
+					}
+					n.validatorSetMu.RLock()
 				}
 			}
 		}
@@ -137,6 +140,17 @@ func (n *Node) frozenValidatorsForCommittedHash(targetHash string, preferredHeig
 		}
 	}
 	n.validatorSetMu.RUnlock()
+	if len(candidates) == 0 {
+		return nil
+	}
+	verified := candidates[:0]
+	for _, candidate := range candidates {
+		if matched, ok := n.validatorSetCandidateMatchesTarget(candidate.height, target, candidate.values, nil); ok {
+			candidate.values = matched
+			verified = append(verified, candidate)
+		}
+	}
+	candidates = verified
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -174,8 +188,12 @@ func (n *Node) committedFrozenValidatorSetCandidate(targetHash string, preferred
 	if targetHash == "" {
 		return nil, false
 	}
+	type candidate struct {
+		height uint64
+		values []string
+	}
+	candidates := make([]candidate, 0, len(preferredHeights))
 	n.validatorSetMu.RLock()
-	defer n.validatorSetMu.RUnlock()
 	for _, height := range preferredHeights {
 		if height == 0 {
 			continue
@@ -185,7 +203,13 @@ func (n *Node) committedFrozenValidatorSetCandidate(targetHash string, preferred
 			continue
 		}
 		if values := canonicalValidatorIDs(n.frozenValidatorsByHeight[height]); len(values) > 0 {
-			return values, true
+			candidates = append(candidates, candidate{height: height, values: values})
+		}
+	}
+	n.validatorSetMu.RUnlock()
+	for _, candidate := range candidates {
+		if matched, ok := n.validatorSetCandidateMatchesTarget(candidate.height, targetHash, candidate.values, nil); ok {
+			return matched, true
 		}
 	}
 	return nil, false
@@ -261,6 +285,9 @@ func (n *Node) validatorSetCandidateFromSnapshot(height uint64, targetHash strin
 				resolvedHash = ValidatorSetHash(matched)
 			}
 			return matched, resolvedHash, "snapshot_committed", true
+		}
+		if targetHash != "" {
+			return nil, "", "none", false
 		}
 	}
 

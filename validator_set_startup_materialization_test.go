@@ -77,6 +77,50 @@ func TestConsensusValidatorsForHeightResolvesParentCommittedV2SnapshotHash(t *te
 	}
 }
 
+func TestFreezeValidatorSetRepairsStaleCacheFromParentCommitment(t *testing.T) {
+	withValidatorSetCommitmentV2AtHeight(t, 1)
+
+	staleSet := canonicalValidatorIDs([]string{"A", "B", "C", "D"})
+	committedSet := canonicalValidatorIDs([]string{"B", "C", "D"})
+	committedHash := ValidatorSetHash(committedSet)
+	staleHash := ValidatorSetHash(staleSet)
+
+	n := &Node{
+		Blockchain: &Blockchain{
+			Blocks: []Block{{
+				ID:                     1,
+				BlockHash:              "block-1",
+				Signatures:             append([]string{}, committedSet...),
+				ValidatorSetHash:       committedHash,
+				NextValidatorSetHash:   committedHash,
+				NextValidatorSetHeight: 2,
+				ActivationHeight:       2,
+			}},
+		},
+		frozenValidatorsByHeight:    map[uint64][]string{2: append([]string{}, staleSet...)},
+		frozenValidatorHashByHeight: map[uint64]string{2: staleHash},
+		committeeByHeight:           map[uint64][]string{2: append([]string{}, staleSet...)},
+		committeeHashByHeight:       map[uint64]string{2: staleHash},
+	}
+
+	got := n.freezeValidatorSetForHeight(2, committedSet)
+	if !sameStringSlice(got, committedSet) {
+		t.Fatalf("freeze returned stale set: got=%v want=%v", got, committedSet)
+	}
+	if frozen := n.frozenValidatorsForHeight(2); !sameStringSlice(frozen, committedSet) {
+		t.Fatalf("frozen cache not repaired: got=%v want=%v", frozen, committedSet)
+	}
+	if hash, ok := n.frozenValidatorSetHash(2); !ok || !strings.EqualFold(hash, committedHash) {
+		t.Fatalf("frozen hash not repaired: ok=%t got=%q want=%q", ok, hash, committedHash)
+	}
+	if committee := n.committeeForHeight(2, staleSet); !sameStringSlice(committee, committedSet) {
+		t.Fatalf("committee cache not repaired: got=%v want=%v", committee, committedSet)
+	}
+	if hash, ok := n.committeeHashForHeight(2); !ok || !strings.EqualFold(hash, committedHash) {
+		t.Fatalf("committee hash not repaired: ok=%t got=%q want=%q", ok, hash, committedHash)
+	}
+}
+
 func TestConsensusValidatorsForHeightResolvesParentPlannedNextSetFromBlock(t *testing.T) {
 	defer withValidatorUpdateTestGlobals(t)()
 

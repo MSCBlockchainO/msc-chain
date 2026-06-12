@@ -21,6 +21,13 @@ type validatorUpdateExecutionContext struct {
 	pendingRemovals      map[string]uint64
 }
 
+func (ctx *validatorUpdateExecutionContext) projectedRegistryHash() string {
+	if ctx == nil || len(ctx.registrySnapshot) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(ValidatorRegistrySnapshotHash(ctx.registrySnapshot))
+}
+
 func normalizeValidatorUpdateCert(cert *ValidatorUpdateCertificate) {
 	if cert == nil {
 		return
@@ -258,10 +265,14 @@ func (n *Node) validatorUpdateActiveSetForHeight(height uint64) []string {
 	if n == nil || height == 0 {
 		return nil
 	}
-	if current := n.plannedValidatorSetForHeightFromChain(height); len(current) > 0 {
+	// Validator-update add/remove validation must use the chain-authoritative
+	// consensus set. A registry projection can include already-active records
+	// that are not yet in the committed/frozen committee, and treating those as
+	// active makes reconciliation adds impossible.
+	if current := n.consensusValidatorsForHeight(height); len(current) > 0 {
 		return current
 	}
-	if current := n.consensusValidatorsForHeight(height); len(current) > 0 {
+	if current := n.plannedValidatorSetForHeightFromChain(height); len(current) > 0 {
 		return current
 	}
 	if height == 1 && len(n.GenesisValidators) > 0 {
@@ -304,6 +315,7 @@ func (n *Node) newValidatorUpdateExecutionContext(height uint64) *validatorUpdat
 	if registryHash == "" || (source != "snapshot_parent" && source != "registry_snapshot" && source != "chain_block" && source != "chain_parent_commitment" && source != "bootstrap_registry") {
 		return nil
 	}
+	registrySnapshot = n.validatorUpdateRegistrySnapshotWithLedgerCandidates(height, registrySnapshot)
 	if len(registrySnapshot) == 0 {
 		return nil
 	}
@@ -320,6 +332,78 @@ func (n *Node) newValidatorUpdateExecutionContext(height uint64) *validatorUpdat
 		pendingAdds:          pendingAdds,
 		pendingRemovals:      pendingRemovals,
 	}
+}
+
+func (n *Node) validatorUpdateRegistrySnapshotWithLedgerCandidates(height uint64, snapshot map[string]ValidatorRecord) map[string]ValidatorRecord {
+	if n == nil || height == 0 || len(n.Ledger.Stakes) == 0 {
+		return snapshot
+	}
+	out := copyValidatorRegistrySnapshot(snapshot)
+	stakeTotals := make(map[string]int64)
+	consensusPubKeys := make(map[string]string)
+	for key, lock := range n.Ledger.Stakes {
+		if lock.Amount <= 0 {
+			continue
+		}
+		parts := strings.SplitN(key, "|", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		id := normalizeValidatorID(lock.ValidatorID)
+		if id == "" {
+			id = normalizeValidatorID(parts[1])
+		}
+		if id == "" || id != normalizeValidatorID(parts[1]) {
+			continue
+		}
+		stakeTotals[id] += int64(lock.Amount)
+		if pubKey := normalizeConsensusPubKeyHex(lock.ConsensusPubKey); pubKey != "" {
+			consensusPubKeys[id] = pubKey
+		}
+	}
+	if len(stakeTotals) == 0 {
+		return snapshot
+	}
+	if out == nil {
+		out = make(map[string]ValidatorRecord, len(stakeTotals))
+	}
+	for id, stake := range stakeTotals {
+		if !validatorPassesStakeGate(id, stake) {
+			continue
+		}
+		rec, exists := validatorRegistryRecordFromSnapshot(out, id)
+		if !exists {
+			rec = ValidatorRecord{
+				ID:              id,
+				ConsensusPubKey: consensusPubKeys[id],
+				Stake:           stake,
+				Reputation:      ValidatorReputationInitial,
+				Status:          ValidatorPending,
+				JoinHeight:      height,
+			}
+		} else {
+			rec.ID = id
+			if rec.Stake < stake {
+				rec.Stake = stake
+			}
+			if normalizeConsensusPubKeyHex(rec.ConsensusPubKey) == "" {
+				rec.ConsensusPubKey = consensusPubKeys[id]
+			}
+			if strings.TrimSpace(string(rec.Status)) == "" {
+				rec.Status = ValidatorPending
+			}
+			if rec.JoinHeight == 0 {
+				rec.JoinHeight = height
+			}
+		}
+		// Ledger-discovered candidates must not expand governance authority for
+		// the certificate that is authorizing their own admission.
+		if !exists {
+			rec.GovernanceSigner = false
+		}
+		out[id] = rec
+	}
+	return out
 }
 
 func (ctx *validatorUpdateExecutionContext) activeSetContains(id string) bool {
@@ -349,6 +433,7 @@ func (ctx *validatorUpdateExecutionContext) queueAdd(id string, updateHeight uin
 	if ctx.pendingRemovals != nil {
 		delete(ctx.pendingRemovals, id)
 	}
+	ctx.activateRegistryRecord(id, updateHeight)
 }
 
 func (ctx *validatorUpdateExecutionContext) queueRemoval(id string, updateHeight uint64) {
@@ -365,6 +450,7 @@ func (ctx *validatorUpdateExecutionContext) queueRemoval(id string, updateHeight
 	if ctx.pendingAdds != nil {
 		delete(ctx.pendingAdds, id)
 	}
+	ctx.exitRegistryRecord(id)
 }
 
 func (ctx *validatorUpdateExecutionContext) cancelPendingAdd(id string) {
@@ -381,6 +467,49 @@ func (ctx *validatorUpdateExecutionContext) cancelPendingRemoval(id string) {
 		return
 	}
 	delete(ctx.pendingRemovals, id)
+}
+
+func (ctx *validatorUpdateExecutionContext) activateRegistryRecord(id string, height uint64) {
+	if ctx == nil {
+		return
+	}
+	id = normalizeValidatorID(id)
+	if id == "" {
+		return
+	}
+	if ctx.registrySnapshot == nil {
+		ctx.registrySnapshot = make(map[string]ValidatorRecord)
+	}
+	rec, ok := validatorRegistryRecordFromSnapshot(ctx.registrySnapshot, id)
+	if !ok {
+		rec = ValidatorRecord{ID: id, Reputation: ValidatorReputationInitial}
+	}
+	rec.ID = id
+	if rec.Reputation == 0 {
+		rec.Reputation = ValidatorReputationInitial
+	}
+	if rec.JoinHeight == 0 || (height > 0 && rec.JoinHeight > height) {
+		rec.JoinHeight = height
+	}
+	rec.Status = ValidatorActive
+	ctx.registrySnapshot[id] = rec
+}
+
+func (ctx *validatorUpdateExecutionContext) exitRegistryRecord(id string) {
+	if ctx == nil || len(ctx.registrySnapshot) == 0 {
+		return
+	}
+	id = normalizeValidatorID(id)
+	if id == "" {
+		return
+	}
+	rec, ok := validatorRegistryRecordFromSnapshot(ctx.registrySnapshot, id)
+	if !ok {
+		return
+	}
+	rec.ID = id
+	rec.Status = ValidatorExited
+	ctx.registrySnapshot[id] = rec
 }
 
 func (ctx *validatorUpdateExecutionContext) plannedValidatorsForHeight(height uint64) []string {
@@ -418,6 +547,27 @@ func (ctx *validatorUpdateExecutionContext) plannedValidatorsForHeight(height ui
 	return canonicalValidatorIDs(next)
 }
 
+func (ctx *validatorUpdateExecutionContext) hasVisibleTransitionForHeight(height uint64) bool {
+	if ctx == nil || height == 0 {
+		return false
+	}
+	targetFinalized := height - 1
+	if targetFinalized == 0 {
+		return false
+	}
+	for _, act := range ctx.pendingAdds {
+		if act > 0 && act <= targetFinalized {
+			return true
+		}
+	}
+	for _, act := range ctx.pendingRemovals {
+		if act > 0 && act <= targetFinalized {
+			return true
+		}
+	}
+	return false
+}
+
 func (ctx *validatorUpdateExecutionContext) plannedNextCommitment(height uint64) (string, string, string) {
 	if ctx == nil || height == 0 {
 		return "", "", "none"
@@ -449,14 +599,103 @@ func (n *Node) blockValidatorUpdatePlanContext(block Block) *validatorUpdateExec
 	return ctx
 }
 
+func blockHasValidatorUpdateTx(block Block) bool {
+	for _, tx := range block.Transactions {
+		if tx.Type == TxValidatorUpdate {
+			return true
+		}
+	}
+	return false
+}
+
+func (n *Node) carryForwardNextValidatorSetCommitmentForBlock(block Block) (string, string, string) {
+	if n == nil || block.ID == 0 {
+		return "", "", "none"
+	}
+	activeHash := strings.TrimSpace(block.ValidatorSetHash)
+	if activeHash == "" {
+		return "", "", "none"
+	}
+	// Runtime liveness queues are local observations and can differ between
+	// honest nodes. Without an explicit on-chain validator update, the current
+	// committed set/root must carry forward unchanged.
+	if !blockHasValidatorUpdateTx(block) {
+		return activeHash, strings.TrimSpace(block.ValidatorSetRoot), "carry_forward"
+	}
+	active := n.freezeValidatorSetForHeight(block.ID, n.consensusValidatorsForHeight(block.ID))
+	if len(active) == 0 {
+		if committed, ok := n.blockValidatorSetFromSignatures(block); ok {
+			active = committed
+		}
+	}
+	if len(active) == 0 {
+		return activeHash, strings.TrimSpace(block.ValidatorSetRoot), "carry_forward"
+	}
+	if matched, ok := n.validatorSetCandidateMatchesTarget(block.ID, activeHash, active, nil); ok {
+		active = matched
+	} else {
+		return activeHash, strings.TrimSpace(block.ValidatorSetRoot), "carry_forward"
+	}
+	nextHeight := block.ID + 1
+	registry := n.validatorRegistrySnapshotForHeight(nextHeight)
+	if len(registry) == 0 {
+		registry = n.validatorRegistrySnapshotForHeight(block.ID)
+	}
+	root := ""
+	if len(registry) > 0 {
+		root = strings.TrimSpace(ValidatorSetMerkleRoot(nextHeight, active, registry))
+	}
+	if root == "" && strings.EqualFold(strings.TrimSpace(block.NextValidatorSetHash), activeHash) {
+		root = strings.TrimSpace(block.NextValidatorSetRoot)
+	}
+	if root == "" {
+		root = strings.TrimSpace(block.ValidatorSetRoot)
+	}
+	return activeHash, root, "carry_forward"
+}
+
+func (n *Node) projectedValidatorUpdateRegistrySnapshotForBlock(block Block) (map[string]ValidatorRecord, string, bool) {
+	if n == nil || block.ID == 0 || !validatorSetCommitmentV2EnabledAt(block.ID) {
+		return nil, "", false
+	}
+	ctx := n.newValidatorUpdateExecutionContext(block.ID)
+	if ctx == nil {
+		return nil, "", false
+	}
+	hasUpdate := false
+	for _, tx := range block.Transactions {
+		if tx.Type != TxValidatorUpdate {
+			continue
+		}
+		hasUpdate = true
+		if err := ctx.validateAndApply(tx, nil); err != nil {
+			return nil, "", false
+		}
+	}
+	if !hasUpdate {
+		return nil, "", false
+	}
+	hash := ctx.projectedRegistryHash()
+	if hash == "" {
+		return nil, "", false
+	}
+	return copyValidatorRegistrySnapshot(ctx.registrySnapshot), hash, true
+}
+
 func (n *Node) expectedNextValidatorSetCommitmentForBlock(block Block) (string, string, string) {
 	if n == nil || block.ID == 0 {
 		return "", "", "none"
 	}
-	if ctx := n.blockValidatorUpdatePlanContext(block); ctx != nil {
-		if hash, root, source := ctx.plannedNextCommitment(block.ID); hash != "" {
-			return hash, root, source
+	hasUpdate := blockHasValidatorUpdateTx(block)
+	if hasUpdate {
+		if ctx := n.blockValidatorUpdatePlanContext(block); ctx != nil {
+			if hash, root, source := ctx.plannedNextCommitment(block.ID); hash != "" {
+				return hash, root, source
+			}
 		}
+	}
+	if hash, root, source := n.carryForwardNextValidatorSetCommitmentForBlock(block); hash != "" {
+		return hash, root, source
 	}
 	nextHash, source := n.deterministicNextValidatorSetHashWithSource(block.ID, block.ValidatorSetHash)
 	nextRoot, _ := n.expectedNextValidatorSetRootWithSource(block.ID, block.ValidatorSetHash, block.ValidatorSetRoot)
@@ -834,6 +1073,7 @@ func (ctx *validatorUpdateExecutionContext) applyPlanOnly(tx Transaction) {
 		if activeNow {
 			if _, ok := ctx.pendingRemovals[normalizeValidatorID(validatorID)]; ok {
 				ctx.cancelPendingRemoval(validatorID)
+				ctx.activateRegistryRecord(validatorID, updateHeight)
 			}
 			return
 		}
@@ -916,6 +1156,14 @@ func (ctx *validatorUpdateExecutionContext) validateAndApply(tx Transaction, led
 		if !ok {
 			return fmt.Errorf("validator_update_missing_registry")
 		}
+		if activeNow {
+			if _, exists := ctx.pendingRemovals[normalizeValidatorID(validatorID)]; exists {
+				ctx.cancelPendingRemoval(validatorID)
+				ctx.activateRegistryRecord(validatorID, updateHeight)
+				break
+			}
+			return fmt.Errorf("validator_update_already_active")
+		}
 		recordCopy := record
 		ValidatorStateMachine{}.Update(&recordCopy, ctx.height)
 		if isValidatorBanned(validatorID) {
@@ -929,13 +1177,6 @@ func (ctx *validatorUpdateExecutionContext) validateAndApply(tx Transaction, led
 		}
 		if !validatorPassesStakeGate(validatorID, recordCopy.Stake) {
 			return fmt.Errorf("validator_update_no_stake")
-		}
-		if activeNow {
-			if _, exists := ctx.pendingRemovals[normalizeValidatorID(validatorID)]; exists {
-				ctx.cancelPendingRemoval(validatorID)
-				break
-			}
-			return fmt.Errorf("validator_update_already_active")
 		}
 		if _, exists := ctx.pendingAdds[normalizeValidatorID(validatorID)]; exists {
 			return fmt.Errorf("validator_update_already_pending")

@@ -14,7 +14,9 @@ P2P_EXTERNAL_ADDR="${P2P_EXTERNAL_ADDR:-/ip4/${PRIVATE_IP}/tcp/${P2P_PORT}}"
 RPC_PORT="${RPC_PORT:-26657}"
 RPC_ADDR="${RPC_ADDR:-${PRIVATE_IP}:${RPC_PORT}}"
 HEALTHCHECK_ADDR="${HEALTHCHECK_ADDR:-}"
-DURATION_SECONDS="${DURATION_SECONDS:-86400}"
+# Default to an indefinite supervisor lifetime. Production nodes should not
+# stop merely because the launcher omitted a duration.
+DURATION_SECONDS="${DURATION_SECONDS:-0}"
 RESTART_EVERY_SECONDS="${RESTART_EVERY_SECONDS:-0}"
 RESTART_DOWN_SECONDS="${RESTART_DOWN_SECONDS:-8}"
 MSC_VALIDATOR_PASSWORD="${MSC_VALIDATOR_PASSWORD:-mainnet-smoke-password}"
@@ -201,7 +203,10 @@ trap 'shutdown_supervisor; exit 0' INT TERM
 trap 'shutdown_supervisor' EXIT
 
 start_at="$SECONDS"
-deadline=$((SECONDS + DURATION_SECONDS))
+deadline=0
+if (( DURATION_SECONDS > 0 )); then
+  deadline=$((SECONDS + DURATION_SECONDS))
+fi
 next_restart=0
 if (( RESTART_EVERY_SECONDS > 0 )); then
   next_restart=$((SECONDS + RESTART_EVERY_SECONDS))
@@ -209,7 +214,7 @@ fi
 
 start_node
 
-while (( SECONDS < deadline )); do
+while (( DURATION_SECONDS <= 0 || SECONDS < deadline )); do
   if [[ -n "${NODE_PID:-}" ]] && ! kill -0 "$NODE_PID" >/dev/null 2>&1; then
     exit_code=0
     if wait "$NODE_PID" 2>/dev/null; then
