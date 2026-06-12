@@ -44,6 +44,7 @@ func seedCrashRecoveryCommittedState(node *Node, height uint64, hash string) {
 
 func TestValidatorCrashRecoveryPrecommitRestoresLock(t *testing.T) {
 	validators := crashRecoveryValidators()
+	privKeys := installCommitVoteKeysForTest(t, validators)
 	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), validators)
 	node.Blockchain.AddBlock(Block{ID: 7, PrevHash: "hash-six", BlockHash: "chain-seven", ValidatorSetHash: ValidatorSetHash(validators)})
 	seedCrashRecoveryFrozenSet(node, 8, validators)
@@ -83,6 +84,7 @@ func TestValidatorCrashRecoveryPrecommitRestoresLock(t *testing.T) {
 	node.localExecVoteByRound = map[uint64]map[uint32]string{locked.ID: {locked.Round: proposalKey}}
 	node.execResultsMu.Unlock()
 
+	recordSignedCommitVotesForTest(t, node, locked, []string{"A", "B", "C"}, privKeys)
 	if err := node.persistConsensusSafetyState("precommit_crash_test"); err != nil {
 		t.Fatalf("persist consensus safety state: %v", err)
 	}

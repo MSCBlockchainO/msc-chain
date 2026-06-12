@@ -32,12 +32,14 @@ func resetExecPoolForTest(t *testing.T) {
 	oldSigners := ExecPool.signers
 	oldChoice := ExecPool.choice
 	oldEpochChoice := ExecPool.epochChoice
+	oldCommitChoice := ExecPool.commitChoice
 	ExecPool.pool = make(map[uint64]map[string]map[string]ExecutionResult)
 	ExecPool.txMerkle = make(map[uint64]map[string]string)
 	ExecPool.frozen = make(map[uint64]map[string]string)
 	ExecPool.signers = make(map[uint64]map[string]map[string]bool)
 	ExecPool.choice = make(map[uint64]map[string]map[string]string)
 	ExecPool.epochChoice = make(map[uint64]map[string]string)
+	ExecPool.commitChoice = make(map[uint64]map[string]string)
 	ExecPool.mu.Unlock()
 
 	t.Cleanup(func() {
@@ -48,11 +50,12 @@ func resetExecPoolForTest(t *testing.T) {
 		ExecPool.signers = oldSigners
 		ExecPool.choice = oldChoice
 		ExecPool.epochChoice = oldEpochChoice
+		ExecPool.commitChoice = oldCommitChoice
 		ExecPool.mu.Unlock()
 	})
 }
 
-func TestLocalExecutionVoteGuardBlocksUnsafeCrossRoundProposalSwitch(t *testing.T) {
+func TestLocalExecutionVoteGuardAllowsMonotonicHigherRoundProposalSwitch(t *testing.T) {
 	node := &Node{
 		ID:                   "A",
 		localExecVoteByRound: make(map[uint64]map[uint32]string),
@@ -69,18 +72,18 @@ func TestLocalExecutionVoteGuardBlocksUnsafeCrossRoundProposalSwitch(t *testing.
 	if node.allowLocalExecutionVoteRound(epoch, 1, sameRoundConflict) {
 		t.Fatalf("expected conflicting same-round local vote to be blocked")
 	}
-	if node.allowLocalExecutionVoteRound(epoch, 3, higherRoundConflict) {
-		t.Fatalf("expected conflicting higher-round proposal switch to be blocked before stale release gap")
+	if !node.allowLocalExecutionVoteRound(epoch, 3, higherRoundConflict) {
+		t.Fatalf("expected conflicting higher-round proposal switch before quorum lock")
 	}
 	if !node.allowLocalExecutionVoteRound(epoch, 4, higherRoundSameBlock) {
 		t.Fatalf("expected higher-round same-block rebroadcast to be allowed")
 	}
-	if !node.allowLocalExecutionVoteRound(epoch, 2, first) {
-		t.Fatalf("expected lower unused round with prior proposal to be allowed")
+	if node.allowLocalExecutionVoteRound(epoch, 2, first) {
+		t.Fatalf("expected stale lower round vote to be blocked after advancing")
 	}
 }
 
-func TestLocalExecutionVoteGuardDoesNotReleaseEvidenceFreeRoundMarker(t *testing.T) {
+func TestLocalExecutionVoteGuardAdvancesPastEvidenceFreeRoundMarker(t *testing.T) {
 	node := &Node{
 		ID:                   "A",
 		localExecVoteByRound: make(map[uint64]map[uint32]string),
@@ -92,14 +95,14 @@ func TestLocalExecutionVoteGuardDoesNotReleaseEvidenceFreeRoundMarker(t *testing
 	if !node.allowLocalExecutionVoteRound(epoch, 0, stale) {
 		t.Fatalf("expected stale seed vote to be allowed")
 	}
-	if node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
-		t.Fatalf("evidence-free marker must not release without higher-round quorum")
+	if !node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
+		t.Fatalf("non-quorum marker must not block a higher-round vote")
 	}
-	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != "" {
-		t.Fatalf("unexpected fresh marker without quorum: got=%q", got)
+	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != fresh {
+		t.Fatalf("higher-round marker not stored: got=%q", got)
 	}
 	if got := node.localExecVoteByRound[epoch][0]; got != stale {
-		t.Fatalf("existing marker should remain without quorum: got=%q", got)
+		t.Fatalf("earlier round marker should remain for same-round equivocation protection: got=%q", got)
 	}
 }
 
@@ -193,7 +196,7 @@ func TestStaleExecutionVoteMirrorsCannotKeepProposalLocked(t *testing.T) {
 	}
 }
 
-func TestLocalExecutionVoteGuardDoesNotReleaseMinorityRoundMarker(t *testing.T) {
+func TestLocalExecutionVoteGuardAdvancesPastMinorityRoundMarker(t *testing.T) {
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	node.ID = "A"
 	node.localExecVoteByRound = make(map[uint64]map[uint32]string)
@@ -211,15 +214,15 @@ func TestLocalExecutionVoteGuardDoesNotReleaseMinorityRoundMarker(t *testing.T) 
 		},
 	}
 
-	if node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
-		t.Fatalf("minority-backed marker must not release without higher-round quorum")
+	if !node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
+		t.Fatalf("minority-backed marker must not block a higher-round vote")
 	}
 	if got := node.localExecVoteByRound[epoch][0]; got != stale {
-		t.Fatalf("minority marker should remain without quorum: got=%q", got)
+		t.Fatalf("minority marker should remain for audit history: got=%q", got)
 	}
 }
 
-func TestLocalExecutionVoteGuardIgnoresCommitStallWithoutQuorum(t *testing.T) {
+func TestLocalExecutionVoteGuardAdvancesWithoutUsingCommitStall(t *testing.T) {
 	resetExecPoolForTest(t)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	node.ID = "A"
@@ -246,14 +249,14 @@ func TestLocalExecutionVoteGuardIgnoresCommitStallWithoutQuorum(t *testing.T) {
 	node.lastCommitAt = time.Now().Add(-2 * execQuorumEmergencyStallTimeout)
 	node.commitMu.Unlock()
 
-	if node.allowLocalExecutionVoteRound(epoch, 2, fresh) {
-		t.Fatalf("local commit stall must not release a non-quorum marker")
+	if !node.allowLocalExecutionVoteRound(epoch, 2, fresh) {
+		t.Fatalf("higher-round vote should advance without relying on local commit age")
 	}
-	if got := node.localExecVoteByRound[epoch][2]; got != "" {
-		t.Fatalf("unexpected fresh marker after local commit stall: got=%q", got)
+	if got := node.localExecVoteByRound[epoch][2]; got != fresh {
+		t.Fatalf("fresh higher-round marker missing: got=%q", got)
 	}
 	if got := node.localExecVoteByRound[epoch][0]; got != stale {
-		t.Fatalf("existing marker should remain after local commit stall: got=%q", got)
+		t.Fatalf("existing marker should remain for audit history: got=%q", got)
 	}
 }
 
@@ -287,12 +290,12 @@ func TestLocalExecutionVoteGuardReleasesNonQuorumMarkerForHigherRoundQuorum(t *t
 	if got := node.localExecVoteByRound[epoch][2]; got != fresh {
 		t.Fatalf("fresh marker not stored after near-quorum release: got=%q", got)
 	}
-	if _, ok := node.localExecVoteByRound[epoch][1]; ok {
-		t.Fatalf("stale marker should be deleted after near-quorum release")
+	if got := node.localExecVoteByRound[epoch][1]; got != stale {
+		t.Fatalf("earlier marker should remain for same-round equivocation protection: got=%q", got)
 	}
 }
 
-func TestLocalExecutionVoteGuardCollapsesSameScopeRoundMarkers(t *testing.T) {
+func TestLocalExecutionVoteGuardRetainsSameScopeRoundMarkers(t *testing.T) {
 	node := &Node{
 		ID:                   "B",
 		localExecVoteByRound: make(map[uint64]map[uint32]string),
@@ -307,8 +310,8 @@ func TestLocalExecutionVoteGuardCollapsesSameScopeRoundMarkers(t *testing.T) {
 	if !node.allowLocalExecutionVoteRound(epoch, 3, round3) {
 		t.Fatalf("expected higher-round same-scope marker to be allowed")
 	}
-	if _, ok := node.localExecVoteByRound[epoch][0]; ok {
-		t.Fatalf("older same-scope marker should be collapsed")
+	if got := node.localExecVoteByRound[epoch][0]; got != round0 {
+		t.Fatalf("older same-scope marker should remain for same-round equivocation protection: got=%q", got)
 	}
 	if got := node.localExecVoteByRound[epoch][3]; got != round3 {
 		t.Fatalf("higher-round same-scope marker not stored: got=%q", got)
@@ -421,7 +424,7 @@ func TestLocalExecutionVoteGuardKeepsHigherRoundOnLowerRoundEvidenceTieAfterStal
 	}
 }
 
-func TestLocalExecutionVoteGuardKeepsStaleQuorumRoundMarker(t *testing.T) {
+func TestLocalExecutionVoteGuardMovesPastStaleExecutionQuorum(t *testing.T) {
 	resetExecPoolForTest(t)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	node.ID = "A"
@@ -445,18 +448,18 @@ func TestLocalExecutionVoteGuardKeepsStaleQuorumRoundMarker(t *testing.T) {
 		}
 	}
 
-	if node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
-		t.Fatalf("expected quorum-backed earlier marker to block conflicting higher-round vote")
+	if !node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
+		t.Fatalf("execution prevote quorum must not block a conflicting higher-round vote")
 	}
 	if got := node.localExecVoteByRound[epoch][0]; got != stale {
 		t.Fatalf("quorum-backed earlier-round marker should remain for audit history, got=%q", got)
 	}
-	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != "" {
-		t.Fatalf("fresh higher-round marker should not be stored, got=%q", got)
+	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != fresh {
+		t.Fatalf("fresh higher-round marker should be stored, got=%q", got)
 	}
 }
 
-func TestLocalExecutionVoteGuardKeepsQuorumMarkerAfterCommitStall(t *testing.T) {
+func TestLocalExecutionVoteGuardMovesPastExecutionQuorumAfterCommitStall(t *testing.T) {
 	resetExecPoolForTest(t)
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 	node.ID = "A"
@@ -484,14 +487,36 @@ func TestLocalExecutionVoteGuardKeepsQuorumMarkerAfterCommitStall(t *testing.T) 
 	node.lastCommitAt = time.Now().Add(-2 * execQuorumEmergencyStallTimeout)
 	node.commitMu.Unlock()
 
-	if node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
-		t.Fatalf("local commit stall must not release a quorum-backed marker")
+	if !node.allowLocalExecutionVoteRound(epoch, localExecVoteStaleRoundReleaseGap+1, fresh) {
+		t.Fatalf("local commit stall must not turn execution prevotes into a permanent lock")
 	}
-	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != "" {
-		t.Fatalf("unexpected fresh marker after stalled quorum: got=%q", got)
+	if got := node.localExecVoteByRound[epoch][localExecVoteStaleRoundReleaseGap+1]; got != fresh {
+		t.Fatalf("expected fresh marker after stalled execution quorum: got=%q", got)
 	}
 	if got := node.localExecVoteByRound[epoch][0]; got != stale {
 		t.Fatalf("quorum marker should remain after local commit stall: got=%q", got)
+	}
+}
+
+func TestLocalExecutionVoteGuardKeepsSignedCommitChoice(t *testing.T) {
+	resetExecPoolForTest(t)
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	node.ID = "A"
+	node.localExecVoteByRound = make(map[uint64]map[uint32]string)
+
+	block := Block{ID: 1, Round: 0, BlockHash: "committed-block", StateRoot: "committed-root"}
+	committed := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot)
+	fresh := proposalVoteKey(block.ID, 3, "fresh-block", "", "fresh-root")
+	node.localExecVoteByRound[block.ID] = map[uint32]string{block.Round: committed}
+	recordSignedCommitVotesForTest(t, node, block, []string{"A"}, privKeys)
+
+	if node.allowLocalExecutionVoteRound(block.ID, 3, fresh) {
+		t.Fatalf("signed commit choice must block a conflicting higher-round execution vote")
+	}
+	if got := node.localExecVoteByRound[block.ID][3]; got != "" {
+		t.Fatalf("unexpected conflicting marker after signed commit: got=%q", got)
 	}
 }
 
@@ -549,7 +574,7 @@ func TestRecordExecResultGlobalRejectsSignerSameRoundEquivocationAcrossProposals
 	}
 }
 
-func TestRecordExecResultGlobalRejectsHigherRoundWithoutQuorumProof(t *testing.T) {
+func TestRecordExecResultGlobalMovesSignerToHigherRoundBeforeQuorum(t *testing.T) {
 	resetExecPoolForTest(t)
 
 	epoch := uint64(89)
@@ -570,14 +595,53 @@ func TestRecordExecResultGlobalRejectsHigherRoundWithoutQuorumProof(t *testing.T
 		BlockHash:  "block-b",
 		Signer:     "A",
 		ResultHash: "root-b",
-	}, 3); ok || !equivocation || count != 0 {
-		t.Fatalf("expected higher-round non-quorum choice to be rejected, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}, 3); !ok || equivocation || count != 1 {
+		t.Fatalf("expected signer choice to move to higher round, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
 	}
-	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 1 {
-		t.Fatalf("lower-round proposal should retain signer vote, got %d", got)
+	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 0 {
+		t.Fatalf("lower-round proposal should lose moved signer vote, got %d", got)
 	}
-	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 0 {
-		t.Fatalf("higher-round proposal must not gain an unproven switched vote, got %d", got)
+	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 1 {
+		t.Fatalf("higher-round proposal should gain moved signer vote, got %d", got)
+	}
+}
+
+func TestRecordExecResultGlobalConvergesAfterSplitLowerRoundVotes(t *testing.T) {
+	resetExecPoolForTest(t)
+
+	const epoch uint64 = 90
+	const higherRound uint32 = 10
+	higher := proposalVoteKey(epoch, higherRound, "block-final", "", "root-final")
+	for i, signer := range []string{"A", "B", "C"} {
+		round := uint32(i + 1)
+		lowerBlock := "block-" + signer
+		lowerRoot := "root-" + signer
+		lower := proposalVoteKey(epoch, round, lowerBlock, "", lowerRoot)
+		if count, ok, equivocation := recordExecResultGlobalWithRequired(epoch, lower, lowerRoot, "", ExecutionResult{
+			Height:     epoch,
+			Round:      round,
+			BlockHash:  lowerBlock,
+			Signer:     signer,
+			ResultHash: lowerRoot,
+		}, 3); !ok || equivocation || count != 1 {
+			t.Fatalf("seed split lower-round vote signer=%s count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
+		}
+	}
+
+	for i, signer := range []string{"A", "B", "C"} {
+		count, ok, equivocation := recordExecResultGlobalWithRequired(epoch, higher, "root-final", "", ExecutionResult{
+			Height:     epoch,
+			Round:      higherRound,
+			BlockHash:  "block-final",
+			Signer:     signer,
+			ResultHash: "root-final",
+		}, 3)
+		if !ok || equivocation || count != i+1 {
+			t.Fatalf("move split vote signer=%s count=%d want=%d ok=%t equivocation=%t", signer, count, i+1, ok, equivocation)
+		}
+	}
+	if got := getExecCountGlobal(epoch, higher, "root-final", ""); got != 3 {
+		t.Fatalf("higher-round proposal did not converge to quorum: got=%d want=3", got)
 	}
 }
 
@@ -624,7 +688,7 @@ func TestRecordExecResultGlobalKeepsQuorumChoiceLockedAcrossRounds(t *testing.T)
 	}
 }
 
-func TestRecordExecResultGlobalReleasesForProjectedHigherRoundQuorum(t *testing.T) {
+func TestRecordExecResultGlobalConvergesMovedVotesOnHigherRoundQuorum(t *testing.T) {
 	resetExecPoolForTest(t)
 
 	epoch := uint64(89)
@@ -702,7 +766,7 @@ func TestQueuedExecutionVoteDropThrottleStaysCoarseInDebugMode(t *testing.T) {
 	}
 }
 
-func TestRecordExecResultGlobalDoesNotReleaseChoiceFromRoundGap(t *testing.T) {
+func TestRecordExecResultGlobalMovesChoiceForwardAcrossRoundGap(t *testing.T) {
 	resetExecPoolForTest(t)
 
 	epoch := uint64(89)
@@ -723,14 +787,14 @@ func TestRecordExecResultGlobalDoesNotReleaseChoiceFromRoundGap(t *testing.T) {
 		BlockHash:  "block-b",
 		Signer:     "A",
 		ResultHash: "root-b",
-	}, 3); ok || !equivocation || count != 0 {
-		t.Fatalf("expected round-gap-only switch to be rejected, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}, 3); !ok || equivocation || count != 1 {
+		t.Fatalf("expected monotonic higher-round switch, got count=%d ok=%t equivocation=%t", count, ok, equivocation)
 	}
-	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 1 {
-		t.Fatalf("round gap must not remove prior signer vote, got %d", got)
+	if got := getExecCountGlobal(epoch, first, "root-a", ""); got != 0 {
+		t.Fatalf("lower-round proposal should lose moved signer vote, got %d", got)
 	}
-	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 0 {
-		t.Fatalf("higher-round proposal must not gain round-gap-only vote, got %d", got)
+	if got := getExecCountGlobal(epoch, higher, "root-b", ""); got != 1 {
+		t.Fatalf("higher-round proposal should gain moved signer vote, got %d", got)
 	}
 }
 
@@ -2185,6 +2249,7 @@ func TestProcessExecutionResultMsgRejectsConflictingLockedVote(t *testing.T) {
 	if !target.proposalHasExecutionQuorum(lowBlock) {
 		t.Fatalf("expected low-round proposal to be quorum locked")
 	}
+	recordSignedCommitVotesForTest(t, target, lowBlock, []string{"A", "C", "D"}, privKeys)
 	target.execResultsMu.Lock()
 	if !target.setQuorumLockedProposalLocked(lowBlock, "test_quorum_lock", 3, 3) {
 		target.execResultsMu.Unlock()
@@ -2229,6 +2294,7 @@ func TestCurrentProposalVoteKeyPrefersQuorumLockedProposal(t *testing.T) {
 	ValidatorPubKeys = make(map[string]ed25519.PublicKey, len(validators))
 	GenesisValidatorPubKeys = make(map[string]ed25519.PublicKey, len(validators))
 	sources := make(map[string]*Node, len(validators))
+	privKeys := make(map[string]ed25519.PrivateKey, len(validators))
 	for _, id := range validators {
 		pub, priv, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
@@ -2236,6 +2302,7 @@ func TestCurrentProposalVoteKeyPrefersQuorumLockedProposal(t *testing.T) {
 		}
 		ValidatorPubKeys[id] = pub
 		GenesisValidatorPubKeys[id] = pub
+		privKeys[id] = priv
 		sources[id] = newValidatorRoundTestNode(t, t.TempDir(), id, validators, pub, priv)
 	}
 
@@ -2266,6 +2333,7 @@ func TestCurrentProposalVoteKeyPrefersQuorumLockedProposal(t *testing.T) {
 		target.execResultsMu.Unlock()
 		t.Fatalf("expected current candidate to move for test setup")
 	}
+	recordSignedCommitVotesForTest(t, target, lowBlock, []string{"A", "B", "C"}, privKeys)
 	if !target.setQuorumLockedProposalLocked(lowBlock, "test_quorum_lock", 3, 3) {
 		target.execResultsMu.Unlock()
 		t.Fatalf("expected quorum lock to be recorded")
@@ -2454,6 +2522,9 @@ func TestProcessExecutionResultMsgFinalizesRecentProposalAfterObservedVotes(t *t
 		}
 		msg.Signature = hex.EncodeToString(ed25519.Sign(privKeys[signer], execResultSignBytesV2(msg.HeightHint, msg.RoundHint, msg.BlockHashHint, msg.ExecHash, msg.TxMerkle)))
 		target.processExecutionResultMsg(msg, false)
+	}
+	for _, signer := range []string{"A", "B", "C"} {
+		target.handleCommitMsg(signedCommitMsgForTest(t, highBlock, signer, privKeys[signer]))
 	}
 
 	if got := target.Blockchain.Height(); got != epoch {

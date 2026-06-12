@@ -538,6 +538,30 @@ func (n *Node) requestBlocksFromPeer(
 	return n.requestBlocksFromPeerDirect(pid, from, to, wantSnapshot, snapshotHeight)
 }
 
+func runBlockRequestStreamPhase(s network.Stream, timeout time.Duration, operation func() error) (error, bool) {
+	if operation == nil {
+		return errors.New("missing stream operation"), false
+	}
+	if timeout <= 0 {
+		return operation(), false
+	}
+	resultCh := make(chan error, 1)
+	go func() {
+		resultCh <- operation()
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case err := <-resultCh:
+		return err, false
+	case <-timer.C:
+		if s != nil {
+			_ = s.Reset()
+		}
+		return context.DeadlineExceeded, true
+	}
+}
+
 func (n *Node) requestBlocksFromPeerDirect(
 	pid peer.ID,
 	from, to uint64,
@@ -595,10 +619,12 @@ func (n *Node) requestBlocksFromPeerDirect(
 	if traceRequest {
 		fmt.Printf("[SYNC-REQUEST-ENCODE] peer=%s range=%d-%d\n", peerLabel, from, to)
 	}
-	if err := enc.Encode(req); err != nil {
-		_ = s.Reset()
+	if err, timedOut := runBlockRequestStreamPhase(s, timeout, func() error { return enc.Encode(req) }); err != nil {
+		if !timedOut {
+			_ = s.Reset()
+		}
 		s = nil
-		wrapped := newBlockRequestPhaseError("encode", pid, from, to, time.Since(encodeStarted), isNetTimeout(err), err)
+		wrapped := newBlockRequestPhaseError("encode", pid, from, to, time.Since(encodeStarted), timedOut || isNetTimeout(err), err)
 		fmt.Printf("[SYNC-REQUEST-ENCODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, wrapped)
 		return nil, nil, nil, wrapped
 	}
@@ -614,10 +640,12 @@ func (n *Node) requestBlocksFromPeerDirect(
 		fmt.Printf("[SYNC-REQUEST-DECODE] peer=%s range=%d-%d\n", peerLabel, from, to)
 	}
 	var resp BlockResponse
-	if err := dec.Decode(&resp); err != nil {
-		_ = s.Reset()
+	if err, timedOut := runBlockRequestStreamPhase(s, timeout, func() error { return dec.Decode(&resp) }); err != nil {
+		if !timedOut {
+			_ = s.Reset()
+		}
 		s = nil
-		wrapped := newBlockRequestPhaseError("decode", pid, from, to, time.Since(decodeStarted), isNetTimeout(err), err)
+		wrapped := newBlockRequestPhaseError("decode", pid, from, to, time.Since(decodeStarted), timedOut || isNetTimeout(err), err)
 		fmt.Printf("[SYNC-REQUEST-DECODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, wrapped)
 		return nil, nil, nil, wrapped
 	}
@@ -971,6 +999,14 @@ func execPoolScopeKey(epoch uint64, proposalKey string) string {
 	return fmt.Sprintf("block|%s|%s", heightPart, blockHash)
 }
 
+func commitVoteScopeKey(height uint64, proposalHash string) string {
+	proposalHash = strings.TrimSpace(proposalHash)
+	if height == 0 || proposalHash == "" {
+		return ""
+	}
+	return fmt.Sprintf("block|%d|%s", height, proposalHash)
+}
+
 func execPoolResultKey(epoch uint64, proposalKey string, execHash string) string {
 	return proposalExecKey(execPoolScopeKey(epoch, proposalKey), execHash)
 }
@@ -1069,6 +1105,14 @@ func (n *Node) proposalHasExecutionQuorum(block Block) bool {
 	return n.proposalVoteCount(block) >= required
 }
 
+func (n *Node) proposalHasSignedCommitQuorum(block Block) (int, int, bool) {
+	if n == nil || block.ID == 0 || strings.TrimSpace(block.BlockHash) == "" {
+		return 0, 0, false
+	}
+	_, _, count, required := n.commitVoteEvidence(block.ID, block.BlockHash)
+	return count, required, required > 0 && count >= required
+}
+
 func (n *Node) proposalAlreadySeenLocked(block Block) bool {
 	if n == nil || block.ID == 0 || n.acceptedProposalBlocks == nil {
 		return false
@@ -1082,14 +1126,8 @@ func (n *Node) proposalAlreadySeenLocked(block Block) bool {
 }
 
 func (n *Node) proposalShouldStayLocked(block Block, voteCount int) (bool, string) {
-	if block.ID != 0 {
-		required := n.executionQuorumRequiredForEpoch(block.ID)
-		if required > 0 && voteCount >= required {
-			return true, "quorum_locked"
-		}
-		if n.proposalHasExecutionQuorum(block) {
-			return true, "quorum_locked"
-		}
+	if _, _, committed := n.proposalHasSignedCommitQuorum(block); committed {
+		return true, "signed_commit_quorum_locked"
 	}
 	return false, ""
 }
@@ -1127,12 +1165,11 @@ func (n *Node) acceptedProposalVoteLockForRound(epoch uint64, incomingRound uint
 	if incomingRound <= block.Round {
 		return Block{}, 0, false, ""
 	}
-	votes := n.acceptedProposalVoteCountLocked(epoch, currentKey)
-	required := n.executionQuorumRequiredForEpoch(epoch)
-	if required == 0 || votes < required {
+	commitVotes, _, committed := n.proposalHasSignedCommitQuorum(block)
+	if !committed {
 		return Block{}, 0, false, ""
 	}
-	return block, votes, true, "accepted_quorum_lock"
+	return block, commitVotes, true, "accepted_signed_commit_lock"
 }
 
 func (n *Node) executionQuorumRequiredForEpoch(epoch uint64) int {
@@ -1144,27 +1181,6 @@ func (n *Node) executionQuorumRequiredForEpoch(epoch uint64) int {
 		return 0
 	}
 	return execQuorumRequired(len(validators))
-}
-
-func (n *Node) higherRoundQuorumSeenForProposal(epoch uint64, lockedBlock Block, incoming Block, projectedVotes int) (int, int, bool) {
-	if n == nil || epoch == 0 || lockedBlock.ID != epoch || incoming.ID != epoch {
-		return 0, 0, false
-	}
-	if !proposalConflictsWithAcceptedLock(lockedBlock, incoming) {
-		return 0, 0, false
-	}
-	if incoming.Round <= lockedBlock.Round {
-		return 0, 0, false
-	}
-	required := n.executionQuorumRequiredForEpoch(epoch)
-	if required == 0 {
-		return 0, 0, false
-	}
-	votes := projectedVotes
-	if votes < 0 {
-		votes = n.proposalVoteCount(incoming)
-	}
-	return votes, required, votes >= required
 }
 
 func (n *Node) proposalShouldHoldAgainstIncomingLocked(epoch uint64, proposalKey string, block Block, voteCount int, incomingRound uint32) (bool, string) {
@@ -1232,9 +1248,11 @@ func (n *Node) quorumLockedProposalLockState(epoch uint64) (Block, int, bool, st
 	if !ok || block.ID != epoch {
 		return Block{}, 0, false, ""
 	}
-	voteCount := n.acceptedProposalVoteCountLocked(epoch, key)
-	keep, reason := n.proposalShouldStayLocked(block, voteCount)
-	return block, voteCount, keep, reason
+	commitVotes, _, committed := n.proposalHasSignedCommitQuorum(block)
+	if !committed {
+		return block, commitVotes, false, ""
+	}
+	return block, commitVotes, true, "signed_commit_quorum_locked"
 }
 
 func (n *Node) quorumLockedProposalHoldStateForIncomingRound(epoch uint64, incoming Block, projectedVotes int) (Block, int, bool, string) {
@@ -1247,20 +1265,6 @@ func (n *Node) quorumLockedProposalHoldStateForIncomingRound(epoch uint64, incom
 	}
 	if incoming.ID == 0 {
 		return block, voteCount, true, reason
-	}
-	if votes, required, unlock := n.higherRoundQuorumSeenForProposal(epoch, block, incoming, projectedVotes); unlock {
-		if DebugConsensus {
-			fmt.Printf("[EXEC-UNLOCK] height=%d locked_round=%d locked_block=%s incoming_round=%d incoming_block=%s votes=%d required=%d reason=higher_round_quorum_seen\n",
-				epoch,
-				block.Round,
-				ShortHash(block.BlockHash),
-				incoming.Round,
-				ShortHash(incoming.BlockHash),
-				votes,
-				required,
-			)
-		}
-		return block, voteCount, false, "higher_round_quorum_seen"
 	}
 	return block, voteCount, true, reason
 }
@@ -1380,21 +1384,16 @@ func (n *Node) setAcceptedProposalLocked(block Block, reason string, force bool)
 			return false
 		}
 		if prevBlock.ID == block.ID && proposalConflictsWithAcceptedLock(prevBlock, block) {
-			required := n.executionQuorumRequiredForEpoch(block.ID)
-			if required == 0 {
-				return false
-			}
-			incomingVotes := n.proposalVoteCount(block)
-			if prevVotes >= required && incomingVotes < required {
+			commitVotes, required, committed := n.proposalHasSignedCommitQuorum(prevBlock)
+			if committed {
 				if DebugConsensus {
-					fmt.Printf("[EXEC-PROPOSAL-KEEP] height=%d locked_round=%d locked_block=%s incoming_round=%d incoming_block=%s votes=%d incoming_votes=%d required=%d reason=quorum_locked\n",
+					fmt.Printf("[EXEC-PROPOSAL-KEEP] height=%d locked_round=%d locked_block=%s incoming_round=%d incoming_block=%s commit_votes=%d required=%d reason=signed_commit_quorum_locked\n",
 						block.ID,
 						prevRound,
 						ShortHash(prevBlockHash),
 						block.Round,
 						ShortHash(block.BlockHash),
-						prevVotes,
-						incomingVotes,
+						commitVotes,
 						required,
 					)
 				}
@@ -1433,6 +1432,12 @@ func (n *Node) setQuorumLockedProposalLocked(block Block, reason string, voteCou
 	if n == nil || block.ID == 0 {
 		return false
 	}
+	commitVotes, commitRequired, committed := n.proposalHasSignedCommitQuorum(block)
+	if !committed {
+		return false
+	}
+	voteCount = commitVotes
+	required = commitRequired
 	snap := n.registerAcceptedProposalBlockLocked(block)
 	if snap.ProposalKey == "" {
 		return false
@@ -2091,6 +2096,169 @@ func verifyExecutionResultSignature(res ExecutionResultMsg, candidates []ed25519
 	return false
 }
 
+func commitVoteSignBytes(height uint64, proposalHash string, execHash string, txMerkle string) []byte {
+	return []byte(fmt.Sprintf("MSC_COMMIT_V1\x00%d\x00%s\x00%s\x00%s",
+		height,
+		strings.TrimSpace(proposalHash),
+		strings.TrimSpace(execHash),
+		strings.TrimSpace(txMerkle),
+	))
+}
+
+func verifyCommitVoteSignature(cm CommitMsg) bool {
+	cm.From = normalizeValidatorID(cm.From)
+	cm.Hash = strings.TrimSpace(cm.Hash)
+	cm.ExecHash = strings.TrimSpace(cm.ExecHash)
+	cm.TxMerkle = strings.TrimSpace(cm.TxMerkle)
+	if cm.Height == 0 || cm.From == "" || cm.Hash == "" || cm.ExecHash == "" || strings.TrimSpace(cm.Signature) == "" {
+		return false
+	}
+	sig, err := hex.DecodeString(strings.TrimSpace(cm.Signature))
+	if err != nil || len(sig) != ed25519.SignatureSize {
+		return false
+	}
+	for _, pub := range execResultPubKeyCandidates(cm.From) {
+		if ed25519.Verify(pub, commitVoteSignBytes(cm.Height, cm.Hash, cm.ExecHash, cm.TxMerkle), sig) {
+			return true
+		}
+	}
+	return false
+}
+
+func (n *Node) commitVoteEvidence(height uint64, proposalHash string) ([]string, []ValidatorSignature, int, int) {
+	if n == nil || height == 0 || strings.TrimSpace(proposalHash) == "" {
+		return nil, nil, 0, 0
+	}
+	proposalHash = strings.TrimSpace(proposalHash)
+	required := n.executionQuorumRequiredForEpoch(height)
+	n.commitMu.Lock()
+	defer n.commitMu.Unlock()
+	bySigner := n.commitVoteSignatures[height][proposalHash]
+	signers := make([]string, 0, len(bySigner))
+	for signer, signature := range bySigner {
+		if normalizeValidatorID(signer) == "" || strings.TrimSpace(signature) == "" {
+			continue
+		}
+		signers = append(signers, normalizeValidatorID(signer))
+	}
+	signers = canonicalValidatorIDs(signers)
+	witnesses := make([]ValidatorSignature, 0, len(signers))
+	for _, signer := range signers {
+		witnesses = append(witnesses, ValidatorSignature{
+			Validator: signer,
+			Signature: strings.TrimSpace(bySigner[signer]),
+		})
+	}
+	return signers, witnesses, len(signers), required
+}
+
+func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
+	if n == nil || !verifyCommitVoteSignature(cm) {
+		return 0, 0, false
+	}
+	cm.From = normalizeValidatorID(cm.From)
+	cm.Hash = strings.TrimSpace(cm.Hash)
+	cm.Signature = strings.TrimSpace(cm.Signature)
+	validators, _, ok := n.deterministicCommitteeValidatorsForHeight(cm.Height)
+	if !ok || len(validators) == 0 || !containsValidatorID(validators, cm.From) {
+		return 0, n.executionQuorumRequiredForEpoch(cm.Height), false
+	}
+	required := n.executionQuorumRequiredForEpoch(cm.Height)
+	if required == 0 {
+		return 0, 0, false
+	}
+
+	n.commitMu.Lock()
+	if n.commitVoteSignatures == nil {
+		n.commitVoteSignatures = make(map[uint64]map[string]map[string]string)
+	}
+	if n.commitVoteSignatures[cm.Height] == nil {
+		n.commitVoteSignatures[cm.Height] = make(map[string]map[string]string)
+	}
+	if n.commitVoteSignatures[cm.Height][cm.Hash] == nil {
+		n.commitVoteSignatures[cm.Height][cm.Hash] = make(map[string]string)
+	}
+	for proposalHash, bySigner := range n.commitVoteSignatures[cm.Height] {
+		if proposalHash != cm.Hash && strings.TrimSpace(bySigner[cm.From]) != "" {
+			n.commitMu.Unlock()
+			return 0, required, false
+		}
+	}
+	existing := strings.TrimSpace(n.commitVoteSignatures[cm.Height][cm.Hash][cm.From])
+	n.commitVoteSignatures[cm.Height][cm.Hash][cm.From] = cm.Signature
+	if n.commitVoted == nil {
+		n.commitVoted = make(map[uint64]map[string]string)
+	}
+	if n.commitVoted[cm.Height] == nil {
+		n.commitVoted[cm.Height] = make(map[string]string)
+	}
+	n.commitVoted[cm.Height][cm.From] = cm.Hash
+	if n.commitVotes == nil {
+		n.commitVotes = make(map[uint64]map[string]map[string]struct{})
+	}
+	if n.commitVotes[cm.Height] == nil {
+		n.commitVotes[cm.Height] = make(map[string]map[string]struct{})
+	}
+	if n.commitVotes[cm.Height][cm.Hash] == nil {
+		n.commitVotes[cm.Height][cm.Hash] = make(map[string]struct{})
+	}
+	n.commitVotes[cm.Height][cm.Hash][cm.From] = struct{}{}
+	count := len(n.commitVoteSignatures[cm.Height][cm.Hash])
+	n.commitMu.Unlock()
+	if existing == "" {
+		n.persistConsensusSafetyStateAsync("signed_commit_vote")
+	}
+	scope := commitVoteScopeKey(cm.Height, cm.Hash)
+	ExecPool.mu.Lock()
+	if ExecPool.commitChoice == nil {
+		ExecPool.commitChoice = make(map[uint64]map[string]string)
+	}
+	if ExecPool.commitChoice[cm.Height] == nil {
+		ExecPool.commitChoice[cm.Height] = make(map[string]string)
+	}
+	if prior := strings.TrimSpace(ExecPool.commitChoice[cm.Height][cm.From]); prior == "" || prior == scope {
+		ExecPool.commitChoice[cm.Height][cm.From] = scope
+	}
+	ExecPool.mu.Unlock()
+	return count, required, true
+}
+
+func (n *Node) broadcastCommitVoteForProposal(block Block, execHash string, txMerkle string) bool {
+	if n == nil || block.ID == 0 || strings.TrimSpace(block.BlockHash) == "" || n.isShuttingDown() {
+		return false
+	}
+	execHash = strings.TrimSpace(execHash)
+	txMerkle = strings.TrimSpace(txMerkle)
+	if execHash == "" || normalizeValidatorID(n.ID) == "" {
+		return false
+	}
+	cm := CommitMsg{
+		Height:   block.ID,
+		Hash:     strings.TrimSpace(block.BlockHash),
+		ExecHash: execHash,
+		TxMerkle: txMerkle,
+		Block:    block,
+		From:     normalizeValidatorID(n.ID),
+	}
+	sig, ok := n.signValidatorPayload(commitVoteSignBytes(cm.Height, cm.Hash, cm.ExecHash, cm.TxMerkle))
+	if !ok {
+		return false
+	}
+	cm.Signature = hex.EncodeToString(sig)
+	n.handleCommitMsg(cm)
+	msg := Message{Type: MsgCommit, Data: MustJSON(cm)}
+	n.fanoutConsensusMessageToPeers(msg)
+	data, _ := MarshalP2PMessage(msg)
+	publishTopic := n.ConsensusTopic
+	if publishTopic == nil {
+		publishTopic = n.ValidatorTopic
+	}
+	if publishTopic != nil && !n.isShuttingDown() {
+		_ = n.publishConsensusTopicWithTimeout(publishTopic, data)
+	}
+	return true
+}
+
 func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 	if n == nil || n.isShuttingDown() {
 		return
@@ -2591,95 +2759,65 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 		n.localExecVoteByRound[epoch] = make(map[uint32]string)
 	}
 	existing := strings.TrimSpace(n.localExecVoteByRound[epoch][round])
-	if existing == "" {
-		blockedExistingRound := uint32(0)
-		blockedExistingKey := ""
-		for existingRound, existingKey := range n.localExecVoteByRound[epoch] {
-			existingKey = strings.TrimSpace(existingKey)
-			if existingKey == "" {
-				continue
-			}
-			if existingRound == round {
-				continue
-			}
-			if existingKey == proposalKey || execPoolScopeKey(epoch, existingKey) == execPoolScopeKey(epoch, proposalKey) {
-				delete(n.localExecVoteByRound[epoch], existingRound)
-				continue
-			}
-			if n.releaseStaleLocalExecutionVoteMarkerLocked(epoch, existingRound, round, existingKey, proposalKey) {
-				delete(n.localExecVoteByRound[epoch], existingRound)
-				continue
-			}
-			blockedExistingRound = existingRound
-			blockedExistingKey = existingKey
-			break
-		}
-		if blockedExistingKey != "" {
-			log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=skip_conflicting_cross_round_vote existing_round=%d existing=%s incoming=%s",
-				ShortID(n.ID),
-				epoch,
-				round,
-				blockedExistingRound,
-				blockedExistingKey,
-				proposalKey,
-			)
-			return false
-		}
-		n.localExecVoteByRound[epoch][round] = proposalKey
-		return true
-	}
 	if existing == proposalKey {
 		return true
 	}
-	if n.releaseStaleLocalExecutionVoteMarkerLocked(epoch, round, round, existing, proposalKey) {
-		n.localExecVoteByRound[epoch][round] = proposalKey
-		return true
+	if existing != "" {
+		log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=skip_conflicting_round_vote existing=%s incoming=%s",
+			ShortID(n.ID),
+			epoch,
+			round,
+			existing,
+			proposalKey,
+		)
+		return false
 	}
-	log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=skip_conflicting_round_vote existing=%s incoming=%s",
-		ShortID(n.ID),
-		epoch,
-		round,
-		existing,
-		proposalKey,
-	)
-	return false
-}
 
-func (n *Node) releaseStaleLocalExecutionVoteMarkerLocked(epoch uint64, existingRound uint32, incomingRound uint32, existingKey string, incomingKey string) bool {
-	if n == nil || epoch == 0 {
+	// Execution votes are movable prevotes. A signed commit vote is the
+	// irreversible one-per-height choice and is the only local cross-round lock.
+	incomingScope := execPoolScopeKey(epoch, proposalKey)
+	n.commitMu.Lock()
+	committedProposal := ""
+	for proposalHash, bySigner := range n.commitVoteSignatures[epoch] {
+		if strings.TrimSpace(bySigner[normalizeValidatorID(n.ID)]) != "" {
+			committedProposal = proposalHash
+			break
+		}
+	}
+	n.commitMu.Unlock()
+	if committedProposal != "" && commitVoteScopeKey(epoch, committedProposal) != incomingScope {
+		log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=skip_conflicting_signed_commit_vote committed=%s incoming=%s",
+			ShortID(n.ID),
+			epoch,
+			round,
+			committedProposal,
+			proposalKey,
+		)
 		return false
 	}
-	existingKey = strings.TrimSpace(existingKey)
-	incomingKey = strings.TrimSpace(incomingKey)
-	if existingKey == "" || incomingKey == "" || existingKey == incomingKey {
+	var highestRound uint32
+	hasPriorRound := false
+	for existingRound, existingKey := range n.localExecVoteByRound[epoch] {
+		existingKey = strings.TrimSpace(existingKey)
+		if existingKey == "" {
+			continue
+		}
+		if !hasPriorRound || existingRound > highestRound {
+			highestRound = existingRound
+			hasPriorRound = true
+		}
+	}
+	if hasPriorRound && round < highestRound {
+		log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=skip_stale_lower_round_vote highest_round=%d incoming=%s",
+			ShortID(n.ID),
+			epoch,
+			round,
+			highestRound,
+			proposalKey,
+		)
 		return false
 	}
-	if incomingRound <= existingRound {
-		return false
-	}
-	required := n.executionQuorumRequiredForEpoch(epoch)
-	if required == 0 {
-		return false
-	}
-	existingVotes := n.acceptedProposalVoteCountLocked(epoch, existingKey)
-	if existingVotes >= required {
-		return false
-	}
-	incomingVotes := n.acceptedProposalVoteCountLocked(epoch, incomingKey)
-	if incomingVotes < required {
-		return false
-	}
-	log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=release_for_higher_round_quorum existing_round=%d existing=%s incoming=%s existing_votes=%d incoming_votes=%d required=%d",
-		ShortID(n.ID),
-		epoch,
-		incomingRound,
-		existingRound,
-		existingKey,
-		incomingKey,
-		existingVotes,
-		incomingVotes,
-		required,
-	)
+	n.localExecVoteByRound[epoch][round] = proposalKey
 	return true
 }
 
@@ -2862,7 +3000,7 @@ func (n *Node) tryFinalizeExecutionQuorumFromPool(targetEpoch uint64, proposalSn
 	if storedCount < required {
 		return false
 	}
-	results, signers, _, ok := getExecResultsGlobal(targetEpoch, proposalSnap.ProposalKey, execHash, txMerkle)
+	results, _, _, ok := getExecResultsGlobal(targetEpoch, proposalSnap.ProposalKey, execHash, txMerkle)
 	if !ok || len(results) < required {
 		return false
 	}
@@ -2870,10 +3008,6 @@ func (n *Node) tryFinalizeExecutionQuorumFromPool(targetEpoch uint64, proposalSn
 		n.mirrorConsensusExecVote(targetEpoch, proposalSnap.BlockHash, result)
 	}
 	_ = n.maybeAdoptProposalOnExecutionVote(leaderBlock)
-	n.execResultsMu.Lock()
-	_ = n.setQuorumLockedProposalLocked(leaderBlock, "quorum_recover_"+strings.TrimSpace(reason), storedCount, required)
-	n.execResultsMu.Unlock()
-	freezeExecPool(targetEpoch, proposalSnap.ProposalKey, execHash)
 	log.Printf("[EXEC-QUORUM-RECOVER] height=%d reason=%s block=%s exec=%s votes=%d required=%d",
 		targetEpoch,
 		strings.TrimSpace(reason),
@@ -2882,7 +3016,7 @@ func (n *Node) tryFinalizeExecutionQuorumFromPool(targetEpoch uint64, proposalSn
 		storedCount,
 		required,
 	)
-	return n.finalizeExecutionResult(targetEpoch, execHash, txMerkle, results, signers)
+	return n.broadcastCommitVoteForProposal(leaderBlock, execHash, txMerkle)
 }
 
 // storeVoteButIgnoreForCommit keeps post-commit execution votes available for
@@ -3367,6 +3501,9 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 	if requiredQuorum <= 0 {
 		return false
 	}
+	if committedScope := strings.TrimSpace(ExecPool.commitChoice[epoch][signer]); committedScope != "" && committedScope != incomingScope {
+		return false
+	}
 	if _, round, _, _, _, ok := proposalVoteKeyParts(incomingProposalKey); ok {
 		incomingRound = round
 	}
@@ -3403,12 +3540,9 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 	if frozen := strings.TrimSpace(ExecPool.frozen[epoch][previousScope]); frozen != "" {
 		return false
 	}
-	if execPoolScopeHasQuorumLocked(epoch, previousScope, requiredQuorum) {
-		return false
-	}
-	if execPoolScopeVoteCountLocked(epoch, incomingScope)+1 < requiredQuorum {
-		return false
-	}
+	// Keep one authoritative signer choice per height by atomically moving the
+	// vote forward. Waiting for the incoming proposal to already have quorum
+	// creates a circular wait when every validator previously voted elsewhere.
 	if byHash, ok := ExecPool.pool[epoch]; ok {
 		prefix := previousScope + "|"
 		for key, results := range byHash {
@@ -3453,32 +3587,6 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 		}
 	}
 	return true
-}
-
-func execPoolScopeVoteCountLocked(epoch uint64, scope string) int {
-	if epoch == 0 || strings.TrimSpace(scope) == "" {
-		return 0
-	}
-	maxCount := 0
-	if byHash, ok := ExecPool.pool[epoch]; ok {
-		prefix := scope + "|"
-		for key, results := range byHash {
-			if strings.HasPrefix(key, prefix) && len(results) > maxCount {
-				maxCount = len(results)
-			}
-		}
-	}
-	return maxCount
-}
-
-func execPoolScopeHasQuorumLocked(epoch uint64, scope string, requiredQuorum int) bool {
-	if epoch == 0 || strings.TrimSpace(scope) == "" {
-		return false
-	}
-	if requiredQuorum <= 0 {
-		return false
-	}
-	return execPoolScopeVoteCountLocked(epoch, scope) >= requiredQuorum
 }
 
 func freezeExecPool(epoch uint64, proposalKey string, execHash string) {
@@ -3687,6 +3795,36 @@ func clearExecPoolUpTo(height uint64) {
 			delete(ExecPool.epochChoice, h)
 		}
 	}
+	for h := range ExecPool.commitChoice {
+		if h <= height {
+			delete(ExecPool.commitChoice, h)
+		}
+	}
+}
+
+func (n *Node) clearCommitVoteStateUpTo(height uint64) {
+	if n == nil || height == 0 {
+		return
+	}
+	n.commitMu.Lock()
+	for h := range n.commitVotes {
+		if h <= height {
+			delete(n.commitVotes, h)
+		}
+	}
+	for h := range n.commitVoted {
+		if h <= height {
+			delete(n.commitVoted, h)
+		}
+	}
+	for h := range n.commitVoteSignatures {
+		if h <= height {
+			delete(n.commitVoteSignatures, h)
+		}
+	}
+	n.commitMu.Unlock()
+	clearExecPoolUpTo(height)
+	n.persistConsensusSafetyStateAsync("commit_vote_state_pruned")
 }
 
 func buildExecPoolSnapshot(epoch uint64, proposalKey string) *ExecPoolSnapshot {
@@ -4383,33 +4521,6 @@ func (n *Node) executionCommitPrecondition(epoch uint64, leaderBlock Block) (int
 	return lockedVotes, required, true, "precommit_quorum"
 }
 
-func (n *Node) recordDeterministicCommitVotes(height uint64, blockHash string, signers []string) (int, int) {
-	if n == nil || height == 0 || strings.TrimSpace(blockHash) == "" {
-		return 0, 0
-	}
-	canonical := canonicalValidatorIDs(signers)
-	count := 0
-	required := 0
-	for _, signer := range canonical {
-		count, required = n.recordCommitVote(height, blockHash, signer)
-	}
-	if count > 0 {
-		n.persistConsensusSafetyStateAsync("commit_votes")
-		n.emitConsensusTelemetry(consensusTelemetryEvent{
-			Type:      "commit_votes_recorded",
-			Reason:    "deterministic_commit",
-			Height:    height,
-			BlockHash: blockHash,
-			Required:  required,
-			Fields: map[string]interface{}{
-				"count":   count,
-				"signers": len(canonical),
-			},
-		})
-	}
-	return count, required
-}
-
 func leaderFromExecHash(execHash string, epoch uint64, validators []string) string {
 	ordered := deterministicStakeHashOrderedValidatorIDs(validators, nil)
 	if len(ordered) == 0 {
@@ -4640,6 +4751,21 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 	if expected == "" || expected != execHash {
 		return false
 	}
+	commitSigners, _, commitCount, commitRequired := n.commitVoteEvidence(epoch, leaderBlock.BlockHash)
+	if commitRequired == 0 {
+		commitRequired = required
+	}
+	if commitCount < commitRequired {
+		if DebugConsensus {
+			log.Printf("[EXEC-COMMIT-DEFER] height=%d reason=signed_commit_votes_shortfall votes=%d required=%d block=%s",
+				epoch,
+				commitCount,
+				commitRequired,
+				ShortHash(leaderBlock.BlockHash),
+			)
+		}
+		return false
+	}
 
 	final := leaderBlock
 	final.BlockTime = LogicalTimeForEpochTick(epoch, TickFinalize)
@@ -4655,7 +4781,7 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		Required:         required,
 		StrictRequired:   strictRequired,
 	}
-	commitSigners := canonicalValidatorIDs(signers)
+	_ = signers
 	// Quorum metadata is part of the signed proposal/hash envelope. Preserve it
 	// when it matches the deterministic frozen-committee quorum.
 	proposalPolicyDefined := strings.TrimSpace(leaderBlock.QuorumPolicyVersion) != "" ||
@@ -4702,26 +4828,6 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 
 	final.ExecutionResults = canonicalExecutionResults(results)
 	final.Signatures = commitSigners
-	if len(final.Signatures) == 0 && len(final.ExecutionResults) > 0 {
-		derived := make([]string, 0, len(final.ExecutionResults))
-		for _, res := range final.ExecutionResults {
-			derived = append(derived, res.Signer)
-		}
-		final.Signatures = canonicalValidatorIDs(derived)
-	}
-	if len(final.ExecutionResults) > 0 && len(final.Signatures) > 0 {
-		allowed := make(map[string]struct{}, len(final.Signatures))
-		for _, signer := range final.Signatures {
-			allowed[signer] = struct{}{}
-		}
-		filtered := make([]ExecutionResult, 0, len(final.ExecutionResults))
-		for _, res := range final.ExecutionResults {
-			if _, ok := allowed[res.Signer]; ok {
-				filtered = append(filtered, res)
-			}
-		}
-		final.ExecutionResults = filtered
-	}
 	proposalHashForVotes := executionVoteProposalHashForFinalBlock(final)
 	for i := range final.ExecutionResults {
 		// Always bind execution evidence to the canonical proposal hash for this
@@ -4745,22 +4851,6 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 	n.attachFinalityCertificate(&final)
 	if n.executionResultAlreadyCommitted(final.ID) {
 		return n.advanceConsensusToCommittedTip("finalize_execution_result_commit_raced")
-	}
-	commitCount, commitRequired := n.recordDeterministicCommitVotes(final.ID, final.BlockHash, final.Signatures)
-	if commitRequired == 0 {
-		commitRequired = required
-	}
-	if commitCount < commitRequired {
-		if DebugConsensus {
-			log.Printf("[EXEC-COMMIT-DEFER] height=%d reason=commit_votes_shortfall votes=%d required=%d signers=%d block=%s",
-				final.ID,
-				commitCount,
-				commitRequired,
-				len(final.Signatures),
-				ShortHash(final.BlockHash),
-			)
-		}
-		return false
 	}
 	if !n.beginExecutionCommitApply(final.ID, final.BlockHash) {
 		if n.executionResultAlreadyCommitted(final.ID) {
@@ -4813,6 +4903,7 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 	if after > before {
 		n.clearAcceptedProposal(epoch)
 		n.clearLeaderBlock(epoch)
+		n.clearCommitVoteStateUpTo(epoch)
 	}
 	return true
 }
@@ -5270,7 +5361,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		return
 	}
 
-	results, signers, _, ok := getExecResultsGlobal(targetEpoch, proposalSnap.ProposalKey, res.ExecHash, res.TxMerkle)
+	results, _, _, ok := getExecResultsGlobal(targetEpoch, proposalSnap.ProposalKey, res.ExecHash, res.TxMerkle)
 	if !ok {
 		return
 	}
@@ -5281,11 +5372,8 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 	}
 
 	_ = n.maybeAdoptProposalOnExecutionVote(leaderBlock)
-	n.execResultsMu.Lock()
-	_ = n.setQuorumLockedProposalLocked(leaderBlock, "quorum_precommit", storedCount, required)
-	n.execResultsMu.Unlock()
-	freezeExecPool(targetEpoch, proposalSnap.ProposalKey, res.ExecHash)
-	_ = n.finalizeExecutionResult(targetEpoch, res.ExecHash, res.TxMerkle, results, signers)
+	_ = results
+	_ = n.broadcastCommitVoteForProposal(leaderBlock, res.ExecHash, res.TxMerkle)
 }
 
 func (n *Node) recordCandidateExecutionResult(res ExecutionResultMsg) bool {
@@ -5512,7 +5600,7 @@ func (n *Node) tryFinalizeProposalIfQuorum(block Block, reason string) bool {
 	if count < required {
 		return false
 	}
-	results, signers, _, ok := getExecResultsGlobal(block.ID, proposalKey, execHash, txMerkle)
+	results, _, _, ok := getExecResultsGlobal(block.ID, proposalKey, execHash, txMerkle)
 	if !ok {
 		return false
 	}
@@ -5520,11 +5608,8 @@ func (n *Node) tryFinalizeProposalIfQuorum(block Block, reason string) bool {
 		reason = "proposal_existing_quorum"
 	}
 	_ = n.maybeAdoptProposalOnExecutionVote(block)
-	n.execResultsMu.Lock()
-	_ = n.setQuorumLockedProposalLocked(block, reason, count, required)
-	n.execResultsMu.Unlock()
-	freezeExecPool(block.ID, proposalKey, execHash)
-	return n.finalizeExecutionResult(block.ID, execHash, txMerkle, results, signers)
+	_ = results
+	return n.broadcastCommitVoteForProposal(block, execHash, txMerkle)
 }
 
 func (n *Node) tryFinalizeFromStoredResults() {
@@ -5580,9 +5665,73 @@ func (n *Node) hasFinalExecutionResult(epoch uint64, execHash string, txMerkle s
 	return false
 }
 
+func (n *Node) proposalBlockByHash(height uint64, proposalHash string) (Block, bool) {
+	if n == nil || height == 0 || strings.TrimSpace(proposalHash) == "" {
+		return Block{}, false
+	}
+	proposalHash = strings.TrimSpace(proposalHash)
+	for _, block := range n.candidateProposalBlocksForEpoch(height) {
+		if block.ID == height && strings.EqualFold(strings.TrimSpace(block.BlockHash), proposalHash) {
+			return block, true
+		}
+	}
+	return Block{}, false
+}
+
 func (n *Node) handleCommitMsg(cm CommitMsg) {
-	// Commit messages are ignored in result-gossip consensus.
-	_ = cm
+	if n == nil || cm.Height == 0 || n.isCommittedReplayHeight(cm.Height) {
+		return
+	}
+	cm.From = normalizeValidatorID(cm.From)
+	cm.Hash = strings.TrimSpace(cm.Hash)
+	cm.ExecHash = strings.TrimSpace(cm.ExecHash)
+	cm.TxMerkle = strings.TrimSpace(cm.TxMerkle)
+	cm.Signature = strings.TrimSpace(cm.Signature)
+	if cm.From == "" || cm.Hash == "" || cm.ExecHash == "" || cm.Signature == "" {
+		return
+	}
+	block, ok := n.proposalBlockByHash(cm.Height, cm.Hash)
+	if !ok && cm.Block.ID == cm.Height && strings.EqualFold(strings.TrimSpace(cm.Block.BlockHash), cm.Hash) {
+		if n.verifyLeaderBlock(cm.Block, "") {
+			n.noteObservedProposal(cm.Block)
+			block = cm.Block
+			ok = true
+		}
+	}
+	if !ok {
+		return
+	}
+	expected := strings.TrimSpace(block.StateRoot)
+	if expected == "" {
+		expected = strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
+	}
+	if expected == "" || !strings.EqualFold(expected, cm.ExecHash) || strings.TrimSpace(block.MempoolRoot) != cm.TxMerkle {
+		return
+	}
+	count, required, accepted := n.recordVerifiedCommitVote(cm)
+	if !accepted {
+		return
+	}
+	log.Printf("[COMMIT-VOTE] signer=%s height=%d block=%s votes=%d required=%d",
+		ShortID(cm.From),
+		cm.Height,
+		ShortHash(cm.Hash),
+		count,
+		required,
+	)
+	if required == 0 || count < required || cm.Height != n.currentEpoch() {
+		return
+	}
+	proposalKey := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, expected)
+	results, signers, executionVotes, executionOK := getExecResultsGlobal(block.ID, proposalKey, expected, block.MempoolRoot)
+	if !executionOK || executionVotes < required {
+		return
+	}
+	n.execResultsMu.Lock()
+	_ = n.setQuorumLockedProposalLocked(block, "signed_commit_quorum", executionVotes, required)
+	n.execResultsMu.Unlock()
+	freezeExecPool(block.ID, proposalKey, expected)
+	_ = n.finalizeExecutionResult(block.ID, expected, block.MempoolRoot, results, signers)
 }
 
 func (n *Node) BroadcastBlock(block Block) {

@@ -13,6 +13,8 @@ import (
 const (
 	finalityCertificateVersionV1 = "finality_epoch_v1"
 	finalityCertificateDomainV1  = "MSC_FINALIZED_EPOCH_V1"
+	finalityCertificateVersionV2 = "finality_epoch_v2"
+	finalityCertificateDomainV2  = "MSC_FINALIZED_EPOCH_V2"
 	finalityAnchorDBPrefix       = "finality_anchor:"
 	finalityCertificateDBPrefix  = "finality_cert:"
 	finalityCheckpointDBPrefix   = "finality_checkpoint:"
@@ -22,6 +24,18 @@ const (
 	finalityValidatorCommitmentsDir = "validator_commitments"
 	finalityIrreversibleRootsDir    = "irreversible_roots"
 )
+
+func finalityCertificateVersionDomain(block Block) (string, string) {
+	if block.FinalityCertificate != nil {
+		switch strings.TrimSpace(block.FinalityCertificate.Version) {
+		case finalityCertificateVersionV2:
+			return finalityCertificateVersionV2, finalityCertificateDomainV2
+		case finalityCertificateVersionV1:
+			return finalityCertificateVersionV1, finalityCertificateDomainV1
+		}
+	}
+	return finalityCertificateVersionV1, finalityCertificateDomainV1
+}
 
 type finalityCheckpointRecord struct {
 	Version                   string `json:"version"`
@@ -140,8 +154,9 @@ func computeFinalityRoot(block Block, signers []string) string {
 	// identity. Binding local signer subsets into the block hash lets two honest
 	// nodes finalize the same state with different hashes if they observe
 	// different valid quorum subsets.
+	_, domain := finalityCertificateVersionDomain(block)
 	return HashStrings([]string{
-		finalityCertificateDomainV1,
+		domain,
 		"root",
 		strconv.FormatUint(block.ID, 10),
 		strconv.FormatUint(block.BlockTime.Epoch, 10),
@@ -166,8 +181,9 @@ func computeFinalityRoot(block Block, signers []string) string {
 func computeEpochAnchorHash(block Block, previousAnchor string, signers []string) string {
 	// Keep the anchor deterministic across equivalent quorum subsets. The
 	// certificate still carries and verifies the actual signers.
+	_, domain := finalityCertificateVersionDomain(block)
 	return HashStrings([]string{
-		finalityCertificateDomainV1,
+		domain,
 		"epoch_anchor",
 		strconv.FormatUint(block.FinalizedEpoch, 10),
 		strconv.FormatUint(block.FinalizedHeight, 10),
@@ -187,6 +203,13 @@ func (n *Node) attachFinalityCommitments(block *Block) {
 	signers := finalitySignersForBlock(*block)
 	if len(signers) == 0 {
 		return
+	}
+	proposalHash := executionVoteProposalHashForFinalBlock(*block)
+	if _, _, count, required := n.commitVoteEvidence(block.ID, proposalHash); required > 0 && count >= required {
+		block.FinalityCertificate = &FinalizedEpochCertificate{
+			Version: finalityCertificateVersionV2,
+			Domain:  finalityCertificateDomainV2,
+		}
 	}
 	previousAnchor := ""
 	if n != nil && block.ID > 1 {
@@ -245,9 +268,28 @@ func (n *Node) attachFinalityCertificate(block *Block) {
 	if len(signatureMap) == 0 {
 		signatureMap = nil
 	}
+	version, domain := finalityCertificateVersionDomain(*block)
+	proposalHash := executionVoteProposalHashForFinalBlock(*block)
+	commitSigners, commitWitnesses, commitCount, commitRequired := n.commitVoteEvidence(block.ID, proposalHash)
+	commitSignatureMap := make(map[string]string, len(commitWitnesses))
+	for _, witness := range commitWitnesses {
+		if signer := normalizeValidatorID(witness.Validator); signer != "" && strings.TrimSpace(witness.Signature) != "" {
+			commitSignatureMap[signer] = strings.TrimSpace(witness.Signature)
+		}
+	}
+	if version == finalityCertificateVersionV2 {
+		if commitRequired <= 0 || commitCount < commitRequired {
+			return
+		}
+		signers = commitSigners
+	} else {
+		commitWitnesses = nil
+		commitSignatureMap = nil
+		proposalHash = ""
+	}
 	block.FinalityCertificate = &FinalizedEpochCertificate{
-		Version:                   finalityCertificateVersionV1,
-		Domain:                    finalityCertificateDomainV1,
+		Version:                   version,
+		Domain:                    domain,
 		Epoch:                     block.FinalizedEpoch,
 		Height:                    block.FinalizedHeight,
 		BlockHash:                 strings.TrimSpace(block.BlockHash),
@@ -265,8 +307,13 @@ func (n *Node) attachFinalityCertificate(block *Block) {
 		FinalizedValidatorSetHash: strings.TrimSpace(block.FinalizedValidatorSetHash),
 		FinalizedValidatorSetRoot: strings.TrimSpace(block.FinalizedValidatorSetRoot),
 		Signers:                   signers,
-		Signatures:                finalityValidatorSignatures(signers, signatureMap),
+		Signatures:                commitWitnesses,
 		ExecutionResultSignatures: signatureMap,
+		CommitVoteProposalHash:    proposalHash,
+		CommitVoteSignatures:      commitSignatureMap,
+	}
+	if version == finalityCertificateVersionV1 {
+		block.FinalityCertificate.Signatures = finalityValidatorSignatures(signers, signatureMap)
 	}
 }
 
@@ -358,10 +405,21 @@ func verifyFinalityCertificate(block Block, signers []string, required int) erro
 	if cert == nil {
 		return errors.New("finality_certificate_missing")
 	}
-	if strings.TrimSpace(cert.Version) != finalityCertificateVersionV1 {
+	version := strings.TrimSpace(cert.Version)
+	domain := strings.TrimSpace(cert.Domain)
+	switch version {
+	case finalityCertificateVersionV1:
+		if domain != finalityCertificateDomainV1 {
+			return errors.New("finality_certificate_domain_mismatch")
+		}
+	case finalityCertificateVersionV2:
+		if domain != finalityCertificateDomainV2 {
+			return errors.New("finality_certificate_domain_mismatch")
+		}
+	default:
 		return errors.New("finality_certificate_version_mismatch")
 	}
-	if strings.TrimSpace(cert.Domain) != finalityCertificateDomainV1 {
+	if _, expectedDomain := finalityCertificateVersionDomain(block); domain != expectedDomain {
 		return errors.New("finality_certificate_domain_mismatch")
 	}
 	if cert.Epoch != block.FinalizedEpoch || cert.Height != block.FinalizedHeight {
@@ -416,24 +474,59 @@ func verifyFinalityCertificate(block Block, signers []string, required int) erro
 		if signer == "" || sig == "" {
 			return errors.New("finality_certificate_signature_empty")
 		}
-		if !containsNormalizedValidatorID(certSigners, signer) {
+		if version == finalityCertificateVersionV1 && !containsNormalizedValidatorID(certSigners, signer) {
 			return fmt.Errorf("finality_certificate_signature_signer_mismatch: %s", signer)
 		}
 		if expected := strings.TrimSpace(resultSigs[signer]); expected != "" && !strings.EqualFold(expected, sig) {
 			return fmt.Errorf("finality_certificate_signature_mismatch: %s", signer)
 		}
 	}
-	for _, witness := range cert.Signatures {
-		signer := normalizeValidatorID(witness.Validator)
-		sig := strings.TrimSpace(witness.Signature)
-		if signer == "" || sig == "" {
-			return errors.New("finality_certificate_signature_empty")
+	if version == finalityCertificateVersionV2 {
+		proposalHash := executionVoteProposalHashForFinalBlock(block)
+		if proposalHash == "" || !strings.EqualFold(strings.TrimSpace(cert.CommitVoteProposalHash), proposalHash) {
+			return errors.New("finality_certificate_commit_proposal_mismatch")
 		}
-		if !containsNormalizedValidatorID(certSigners, signer) {
-			return fmt.Errorf("finality_certificate_signature_signer_mismatch: %s", signer)
+		verified := make(map[string]struct{}, len(cert.CommitVoteSignatures))
+		for rawSigner, rawSig := range cert.CommitVoteSignatures {
+			signer := normalizeValidatorID(rawSigner)
+			sig := strings.TrimSpace(rawSig)
+			if signer == "" || sig == "" || !containsNormalizedValidatorID(certSigners, signer) {
+				return fmt.Errorf("finality_certificate_commit_signature_signer_mismatch: %s", signer)
+			}
+			msg := CommitMsg{
+				Height:    block.ID,
+				Hash:      proposalHash,
+				ExecHash:  strings.TrimSpace(block.StateRoot),
+				TxMerkle:  strings.TrimSpace(block.MempoolRoot),
+				From:      signer,
+				Signature: sig,
+			}
+			if !verifyCommitVoteSignature(msg) {
+				return fmt.Errorf("finality_certificate_commit_signature_invalid: %s", signer)
+			}
+			verified[signer] = struct{}{}
 		}
-		if expected := strings.TrimSpace(resultSigs[signer]); expected != "" && !strings.EqualFold(expected, sig) {
-			return fmt.Errorf("finality_certificate_signature_mismatch: %s", signer)
+		if len(verified) < required {
+			return fmt.Errorf("finality_certificate_commit_signature_shortfall: signatures=%d required=%d", len(verified), required)
+		}
+		for _, signer := range certSigners {
+			if _, ok := verified[signer]; !ok {
+				return fmt.Errorf("finality_certificate_commit_signature_missing: %s", signer)
+			}
+		}
+	} else {
+		for _, witness := range cert.Signatures {
+			signer := normalizeValidatorID(witness.Validator)
+			sig := strings.TrimSpace(witness.Signature)
+			if signer == "" || sig == "" {
+				return errors.New("finality_certificate_signature_empty")
+			}
+			if !containsNormalizedValidatorID(certSigners, signer) {
+				return fmt.Errorf("finality_certificate_signature_signer_mismatch: %s", signer)
+			}
+			if expected := strings.TrimSpace(resultSigs[signer]); expected != "" && !strings.EqualFold(expected, sig) {
+				return fmt.Errorf("finality_certificate_signature_mismatch: %s", signer)
+			}
 		}
 	}
 	if !IsTestnet {
@@ -448,6 +541,15 @@ func verifyFinalityCertificate(block Block, signers []string, required int) erro
 func finalityCertificateSignatureCount(cert *FinalizedEpochCertificate) int {
 	if cert == nil {
 		return 0
+	}
+	if strings.TrimSpace(cert.Version) == finalityCertificateVersionV2 {
+		seen := make(map[string]struct{}, len(cert.CommitVoteSignatures))
+		for rawSigner, rawSig := range cert.CommitVoteSignatures {
+			if signer := normalizeValidatorID(rawSigner); signer != "" && strings.TrimSpace(rawSig) != "" {
+				seen[signer] = struct{}{}
+			}
+		}
+		return len(seen)
 	}
 	seen := make(map[string]struct{}, len(cert.ExecutionResultSignatures)+len(cert.Signatures))
 	for rawSigner, rawSig := range cert.ExecutionResultSignatures {
@@ -478,9 +580,10 @@ func finalityCheckpointDBKey(height uint64) []byte {
 }
 
 func finalityCheckpointRecordFromBlock(block Block) finalityCheckpointRecord {
+	version, domain := finalityCertificateVersionDomain(block)
 	return finalityCheckpointRecord{
-		Version:                   finalityCertificateVersionV1,
-		Domain:                    finalityCertificateDomainV1,
+		Version:                   version,
+		Domain:                    domain,
 		Epoch:                     block.FinalizedEpoch,
 		Height:                    block.FinalizedHeight,
 		BlockHash:                 strings.TrimSpace(block.BlockHash),
@@ -496,9 +599,10 @@ func finalityCheckpointRecordFromBlock(block Block) finalityCheckpointRecord {
 }
 
 func epochAnchorRecordFromBlock(block Block) EpochAnchorRecord {
+	version, domain := finalityCertificateVersionDomain(block)
 	return EpochAnchorRecord{
-		Version:                   finalityCertificateVersionV1,
-		Domain:                    finalityCertificateDomainV1,
+		Version:                   version,
+		Domain:                    domain,
 		Epoch:                     block.FinalizedEpoch,
 		Height:                    block.FinalizedHeight,
 		AnchorHash:                strings.TrimSpace(block.EpochAnchorHash),
@@ -514,9 +618,10 @@ func epochAnchorRecordFromBlock(block Block) EpochAnchorRecord {
 }
 
 func validatorCommitmentRecordFromBlock(block Block) ValidatorCommitmentRecord {
+	version, domain := finalityCertificateVersionDomain(block)
 	return ValidatorCommitmentRecord{
-		Version:                   finalityCertificateVersionV1,
-		Domain:                    finalityCertificateDomainV1,
+		Version:                   version,
+		Domain:                    domain,
 		Epoch:                     block.FinalizedEpoch,
 		Height:                    block.FinalizedHeight,
 		ValidatorSetHash:          strings.TrimSpace(block.ValidatorSetHash),
@@ -527,9 +632,10 @@ func validatorCommitmentRecordFromBlock(block Block) ValidatorCommitmentRecord {
 }
 
 func irreversibleRootFromBlock(block Block) IrreversibleRoot {
+	version, domain := finalityCertificateVersionDomain(block)
 	return IrreversibleRoot{
-		Version:         finalityCertificateVersionV1,
-		Domain:          finalityCertificateDomainV1,
+		Version:         version,
+		Domain:          domain,
 		Epoch:           block.FinalizedEpoch,
 		Height:          block.FinalizedHeight,
 		FinalizedHash:   strings.TrimSpace(block.BlockHash),
@@ -593,6 +699,9 @@ func (n *Node) loadPersistedFinalityCertificate(height uint64) (FinalizedEpochCe
 
 func verifyFinalityCheckpointRecordMatchesBlock(record finalityCheckpointRecord, block Block) error {
 	expected := finalityCheckpointRecordFromBlock(block)
+	if strings.TrimSpace(record.Version) != expected.Version || strings.TrimSpace(record.Domain) != expected.Domain {
+		return errors.New("finality_checkpoint_domain_mismatch")
+	}
 	if record.Height != expected.Height || record.Epoch != expected.Epoch {
 		return errors.New("finality_checkpoint_height_mismatch")
 	}
@@ -769,7 +878,8 @@ func verifyIrreversibleRootArtifactMatchesBlock(record IrreversibleRoot, block B
 }
 
 func verifyFinalityCertificateArtifactMatchesBlock(cert FinalizedEpochCertificate, block Block) error {
-	if strings.TrimSpace(cert.Version) != finalityCertificateVersionV1 || strings.TrimSpace(cert.Domain) != finalityCertificateDomainV1 {
+	expectedVersion, expectedDomain := finalityCertificateVersionDomain(block)
+	if strings.TrimSpace(cert.Version) != expectedVersion || strings.TrimSpace(cert.Domain) != expectedDomain {
 		return errors.New("finality_certificate_artifact_domain_mismatch")
 	}
 	if cert.Epoch != block.FinalizedEpoch || cert.Height != block.FinalizedHeight {

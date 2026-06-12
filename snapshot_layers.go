@@ -165,6 +165,7 @@ func copyFinalizedEpochCertificate(src *FinalizedEpochCertificate) *FinalizedEpo
 	out.Signers = append([]string{}, src.Signers...)
 	out.Signatures = append([]ValidatorSignature{}, src.Signatures...)
 	out.ExecutionResultSignatures = copyStringMap(src.ExecutionResultSignatures)
+	out.CommitVoteSignatures = copyStringMap(src.CommitVoteSignatures)
 	return &out
 }
 

@@ -76,6 +76,7 @@ func newTestNodeForResultGossip(t *testing.T, dataDir string, validators []strin
 		committed:                  make(map[uint64]string),
 		commitVotes:                make(map[uint64]map[string]map[string]struct{}),
 		commitVoted:                make(map[uint64]map[string]string),
+		commitVoteSignatures:       make(map[uint64]map[string]map[string]string),
 		logicalClock:               LogicalTimeForEpoch(1),
 	}
 
@@ -113,6 +114,57 @@ func newTestNodeForResultGossip(t *testing.T, dataDir string, validators []strin
 	})
 
 	return n
+}
+
+func installCommitVoteKeysForTest(t *testing.T, validators []string) map[string]ed25519.PrivateKey {
+	t.Helper()
+	oldValidatorPubKeys := ValidatorPubKeys
+	oldGenesisValidatorPubKeys := GenesisValidatorPubKeys
+	t.Cleanup(func() {
+		ValidatorPubKeys = oldValidatorPubKeys
+		GenesisValidatorPubKeys = oldGenesisValidatorPubKeys
+	})
+
+	privKeys := make(map[string]ed25519.PrivateKey, len(validators))
+	ValidatorPubKeys = make(map[string]ed25519.PublicKey, len(validators))
+	GenesisValidatorPubKeys = make(map[string]ed25519.PublicKey, len(validators))
+	for _, id := range validators {
+		pub, priv, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatalf("commit-vote keygen failed for %s: %v", id, err)
+		}
+		privKeys[id] = priv
+		ValidatorPubKeys[id] = pub
+		GenesisValidatorPubKeys[id] = pub
+	}
+	return privKeys
+}
+
+func signedCommitMsgForTest(t *testing.T, block Block, signer string, priv ed25519.PrivateKey) CommitMsg {
+	t.Helper()
+	if len(priv) != ed25519.PrivateKeySize {
+		t.Fatalf("missing commit-vote private key for %s", signer)
+	}
+	msg := CommitMsg{
+		Height:   block.ID,
+		Hash:     block.BlockHash,
+		ExecHash: block.StateRoot,
+		TxMerkle: block.MempoolRoot,
+		Block:    block,
+		From:     signer,
+	}
+	msg.Signature = hex.EncodeToString(ed25519.Sign(priv, commitVoteSignBytes(msg.Height, msg.Hash, msg.ExecHash, msg.TxMerkle)))
+	return msg
+}
+
+func recordSignedCommitVotesForTest(t *testing.T, node *Node, block Block, signers []string, privKeys map[string]ed25519.PrivateKey) {
+	t.Helper()
+	for _, signer := range signers {
+		msg := signedCommitMsgForTest(t, block, signer, privKeys[signer])
+		if _, _, ok := node.recordVerifiedCommitVote(msg); !ok {
+			t.Fatalf("failed to record signed commit vote for %s", signer)
+		}
+	}
 }
 
 func waitForConsensusTargetHeight(t *testing.T, node *Node, want uint64) {
@@ -164,6 +216,7 @@ func TestResultGossipCommitTenTimes(t *testing.T) {
 	oldExecPoolSigners := ExecPool.signers
 	oldExecPoolChoice := ExecPool.choice
 	oldExecPoolEpochChoice := ExecPool.epochChoice
+	oldExecPoolCommitChoice := ExecPool.commitChoice
 	ExecPool.mu.Unlock()
 	t.Cleanup(func() {
 		GenesisHash = oldGenesisHash
@@ -177,6 +230,7 @@ func TestResultGossipCommitTenTimes(t *testing.T) {
 		ExecPool.signers = oldExecPoolSigners
 		ExecPool.choice = oldExecPoolChoice
 		ExecPool.epochChoice = oldExecPoolEpochChoice
+		ExecPool.commitChoice = oldExecPoolCommitChoice
 		ExecPool.mu.Unlock()
 	})
 
@@ -202,6 +256,7 @@ func TestResultGossipCommitTenTimes(t *testing.T) {
 	ExecPool.signers = make(map[uint64]map[string]map[string]bool)
 	ExecPool.choice = make(map[uint64]map[string]map[string]string)
 	ExecPool.epochChoice = make(map[uint64]map[string]string)
+	ExecPool.commitChoice = make(map[uint64]map[string]string)
 	ExecPool.mu.Unlock()
 
 	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
@@ -240,6 +295,9 @@ func TestResultGossipCommitTenTimes(t *testing.T) {
 			}
 			node.processExecutionResultMsg(msg, false)
 		}
+		for _, id := range []string{"A", "B", "C"} {
+			node.handleCommitMsg(signedCommitMsgForTest(t, block, id, privKeys[id]))
+		}
 
 		if got := node.Blockchain.Height(); got != epoch {
 			leader, ok := node.getLeaderBlock(epoch)
@@ -263,6 +321,7 @@ func TestResultGossipCommitTenTimes(t *testing.T) {
 func TestFinalizeExecutionResultRequiresPrecommitQuorumLock(t *testing.T) {
 	validators := []string{"A", "B", "C", "D"}
 	resetExecPoolForTest(t)
+	privKeys := installCommitVoteKeysForTest(t, validators)
 	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
 
 	epoch := node.currentEpoch()
@@ -283,6 +342,7 @@ func TestFinalizeExecutionResultRequiresPrecommitQuorumLock(t *testing.T) {
 			t.Fatalf("failed to record exec quorum result for signer %s", res.Signer)
 		}
 	}
+	recordSignedCommitVotesForTest(t, node, block, signers, privKeys)
 
 	if node.finalizeExecutionResult(epoch, block.StateRoot, block.MempoolRoot, results, signers) {
 		t.Fatalf("expected finalize to wait for precommit quorum lock")
@@ -307,6 +367,7 @@ func TestFinalizeExecutionResultDefersWhileLocalNodeSyncing(t *testing.T) {
 
 	validators := []string{"A", "B", "C", "D"}
 	resetExecPoolForTest(t)
+	privKeys := installCommitVoteKeysForTest(t, validators)
 	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
 
 	epoch := node.currentEpoch()
@@ -327,6 +388,7 @@ func TestFinalizeExecutionResultDefersWhileLocalNodeSyncing(t *testing.T) {
 			t.Fatalf("failed to record exec quorum result for signer %s", res.Signer)
 		}
 	}
+	recordSignedCommitVotesForTest(t, node, block, signers, privKeys)
 	node.execResultsMu.Lock()
 	if ok := node.setQuorumLockedProposalLocked(block, "test_syncing_finality_defer", 3, 3); !ok {
 		node.execResultsMu.Unlock()
@@ -442,12 +504,15 @@ func TestHardResetConsensusClearsExecutionArchitectureView(t *testing.T) {
 }
 
 func TestSetQuorumLockedProposalLockedSyncsConsensusStateLock(t *testing.T) {
-	target := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	target := newTestNodeForResultGossip(t, t.TempDir(), validators)
 	epoch := target.currentEpoch()
 	block := target.BuildLeaderBlock(epoch)
 	if !target.storeLeaderBlock(block) {
 		t.Fatalf("failed to store leader block")
 	}
+	recordSignedCommitVotesForTest(t, target, block, []string{"A", "B", "C"}, privKeys)
 
 	target.execResultsMu.Lock()
 	if ok := target.setQuorumLockedProposalLocked(block, "test_quorum_lock_sync", 3, 3); !ok {
@@ -472,6 +537,7 @@ func TestSetQuorumLockedProposalLockedSyncsConsensusStateLock(t *testing.T) {
 func TestFinalizeExecutionResultCommitsAfterPrecommitQuorum(t *testing.T) {
 	validators := []string{"A", "B", "C", "D"}
 	resetExecPoolForTest(t)
+	privKeys := installCommitVoteKeysForTest(t, validators)
 	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
 
 	epoch := node.currentEpoch()
@@ -492,6 +558,7 @@ func TestFinalizeExecutionResultCommitsAfterPrecommitQuorum(t *testing.T) {
 			t.Fatalf("failed to record exec quorum result for signer %s", res.Signer)
 		}
 	}
+	recordSignedCommitVotesForTest(t, node, block, signers, privKeys)
 
 	node.execResultsMu.Lock()
 	if ok := node.setQuorumLockedProposalLocked(block, "test_quorum_precommit", 3, 3); !ok {
@@ -631,6 +698,7 @@ func TestFinalizeExecutionResultPreservesSignedQuorumPolicyMetadata(t *testing.T
 			t.Fatalf("failed to record exec quorum result for signer %s", res.Signer)
 		}
 	}
+	recordSignedCommitVotesForTest(t, node, block, signers, privKeys)
 
 	node.execResultsMu.Lock()
 	if ok := node.setQuorumLockedProposalLocked(block, "test_quorum_metadata_preserve", 3, 3); !ok {
@@ -967,6 +1035,7 @@ func TestFinalizeExecutionResultRequiresStrictExecutionQuorumForCommitVotes(t *t
 
 	validators := []string{"A", "B", "C", "D"}
 	resetExecPoolForTest(t)
+	privKeys := installCommitVoteKeysForTest(t, validators)
 	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
 
 	now := time.Now()
@@ -1014,10 +1083,11 @@ func TestFinalizeExecutionResultRequiresStrictExecutionQuorumForCommitVotes(t *t
 		t.Fatalf("expected strict execution quorum 3, got %d", got)
 	}
 
+	recordSignedCommitVotesForTest(t, node, block, signers, privKeys)
 	node.execResultsMu.Lock()
-	if ok := node.setQuorumLockedProposalLocked(block, "test_strict_precommit_shortfall", 2, 3); !ok {
+	if ok := node.setQuorumLockedProposalLocked(block, "test_strict_precommit_shortfall", 2, 3); ok {
 		node.execResultsMu.Unlock()
-		t.Fatalf("failed to set quorum precommit lock")
+		t.Fatalf("unsigned shortfall must not set a quorum precommit lock")
 	}
 	node.execResultsMu.Unlock()
 
@@ -1034,8 +1104,12 @@ func TestFinalizeExecutionResultRequiresStrictExecutionQuorumForCommitVotes(t *t
 	}
 	results = append(results, extra)
 	signers = append(signers, "C")
+	recordSignedCommitVotesForTest(t, node, block, []string{"C"}, privKeys)
 	node.execResultsMu.Lock()
-	_ = node.setQuorumLockedProposalLocked(block, "test_strict_precommit", 3, 3)
+	if !node.setQuorumLockedProposalLocked(block, "test_strict_precommit", 3, 3) {
+		node.execResultsMu.Unlock()
+		t.Fatalf("expected signed commit quorum lock")
+	}
 	node.execResultsMu.Unlock()
 
 	if !node.finalizeExecutionResult(epoch, block.StateRoot, block.MempoolRoot, results, signers) {
@@ -2321,6 +2395,7 @@ func TestFinalizeExecutionResultRequiresValidLeaderCommitments(t *testing.T) {
 func TestFinalizeExecutionResultAppliesDeterministicSortingRule(t *testing.T) {
 	validators := []string{"A", "B", "C", "D"}
 	resetExecPoolForTest(t)
+	privKeys := installCommitVoteKeysForTest(t, validators)
 	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
 
 	epoch := node.currentEpoch()
@@ -2331,6 +2406,7 @@ func TestFinalizeExecutionResultAppliesDeterministicSortingRule(t *testing.T) {
 	if !node.storeLeaderBlock(block) {
 		t.Fatalf("failed to store leader block")
 	}
+	recordSignedCommitVotesForTest(t, node, block, []string{"A", "B", "C"}, privKeys)
 	node.execResultsMu.Lock()
 	if ok := node.setQuorumLockedProposalLocked(block, "test_deterministic_sorting", 3, 3); !ok {
 		node.execResultsMu.Unlock()

@@ -5758,7 +5758,6 @@ func (n *Node) storeLeaderBlock(block Block) bool {
 	}
 
 	lockedBlock, lockedVotes, keepLocked, lockReason := n.quorumLockedProposalHoldStateForIncomingRound(block.ID, block, -1)
-	quorumUnlocked := lockReason == "higher_round_quorum_seen"
 	if keepLocked && proposalConflictsWithAcceptedLock(lockedBlock, block) {
 		if DebugConsensus {
 			fmt.Printf("[ROUND-FAILOVER] rejected held proposal height=%d held_round=%d held_block=%s incoming_round=%d incoming_block=%s votes=%d reason=%s\n",
@@ -5773,22 +5772,20 @@ func (n *Node) storeLeaderBlock(block Block) bool {
 		}
 		return false
 	}
-	if !quorumUnlocked {
-		heldBlock, heldVotes, keepHeld, holdReason := n.acceptedProposalHoldStateForIncomingRound(block.ID, block.Round)
-		if keepHeld && proposalConflictsWithAcceptedLock(heldBlock, block) {
-			if DebugConsensus {
-				fmt.Printf("[ROUND-FAILOVER] rejected held proposal height=%d held_round=%d held_block=%s incoming_round=%d incoming_block=%s votes=%d reason=%s\n",
-					block.ID,
-					heldBlock.Round,
-					ShortHash(heldBlock.BlockHash),
-					block.Round,
-					ShortHash(block.BlockHash),
-					heldVotes,
-					holdReason,
-				)
-			}
-			return false
+	heldBlock, heldVotes, keepHeld, holdReason := n.acceptedProposalHoldStateForIncomingRound(block.ID, block.Round)
+	if keepHeld && proposalConflictsWithAcceptedLock(heldBlock, block) {
+		if DebugConsensus {
+			fmt.Printf("[ROUND-FAILOVER] rejected held proposal height=%d held_round=%d held_block=%s incoming_round=%d incoming_block=%s votes=%d reason=%s\n",
+				block.ID,
+				heldBlock.Round,
+				ShortHash(heldBlock.BlockHash),
+				block.Round,
+				ShortHash(block.BlockHash),
+				heldVotes,
+				holdReason,
+			)
 		}
+		return false
 	}
 	var replaced bool
 	var existing Block
@@ -5801,7 +5798,7 @@ func (n *Node) storeLeaderBlock(block Block) bool {
 		existing = current
 		if existing.BlockHash == block.BlockHash {
 			if block.Round > existing.Round {
-				if n.proposalHasExecutionQuorum(existing) {
+				if _, _, committed := n.proposalHasSignedCommitQuorum(existing); committed {
 					if DebugConsensus {
 						fmt.Printf("[ROUND-FAILOVER] keeping quorum-locked leader height=%d round=%d incoming_round=%d block=%s\n",
 							block.ID, existing.Round, block.Round, ShortHash(block.BlockHash))
@@ -5859,14 +5856,6 @@ func (n *Node) storeLeaderBlock(block Block) bool {
 
 	if !stored {
 		return false
-	}
-	if quorumUnlocked {
-		votes, required, unlock := n.higherRoundQuorumSeenForProposal(block.ID, lockedBlock, block, -1)
-		if unlock {
-			n.execResultsMu.Lock()
-			_ = n.setQuorumLockedProposalLocked(block, "higher_round_quorum_unlock", votes, required)
-			n.execResultsMu.Unlock()
-		}
 	}
 	n.noteObservedProposal(block)
 	if replaced {
@@ -28052,26 +28041,21 @@ func (n *Node) hasCommittedDifferentHash(height uint64, hash string) bool {
 }
 
 func (n *Node) hasCommitQuorum(height uint64, hash string) bool {
-	validators := n.freezeValidatorSetForHeight(height, n.GetConsensusValidators(int(height)))
-	required := n.executionQuorumRequiredForEpoch(height)
-	if required == 0 {
-		required = execQuorumRequired(len(validators))
+	_, _, count, required := n.commitVoteEvidence(height, hash)
+	if required > 0 && count >= required {
+		return true
 	}
-	if required < 1 {
-		required = 1
-	}
-
-	n.commitMu.Lock()
-
-	defer n.commitMu.Unlock()
-
-	if n.commitVotes[height] == nil || n.commitVotes[height][hash] == nil {
-
+	if n == nil || n.Blockchain == nil {
 		return false
-
 	}
-
-	return len(n.commitVotes[height][hash]) >= required
+	block, ok := n.Blockchain.GetBlock(height)
+	if !ok || !strings.EqualFold(strings.TrimSpace(block.BlockHash), strings.TrimSpace(hash)) {
+		return false
+	}
+	if required == 0 {
+		required = n.executionQuorumRequiredForEpoch(height)
+	}
+	return required > 0 && verifyFinalityCertificate(block, finalitySignersForBlock(block), required) == nil
 
 }
 

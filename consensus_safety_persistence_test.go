@@ -9,7 +9,8 @@ import (
 )
 
 func TestConsensusSafetyStatePersistsRestartLineage(t *testing.T) {
-	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), []string{"A", "B", "C"})
+	validators := []string{"A", "B", "C"}
+	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), validators)
 	node.Blockchain.AddBlock(Block{ID: 7, BlockHash: "chain-seven"})
 	node.Consensus = NewConsensusState(7)
 	block := Block{
@@ -17,6 +18,7 @@ func TestConsensusSafetyStatePersistsRestartLineage(t *testing.T) {
 		Round:     2,
 		BlockHash: "hash-seven",
 		Proposer:  "A",
+		StateRoot: "state-seven",
 	}
 
 	node.Consensus.mu.Lock()
@@ -53,6 +55,9 @@ func TestConsensusSafetyStatePersistsRestartLineage(t *testing.T) {
 		7: {block.BlockHash: {"A": {}, "B": {}}},
 	}
 	node.commitVoted = map[uint64]map[string]string{7: {"A": block.BlockHash, "B": block.BlockHash}}
+	node.commitVoteSignatures = map[uint64]map[string]map[string]string{
+		7: {block.BlockHash: {"A": "signed-a", "B": "signed-b"}},
+	}
 	node.committed = map[uint64]string{6: "hash-six"}
 	node.committedHeight = 6
 	node.finalizedHeight = 6
@@ -74,6 +79,7 @@ func TestConsensusSafetyStatePersistsRestartLineage(t *testing.T) {
 	node.commitMu.Lock()
 	node.commitVotes = nil
 	node.commitVoted = nil
+	node.commitVoteSignatures = nil
 	node.committed = nil
 	node.committedHeight = 0
 	node.finalizedHeight = 0
@@ -198,6 +204,12 @@ func TestConsensusSafetyRestorePrunesFinalizedCommitVoteHistory(t *testing.T) {
 		7: {"A": currentHash, "B": currentHash},
 		8: {"C": "future-eight"},
 	}
+	node.commitVoteSignatures = map[uint64]map[string]map[string]string{
+		1: {"hash-one": {"A": "signed-a"}},
+		6: {"hash-six": {"B": "signed-b"}},
+		7: {currentHash: {"A": "signed-a", "B": "signed-b"}},
+		8: {"future-eight": {"C": "signed-c"}},
+	}
 	node.committed = map[uint64]string{7: currentHash}
 	node.committedHeight = 7
 	node.finalizedHeight = 7
@@ -211,6 +223,7 @@ func TestConsensusSafetyRestorePrunesFinalizedCommitVoteHistory(t *testing.T) {
 	node.commitMu.Lock()
 	node.commitVotes = nil
 	node.commitVoted = nil
+	node.commitVoteSignatures = nil
 	node.commitMu.Unlock()
 	if err := node.restoreConsensusSafetyState(); err != nil {
 		t.Fatalf("restore consensus safety state: %v", err)
@@ -388,6 +401,7 @@ func TestConsensusSafetyRestoreDropsAcceptedLocalVoteWithoutExecEvidence(t *test
 
 func TestConsensusSafetyRestoreNextHeightPrecommitLockAfterCrash(t *testing.T) {
 	validators := canonicalValidatorIDs([]string{"A", "B", "C", "D"})
+	privKeys := installCommitVoteKeysForTest(t, validators)
 	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), validators)
 	node.Blockchain.AddBlock(Block{ID: 7, PrevHash: "hash-six", BlockHash: "chain-seven", ValidatorSetHash: ValidatorSetHash(validators)})
 	node.Consensus = NewConsensusState(8)
@@ -440,6 +454,7 @@ func TestConsensusSafetyRestoreNextHeightPrecommitLockAfterCrash(t *testing.T) {
 	node.localExecVoteByRound = map[uint64]map[uint32]string{locked.ID: {locked.Round: proposalKey}}
 	node.execResultsMu.Unlock()
 
+	recordSignedCommitVotesForTest(t, node, locked, []string{"A", "B", "C"}, privKeys)
 	node.commitMu.Lock()
 	node.committed = map[uint64]string{7: "chain-seven"}
 	node.committedHeight = 7

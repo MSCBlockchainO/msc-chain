@@ -990,6 +990,7 @@ func (n *Node) resetTransientStateForRecovery(height uint64) {
 	n.commitMu.Lock()
 	n.commitVotes = make(map[uint64]map[string]map[string]struct{})
 	n.commitVoted = make(map[uint64]map[string]string)
+	n.commitVoteSignatures = make(map[uint64]map[string]map[string]string)
 	n.commitMu.Unlock()
 
 	n.Mempool.Clear()
@@ -1049,6 +1050,7 @@ func (n *Node) rewindLocalChainToHeight(height uint64, reason string) bool {
 	n.lastCommitAt = time.Now()
 	n.commitVotes = make(map[uint64]map[string]map[string]struct{})
 	n.commitVoted = make(map[uint64]map[string]string)
+	n.commitVoteSignatures = make(map[uint64]map[string]map[string]string)
 	n.commitMu.Unlock()
 
 	if !n.restoreLedgersFromAuthoritativeExecution(height, "rewind_"+strings.TrimSpace(reason)) {

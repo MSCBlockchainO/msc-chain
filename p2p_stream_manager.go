@@ -36,8 +36,33 @@ func (n *Node) openStream(ctx context.Context, pid peer.ID, proto string) (netwo
 	if n == nil || n.Host == nil {
 		return nil, errors.New("host_unavailable")
 	}
-	if n.streamManager != nil {
-		return n.streamManager.Open(ctx, pid, protocol.ID(proto))
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	return n.Host.NewStream(ctx, pid, protocol.ID(proto))
+	opener := n.streamManager
+	if opener == nil {
+		opener = NewStreamManager(n.Host)
+	}
+	type openResult struct {
+		stream network.Stream
+		err    error
+	}
+	resultCh := make(chan openResult, 1)
+	go func() {
+		stream, err := opener.Open(ctx, pid, protocol.ID(proto))
+		result := openResult{stream: stream, err: err}
+		select {
+		case resultCh <- result:
+		case <-ctx.Done():
+			if stream != nil {
+				_ = stream.Reset()
+			}
+		}
+	}()
+	select {
+	case result := <-resultCh:
+		return result.stream, result.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }

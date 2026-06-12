@@ -1203,20 +1203,22 @@ var GenesisValidatorPubKeys = map[string]ed25519.PublicKey{}
 // ExecPool is a global execution vote pool shared inside the process.
 // Votes are block-scoped across round churn, not tied to only the current round.
 var ExecPool = struct {
-	mu          sync.Mutex
-	pool        map[uint64]map[string]map[string]ExecutionResult // epoch -> blockScopedExecKey -> signer -> result
-	txMerkle    map[uint64]map[string]string                     // epoch -> blockScopedExecKey -> txMerkle
-	frozen      map[uint64]map[string]string                     // epoch -> blockScopeKey -> execHash (frozen after quorum)
-	signers     map[uint64]map[string]map[string]bool            // epoch -> blockScopeKey -> signer -> seen
-	choice      map[uint64]map[string]map[string]string          // epoch -> blockScopeKey -> signer -> execHash:txMerkle
-	epochChoice map[uint64]map[string]string                     // epoch -> signer -> blockScopeKey|execHash:txMerkle
+	mu           sync.Mutex
+	pool         map[uint64]map[string]map[string]ExecutionResult // epoch -> blockScopedExecKey -> signer -> result
+	txMerkle     map[uint64]map[string]string                     // epoch -> blockScopedExecKey -> txMerkle
+	frozen       map[uint64]map[string]string                     // epoch -> blockScopeKey -> execHash (frozen after quorum)
+	signers      map[uint64]map[string]map[string]bool            // epoch -> blockScopeKey -> signer -> seen
+	choice       map[uint64]map[string]map[string]string          // epoch -> blockScopeKey -> signer -> execHash:txMerkle
+	epochChoice  map[uint64]map[string]string                     // epoch -> signer -> blockScopeKey|execHash:txMerkle
+	commitChoice map[uint64]map[string]string                     // epoch -> signer -> blockScopeKey
 }{
-	pool:        make(map[uint64]map[string]map[string]ExecutionResult),
-	txMerkle:    make(map[uint64]map[string]string),
-	frozen:      make(map[uint64]map[string]string),
-	signers:     make(map[uint64]map[string]map[string]bool),
-	choice:      make(map[uint64]map[string]map[string]string),
-	epochChoice: make(map[uint64]map[string]string),
+	pool:         make(map[uint64]map[string]map[string]ExecutionResult),
+	txMerkle:     make(map[uint64]map[string]string),
+	frozen:       make(map[uint64]map[string]string),
+	signers:      make(map[uint64]map[string]map[string]bool),
+	choice:       make(map[uint64]map[string]map[string]string),
+	epochChoice:  make(map[uint64]map[string]string),
+	commitChoice: make(map[uint64]map[string]string),
 }
 
 // ================================
@@ -1435,6 +1437,8 @@ type FinalizedEpochCertificate struct {
 	Signers                   []string             `json:"signers,omitempty"`
 	Signatures                []ValidatorSignature `json:"signatures,omitempty"`
 	ExecutionResultSignatures map[string]string    `json:"execution_result_signatures,omitempty"`
+	CommitVoteProposalHash    string               `json:"commit_vote_proposal_hash,omitempty"`
+	CommitVoteSignatures      map[string]string    `json:"commit_vote_signatures,omitempty"`
 }
 type Handshake struct {
 	NodeID          string   `json:"node_id"`
@@ -1981,16 +1985,17 @@ type Node struct {
 	lastLeaderEpoch             uint64
 	lastLeaderRound             uint32
 
-	commitMu         sync.Mutex
-	applyMu          sync.Mutex
-	committed        map[uint64]string                         // height -> hash
-	committedHeight  uint64                                    // monotonic finalized height (idempotent barrier)
-	lastCommitHeight uint64                                    // last committed height observed locally
-	lastCommitAt     time.Time                                 // wall-clock time of last committed-height progress
-	finalizedHeight  uint64                                    // supermajority-finalized height (can lag committed)
-	commitVotes      map[uint64]map[string]map[string]struct{} // height -> hash -> voter
-	commitVoted      map[uint64]map[string]string              // height -> voter -> hash (one commit vote per height)
-	commitInFlight   map[uint64]string                         // height -> hash currently being applied
+	commitMu             sync.Mutex
+	applyMu              sync.Mutex
+	committed            map[uint64]string                         // height -> hash
+	committedHeight      uint64                                    // monotonic finalized height (idempotent barrier)
+	lastCommitHeight     uint64                                    // last committed height observed locally
+	lastCommitAt         time.Time                                 // wall-clock time of last committed-height progress
+	finalizedHeight      uint64                                    // supermajority-finalized height (can lag committed)
+	commitVotes          map[uint64]map[string]map[string]struct{} // height -> proposal hash -> voter
+	commitVoted          map[uint64]map[string]string              // height -> voter -> proposal hash (one commit vote per height)
+	commitVoteSignatures map[uint64]map[string]map[string]string   // height -> proposal hash -> voter -> signature
+	commitInFlight       map[uint64]string                         // height -> hash currently being applied
 
 	heartbeatMu            sync.Mutex
 	lastHeartbeatReported  uint64
@@ -3174,10 +3179,13 @@ type ExecutionResultMsg struct {
 }
 
 type CommitMsg struct {
-	Height uint64 `json:"height"`
-	Hash   string `json:"hash"`
-	Block  Block  `json:"block"`
-	From   string `json:"from"`
+	Height    uint64 `json:"height"`
+	Hash      string `json:"hash"`
+	ExecHash  string `json:"exec_hash,omitempty"`
+	TxMerkle  string `json:"tx_merkle,omitempty"`
+	Block     Block  `json:"block"`
+	From      string `json:"from"`
+	Signature string `json:"sig,omitempty"`
 }
 
 type FraudProof struct {

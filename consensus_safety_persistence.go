@@ -59,13 +59,14 @@ type consensusSafetySnapshot struct {
 	AcceptedProposalBlocks map[string]Block             `json:"accepted_proposal_blocks,omitempty"`
 	LocalExecVoteByRound   map[uint64]map[uint32]string `json:"local_exec_vote_by_round,omitempty"`
 
-	CommitVotes      map[uint64]map[string][]string `json:"commit_votes,omitempty"`
-	CommitVoted      map[uint64]map[string]string   `json:"commit_voted,omitempty"`
-	CommittedHashes  map[uint64]string              `json:"committed_hashes,omitempty"`
-	CommittedHeight  uint64                         `json:"committed_height,omitempty"`
-	FinalizedHeight  uint64                         `json:"finalized_height,omitempty"`
-	LastCommitHeight uint64                         `json:"last_commit_height,omitempty"`
-	LastCommitAtUnix int64                          `json:"last_commit_at_unix,omitempty"`
+	CommitVotes          map[uint64]map[string][]string          `json:"commit_votes,omitempty"`
+	CommitVoted          map[uint64]map[string]string            `json:"commit_voted,omitempty"`
+	CommitVoteSignatures map[uint64]map[string]map[string]string `json:"commit_vote_signatures,omitempty"`
+	CommittedHashes      map[uint64]string                       `json:"committed_hashes,omitempty"`
+	CommittedHeight      uint64                                  `json:"committed_height,omitempty"`
+	FinalizedHeight      uint64                                  `json:"finalized_height,omitempty"`
+	LastCommitHeight     uint64                                  `json:"last_commit_height,omitempty"`
+	LastCommitAtUnix     int64                                   `json:"last_commit_at_unix,omitempty"`
 
 	PostBlockSafeMode map[uint64]consensusSafeModeWindowSnapshot `json:"post_block_safe_mode,omitempty"`
 }
@@ -375,11 +376,38 @@ func cloneCommitVoted(in map[uint64]map[string]string) map[uint64]map[string]str
 	return out
 }
 
-func shouldPruneRestoredCommitVoteHeight(height, chainHeight uint64) bool {
-	if chainHeight == 0 {
-		return true
+func cloneCommitVoteSignatures(in map[uint64]map[string]map[string]string) map[uint64]map[string]map[string]string {
+	if len(in) == 0 {
+		return nil
 	}
-	return height < chainHeight || height > chainHeight
+	out := make(map[uint64]map[string]map[string]string, len(in))
+	for height, byHash := range in {
+		hashes := make(map[string]map[string]string, len(byHash))
+		for hash, bySigner := range byHash {
+			signatures := make(map[string]string, len(bySigner))
+			for signer, signature := range bySigner {
+				signer = normalizeValidatorID(signer)
+				signature = strings.TrimSpace(signature)
+				if signer != "" && signature != "" {
+					signatures[signer] = signature
+				}
+			}
+			if len(signatures) > 0 {
+				hashes[strings.TrimSpace(hash)] = signatures
+			}
+		}
+		if len(hashes) > 0 {
+			out[height] = hashes
+		}
+	}
+	return out
+}
+
+func shouldPruneRestoredCommitVoteHeight(height, chainHeight, activeHeight uint64) bool {
+	if chainHeight == 0 {
+		return height != activeHeight
+	}
+	return height != chainHeight && height != activeHeight
 }
 
 func cloneCommittedHashes(in map[uint64]string) map[uint64]string {
@@ -496,6 +524,7 @@ func (n *Node) snapshotConsensusSafetyState(reason string) consensusSafetySnapsh
 	n.commitMu.Lock()
 	snap.CommitVotes = flattenCommitVotes(n.commitVotes)
 	snap.CommitVoted = cloneCommitVoted(n.commitVoted)
+	snap.CommitVoteSignatures = cloneCommitVoteSignatures(n.commitVoteSignatures)
 	snap.CommittedHashes = cloneCommittedHashes(n.committed)
 	snap.CommittedHeight = n.committedHeight
 	snap.FinalizedHeight = n.finalizedHeight
@@ -890,6 +919,10 @@ func (n *Node) restoreConsensusSafetyState() error {
 		n.execResultsMu.Unlock()
 	}
 
+	activeCommitHeight := uint64(0)
+	if restoreActiveRound {
+		activeCommitHeight = snap.Height
+	}
 	n.commitMu.Lock()
 	if chainHeight == 0 {
 		n.committedHeight = 0
@@ -909,7 +942,7 @@ func (n *Node) restoreConsensusSafetyState() error {
 	if snap.CommitVotes != nil {
 		n.commitVotes = inflateCommitVotes(snap.CommitVotes)
 		for height := range n.commitVotes {
-			if shouldPruneRestoredCommitVoteHeight(height, chainHeight) {
+			if shouldPruneRestoredCommitVoteHeight(height, chainHeight, activeCommitHeight) {
 				delete(n.commitVotes, height)
 			}
 		}
@@ -917,8 +950,41 @@ func (n *Node) restoreConsensusSafetyState() error {
 	if snap.CommitVoted != nil {
 		n.commitVoted = cloneCommitVoted(snap.CommitVoted)
 		for height := range n.commitVoted {
-			if shouldPruneRestoredCommitVoteHeight(height, chainHeight) {
+			if shouldPruneRestoredCommitVoteHeight(height, chainHeight, activeCommitHeight) {
 				delete(n.commitVoted, height)
+			}
+		}
+	}
+	if snap.CommitVoteSignatures != nil {
+		n.commitVoteSignatures = cloneCommitVoteSignatures(snap.CommitVoteSignatures)
+		for height := range n.commitVoteSignatures {
+			if shouldPruneRestoredCommitVoteHeight(height, chainHeight, activeCommitHeight) {
+				delete(n.commitVoteSignatures, height)
+			}
+		}
+	}
+	// Legacy journals could contain deterministic, unsigned commit counters.
+	// Only persisted signatures are authoritative commit-vote evidence.
+	n.commitVotes = make(map[uint64]map[string]map[string]struct{})
+	n.commitVoted = make(map[uint64]map[string]string)
+	for height, byHash := range n.commitVoteSignatures {
+		for hash, bySigner := range byHash {
+			if n.commitVotes[height] == nil {
+				n.commitVotes[height] = make(map[string]map[string]struct{})
+			}
+			if n.commitVotes[height][hash] == nil {
+				n.commitVotes[height][hash] = make(map[string]struct{})
+			}
+			if n.commitVoted[height] == nil {
+				n.commitVoted[height] = make(map[string]string)
+			}
+			for signer, signature := range bySigner {
+				signer = normalizeValidatorID(signer)
+				if signer == "" || strings.TrimSpace(signature) == "" {
+					continue
+				}
+				n.commitVotes[height][hash][signer] = struct{}{}
+				n.commitVoted[height][signer] = hash
 			}
 		}
 	}
@@ -968,7 +1034,24 @@ func (n *Node) restoreConsensusSafetyState() error {
 	if snap.LastCommitAtUnix > 0 && n.lastCommitAt.IsZero() {
 		n.lastCommitAt = time.Unix(snap.LastCommitAtUnix, 0)
 	}
+	restoredCommitSignatures := cloneCommitVoteSignatures(n.commitVoteSignatures)
 	n.commitMu.Unlock()
+	ExecPool.mu.Lock()
+	if ExecPool.commitChoice == nil {
+		ExecPool.commitChoice = make(map[uint64]map[string]string)
+	}
+	for height, byHash := range restoredCommitSignatures {
+		if ExecPool.commitChoice[height] == nil {
+			ExecPool.commitChoice[height] = make(map[string]string)
+		}
+		for hash, bySigner := range byHash {
+			scope := commitVoteScopeKey(height, hash)
+			for signer := range bySigner {
+				ExecPool.commitChoice[height][normalizeValidatorID(signer)] = scope
+			}
+		}
+	}
+	ExecPool.mu.Unlock()
 
 	restoredSafeModeUntil, restoredSafeModeWindow := restorePostBlockSafeModeWindows(snap.PostBlockSafeMode, chainHeight, time.Now())
 	n.validatorSetMu.Lock()
