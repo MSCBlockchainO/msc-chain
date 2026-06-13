@@ -318,12 +318,15 @@ func (n *Node) attachFinalityCertificate(block *Block) {
 }
 
 func finalityRequiredQuorum(block Block, validators []string) int {
-	strict := strictExecSupermajority(len(canonicalValidatorIDs(validators)))
-	if block.RequiredQuorum > strict {
+	if block.RequiredQuorum > 0 {
 		return block.RequiredQuorum
 	}
-	if strict > 0 {
-		return strict
+	if block.StrictQuorum > 0 {
+		return block.StrictQuorum
+	}
+	fallback := strictExecSupermajority(len(canonicalValidatorIDs(validators)))
+	if fallback > 0 {
+		return fallback
 	}
 	if len(validators) > 0 {
 		return len(validators)

@@ -91,6 +91,21 @@ func TestFinalityBlockHashIgnoresEquivalentQuorumSubset(t *testing.T) {
 	}
 }
 
+func TestFinalityRequiredQuorumHonorsBlockPolicy(t *testing.T) {
+	validators := canonicalValidatorIDs([]string{"A", "B", "C", "D", "F"})
+	block := Block{
+		ConsensusMode:       "NORMAL",
+		QuorumPolicyVersion: quorumPolicyVersionV1,
+		ActiveReadyCount:    len(validators),
+		RequiredQuorum:      3,
+		StrictQuorum:        3,
+	}
+
+	if got := finalityRequiredQuorum(block, validators); got != block.RequiredQuorum {
+		t.Fatalf("finality required quorum = %d, want block required quorum %d", got, block.RequiredQuorum)
+	}
+}
+
 func TestVerifyBlockRejectsFinalityCertificateValidatorSetMismatch(t *testing.T) {
 	validators := canonicalValidatorIDs([]string{"A", "B", "C", "D"})
 	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
