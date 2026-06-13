@@ -531,7 +531,7 @@ var ProposerRoundTimeout = 15 * time.Second
 // ConsensusFastProposerFailoverEnabled lets a healthy network replace a stalled
 // proposer using proposer_round_timeout_seconds without silently flooring it to
 // min_block_interval. It does not change quorum/finality requirements.
-var ConsensusFastProposerFailoverEnabled = false
+var ConsensusFastProposerFailoverEnabled = true
 var ConsensusFastProposerFailoverMin = 1 * time.Second
 
 // Zero keeps round recovery uncapped unless an operator explicitly sets a limit.

@@ -1461,6 +1461,12 @@ func TestSelectLiveLeaderForHeightRoundKeepsCanonicalLeaderWhenLive(t *testing.T
 }
 
 func TestEffectiveProposerRoundTimeoutUsesProposalWindowFloor(t *testing.T) {
+	oldFast := ConsensusFastProposerFailoverEnabled
+	t.Cleanup(func() {
+		ConsensusFastProposerFailoverEnabled = oldFast
+	})
+	ConsensusFastProposerFailoverEnabled = false
+
 	got := effectiveProposerRoundTimeout(1*time.Second, 4*time.Second, 500*time.Millisecond)
 	if got != 4*time.Second {
 		t.Fatalf("expected min-block-interval floor to win: got=%s want=%s", got, 4*time.Second)
@@ -1510,6 +1516,12 @@ func TestComputeConsensusRoundFastFailoverDoesNotWaitForMinBlockWindow(t *testin
 }
 
 func TestComputeConsensusRoundAdvancesFromObservedRoundAnchor(t *testing.T) {
+	oldFast := ConsensusFastProposerFailoverEnabled
+	t.Cleanup(func() {
+		ConsensusFastProposerFailoverEnabled = oldFast
+	})
+	ConsensusFastProposerFailoverEnabled = false
+
 	epochStartedAt := time.Unix(100, 0)
 	observedAt := epochStartedAt.Add(9 * time.Second)
 
@@ -1525,6 +1537,12 @@ func TestComputeConsensusRoundAdvancesFromObservedRoundAnchor(t *testing.T) {
 }
 
 func TestConsensusRoundAnchorsWithGateHoldFreezesRoundClock(t *testing.T) {
+	oldFast := ConsensusFastProposerFailoverEnabled
+	t.Cleanup(func() {
+		ConsensusFastProposerFailoverEnabled = oldFast
+	})
+	ConsensusFastProposerFailoverEnabled = false
+
 	epochStartedAt := time.Unix(100, 0)
 	observedAt := epochStartedAt.Add(4 * time.Second)
 	gateHeldAt := observedAt.Add(20 * time.Second)
