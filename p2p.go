@@ -2170,11 +2170,11 @@ func (n *Node) localSignedCommitChoice(height uint64) string {
 	return ""
 }
 
-func (n *Node) shouldFollowCommitNearQuorum(height uint64, proposalHash string, count int, required int) bool {
+func (n *Node) shouldFollowCommitEvidence(height uint64, proposalHash string, count int, required int) bool {
 	if n == nil || height == 0 || strings.TrimSpace(proposalHash) == "" || required <= 1 {
 		return false
 	}
-	if height != n.currentEpoch() || count < required-1 || count >= required {
+	if height != n.currentEpoch() || count <= 0 || count >= required {
 		return false
 	}
 	return n.localSignedCommitChoice(height) == ""
@@ -5739,7 +5739,7 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 		count,
 		required,
 	)
-	if n.shouldFollowCommitNearQuorum(cm.Height, cm.Hash, count, required) {
+	if n.shouldFollowCommitEvidence(cm.Height, cm.Hash, count, required) {
 		log.Printf("[COMMIT-FOLLOW] validator=%s height=%d block=%s votes=%d required=%d action=broadcast_execution_vote",
 			ShortID(n.ID),
 			cm.Height,

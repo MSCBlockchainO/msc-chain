@@ -3603,7 +3603,7 @@ func TestLocalExecutionVoteCanMoveToLowerRoundBeforeSignedCommit(t *testing.T) {
 	}
 }
 
-func TestHandleCommitMsgFollowsCommitQuorumMinusOne(t *testing.T) {
+func TestHandleCommitMsgFollowsSignedCommitEvidence(t *testing.T) {
 	oldRequireWallet := ConfigAuthRequireWallet
 	oldRequireStake := ValidatorRequireStake
 	oldStrictActivation := ValidatorOnboardingStrictActivation
@@ -3649,8 +3649,12 @@ func TestHandleCommitMsgFollowsCommitQuorumMinusOne(t *testing.T) {
 	}
 
 	node.handleCommitMsg(signedCommitMsgForTest(t, block, "B", privKeys["B"]))
-	if got := node.localSignedCommitChoice(epoch); got != "" {
-		t.Fatalf("single remote commit vote should not trigger local commit, got=%q", got)
+	if got := node.localSignedCommitChoice(epoch); got != block.BlockHash {
+		t.Fatalf("single remote commit vote should anchor local commit choice, got=%q want=%q", got, block.BlockHash)
+	}
+	_, _, count, required := node.commitVoteEvidence(epoch, block.BlockHash)
+	if count != 2 || required != 3 {
+		t.Fatalf("expected remote+local commit evidence before finality, got=%d required=%d", count, required)
 	}
 	node.handleCommitMsg(signedCommitMsgForTest(t, block, "C", privKeys["C"]))
 
