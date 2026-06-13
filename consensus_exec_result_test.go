@@ -2245,6 +2245,81 @@ func TestFutureLeaderBlockQueuesAndReplaysQueuedExecutionVote(t *testing.T) {
 	}
 }
 
+func TestPostCommitConsensusDrainReplaysQueuedNextEpochEvidence(t *testing.T) {
+	setProposerRoundMaxForTest(t, 0)
+	oldValidatorPubKeys := ValidatorPubKeys
+	oldGenesisValidatorPubKeys := GenesisValidatorPubKeys
+	oldDebugConsensus := DebugConsensus
+	t.Cleanup(func() {
+		ValidatorPubKeys = oldValidatorPubKeys
+		GenesisValidatorPubKeys = oldGenesisValidatorPubKeys
+		DebugConsensus = oldDebugConsensus
+	})
+	resetExecPoolForTest(t)
+
+	DebugConsensus = false
+
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := make(map[string]ed25519.PrivateKey, len(validators))
+	ValidatorPubKeys = make(map[string]ed25519.PublicKey, len(validators))
+	GenesisValidatorPubKeys = make(map[string]ed25519.PublicKey, len(validators))
+	sources := make(map[string]*Node, len(validators))
+	for _, id := range validators {
+		pub, priv, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatalf("keygen failed: %v", err)
+		}
+		privKeys[id] = priv
+		ValidatorPubKeys[id] = pub
+		GenesisValidatorPubKeys[id] = pub
+		sources[id] = newValidatorRoundTestNode(t, t.TempDir(), id, validators, pub, priv)
+	}
+
+	target := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	target.ID = "TARGET"
+
+	block1 := buildProposalForRound(t, 1, 0, validators, sources)
+	for _, source := range sources {
+		source.Blockchain.AddBlock(block1)
+	}
+	block2 := buildProposalForRound(t, 2, 0, validators, sources)
+
+	msg := ExecutionResultMsg{
+		HeightHint:    2,
+		RoundHint:     block2.Round,
+		BlockHashHint: block2.BlockHash,
+		SigVersion:    execResultSigVersionV2,
+		ExecHash:      block2.StateRoot,
+		TxMerkle:      block2.MempoolRoot,
+		Signer:        "C",
+	}
+	msg.Signature = hex.EncodeToString(ed25519.Sign(privKeys["C"], execResultSignBytesV2(msg.HeightHint, msg.RoundHint, msg.BlockHashHint, msg.ExecHash, msg.TxMerkle)))
+
+	target.processExecutionResultMsg(msg, true)
+	target.handleLeaderBlock(block2, "peer-future")
+
+	target.Blockchain.AddBlock(block1)
+	target.schedulePostCommitConsensusDrain(1)
+
+	proposalKey := proposalVoteKey(2, block2.Round, block2.BlockHash, block2.MempoolRoot, block2.StateRoot)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		stored, ok := target.getLeaderBlock(2)
+		votes := getExecCountGlobal(2, proposalKey, block2.StateRoot, block2.MempoolRoot)
+		if ok && stored.BlockHash == block2.BlockHash && votes == 1 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	stored, ok := target.getLeaderBlock(2)
+	t.Fatalf("expected post-commit drain to replay queued height-2 proposal and vote, stored=%t block=%s votes=%d",
+		ok,
+		ShortHash(stored.BlockHash),
+		getExecCountGlobal(2, proposalKey, block2.StateRoot, block2.MempoolRoot),
+	)
+}
+
 func TestCommittedUnresolvedExecutionVoteIsNotQueued(t *testing.T) {
 	resetExecPoolForTest(t)
 

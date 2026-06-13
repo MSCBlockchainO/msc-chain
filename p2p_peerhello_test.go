@@ -525,8 +525,8 @@ func TestValidatorMeshUrgentPeerFloorUsesQuorum(t *testing.T) {
 	})
 
 	n := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D", "F"})
-	if got := n.validatorMeshUrgentPeerFloor(4); got != 3 {
-		t.Fatalf("urgent peer floor mismatch: got=%d want=3", got)
+	if got := n.validatorMeshUrgentPeerFloor(4); got != 4 {
+		t.Fatalf("urgent peer floor mismatch: got=%d want=4", got)
 	}
 
 	SelfHealMinPeers = 5
@@ -576,6 +576,29 @@ func TestClearDialBackoffForPeerAddrsClearsPersistentValidatorPeer(t *testing.T)
 	}
 	if n.canDialPeerID(otherPeer) {
 		t.Fatalf("unlisted peer backoff should remain intact")
+	}
+}
+
+func TestPersistentValidatorPeerDialFailureUsesSoftBackoff(t *testing.T) {
+	peerID := "12D3KooWSoftBackoffPeer"
+	n := &Node{
+		ID:      "A",
+		Role:    "validator",
+		DataDir: t.TempDir(),
+		Config: &NodeConfig{
+			PersistentPeers: []string{"/ip4/10.0.0.2/tcp/7002/p2p/" + peerID},
+		},
+		peerDialFailures: make(map[string]int),
+		peerDialNext:     make(map[string]time.Time),
+	}
+
+	for i := 0; i < 5; i++ {
+		n.recordDialFailure(peerID)
+	}
+
+	delay := time.Until(n.peerDialNext[peerID])
+	if delay < 35*time.Second || delay > 41*time.Second {
+		t.Fatalf("persistent validator peer backoff should cap near 40s, got=%s", delay)
 	}
 }
 

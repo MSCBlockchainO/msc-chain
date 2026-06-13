@@ -71,6 +71,10 @@ const (
 	dialBackoffStep2                = 30 * time.Second
 	dialBackoffStep3                = 2 * time.Minute
 	dialBackoffMax                  = 5 * time.Minute
+	validatorDialBackoffStep1       = 5 * time.Second
+	validatorDialBackoffStep2       = 10 * time.Second
+	validatorDialBackoffStep3       = 20 * time.Second
+	validatorDialBackoffMax         = 40 * time.Second
 	execVoteReplayTTL               = 2 * time.Minute
 	execVoteStaleIngressTTL         = 30 * time.Second
 	execVoteRebroadcastCooldown     = 5 * time.Second
@@ -4996,6 +5000,7 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		n.clearAcceptedProposal(epoch)
 		n.clearLeaderBlock(epoch)
 		n.clearCommitVoteStateUpTo(epoch)
+		n.schedulePostCommitConsensusDrain(epoch)
 	}
 	return true
 }
@@ -5620,6 +5625,56 @@ func (n *Node) replayQueuedExecutionVotes() {
 	n.tryFinalizeFromStoredResults()
 }
 
+func (n *Node) replayQueuedExecutionVotesForEpoch(epoch uint64) {
+	if n == nil || epoch == 0 {
+		return
+	}
+	key := fmt.Sprintf("%d", epoch)
+	n.execResultsMu.Lock()
+	if len(n.queuedExecVotes) == 0 {
+		n.execResultsMu.Unlock()
+		n.tryFinalizeFromStoredResults()
+		return
+	}
+	msgs := append([]ExecutionResultMsg(nil), n.queuedExecVotes[key]...)
+	if len(msgs) > 0 {
+		delete(n.queuedExecVotes, key)
+	}
+	n.execResultsMu.Unlock()
+
+	for _, msg := range msgs {
+		n.processExecutionResultMsg(msg, true)
+	}
+	n.tryFinalizeFromStoredResults()
+}
+
+func (n *Node) schedulePostCommitConsensusDrain(committedEpoch uint64) {
+	if n == nil || committedEpoch == 0 || n.isShuttingDown() {
+		return
+	}
+	nextEpoch := committedEpoch + 1
+	if nextEpoch == 0 {
+		return
+	}
+	if !n.scheduleConsensusPriorityTask(func() {
+		if n == nil || n.isShuttingDown() || n.currentEpoch() != nextEpoch {
+			return
+		}
+		n.replayQueuedLeaderBlocksForCurrentEpoch()
+		n.replayQueuedExecutionVotesForEpoch(nextEpoch)
+		n.maybeBroadcastCurrentLeaderExecutionVote("post_commit_queue_drain")
+	}) {
+		n.SafeGo(fmt.Sprintf("post_commit_queue_drain_%d", nextEpoch), func() {
+			if n == nil || n.isShuttingDown() || n.currentEpoch() != nextEpoch {
+				return
+			}
+			n.replayQueuedLeaderBlocksForCurrentEpoch()
+			n.replayQueuedExecutionVotesForEpoch(nextEpoch)
+			n.maybeBroadcastCurrentLeaderExecutionVote("post_commit_queue_drain")
+		})
+	}
+}
+
 func (n *Node) processQueuedExecutionVotesForProposal(block Block) {
 	if n == nil || block.ID == 0 {
 		return
@@ -6190,6 +6245,50 @@ func dialBackoffDelay(failures int) time.Duration {
 	}
 }
 
+func validatorDialBackoffDelay(failures int) time.Duration {
+	switch failures {
+	case 1:
+		return validatorDialBackoffStep1
+	case 2:
+		return validatorDialBackoffStep2
+	case 3:
+		return validatorDialBackoffStep3
+	default:
+		return validatorDialBackoffMax
+	}
+}
+
+func peerIDInPeerAddrs(peerID string, addrs []string) bool {
+	peerID = strings.TrimSpace(peerID)
+	if peerID == "" {
+		return false
+	}
+	for _, addr := range addrs {
+		_, parsed, ok := splitPeerAddress(addr)
+		if ok && strings.TrimSpace(parsed) == peerID {
+			return true
+		}
+	}
+	return false
+}
+
+func (n *Node) isValidatorOrPersistentPeerID(peerID string) bool {
+	if n == nil || strings.TrimSpace(peerID) == "" {
+		return false
+	}
+	targets := n.persistentPeersSnapshot()
+	if normalizeNodeRole(n.Role) == "validator" {
+		targets = mergePeerLists(targets, n.validatorMeshTargets())
+	}
+	if peerIDInPeerAddrs(peerID, targets) {
+		return true
+	}
+	n.peerStateMu.Lock()
+	validatorID := strings.TrimSpace(n.peerToValidator[peerID])
+	n.peerStateMu.Unlock()
+	return validatorID != ""
+}
+
 func isLocalhostPeerAddr(addr string) bool {
 	base := strings.ToLower(strings.TrimSpace(stripP2PComponent(addr)))
 	if base == "" {
@@ -6264,11 +6363,15 @@ func (n *Node) recordDialFailure(peerID string) {
 	if peerID == "" {
 		return
 	}
+	backoff := dialBackoffDelay
+	if n.isValidatorOrPersistentPeerID(peerID) {
+		backoff = validatorDialBackoffDelay
+	}
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
 	failures := n.peerDialFailures[peerID] + 1
 	n.peerDialFailures[peerID] = failures
-	n.peerDialNext[peerID] = time.Now().Add(dialBackoffDelay(failures))
+	n.peerDialNext[peerID] = time.Now().Add(backoff(failures))
 	n.notePeerDialScore(peerID, false)
 }
 func (n *Node) recordDialSuccess(peerID string) {
@@ -9160,8 +9263,8 @@ func (n *Node) validatorMeshUrgentPeerFloor(targetCount int) int {
 	floor := 1
 	if n.Blockchain != nil {
 		nextHeight := n.Blockchain.Height() + 1
-		if required := n.executionQuorumRequiredForEpoch(nextHeight); required > floor {
-			floor = required
+		if required := n.executionQuorumRequiredForEpoch(nextHeight); required > 0 && required+1 > floor {
+			floor = required + 1
 		}
 	}
 	if SelfHealMinPeers > floor {
@@ -9205,6 +9308,33 @@ func (n *Node) trustedPeerMultiaddrs() []string {
 	}
 	return sanitizePeerListWithPreferred(trusted, trusted)
 }
+
+func (n *Node) validatorMeshNeedsBackoffReset(targets []string) bool {
+	if n == nil || n.Host == nil || len(targets) == 0 {
+		return false
+	}
+	if len(n.Host.Network().Peers()) < n.validatorMeshUrgentPeerFloor(len(targets)) {
+		return true
+	}
+	for _, target := range targets {
+		_, peerID, ok := splitPeerAddress(target)
+		if !ok || strings.TrimSpace(peerID) == "" {
+			continue
+		}
+		pid, err := peer.Decode(peerID)
+		if err != nil {
+			continue
+		}
+		if n.Host.ID() == pid {
+			continue
+		}
+		if !n.hasActivePeerConnection(pid) {
+			return true
+		}
+	}
+	return false
+}
+
 func (n *Node) maintainValidatorMesh(ctx context.Context) {
 	if n == nil || n.Host == nil {
 		return
@@ -9222,13 +9352,13 @@ func (n *Node) maintainValidatorMesh(ctx context.Context) {
 			// node role. Full/archive observers must redial them after transient
 			// disconnects just as validators do.
 			targets := n.persistentPeersSnapshot()
-			if n.Role == "validator" {
+			if normalizeNodeRole(n.Role) == "validator" {
 				targets = mergePeerLists(targets, n.validatorMeshTargets())
 			}
 			if len(targets) == 0 {
 				continue
 			}
-			if len(n.Host.Network().Peers()) < n.validatorMeshUrgentPeerFloor(len(targets)) {
+			if n.validatorMeshNeedsBackoffReset(targets) {
 				n.clearDialBackoffForPeerAddrs(targets)
 			}
 			n.connectToPeers(ctx, targets)
