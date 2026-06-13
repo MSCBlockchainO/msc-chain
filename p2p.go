@@ -2314,7 +2314,10 @@ func (n *Node) broadcastCommitVoteForProposal(block Block, execHash string, txMe
 		return false
 	}
 	cm.Signature = hex.EncodeToString(sig)
-	n.handleCommitMsg(cm)
+	alreadySignedSameProposal := strings.EqualFold(strings.TrimSpace(n.localSignedCommitChoice(block.ID)), cm.Hash)
+	if !alreadySignedSameProposal {
+		n.handleCommitMsg(cm)
+	}
 	msg := Message{Type: MsgCommit, Data: MustJSON(cm)}
 	n.fanoutConsensusMessageToPeers(msg)
 	data, _ := MarshalP2PMessage(msg)
@@ -5778,7 +5781,7 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 		required,
 	)
 	if n.shouldFollowCommitEvidence(cm.Height, cm.Hash, count, required) {
-		log.Printf("[COMMIT-FOLLOW] validator=%s height=%d block=%s votes=%d required=%d action=broadcast_execution_vote",
+		log.Printf("[COMMIT-FOLLOW] validator=%s height=%d block=%s votes=%d required=%d action=broadcast_commit_vote",
 			ShortID(n.ID),
 			cm.Height,
 			ShortHash(cm.Hash),
@@ -5786,6 +5789,9 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 			required,
 		)
 		n.maybeBroadcastExecutionVoteForBlock(block, "commit_quorum_minus_one")
+		if !n.broadcastCommitVoteForProposal(block, expected, block.MempoolRoot) {
+			n.maybeRebroadcastExecutionVoteForBlock(block, "commit_quorum_minus_one")
+		}
 	}
 	if required == 0 || count < required || cm.Height != n.currentEpoch() {
 		return
