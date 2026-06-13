@@ -2795,6 +2795,7 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 		)
 		return false
 	}
+
 	var highestRound uint32
 	hasPriorRound := false
 	for existingRound, existingKey := range n.localExecVoteByRound[epoch] {
@@ -2808,14 +2809,13 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 		}
 	}
 	if hasPriorRound && round < highestRound {
-		log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=skip_stale_lower_round_vote highest_round=%d incoming=%s",
+		log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=allow_lower_round_convergence highest_round=%d incoming=%s",
 			ShortID(n.ID),
 			epoch,
 			round,
 			highestRound,
 			proposalKey,
 		)
-		return false
 	}
 	n.localExecVoteByRound[epoch][round] = proposalKey
 	return true

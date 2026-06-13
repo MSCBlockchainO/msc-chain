@@ -3582,6 +3582,27 @@ func TestPublishExecutionResultSkipsLocalDoubleVoteForSameRound(t *testing.T) {
 	}
 }
 
+func TestLocalExecutionVoteCanMoveToLowerRoundBeforeSignedCommit(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+
+	higherRoundProposal := proposalVoteKey(104916, 10, "higher-round-block", "tx-root", "")
+	lowerRoundProposal := proposalVoteKey(104916, 9, "lower-round-quorum-block", "tx-root", "")
+
+	if !node.allowLocalExecutionVoteRound(104916, 10, higherRoundProposal) {
+		t.Fatalf("expected initial higher-round execution vote to be accepted")
+	}
+	if !node.allowLocalExecutionVoteRound(104916, 9, lowerRoundProposal) {
+		t.Fatalf("expected pre-commit execution vote to converge to lower-round quorum path")
+	}
+
+	node.execResultsMu.Lock()
+	got := node.localExecVoteByRound[104916][9]
+	node.execResultsMu.Unlock()
+	if got != lowerRoundProposal {
+		t.Fatalf("expected lower round vote marker to be recorded, got=%q want=%q", got, lowerRoundProposal)
+	}
+}
+
 func TestBeginExecutionCommitApplyIsIdempotent(t *testing.T) {
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 
