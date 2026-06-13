@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
+	"strings"
 	"testing"
 	"time"
 )
@@ -498,7 +499,7 @@ func TestLocalExecutionVoteGuardMovesPastExecutionQuorumAfterCommitStall(t *test
 	}
 }
 
-func TestLocalExecutionVoteGuardKeepsSignedCommitChoice(t *testing.T) {
+func TestLocalExecutionVoteCanMovePastSingleSignedCommitChoice(t *testing.T) {
 	resetExecPoolForTest(t)
 	validators := []string{"A", "B", "C", "D"}
 	privKeys := installCommitVoteKeysForTest(t, validators)
@@ -512,11 +513,92 @@ func TestLocalExecutionVoteGuardKeepsSignedCommitChoice(t *testing.T) {
 	node.localExecVoteByRound[block.ID] = map[uint32]string{block.Round: committed}
 	recordSignedCommitVotesForTest(t, node, block, []string{"A"}, privKeys)
 
+	if !node.allowLocalExecutionVoteRound(block.ID, 3, fresh) {
+		t.Fatalf("single signed commit choice must not block higher-round execution convergence")
+	}
+	if got := node.localExecVoteByRound[block.ID][3]; got != fresh {
+		t.Fatalf("expected higher-round marker after non-quorum commit choice: got=%q", got)
+	}
+}
+
+func TestLocalExecutionVoteGuardKeepsSignedCommitQuorumChoice(t *testing.T) {
+	resetExecPoolForTest(t)
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	node.ID = "A"
+	node.localExecVoteByRound = make(map[uint64]map[uint32]string)
+
+	block := Block{ID: 1, Round: 0, BlockHash: "committed-block", StateRoot: "committed-root"}
+	committed := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot)
+	fresh := proposalVoteKey(block.ID, 3, "fresh-block", "", "fresh-root")
+	node.localExecVoteByRound[block.ID] = map[uint32]string{block.Round: committed}
+	recordSignedCommitVotesForTest(t, node, block, []string{"A", "B", "C"}, privKeys)
+
 	if node.allowLocalExecutionVoteRound(block.ID, 3, fresh) {
-		t.Fatalf("signed commit choice must block a conflicting higher-round execution vote")
+		t.Fatalf("signed commit quorum must block a conflicting higher-round execution vote")
 	}
 	if got := node.localExecVoteByRound[block.ID][3]; got != "" {
-		t.Fatalf("unexpected conflicting marker after signed commit: got=%q", got)
+		t.Fatalf("unexpected conflicting marker after signed commit quorum: got=%q", got)
+	}
+}
+
+func TestSignedCommitVoteCanMoveToHigherRoundBeforeQuorum(t *testing.T) {
+	resetExecPoolForTest(t)
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	node.ID = "A"
+
+	lowBlock := Block{ID: 1, Round: 2, BlockHash: "low-round-block", StateRoot: "low-root"}
+	highBlock := Block{ID: 1, Round: 7, BlockHash: "high-round-block", StateRoot: "high-root"}
+	node.noteObservedProposal(lowBlock)
+	node.noteObservedProposal(highBlock)
+
+	if _, _, ok := node.recordVerifiedCommitVote(signedCommitMsgForTest(t, lowBlock, "A", privKeys["A"])); !ok {
+		t.Fatalf("expected first signed commit vote to record")
+	}
+	if _, _, ok := node.recordVerifiedCommitVote(signedCommitMsgForTest(t, highBlock, "A", privKeys["A"])); !ok {
+		t.Fatalf("expected higher-round signed commit vote to replace non-quorum prior vote")
+	}
+	if got := node.localSignedCommitChoice(lowBlock.ID); got != highBlock.BlockHash {
+		t.Fatalf("expected local commit choice to move to higher round, got=%q want=%q", got, highBlock.BlockHash)
+	}
+	_, _, lowCount, _ := node.commitVoteEvidence(lowBlock.ID, lowBlock.BlockHash)
+	if lowCount != 0 {
+		t.Fatalf("expected low-round commit evidence to be removed after replacement, got=%d", lowCount)
+	}
+	_, _, highCount, required := node.commitVoteEvidence(highBlock.ID, highBlock.BlockHash)
+	if highCount != 1 || required != 3 {
+		t.Fatalf("unexpected high-round commit evidence: count=%d required=%d", highCount, required)
+	}
+
+	ExecPool.mu.Lock()
+	choice := strings.TrimSpace(ExecPool.commitChoice[highBlock.ID]["A"])
+	ExecPool.mu.Unlock()
+	if choice != commitVoteScopeKey(highBlock.ID, highBlock.BlockHash) {
+		t.Fatalf("expected global commit choice to follow replacement, got=%q", choice)
+	}
+}
+
+func TestSignedCommitVoteCannotReplaceQuorumChoice(t *testing.T) {
+	resetExecPoolForTest(t)
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	node.ID = "A"
+
+	lowBlock := Block{ID: 1, Round: 2, BlockHash: "low-round-block", StateRoot: "low-root"}
+	highBlock := Block{ID: 1, Round: 7, BlockHash: "high-round-block", StateRoot: "high-root"}
+	node.noteObservedProposal(lowBlock)
+	node.noteObservedProposal(highBlock)
+	recordSignedCommitVotesForTest(t, node, lowBlock, []string{"A", "B", "C"}, privKeys)
+
+	if _, _, ok := node.recordVerifiedCommitVote(signedCommitMsgForTest(t, highBlock, "A", privKeys["A"])); ok {
+		t.Fatalf("signed commit quorum must reject conflicting higher-round replacement")
+	}
+	if got := node.localSignedCommitChoice(lowBlock.ID); got != lowBlock.BlockHash {
+		t.Fatalf("expected local commit choice to remain on quorum block, got=%q want=%q", got, lowBlock.BlockHash)
 	}
 }
 

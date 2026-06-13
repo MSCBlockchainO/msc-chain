@@ -2170,6 +2170,11 @@ func (n *Node) localSignedCommitChoice(height uint64) string {
 	return ""
 }
 
+func (n *Node) signedCommitQuorumForHash(height uint64, proposalHash string) bool {
+	_, _, count, required := n.commitVoteEvidence(height, proposalHash)
+	return required > 0 && count >= required
+}
+
 func (n *Node) shouldFollowCommitEvidence(height uint64, proposalHash string, count int, required int) bool {
 	if n == nil || height == 0 || strings.TrimSpace(proposalHash) == "" || required <= 1 {
 		return false
@@ -2177,7 +2182,8 @@ func (n *Node) shouldFollowCommitEvidence(height uint64, proposalHash string, co
 	if height != n.currentEpoch() || count <= 0 || count >= required {
 		return false
 	}
-	return n.localSignedCommitChoice(height) == ""
+	localChoice := n.localSignedCommitChoice(height)
+	return localChoice == "" || !n.signedCommitQuorumForHash(height, localChoice)
 }
 
 func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
@@ -2196,6 +2202,18 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
 		return 0, 0, false
 	}
 
+	proposalRounds := make(map[string]uint32)
+	if cm.Block.ID == cm.Height && strings.EqualFold(strings.TrimSpace(cm.Block.BlockHash), cm.Hash) {
+		proposalRounds[cm.Hash] = cm.Block.Round
+	}
+	for _, block := range n.candidateProposalBlocksForEpoch(cm.Height) {
+		hash := strings.TrimSpace(block.BlockHash)
+		if block.ID == cm.Height && hash != "" {
+			proposalRounds[hash] = block.Round
+		}
+	}
+	incomingRound, incomingRoundKnown := proposalRounds[cm.Hash]
+
 	n.commitMu.Lock()
 	if n.commitVoteSignatures == nil {
 		n.commitVoteSignatures = make(map[uint64]map[string]map[string]string)
@@ -2206,10 +2224,33 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
 	if n.commitVoteSignatures[cm.Height][cm.Hash] == nil {
 		n.commitVoteSignatures[cm.Height][cm.Hash] = make(map[string]string)
 	}
+	replacedPrior := false
 	for proposalHash, bySigner := range n.commitVoteSignatures[cm.Height] {
 		if proposalHash != cm.Hash && strings.TrimSpace(bySigner[cm.From]) != "" {
-			n.commitMu.Unlock()
-			return 0, required, false
+			existingRound, existingRoundKnown := proposalRounds[proposalHash]
+			existingCount := 0
+			for _, signature := range bySigner {
+				if strings.TrimSpace(signature) != "" {
+					existingCount++
+				}
+			}
+			if existingCount >= required || !incomingRoundKnown || !existingRoundKnown || incomingRound <= existingRound {
+				n.commitMu.Unlock()
+				return 0, required, false
+			}
+			delete(bySigner, cm.From)
+			if len(bySigner) == 0 {
+				delete(n.commitVoteSignatures[cm.Height], proposalHash)
+			}
+			if byHeight := n.commitVotes[cm.Height]; byHeight != nil {
+				if signers := byHeight[proposalHash]; signers != nil {
+					delete(signers, cm.From)
+					if len(signers) == 0 {
+						delete(byHeight, proposalHash)
+					}
+				}
+			}
+			replacedPrior = true
 		}
 	}
 	existing := strings.TrimSpace(n.commitVoteSignatures[cm.Height][cm.Hash][cm.From])
@@ -2233,7 +2274,7 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
 	n.commitVotes[cm.Height][cm.Hash][cm.From] = struct{}{}
 	count := len(n.commitVoteSignatures[cm.Height][cm.Hash])
 	n.commitMu.Unlock()
-	if existing == "" {
+	if existing == "" || replacedPrior {
 		n.persistConsensusSafetyStateAsync("signed_commit_vote")
 	}
 	scope := commitVoteScopeKey(cm.Height, cm.Hash)
@@ -2244,7 +2285,7 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
 	if ExecPool.commitChoice[cm.Height] == nil {
 		ExecPool.commitChoice[cm.Height] = make(map[string]string)
 	}
-	if prior := strings.TrimSpace(ExecPool.commitChoice[cm.Height][cm.From]); prior == "" || prior == scope {
+	if prior := strings.TrimSpace(ExecPool.commitChoice[cm.Height][cm.From]); prior == "" || prior == scope || replacedPrior {
 		ExecPool.commitChoice[cm.Height][cm.From] = scope
 	}
 	ExecPool.mu.Unlock()
@@ -2801,11 +2842,11 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 		return false
 	}
 
-	// Execution votes are movable prevotes. A signed commit vote is the
-	// irreversible one-per-height choice and is the only local cross-round lock.
+	// Execution votes are movable prevotes. Only a signed commit quorum is the
+	// irreversible cross-round lock; a lone commit vote must not strand liveness.
 	incomingScope := execPoolScopeKey(epoch, proposalKey)
 	committedProposal := n.localSignedCommitChoice(epoch)
-	if committedProposal != "" && commitVoteScopeKey(epoch, committedProposal) != incomingScope {
+	if committedProposal != "" && n.signedCommitQuorumForHash(epoch, committedProposal) && commitVoteScopeKey(epoch, committedProposal) != incomingScope {
 		log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=skip_conflicting_signed_commit_vote committed=%s incoming=%s",
 			ShortID(n.ID),
 			epoch,
@@ -3519,9 +3560,6 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 		return false
 	}
 	if requiredQuorum <= 0 {
-		return false
-	}
-	if committedScope := strings.TrimSpace(ExecPool.commitChoice[epoch][signer]); committedScope != "" && committedScope != incomingScope {
 		return false
 	}
 	if _, round, _, _, _, ok := proposalVoteKeyParts(incomingProposalKey); ok {
