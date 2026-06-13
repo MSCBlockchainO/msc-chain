@@ -87,9 +87,13 @@ func peerConnectionFloodKey(conn network.Conn) string {
 	return ""
 }
 
-func (n *Node) allowPeerConnectionFloodKey(key string) bool {
+func (n *Node) allowPeerConnectionFloodForPeer(peerID string, key string) bool {
+	peerID = strings.TrimSpace(peerID)
 	key = strings.TrimSpace(key)
 	if n == nil || key == "" || PeerConnectionFloodMaxPerWindow <= 0 {
+		return true
+	}
+	if peerID != "" && n.isValidatorOrPersistentPeerID(peerID) {
 		return true
 	}
 	n.ensurePeerIsolationMaps()
@@ -107,8 +111,20 @@ func (n *Node) allowPeerConnectionFloodKey(key string) bool {
 	return true
 }
 
+func (n *Node) allowPeerConnectionFloodKey(key string) bool {
+	peerID := ""
+	if strings.HasPrefix(strings.TrimSpace(key), "peer:") {
+		peerID = strings.TrimPrefix(strings.TrimSpace(key), "peer:")
+	}
+	return n.allowPeerConnectionFloodForPeer(peerID, key)
+}
+
 func (n *Node) allowPeerConnectionFlood(conn network.Conn) bool {
-	return n.allowPeerConnectionFloodKey(peerConnectionFloodKey(conn))
+	peerID := ""
+	if conn != nil {
+		peerID = strings.TrimSpace(conn.RemotePeer().String())
+	}
+	return n.allowPeerConnectionFloodForPeer(peerID, peerConnectionFloodKey(conn))
 }
 
 func isRoutableDiscoveryIP(ip net.IP) bool {

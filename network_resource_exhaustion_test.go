@@ -83,6 +83,30 @@ func TestConnectionFloodLimitRejectsBurst(t *testing.T) {
 	}
 }
 
+func TestTrustedValidatorPeerBypassesConnectionFloodLimit(t *testing.T) {
+	withResourceLimitGlobals(t)
+	PeerConnectionFloodMaxPerWindow = 1
+	PeerResourceWindowDuration = time.Minute
+
+	peerID := "12D3KooWQyDzYWfQphFam7oxte6PgPAKPPzWWWXwXMUzjYqXxBLk"
+	n := &Node{
+		Role: "validator",
+		Config: &NodeConfig{
+			PersistentPeers: []string{"/ip4/10.0.0.2/tcp/7002/p2p/" + peerID},
+		},
+	}
+	n.ensurePeerIsolationMaps()
+	key := "subnet:10.0.0.0/24"
+	for i := 0; i < 5; i++ {
+		if !n.allowPeerConnectionFloodForPeer(peerID, key) {
+			t.Fatalf("trusted validator mesh peer should bypass connection flood limit at attempt %d", i+1)
+		}
+	}
+	if got := n.observabilityStatsSnapshot().PeerConnectionFloodTotal; got != 0 {
+		t.Fatalf("trusted validator mesh peer should not increment flood drops, got=%d", got)
+	}
+}
+
 func TestDiscoveryAddressValidationRejectsPoisonedCache(t *testing.T) {
 	withResourceLimitGlobals(t)
 	PeerDiscoveryMaxAddrs = 2

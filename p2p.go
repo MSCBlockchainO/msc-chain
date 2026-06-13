@@ -6416,6 +6416,41 @@ func (n *Node) clearDialBackoffForPeerAddrs(peerAddrs []string) {
 	}
 }
 
+func (n *Node) protectValidatorMeshPeerID(peerID string) {
+	if n == nil || n.Host == nil {
+		return
+	}
+	peerID = strings.TrimSpace(peerID)
+	if peerID == "" || !n.isValidatorOrPersistentPeerID(peerID) {
+		return
+	}
+	pid, err := peer.Decode(peerID)
+	if err != nil {
+		return
+	}
+	if cm := n.Host.ConnManager(); cm != nil {
+		cm.TagPeer(pid, "validator-mesh", 1000)
+		cm.Protect(pid, "validator-mesh")
+	}
+}
+
+func (n *Node) unprotectValidatorMeshPeerID(peerID string) {
+	if n == nil || n.Host == nil {
+		return
+	}
+	peerID = strings.TrimSpace(peerID)
+	if peerID == "" {
+		return
+	}
+	pid, err := peer.Decode(peerID)
+	if err != nil {
+		return
+	}
+	if cm := n.Host.ConnManager(); cm != nil {
+		cm.Unprotect(pid, "validator-mesh")
+	}
+}
+
 func (n *Node) decayDialFailures(now time.Time) {
 	if n == nil {
 		return
@@ -6650,6 +6685,7 @@ func (n *Node) forgetPeer(peerID, reason string) {
 	if peerID == "" {
 		return
 	}
+	n.unprotectValidatorMeshPeerID(peerID)
 	n.clearPeerState(peerID)
 	if n.Host != nil {
 		if pid, err := peer.Decode(peerID); err == nil {
@@ -7636,6 +7672,7 @@ func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
 	}
 	if effectiveValidatorPeer {
 		n.HandlePeerHello(peerAddr, hello.ValidatorID, hello.P2PAddr)
+		n.protectValidatorMeshPeerID(peerAddr)
 	}
 	if mismatch && effectiveValidatorPeer {
 		if n.shouldTrackLateJoinAuthority() && normalizeExpectedValidatorSetSource(expectedSource) == "genesis_bootstrap" {
@@ -8383,6 +8420,7 @@ func (n *Node) onPeerConnected(pid peer.ID) {
 	if vid != "" {
 		n.touchValidator(vid, n.Blockchain.Height())
 	}
+	n.protectValidatorMeshPeerID(pid.String())
 	go n.exchangePeerInfo(pid)
 	// Send peer list after a short hello window to avoid deterministic
 	// "unverified peer" drops when both sides race peers-list first.
@@ -9898,6 +9936,9 @@ func (n *Node) allowPeerDiversityASN(peerID string, outbound bool) bool {
 	if n == nil || !PeerDiversityEnabled {
 		return true
 	}
+	if n.isValidatorOrPersistentPeerID(peerID) {
+		return true
+	}
 	asn := n.peerDiversityASNForPeer(peerID)
 	if asn == "" {
 		return true
@@ -9926,6 +9967,9 @@ func (n *Node) allowPeerDiversityConn(conn network.Conn) bool {
 		return true
 	}
 	peerID := conn.RemotePeer().String()
+	if n.isValidatorOrPersistentPeerID(peerID) {
+		return true
+	}
 	subnet := peerSubnetKeyFromMultiaddr(conn.RemoteMultiaddr())
 	if subnet != "" && PeerDiversityMaxPerSubnet > 0 {
 		connected := n.connectedPeersInSubnet(subnet, peerID)
@@ -9949,6 +9993,9 @@ func (n *Node) allowPeerDiversityDial(maddr ma.Multiaddr) bool {
 		return true
 	}
 	if !PeerDiversityEnabled {
+		return true
+	}
+	if _, peerID, ok := splitPeerAddress(maddr.String()); ok && n.isValidatorOrPersistentPeerID(peerID) {
 		return true
 	}
 	subnet := peerSubnetKeyFromMultiaddr(maddr)
@@ -9979,6 +10026,9 @@ func (n *Node) allowPeerDiversityOutboundPeer(info *peer.AddrInfo) bool {
 		return true
 	}
 	peerID := info.ID.String()
+	if n.isValidatorOrPersistentPeerID(peerID) {
+		return true
+	}
 	if !n.allowPeerDiversityASN(peerID, true) {
 		return false
 	}
@@ -10792,6 +10842,7 @@ func (n *Node) connectToPeer(ctx context.Context, peerAddr string) error {
 	if cm := n.Host.ConnManager(); cm != nil {
 		cm.TagPeer(addrInfo.ID, "persistent", 100)
 	}
+	n.protectValidatorMeshPeerID(addrInfo.ID.String())
 	// Add to peers list
 	n.PeersLibp2p = append(n.PeersLibp2p, addrInfo.ID)
 	n.rememberPeerDiversityAddr(addrInfo.ID.String(), addrInfo.Addrs, true)

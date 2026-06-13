@@ -166,3 +166,43 @@ func TestPeerDiversityOutboundSubnetLimitRejectsDial(t *testing.T) {
 		t.Fatalf("expected outbound diversity rejection, got=%d", snap.OutboundRejectTotal)
 	}
 }
+
+func TestTrustedValidatorPeerBypassesDiversityDialLimit(t *testing.T) {
+	oldEnabled := PeerDiversityEnabled
+	oldMaxSubnet := PeerDiversityMaxPerSubnet
+	oldMaxOutboundSubnet := PeerDiversityMaxOutboundPerSubnet
+	oldDebug := DebugNet
+	defer func() {
+		PeerDiversityEnabled = oldEnabled
+		PeerDiversityMaxPerSubnet = oldMaxSubnet
+		PeerDiversityMaxOutboundPerSubnet = oldMaxOutboundSubnet
+		DebugNet = oldDebug
+	}()
+	PeerDiversityEnabled = true
+	PeerDiversityMaxPerSubnet = 1
+	PeerDiversityMaxOutboundPerSubnet = 1
+	DebugNet = false
+
+	peerID := "12D3KooWQyDzYWfQphFam7oxte6PgPAKPPzWWWXwXMUzjYqXxBLk"
+	existing, err := ma.NewMultiaddr("/ip4/10.0.0.9/tcp/7001")
+	if err != nil {
+		t.Fatalf("existing multiaddr: %v", err)
+	}
+	target, err := ma.NewMultiaddr("/ip4/10.0.0.10/tcp/7002/p2p/" + peerID)
+	if err != nil {
+		t.Fatalf("target multiaddr: %v", err)
+	}
+	n := &Node{
+		Role: "validator",
+		Config: &NodeConfig{
+			PersistentPeers: []string{target.String()},
+		},
+	}
+	n.ensurePeerIsolationMaps()
+	n.setPeerConnected("peer-a", true)
+	n.rememberPeerDiversityAddr("peer-a", []ma.Multiaddr{existing}, true)
+
+	if !n.allowPeerDiversityDial(target) {
+		t.Fatalf("trusted validator mesh peer should bypass local subnet diversity dial limit")
+	}
+}
