@@ -2207,6 +2207,14 @@ func (n *Node) signedCommitQuorumForHash(height uint64, proposalHash string) boo
 	return required > 0 && count >= required
 }
 
+func (n *Node) proposalRoundForHash(height uint64, proposalHash string) (uint32, bool) {
+	block, ok := n.proposalBlockByHash(height, proposalHash)
+	if !ok {
+		return 0, false
+	}
+	return block.Round, true
+}
+
 func (n *Node) shouldFollowCommitEvidence(height uint64, proposalHash string, count int, required int) bool {
 	if n == nil || height == 0 || strings.TrimSpace(proposalHash) == "" || required <= 1 {
 		return false
@@ -2215,7 +2223,22 @@ func (n *Node) shouldFollowCommitEvidence(height uint64, proposalHash string, co
 		return false
 	}
 	localChoice := n.localSignedCommitChoice(height)
-	return localChoice == "" || !n.signedCommitQuorumForHash(height, localChoice)
+	if localChoice == "" {
+		if accepted, ok := n.acceptedProposalBlock(height); ok && !strings.EqualFold(strings.TrimSpace(accepted.BlockHash), strings.TrimSpace(proposalHash)) {
+			incomingRound, incomingKnown := n.proposalRoundForHash(height, proposalHash)
+			return incomingKnown && incomingRound > accepted.Round
+		}
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(localChoice), strings.TrimSpace(proposalHash)) {
+		return true
+	}
+	if n.signedCommitQuorumForHash(height, localChoice) {
+		return false
+	}
+	incomingRound, incomingKnown := n.proposalRoundForHash(height, proposalHash)
+	localRound, localKnown := n.proposalRoundForHash(height, localChoice)
+	return incomingKnown && localKnown && incomingRound > localRound
 }
 
 func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
@@ -6776,6 +6799,7 @@ func (n *Node) disconnectPeerID(peerID, reason string) {
 	if peerID == "" {
 		return
 	}
+	log.Printf("[PEER-DISCONNECT] peer=%s reason=%s trusted=%t", ShortID(peerID), strings.TrimSpace(reason), n.isValidatorOrPersistentPeerID(peerID))
 	n.observePeerDisconnect(reason)
 	n.quarantinePeer(peerID, reason)
 	n.recordDialFailure(peerID)

@@ -3738,6 +3738,78 @@ func TestHandleCommitMsgFollowsSignedCommitEvidence(t *testing.T) {
 	}
 }
 
+func commitFollowTestProposal(node *Node, epoch uint64, round uint32, fill string) Block {
+	block := node.BuildLeaderBlock(epoch)
+	block.Round = round
+	block.BlockTime = LogicalTimeForEpochTick(epoch, TickExec)
+	block.Timestamp = int64(SystemTimeUnits(block.BlockTime))
+	block.StateRoot = strings.Repeat(fill, 64)
+	block.BlockHash = HashBlock(block)
+	return block
+}
+
+func rememberCommitFollowProposal(node *Node, block Block) string {
+	key := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot)
+	node.execResultsMu.Lock()
+	if node.acceptedProposal == nil {
+		node.acceptedProposal = make(map[string]string)
+	}
+	if node.acceptedProposalBlocks == nil {
+		node.acceptedProposalBlocks = make(map[string]Block)
+	}
+	node.acceptedProposalBlocks[key] = block
+	node.execResultsMu.Unlock()
+	return key
+}
+
+func recordLocalCommitChoiceForTest(node *Node, height uint64, proposalHash string) {
+	node.commitMu.Lock()
+	defer node.commitMu.Unlock()
+	if node.commitVoteSignatures == nil {
+		node.commitVoteSignatures = make(map[uint64]map[string]map[string]string)
+	}
+	if node.commitVoteSignatures[height] == nil {
+		node.commitVoteSignatures[height] = make(map[string]map[string]string)
+	}
+	node.commitVoteSignatures[height][proposalHash] = map[string]string{normalizeValidatorID(node.ID): "local-signature"}
+}
+
+func TestShouldFollowCommitEvidenceRejectsLowerRoundAfterLocalChoice(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.ID = "A"
+	epoch := node.currentEpoch()
+	low := commitFollowTestProposal(node, epoch, 5, "1")
+	high := commitFollowTestProposal(node, epoch, 6, "2")
+	rememberCommitFollowProposal(node, low)
+	highKey := rememberCommitFollowProposal(node, high)
+	node.execResultsMu.Lock()
+	node.acceptedProposal[acceptedProposalHeightKey(epoch)] = highKey
+	node.execResultsMu.Unlock()
+	recordLocalCommitChoiceForTest(node, epoch, high.BlockHash)
+
+	if node.shouldFollowCommitEvidence(epoch, low.BlockHash, 2, 3) {
+		t.Fatalf("must not follow lower-round partial commit evidence after signing a higher-round proposal")
+	}
+}
+
+func TestShouldFollowCommitEvidenceAllowsHigherRoundAfterLocalChoice(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.ID = "A"
+	epoch := node.currentEpoch()
+	low := commitFollowTestProposal(node, epoch, 5, "3")
+	high := commitFollowTestProposal(node, epoch, 6, "4")
+	lowKey := rememberCommitFollowProposal(node, low)
+	rememberCommitFollowProposal(node, high)
+	node.execResultsMu.Lock()
+	node.acceptedProposal[acceptedProposalHeightKey(epoch)] = lowKey
+	node.execResultsMu.Unlock()
+	recordLocalCommitChoiceForTest(node, epoch, low.BlockHash)
+
+	if !node.shouldFollowCommitEvidence(epoch, high.BlockHash, 2, 3) {
+		t.Fatalf("expected higher-round partial commit evidence to move an unfinalized local choice forward")
+	}
+}
+
 func TestBeginExecutionCommitApplyIsIdempotent(t *testing.T) {
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 
