@@ -7778,6 +7778,22 @@ func syncMinPeers() int {
 	return minPeers
 }
 
+func (n *Node) snapshotSyncStartMinPeers(targetHeight uint64, required int) int {
+	minPeers := syncMinPeers()
+	if required > 0 && required < minPeers {
+		minPeers = required
+	}
+	if n != nil && targetHeight > 0 {
+		if quorum := execQuorumRequired(len(n.GetConsensusValidators(int(targetHeight)))); quorum > 0 && quorum < minPeers {
+			minPeers = quorum
+		}
+	}
+	if minPeers <= 0 {
+		return 1
+	}
+	return minPeers
+}
+
 func computeSyncPipelineStage(
 	localHeight uint64,
 	targetHeight uint64,
@@ -7910,7 +7926,7 @@ func (n *Node) shouldForceSnapshotForFreshNode(localHeight uint64, targetHeight 
 }
 
 func (n *Node) syncPipelineStageForStatus(localHeight uint64, targetHeight uint64, peers int, snapshotActive bool, syncing bool, syncComplete bool) string {
-	minPeers := syncMinPeers()
+	minPeers := n.snapshotSyncStartMinPeers(targetHeight, 0)
 	forceSnapshot := n.shouldForceSnapshotForFreshNode(localHeight, targetHeight)
 	return computeSyncPipelineStage(localHeight, targetHeight, peers, minPeers, snapshotActive, forceSnapshot, syncing, syncComplete)
 }
@@ -12365,7 +12381,8 @@ func (n *Node) maybeSnapshotSyncToHeight(targetHeight uint64, reason string, vot
 		if peerCount == 0 {
 			return
 		}
-		if peerCount < syncMinPeers() && syncStageUsesSnapshotTransfer(syncCatchupStage(localHeight, targetHeight)) {
+		minSnapshotPeers := n.snapshotSyncStartMinPeers(targetHeight, required)
+		if peerCount < minSnapshotPeers && syncStageUsesSnapshotTransfer(syncCatchupStage(localHeight, targetHeight)) {
 			return
 		}
 	}
