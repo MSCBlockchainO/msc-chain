@@ -161,3 +161,22 @@ func TestInvalidLeaderBlockSignatureFeedsSecurityReputation(t *testing.T) {
 		t.Fatalf("repeated invalid leader blocks should quarantine peer")
 	}
 }
+
+func TestTrustedValidatorSecurityFaultDoesNotQuarantinePeer(t *testing.T) {
+	node := &Node{
+		peerToValidator: make(map[string]string),
+	}
+	peerID := "peer-trusted-validator"
+	node.peerToValidator[peerID] = "B"
+
+	for i := uint64(0); i < peerSecurityFaultQuarantineAfter; i++ {
+		node.recordPeerSecurityFault(peerID, "invalid_leader_block_signature")
+	}
+	score, ok := node.syncPeerScoreSnapshot(peerID)
+	if !ok || score.SecurityFaultCount < peerSecurityFaultQuarantineAfter {
+		t.Fatalf("expected trusted peer security faults to be scored, ok=%t score=%+v", ok, score)
+	}
+	if node.isPeerQuarantined(peerID) {
+		t.Fatalf("trusted validator peer should not be quarantined for local security-fault accounting")
+	}
+}

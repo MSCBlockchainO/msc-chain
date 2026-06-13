@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"strings"
 	"time"
 )
@@ -130,6 +131,11 @@ func (n *Node) recordPeerSecurityFault(peerID string, reason string) uint64 {
 	n.savePeerReputation()
 
 	if count >= peerSecurityFaultQuarantineAfter {
+		if n.isValidatorOrPersistentPeerID(peerID) {
+			n.clearDialBackoffForPeerID(peerID)
+			log.Printf("[PEER-SECURITY-SOFT] peer=%s reason=%s count=%d action=keep_trusted_connection", ShortID(peerID), reason, count)
+			return count
+		}
 		n.ensurePeerIsolationMaps()
 		n.disconnectPeerID(peerID, "security_"+reason)
 	}
