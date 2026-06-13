@@ -3170,6 +3170,7 @@ type ExecutionResultMsg struct {
 	HeightHint          uint64 `json:"height_hint"`
 	RoundHint           uint32 `json:"round_hint,omitempty"`
 	BlockHashHint       string `json:"block_hash_hint,omitempty"`
+	Block               *Block `json:"block,omitempty"`
 	SigVersion          uint8  `json:"sig_v,omitempty"`
 	ExecHash            string `json:"exec_hash"`
 	TxMerkle            string `json:"tx_merkle"`

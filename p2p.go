@@ -836,6 +836,7 @@ type execBroadcastContext struct {
 	RoundHint           uint32
 	BlockHashHint       string
 	ProposalKey         string
+	Block               *Block
 	ExecHash            string
 	TxMerkle            string
 	TxCount             int
@@ -1764,6 +1765,32 @@ func (n *Node) resolveExecutionVoteProposal(height uint64, res ExecutionResultMs
 	return Block{}, execProposalSnapshot{}, false
 }
 
+func (n *Node) observeExecutionVoteProposalBlock(res ExecutionResultMsg) bool {
+	if n == nil || res.Block == nil || res.HeightHint == 0 {
+		return false
+	}
+	block := *res.Block
+	if block.ID != res.HeightHint || strings.TrimSpace(block.BlockHash) == "" {
+		return false
+	}
+	if hashHint := strings.TrimSpace(res.BlockHashHint); hashHint != "" && !strings.EqualFold(strings.TrimSpace(block.BlockHash), hashHint) {
+		return false
+	}
+	if txMerkle := strings.TrimSpace(res.TxMerkle); txMerkle != "" && strings.TrimSpace(block.MempoolRoot) != txMerkle {
+		return false
+	}
+	if execHash := strings.TrimSpace(res.ExecHash); execHash != "" && strings.TrimSpace(block.StateRoot) != "" && !strings.EqualFold(strings.TrimSpace(block.StateRoot), execHash) {
+		return false
+	}
+	if !n.verifyLeaderBlock(block, "") {
+		return false
+	}
+	if !n.storeLeaderBlock(block) {
+		n.noteObservedProposal(block)
+	}
+	return true
+}
+
 func (n *Node) proposalSnapshotForEpoch(height uint64) (execProposalSnapshot, bool) {
 	block, ok := n.executionVoteTargetBlock(height)
 	if !ok || block.ID != height {
@@ -1812,6 +1839,7 @@ func (n *Node) prepareExecutionBroadcastForBlock(block Block, execHash string, t
 	}
 	ctx.RoundHint = snap.Round
 	ctx.BlockHashHint = strings.TrimSpace(snap.BlockHash)
+	ctx.Block = &block
 	ctx.TxCount = len(block.Transactions)
 	ctx.PrevHash = strings.TrimSpace(block.PrevHash)
 	ctx.TxMerkle = strings.TrimSpace(block.MempoolRoot)
@@ -2388,6 +2416,7 @@ func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 			HeightHint:          heightHint,
 			RoundHint:           roundHint,
 			BlockHashHint:       blockHashHint,
+			Block:               ctx.Block,
 			SigVersion:          sigVersion,
 			ExecHash:            execHash,
 			TxMerkle:            txMerkle,
@@ -2407,6 +2436,7 @@ func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 			HeightHint:          heightHint,
 			RoundHint:           roundHint,
 			BlockHashHint:       blockHashHint,
+			Block:               ctx.Block,
 			SigVersion:          sigVersion,
 			ExecHash:            execHash,
 			TxMerkle:            txMerkle,
@@ -5094,6 +5124,9 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 	n.commitMu.Unlock()
 	committedEpoch := res.HeightHint <= committedHeight
 
+	if n.observeExecutionVoteProposalBlock(res) && res.Block != nil {
+		n.processQueuedExecutionVotesForProposal(*res.Block)
+	}
 	leaderBlock, proposalSnap, ok := n.resolveExecutionVoteProposal(targetEpoch, res)
 	if !ok {
 		if committedEpoch {
