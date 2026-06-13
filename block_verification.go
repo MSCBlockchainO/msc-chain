@@ -246,10 +246,10 @@ func (n *Node) verifyBlockConsensusEvidence(block Block, validators []string) er
 			finalHash := strings.TrimSpace(block.BlockHash)
 			proposalHash := executionVoteProposalHashForFinalBlock(block)
 			if !strings.EqualFold(resultBlockHash, finalHash) && (proposalHash == "" || !strings.EqualFold(resultBlockHash, proposalHash)) {
-				if !verifyBlockExecutionResultSignatureForHint(result, block, resultBlockHash) {
+				if !n.verifyBlockExecutionResultSignatureForHint(result, block, resultBlockHash) {
 					// Legacy v1 votes omit block-hash hints; accept them when the
 					// exec/merkle signature still matches under the canonical paths.
-					if err := verifyBlockExecutionResultSignature(result, block); err != nil {
+					if err := n.verifyBlockExecutionResultSignature(result, block); err != nil {
 						return errors.New("execution_result_block_mismatch")
 					}
 				}
@@ -272,7 +272,7 @@ func (n *Node) verifyBlockConsensusEvidence(block Block, validators []string) er
 			return errors.New("execution_result_signature_missing")
 		}
 		if !signatureVerified {
-			if err := verifyBlockExecutionResultSignature(result, block); err != nil {
+			if err := n.verifyBlockExecutionResultSignature(result, block); err != nil {
 				return err
 			}
 		}
@@ -303,6 +303,10 @@ func verifyBlockExecutionQuorumEvidence(block Block, executionSigners map[string
 }
 
 func verifyBlockExecutionResultSignatureForHint(result ExecutionResult, block Block, blockHashHint string) bool {
+	return (*Node)(nil).verifyBlockExecutionResultSignatureForHint(result, block, blockHashHint)
+}
+
+func (n *Node) verifyBlockExecutionResultSignatureForHint(result ExecutionResult, block Block, blockHashHint string) bool {
 	sigHex := strings.TrimSpace(result.Signature)
 	blockHashHint = strings.TrimSpace(blockHashHint)
 	if sigHex == "" || blockHashHint == "" {
@@ -312,7 +316,7 @@ func verifyBlockExecutionResultSignatureForHint(result ExecutionResult, block Bl
 	if err != nil || len(sig) != ed25519.SignatureSize {
 		return false
 	}
-	candidates := execResultPubKeyCandidates(result.Signer)
+	candidates := n.execResultPubKeyCandidatesForHeight(result.Signer, block.ID)
 	if len(candidates) == 0 {
 		return false
 	}
@@ -394,6 +398,10 @@ func recoveryQuorumMetadataAllowsOmittedCounts(mode string, block Block) bool {
 }
 
 func verifyBlockExecutionResultSignature(result ExecutionResult, block Block) error {
+	return (*Node)(nil).verifyBlockExecutionResultSignature(result, block)
+}
+
+func (n *Node) verifyBlockExecutionResultSignature(result ExecutionResult, block Block) error {
 	sigHex := strings.TrimSpace(result.Signature)
 	if sigHex == "" {
 		return nil
@@ -402,7 +410,7 @@ func verifyBlockExecutionResultSignature(result ExecutionResult, block Block) er
 	if err != nil || len(sig) != ed25519.SignatureSize {
 		return errors.New("invalid_execution_result_signature_encoding")
 	}
-	candidates := execResultPubKeyCandidates(result.Signer)
+	candidates := n.execResultPubKeyCandidatesForHeight(result.Signer, block.ID)
 	if len(candidates) == 0 {
 		return errors.New("execution_result_pubkey_missing")
 	}

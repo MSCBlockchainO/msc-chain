@@ -395,6 +395,91 @@ func TestVerifyExecutionResultSignatureUsesStoredVoteRound(t *testing.T) {
 	}
 }
 
+func TestVerifyExecutionResultSignatureUsesCommittedRegistryPubKey(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	const signer = "B"
+	validatorPubKeysMu.Lock()
+	oldRuntime, hadRuntime := ValidatorPubKeys[signer]
+	oldGenesis, hadGenesis := GenesisValidatorPubKeys[signer]
+	delete(ValidatorPubKeys, signer)
+	delete(GenesisValidatorPubKeys, signer)
+	validatorPubKeysMu.Unlock()
+	t.Cleanup(func() {
+		validatorPubKeysMu.Lock()
+		defer validatorPubKeysMu.Unlock()
+		if hadRuntime {
+			ValidatorPubKeys[signer] = oldRuntime
+		} else {
+			delete(ValidatorPubKeys, signer)
+		}
+		if hadGenesis {
+			GenesisValidatorPubKeys[signer] = oldGenesis
+		} else {
+			delete(GenesisValidatorPubKeys, signer)
+		}
+	})
+	if candidates := execResultPubKeyCandidates(signer); len(candidates) != 0 {
+		t.Fatalf("test requires no runtime/genesis pubkey candidates, got=%d", len(candidates))
+	}
+
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	const height uint64 = 12
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = []Block{{ID: 0, BlockHash: GenesisHash}}
+	for h := uint64(1); h <= height; h++ {
+		node.Blockchain.Blocks = append(node.Blockchain.Blocks, Block{ID: h, BlockHash: fmt.Sprintf("block-%d", h)})
+	}
+	node.Blockchain.mu.Unlock()
+	registry := map[string]ValidatorRecord{
+		"A": {ID: "A", Stake: 100},
+		"B": {ID: "B", ConsensusPubKey: hex.EncodeToString(pub), Stake: 100},
+		"C": {ID: "C", Stake: 100},
+		"D": {ID: "D", Stake: 100},
+	}
+	if err := node.storeValidatorRegistrySnapshotRecord(height-1, registry); err != nil {
+		t.Fatalf("store parent registry snapshot: %v", err)
+	}
+
+	block := Block{
+		ID:                  height,
+		Round:               3,
+		PrevHash:            "block-11",
+		Proposer:            "A",
+		Type:                BlockTypeTime,
+		BlockTime:           LogicalTimeForEpochTick(height, TickFinalize),
+		StateRoot:           strings.Repeat("1", 64),
+		MempoolRoot:         strings.Repeat("2", 64),
+		ConsensusMode:       "NORMAL",
+		QuorumPolicyVersion: quorumPolicyVersionV1,
+		ActiveReadyCount:    3,
+		RequiredQuorum:      1,
+		StrictQuorum:        1,
+		Signatures:          []string{"A"},
+	}
+	block.Timestamp = int64(SystemTimeUnits(block.BlockTime))
+	block.BlockHash = HashBlock(block)
+	proposalHash := executionVoteProposalHashForFinalBlock(block)
+	sig := ed25519.Sign(priv, execResultSignBytesV2(block.ID, block.Round, proposalHash, block.StateRoot, block.MempoolRoot))
+	result := ExecutionResult{
+		Height:     block.ID,
+		Round:      block.Round,
+		BlockHash:  proposalHash,
+		Signer:     signer,
+		ResultHash: block.StateRoot,
+		TxMerkle:   block.MempoolRoot,
+		Signature:  hex.EncodeToString(sig),
+	}
+	result.ExecutionResultHash = executionResultHashFromBlockResult(result, block)
+	block.ExecutionResults = []ExecutionResult{result}
+
+	if err := node.verifyBlockConsensusEvidence(block, []string{"A", "B", "C", "D"}); err != nil {
+		t.Fatalf("expected committed registry pubkey to verify execution result: %v", err)
+	}
+}
+
 func TestVerifyBlockConsensusEvidenceAcceptsSignedOriginalProposalHash(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

@@ -3424,29 +3424,46 @@ func (n *Node) validatorStatusSnapshot(id string) (ValidatorStatus, bool) {
 	return snapshot, true
 }
 
+func appendExecResultPubKeyCandidate(candidates []ed25519.PublicKey, pk ed25519.PublicKey) []ed25519.PublicKey {
+	if len(pk) != ed25519.PublicKeySize {
+		return candidates
+	}
+	for _, existing := range candidates {
+		if bytes.Equal(existing, pk) {
+			return candidates
+		}
+	}
+	copied := make([]byte, len(pk))
+	copy(copied, pk)
+	return append(candidates, ed25519.PublicKey(copied))
+}
+
 func execResultPubKeyCandidates(signer string) []ed25519.PublicKey {
 	normalized := normalizeValidatorID(signer)
 	candidates := make([]ed25519.PublicKey, 0, 4)
-	addCandidate := func(pk ed25519.PublicKey) {
-		if len(pk) != ed25519.PublicKeySize {
-			return
-		}
-		for _, existing := range candidates {
-			if bytes.Equal(existing, pk) {
-				return
-			}
-		}
-		copied := make([]byte, len(pk))
-		copy(copied, pk)
-		candidates = append(candidates, ed25519.PublicKey(copied))
-	}
 	validatorPubKeysMu.RLock()
-	addCandidate(ValidatorPubKeys[normalized])
-	addCandidate(ValidatorPubKeys[signer])
-	addCandidate(GenesisValidatorPubKeys[normalized])
-	addCandidate(GenesisValidatorPubKeys[signer])
+	candidates = appendExecResultPubKeyCandidate(candidates, ValidatorPubKeys[normalized])
+	candidates = appendExecResultPubKeyCandidate(candidates, ValidatorPubKeys[signer])
+	candidates = appendExecResultPubKeyCandidate(candidates, GenesisValidatorPubKeys[normalized])
+	candidates = appendExecResultPubKeyCandidate(candidates, GenesisValidatorPubKeys[signer])
 	validatorPubKeysMu.RUnlock()
 	return candidates
+}
+
+func (n *Node) execResultPubKeyCandidatesForHeight(signer string, height uint64) []ed25519.PublicKey {
+	candidates := execResultPubKeyCandidates(signer)
+	if n == nil || height == 0 {
+		return candidates
+	}
+	rec, ok := validatorRecordFromStakeSnapshot(n.validatorRegistrySnapshotForHeight(height), signer)
+	if !ok {
+		return candidates
+	}
+	pubBytes, err := decodeConsensusPubKeyHex(rec.ConsensusPubKey)
+	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
+		return candidates
+	}
+	return appendExecResultPubKeyCandidate(candidates, ed25519.PublicKey(pubBytes))
 }
 
 func recordExecResultGlobal(epoch uint64, proposalKey string, execHash string, txMerkle string, res ExecutionResult) (int, bool, bool) {
@@ -5208,7 +5225,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		n.logExecutionVoteDrop("invalid_signature_encoding", res, proposalSnap)
 		return
 	}
-	candidates := execResultPubKeyCandidates(res.Signer)
+	candidates := n.execResultPubKeyCandidatesForHeight(res.Signer, targetEpoch)
 	if len(candidates) == 0 {
 		if allowQueue {
 			n.queueExecResult(res)
