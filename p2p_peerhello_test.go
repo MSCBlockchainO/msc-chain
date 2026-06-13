@@ -517,6 +517,68 @@ func TestValidatorMeshReconcileIntervalMainnet(t *testing.T) {
 	}
 }
 
+func TestValidatorMeshUrgentPeerFloorUsesQuorum(t *testing.T) {
+	oldMinPeers := SelfHealMinPeers
+	SelfHealMinPeers = 1
+	t.Cleanup(func() {
+		SelfHealMinPeers = oldMinPeers
+	})
+
+	n := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D", "F"})
+	if got := n.validatorMeshUrgentPeerFloor(4); got != 3 {
+		t.Fatalf("urgent peer floor mismatch: got=%d want=3", got)
+	}
+
+	SelfHealMinPeers = 5
+	if got := n.validatorMeshUrgentPeerFloor(4); got != 4 {
+		t.Fatalf("urgent peer floor should clamp to target count: got=%d want=4", got)
+	}
+}
+
+func TestClearDialBackoffForPeerAddrsClearsPersistentValidatorPeer(t *testing.T) {
+	peerID := "12D3KooWBackoffPeer"
+	otherPeer := "12D3KooWOtherPeer"
+	n := &Node{
+		peerDialFailures: map[string]int{
+			peerID:    4,
+			otherPeer: 2,
+		},
+		peerDialNext: map[string]time.Time{
+			peerID:    time.Now().Add(5 * time.Minute),
+			otherPeer: time.Now().Add(5 * time.Minute),
+		},
+		quarantineUntil: map[string]time.Time{
+			peerID:    time.Now().Add(5 * time.Minute),
+			otherPeer: time.Now().Add(5 * time.Minute),
+		},
+		connectingPeers: map[string]bool{
+			peerID:    true,
+			otherPeer: true,
+		},
+	}
+
+	n.clearDialBackoffForPeerAddrs([]string{"/ip4/10.0.0.2/tcp/7002/p2p/" + peerID})
+
+	if !n.canDialPeerID(peerID) {
+		t.Fatalf("expected validator mesh peer to be immediately dialable")
+	}
+	if _, ok := n.peerDialFailures[peerID]; ok {
+		t.Fatalf("expected dial failures cleared")
+	}
+	if _, ok := n.peerDialNext[peerID]; ok {
+		t.Fatalf("expected dial backoff cleared")
+	}
+	if _, ok := n.quarantineUntil[peerID]; ok {
+		t.Fatalf("expected quarantine cleared")
+	}
+	if n.connectingPeers[peerID] {
+		t.Fatalf("expected stale connecting state cleared")
+	}
+	if n.canDialPeerID(otherPeer) {
+		t.Fatalf("unlisted peer backoff should remain intact")
+	}
+}
+
 func TestShouldSyncForValidatorSetMismatch(t *testing.T) {
 	if shouldSyncForValidatorSetMismatch(224, 219) {
 		t.Fatalf("stale peer mismatch should not trigger sync")

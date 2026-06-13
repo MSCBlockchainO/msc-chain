@@ -6281,6 +6281,37 @@ func (n *Node) recordDialSuccess(peerID string) {
 	n.peerStateMu.Unlock()
 	n.notePeerDialScore(peerID, true)
 }
+
+func (n *Node) clearDialBackoffForPeerID(peerID string) {
+	if n == nil || strings.TrimSpace(peerID) == "" {
+		return
+	}
+	n.peerStateMu.Lock()
+	delete(n.peerDialFailures, peerID)
+	delete(n.peerDialNext, peerID)
+	delete(n.quarantineUntil, peerID)
+	delete(n.connectingPeers, peerID)
+	n.peerStateMu.Unlock()
+}
+
+func (n *Node) clearDialBackoffForPeerAddrs(peerAddrs []string) {
+	if n == nil || len(peerAddrs) == 0 {
+		return
+	}
+	seen := make(map[string]struct{}, len(peerAddrs))
+	for _, addr := range peerAddrs {
+		_, peerID, ok := splitPeerAddress(addr)
+		if !ok || strings.TrimSpace(peerID) == "" {
+			continue
+		}
+		if _, done := seen[peerID]; done {
+			continue
+		}
+		seen[peerID] = struct{}{}
+		n.clearDialBackoffForPeerID(peerID)
+	}
+}
+
 func (n *Node) decayDialFailures(now time.Time) {
 	if n == nil {
 		return
@@ -8399,6 +8430,9 @@ func (n *Node) startSelfHeal(ctx context.Context) {
 				if n.Role == "validator" {
 					targets := n.validatorMeshTargets()
 					if len(targets) > 0 {
+						if peers < n.validatorMeshUrgentPeerFloor(len(targets)) || stalled {
+							n.clearDialBackoffForPeerAddrs(targets)
+						}
 						n.connectToPeers(ctx, targets)
 					}
 				}
@@ -8407,6 +8441,9 @@ func (n *Node) startSelfHeal(ctx context.Context) {
 				extras = mergePeerLists(extras, seeds)
 				extras = sanitizePeerListWithPreferred(extras, n.trustedPeerMultiaddrs())
 				if len(extras) > 0 {
+					if peers < n.validatorMeshUrgentPeerFloor(len(extras)) || stalled {
+						n.clearDialBackoffForPeerAddrs(extras)
+					}
 					n.connectToPeers(ctx, extras)
 				}
 				n.connectPubSubPeers()
@@ -9114,6 +9151,30 @@ func (n *Node) validatorMeshTargets() []string {
 	}
 	return sanitizePeerListWithPreferred(addrs, addrs)
 }
+
+func (n *Node) validatorMeshUrgentPeerFloor(targetCount int) int {
+	if n == nil {
+		return 1
+	}
+	floor := 1
+	if n.Blockchain != nil {
+		nextHeight := n.Blockchain.Height() + 1
+		if required := n.executionQuorumRequiredForEpoch(nextHeight); required > floor {
+			floor = required
+		}
+	}
+	if SelfHealMinPeers > floor {
+		floor = SelfHealMinPeers
+	}
+	if targetCount > 0 && floor > targetCount {
+		floor = targetCount
+	}
+	if floor < 1 {
+		return 1
+	}
+	return floor
+}
+
 func (n *Node) trustedPeerMultiaddrs() []string {
 	if n == nil {
 		return nil
@@ -9165,6 +9226,9 @@ func (n *Node) maintainValidatorMesh(ctx context.Context) {
 			}
 			if len(targets) == 0 {
 				continue
+			}
+			if len(n.Host.Network().Peers()) < n.validatorMeshUrgentPeerFloor(len(targets)) {
+				n.clearDialBackoffForPeerAddrs(targets)
 			}
 			n.connectToPeers(ctx, targets)
 		}
