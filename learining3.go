@@ -36322,7 +36322,7 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 			}
 		}
 	}
-	out.ConsensusReady = configuredValidator && participationReady && strictActivationReady && out.SyncComplete && out.RequiredQuorum > 0 && out.LiveValidators >= out.RequiredQuorum
+	out.ConsensusReady = configuredValidator && participationReady && strictActivationReady && out.SyncComplete && out.RequiredQuorum > 0
 	out.Ready = out.SyncComplete && out.ConsensusRunning && (!configuredValidator || out.ConsensusReady)
 	if out.Ready {
 		out.WaitReason = "ready"
@@ -36341,8 +36341,6 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 		case !strictActivationReady:
 			out.WaitReason = strictActivationReason
 			out.ValidatorState = "activating"
-		case out.RequiredQuorum > 0 && out.LiveValidators < out.RequiredQuorum:
-			out.WaitReason = fmt.Sprintf("waiting_quorum_%d_of_%d", out.LiveValidators, out.RequiredQuorum)
 		case !out.ConsensusRunning:
 			out.WaitReason = "consensus_not_started"
 		}
@@ -36902,7 +36900,6 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 	startupNetworkReason := ""
 	executionReady := true
 	executionReason := "ready"
-	quorumReady := true
 	strictActivationReady := true
 	strictActivationReason := "active"
 	consensusLoopRunning := consensusStarted.Load()
@@ -36943,7 +36940,6 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 				}
 			}
 		}
-		quorumReady = committeeResolved && (out.RequiredQuorum == 0 || out.LiveValidators >= out.RequiredQuorum)
 		if !coreRegistryTrustReady {
 			out.CoreRegistryGate = "blocked"
 		}
@@ -37109,7 +37105,10 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 		}
 	}
 	if configuredValidator {
-		out.ConsensusReady = participationGateReady && strictGateReady && coreConsensusReady && committeeResolved && quorumReady && startupSetReady && startupNetworkReady && !out.Syncing && !snapshotSessionActive && out.SyncComplete && out.SnapshotWarmupRemainingBlocks == 0
+		// Local observed quorum is diagnostic. Validator self-readiness must be
+		// derived from deterministic eligibility and sync gates, not transient
+		// peer visibility, otherwise one mesh flap can cascade into self-disable.
+		out.ConsensusReady = participationGateReady && strictGateReady && coreConsensusReady && committeeResolved && startupSetReady && startupNetworkReady && !out.Syncing && !snapshotSessionActive && out.SyncComplete && out.SnapshotWarmupRemainingBlocks == 0
 		out.Ready = out.SyncComplete && out.ConsensusRunning && out.ConsensusReady
 	} else {
 		out.ConsensusReady = true
@@ -37153,8 +37152,6 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 		out.WaitReason = "core_pending_activation"
 	case configuredValidator && !committeeResolved:
 		out.WaitReason = "validator_set_unresolved"
-	case configuredValidator && !quorumReady:
-		out.WaitReason = fmt.Sprintf("waiting_quorum_%d_of_%d", out.LiveValidators, out.RequiredQuorum)
 	case configuredValidator && !consensusLoopRunning:
 		out.WaitReason = "consensus_not_started"
 	default:

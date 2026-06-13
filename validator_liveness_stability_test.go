@@ -303,6 +303,43 @@ func TestRuntimeStatusLiteDoesNotMarkInactiveValidatorReady(t *testing.T) {
 	}
 }
 
+func TestRuntimeStatusDoesNotSelfDisableOnObservedQuorumCollapse(t *testing.T) {
+	defer withOnboardingStrictActivationGlobals(t)()
+	configureStrictActivationDefaults()
+
+	ConfigAuthRequireWallet = false
+	ValidatorRequireStake = false
+	wasStarted := consensusStarted.Load()
+	consensusStarted.Store(true)
+	t.Cleanup(func() {
+		consensusStarted.Store(wasStarted)
+	})
+
+	n := makeStrictActivationNode(8)
+	setHash := ValidatorSetHash([]string{"A", "B", "C", "D"})
+	n.setValidatorStartupCheckStatus(true, n.Blockchain.Height()+1, setHash, setHash, "startup_validator_set_ok")
+	for _, st := range n.validatorStatus {
+		st.Enabled = false
+		st.ConsensusReadyKnown = true
+	}
+
+	lite := n.runtimeStatusSnapshotLite()
+	if lite.RequiredQuorum <= 0 || lite.LiveValidators >= lite.RequiredQuorum {
+		t.Fatalf("test setup must simulate observed quorum collapse, live=%d required=%d", lite.LiveValidators, lite.RequiredQuorum)
+	}
+	if !lite.ConsensusReady || !lite.Ready || lite.WaitReason != "ready" {
+		t.Fatalf("lite status should keep self readiness independent from observed quorum: %+v", lite)
+	}
+
+	full := n.runtimeStatusSnapshot()
+	if full.RequiredQuorum <= 0 || full.LiveValidators >= full.RequiredQuorum {
+		t.Fatalf("test setup must simulate full observed quorum collapse, live=%d required=%d", full.LiveValidators, full.RequiredQuorum)
+	}
+	if !full.ConsensusReady || !full.Ready || full.WaitReason != "ready" {
+		t.Fatalf("full status should keep self readiness independent from observed quorum: %+v", full)
+	}
+}
+
 func TestValidatorLivenessRequiresConsensusReady(t *testing.T) {
 	withLivenessSettings(t, 25, 10, 8)
 
