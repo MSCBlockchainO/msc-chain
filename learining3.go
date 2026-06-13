@@ -11169,6 +11169,9 @@ func (n *Node) startupNetworkValidatorSetSampleStatus(localHeight uint64) (bool,
 			return true, "network_validator_set_sample_not_required_inactive_candidate", networkHeight, 0, ""
 		}
 	}
+	if ok, hash := n.startupCommittedTipNetworkSampleReady(localHeight, checkHeight); ok {
+		return true, "steady_state_committed_tip", localHeight, 0, hash
+	}
 	requiredVotes := n.startupNetworkSampleRequiredVotes(localHeight)
 	if requiredVotes <= 0 {
 		requiredVotes = 1
@@ -11194,6 +11197,38 @@ func (n *Node) startupNetworkValidatorSetSampleStatus(localHeight uint64) (bool,
 		return false, "waiting_network_validator_set_sample", networkHeight, votes, ""
 	}
 	return true, "network_validator_set_sample", networkHeight, votes, strings.ToLower(strings.TrimSpace(networkHash))
+}
+
+func (n *Node) startupCommittedTipNetworkSampleReady(localHeight uint64, checkHeight uint64) (bool, string) {
+	if n == nil || localHeight == 0 || checkHeight == 0 {
+		return false, ""
+	}
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	if n.finalizedHeight > committedHeight {
+		committedHeight = n.finalizedHeight
+	}
+	n.commitMu.Unlock()
+	if committedHeight == 0 || committedHeight < localHeight {
+		return false, ""
+	}
+	if active, _ := n.selfActiveValidatorAt(checkHeight); !active {
+		return false, ""
+	}
+	expected, expectedSource := n.expectedValidatorSetHashWithSource(checkHeight)
+	expected = strings.ToLower(strings.TrimSpace(expected))
+	if expected == "" || !startupNetworkSampleSourceRequiresQuorum(expectedSource) {
+		return false, ""
+	}
+	_, localHash, localSource, ok := n.startupResolvedValidatorSetHash(checkHeight)
+	localHash = strings.ToLower(strings.TrimSpace(localHash))
+	if !ok || localHash == "" || !strings.EqualFold(expected, localHash) {
+		return false, ""
+	}
+	if !startupNetworkSampleSourceRequiresQuorum(localSource) && !validatorSetSourceIsChainAuthoritative(localSource) {
+		return false, ""
+	}
+	return true, expected
 }
 
 func (n *Node) startupNetworkSampleRequiredVotes(localHeight uint64) int {

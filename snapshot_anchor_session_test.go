@@ -1096,6 +1096,39 @@ func TestRuntimeStatusKeepsCommittedValidatorEnabledWithoutStartupSample(t *test
 	}
 }
 
+func TestStartupNetworkValidatorSetSampleStatusAllowsCommittedTipWithoutPeers(t *testing.T) {
+	defer withLegacyQuorumFallbackGlobals(t)()
+	ValidatorSetCommitmentV2Height = 0
+	ValidatorSetHashV3Height = 0
+	ConfigAuthRequireWallet = false
+	ValidatorRequireStake = false
+
+	host, err := libp2p.New()
+	if err != nil {
+		t.Fatalf("failed to create host: %v", err)
+	}
+	defer host.Close()
+
+	hash := ValidatorSetHash([]string{"A", "B", "C", "D"})
+	n := newStartupSampleNode(956, hash)
+	n.DataDir = t.TempDir()
+	n.Host = host
+	n.committedHeight = 956
+	n.finalizedHeight = 956
+	n.lastCommitHeight = 956
+
+	ready, reason, networkHeight, votes, networkHash := n.startupNetworkValidatorSetSampleStatus(956)
+	if !ready {
+		t.Fatalf("expected committed tip to bypass remote startup sample, reason=%s", reason)
+	}
+	if reason != "steady_state_committed_tip" {
+		t.Fatalf("unexpected reason: got=%s", reason)
+	}
+	if networkHeight != 956 || votes != 0 || networkHash != hash {
+		t.Fatalf("unexpected committed-tip sample: height=%d votes=%d hash=%q", networkHeight, votes, networkHash)
+	}
+}
+
 func newStartupSampleNode(localHeight uint64, hash string) *Node {
 	validators := []string{"A", "B", "C", "D"}
 	return &Node{
