@@ -3603,6 +3603,62 @@ func TestLocalExecutionVoteCanMoveToLowerRoundBeforeSignedCommit(t *testing.T) {
 	}
 }
 
+func TestHandleCommitMsgFollowsCommitQuorumMinusOne(t *testing.T) {
+	oldRequireWallet := ConfigAuthRequireWallet
+	oldRequireStake := ValidatorRequireStake
+	oldStrictActivation := ValidatorOnboardingStrictActivation
+	t.Cleanup(func() {
+		ConfigAuthRequireWallet = oldRequireWallet
+		ValidatorRequireStake = oldRequireStake
+		ValidatorOnboardingStrictActivation = oldStrictActivation
+	})
+	ConfigAuthRequireWallet = false
+	ValidatorRequireStake = false
+	ValidatorOnboardingStrictActivation = false
+
+	resetExecPoolForTest(t)
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	node.ID = "A"
+	node.Role = "validator"
+	node.ValidatorKey = ValidatorKey{
+		ID:         "A",
+		PublicKey:  append(ed25519.PublicKey(nil), privKeys["A"].Public().(ed25519.PublicKey)...),
+		PrivateKey: append(ed25519.PrivateKey(nil), privKeys["A"]...),
+	}
+
+	epoch := node.currentEpoch()
+	block := node.BuildLeaderBlock(epoch)
+	if !node.storeLeaderBlock(block) {
+		t.Fatalf("failed to store leader block")
+	}
+	proposalKey := proposalVoteKey(epoch, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot)
+	for _, signer := range []string{"B", "C"} {
+		if _, ok, equivocation := recordExecResultGlobalWithRequired(epoch, proposalKey, block.StateRoot, block.MempoolRoot, ExecutionResult{
+			Height:              epoch,
+			Round:               block.Round,
+			BlockHash:           block.BlockHash,
+			Signer:              signer,
+			ResultHash:          block.StateRoot,
+			TxMerkle:            block.MempoolRoot,
+			ExecutionResultHash: executionResultHashFromBlockResult(ExecutionResult{Height: epoch, BlockHash: block.BlockHash, ResultHash: block.StateRoot, TxMerkle: block.MempoolRoot}, block),
+		}, 3); !ok || equivocation {
+			t.Fatalf("failed to seed execution vote signer=%s ok=%t equivocation=%t", signer, ok, equivocation)
+		}
+	}
+
+	node.handleCommitMsg(signedCommitMsgForTest(t, block, "B", privKeys["B"]))
+	if got := node.localSignedCommitChoice(epoch); got != "" {
+		t.Fatalf("single remote commit vote should not trigger local commit, got=%q", got)
+	}
+	node.handleCommitMsg(signedCommitMsgForTest(t, block, "C", privKeys["C"]))
+
+	if got := node.Blockchain.Height(); got < epoch {
+		t.Fatalf("expected local follow vote to finalize the near-quorum proposal, height=%d want_at_least=%d", got, epoch)
+	}
+}
+
 func TestBeginExecutionCommitApplyIsIdempotent(t *testing.T) {
 	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
 

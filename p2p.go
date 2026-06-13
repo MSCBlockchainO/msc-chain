@@ -2152,6 +2152,34 @@ func (n *Node) commitVoteEvidence(height uint64, proposalHash string) ([]string,
 	return signers, witnesses, len(signers), required
 }
 
+func (n *Node) localSignedCommitChoice(height uint64) string {
+	if n == nil || height == 0 {
+		return ""
+	}
+	localID := normalizeValidatorID(n.ID)
+	if localID == "" {
+		return ""
+	}
+	n.commitMu.Lock()
+	defer n.commitMu.Unlock()
+	for proposalHash, bySigner := range n.commitVoteSignatures[height] {
+		if strings.TrimSpace(bySigner[localID]) != "" {
+			return strings.TrimSpace(proposalHash)
+		}
+	}
+	return ""
+}
+
+func (n *Node) shouldFollowCommitNearQuorum(height uint64, proposalHash string, count int, required int) bool {
+	if n == nil || height == 0 || strings.TrimSpace(proposalHash) == "" || required <= 1 {
+		return false
+	}
+	if height != n.currentEpoch() || count < required-1 || count >= required {
+		return false
+	}
+	return n.localSignedCommitChoice(height) == ""
+}
+
 func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
 	if n == nil || !verifyCommitVoteSignature(cm) {
 		return 0, 0, false
@@ -2776,15 +2804,7 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 	// Execution votes are movable prevotes. A signed commit vote is the
 	// irreversible one-per-height choice and is the only local cross-round lock.
 	incomingScope := execPoolScopeKey(epoch, proposalKey)
-	n.commitMu.Lock()
-	committedProposal := ""
-	for proposalHash, bySigner := range n.commitVoteSignatures[epoch] {
-		if strings.TrimSpace(bySigner[normalizeValidatorID(n.ID)]) != "" {
-			committedProposal = proposalHash
-			break
-		}
-	}
-	n.commitMu.Unlock()
+	committedProposal := n.localSignedCommitChoice(epoch)
 	if committedProposal != "" && commitVoteScopeKey(epoch, committedProposal) != incomingScope {
 		log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=skip_conflicting_signed_commit_vote committed=%s incoming=%s",
 			ShortID(n.ID),
@@ -5719,6 +5739,16 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 		count,
 		required,
 	)
+	if n.shouldFollowCommitNearQuorum(cm.Height, cm.Hash, count, required) {
+		log.Printf("[COMMIT-FOLLOW] validator=%s height=%d block=%s votes=%d required=%d action=broadcast_execution_vote",
+			ShortID(n.ID),
+			cm.Height,
+			ShortHash(cm.Hash),
+			count,
+			required,
+		)
+		n.maybeBroadcastExecutionVoteForBlock(block, "commit_quorum_minus_one")
+	}
 	if required == 0 || count < required || cm.Height != n.currentEpoch() {
 		return
 	}
