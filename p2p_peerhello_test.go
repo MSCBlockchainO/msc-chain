@@ -602,6 +602,57 @@ func TestPersistentValidatorPeerDialFailureUsesSoftBackoff(t *testing.T) {
 	}
 }
 
+func TestValidatorMeshPeerFlapDoesNotQuarantine(t *testing.T) {
+	peerID := "12D3KooWValidatorFlapPeer"
+	n := &Node{
+		ID:   "A",
+		Role: "validator",
+		Config: &NodeConfig{
+			PersistentPeers: []string{"/ip4/10.0.0.2/tcp/7002/p2p/" + peerID},
+		},
+	}
+	n.ensurePeerIsolationMaps()
+	n.peerStateMu.Lock()
+	n.peerDialFailures[peerID] = 4
+	n.peerDialNext[peerID] = time.Now().Add(2 * time.Minute)
+	n.quarantineUntil[peerID] = time.Now().Add(2 * time.Minute)
+	n.peerStateMu.Unlock()
+
+	for i := 0; i < peerFlapThreshold; i++ {
+		n.recordPeerFlap(peerID)
+	}
+
+	if !n.canDialPeerID(peerID) {
+		t.Fatalf("validator mesh peer should remain immediately dialable after flaps")
+	}
+	if _, ok := n.quarantineUntil[peerID]; ok {
+		t.Fatalf("validator mesh peer should not be quarantined for transport flaps")
+	}
+	if _, ok := n.peerDialFailures[peerID]; ok {
+		t.Fatalf("validator mesh peer dial failures should be cleared after flap threshold")
+	}
+	if _, ok := n.peerDialNext[peerID]; ok {
+		t.Fatalf("validator mesh peer dial backoff should be cleared after flap threshold")
+	}
+}
+
+func TestOrdinaryPeerFlapStillQuarantines(t *testing.T) {
+	peerID := "ordinary-peer"
+	n := &Node{}
+	n.ensurePeerIsolationMaps()
+
+	for i := 0; i < peerFlapThreshold; i++ {
+		n.recordPeerFlap(peerID)
+	}
+
+	if _, ok := n.quarantineUntil[peerID]; !ok {
+		t.Fatalf("ordinary peer should still be quarantined after repeated flaps")
+	}
+	if n.canDialPeerID(peerID) {
+		t.Fatalf("ordinary quarantined peer should not be immediately dialable")
+	}
+}
+
 func TestShouldSyncForValidatorSetMismatch(t *testing.T) {
 	if shouldSyncForValidatorSetMismatch(224, 219) {
 		t.Fatalf("stale peer mismatch should not trigger sync")

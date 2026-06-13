@@ -6698,6 +6698,15 @@ func (n *Node) quarantinePeer(peerID, reason string) {
 	if peerID == "" {
 		return
 	}
+	if strings.Contains(reason, "peer_flap") && n.isValidatorOrPersistentPeerID(peerID) {
+		// Validator mesh targets are safety-critical. A transport flap should
+		// trigger fast redial, not isolate a validator long enough to lose quorum.
+		n.clearDialBackoffForPeerID(peerID)
+		if DebugNet {
+			fmt.Printf("Peer flap quarantine bypassed for validator/persistent peer: %s reason=%s\n", peerID, reason)
+		}
+		return
+	}
 	duration := quarantineDurationFor(reason)
 	forget := shouldForgetPeer(reason)
 	if forget {
@@ -8322,9 +8331,15 @@ func (n *Node) shouldLogNetworkProbe(tag string, interval time.Duration) bool {
 	return true
 }
 func (n *Node) recordPeerFlap(peerID string) {
+	peerID = strings.TrimSpace(peerID)
+	if n == nil || peerID == "" {
+		return
+	}
+	n.ensurePeerIsolationMaps()
 	now := time.Now()
 	cutoff := now.Add(-peerFlapWindow)
 	quarantine := false
+	trustedMeshPeer := n.isValidatorOrPersistentPeerID(peerID)
 	n.peerStateMu.Lock()
 	list := n.peerFlapTimes[peerID]
 	filtered := list[:0]
@@ -8336,7 +8351,14 @@ func (n *Node) recordPeerFlap(peerID string) {
 	filtered = append(filtered, now)
 	n.peerFlapTimes[peerID] = filtered
 	if len(filtered) >= peerFlapThreshold {
-		quarantine = true
+		if trustedMeshPeer {
+			n.peerFlapTimes[peerID] = []time.Time{now}
+			delete(n.quarantineUntil, peerID)
+			delete(n.peerDialFailures, peerID)
+			delete(n.peerDialNext, peerID)
+		} else {
+			quarantine = true
+		}
 	}
 	n.peerStateMu.Unlock()
 	if quarantine {
