@@ -602,6 +602,46 @@ func TestSignedCommitVoteCannotReplaceQuorumChoice(t *testing.T) {
 	}
 }
 
+func TestLocalSignedCommitChoicePrefersQuorumOverStaleLocalScope(t *testing.T) {
+	resetExecPoolForTest(t)
+	validators := []string{"A", "B", "C", "D"}
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	node.ID = "A"
+
+	lowBlock := Block{ID: 1, Round: 2, BlockHash: "low-round-block", StateRoot: "low-root"}
+	highBlock := Block{ID: 1, Round: 7, BlockHash: "high-round-block", StateRoot: "high-root"}
+	node.noteObservedProposal(lowBlock)
+	node.noteObservedProposal(highBlock)
+
+	lowScope := commitVoteResultScopeKey(lowBlock.ID, lowBlock.BlockHash, lowBlock.StateRoot, lowBlock.MempoolRoot)
+	highScope := commitVoteResultScopeKey(highBlock.ID, highBlock.BlockHash, highBlock.StateRoot, highBlock.MempoolRoot)
+	node.commitMu.Lock()
+	node.commitVoteSignatures = map[uint64]map[string]map[string]string{
+		lowBlock.ID: {
+			highScope: {"A": "local-high-stale"},
+			lowScope: {
+				"A": "local-low",
+				"B": "peer-low-b",
+				"C": "peer-low-c",
+			},
+		},
+	}
+	node.commitMu.Unlock()
+
+	if got := node.localSignedCommitChoice(lowBlock.ID); got != lowBlock.BlockHash {
+		t.Fatalf("expected quorum-backed local choice, got=%q want=%q", got, lowBlock.BlockHash)
+	}
+	if got := node.localSignedCommitChoiceScope(lowBlock.ID); got != lowScope {
+		t.Fatalf("expected quorum-backed local scope, got=%q want=%q", got, lowScope)
+	}
+	if !node.hasLocalSignedCommitScope(highBlock.ID, highScope) {
+		t.Fatalf("expected exact stale high-round local scope to remain detectable")
+	}
+	if node.shouldFollowCommitEvidence(highBlock.ID, highBlock.BlockHash, 1, 3) {
+		t.Fatalf("stale high-round local signature must not override an existing signed-commit quorum")
+	}
+}
+
 func TestExecutionVoteWithHashMustMatchRound(t *testing.T) {
 	snap := execProposalSnapshot{
 		Epoch:     10,

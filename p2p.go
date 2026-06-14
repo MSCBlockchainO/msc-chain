@@ -2471,39 +2471,94 @@ func (n *Node) commitVoteEvidenceForResult(height uint64, proposalHash string, e
 }
 
 func (n *Node) localSignedCommitChoice(height uint64) string {
-	if n == nil || height == 0 {
-		return ""
-	}
-	localID := normalizeValidatorID(n.ID)
-	if localID == "" {
-		return ""
-	}
-	n.commitMu.Lock()
-	defer n.commitMu.Unlock()
-	for proposalKey, bySigner := range n.commitVoteSignatures[height] {
-		if strings.TrimSpace(bySigner[localID]) != "" {
-			return commitVoteProposalHashFromScope(height, proposalKey)
-		}
-	}
-	return ""
+	choice := n.localSignedCommitChoiceSnapshot(height)
+	return choice.ProposalHash
 }
 
 func (n *Node) localSignedCommitChoiceScope(height uint64) string {
+	choice := n.localSignedCommitChoiceSnapshot(height)
+	return choice.Scope
+}
+
+type localSignedCommitChoiceSnapshot struct {
+	Scope        string
+	ProposalHash string
+	Round        uint32
+	RoundKnown   bool
+	Count        int
+	Quorum       bool
+}
+
+func (n *Node) localSignedCommitChoiceSnapshot(height uint64) localSignedCommitChoiceSnapshot {
 	if n == nil || height == 0 {
-		return ""
+		return localSignedCommitChoiceSnapshot{}
 	}
 	localID := normalizeValidatorID(n.ID)
 	if localID == "" {
-		return ""
+		return localSignedCommitChoiceSnapshot{}
+	}
+	required := n.executionQuorumRequiredForEpoch(height)
+	candidates := make([]localSignedCommitChoiceSnapshot, 0, 2)
+	n.commitMu.Lock()
+	for proposalKey, bySigner := range n.commitVoteSignatures[height] {
+		if strings.TrimSpace(bySigner[localID]) != "" {
+			count := 0
+			for _, signature := range bySigner {
+				if strings.TrimSpace(signature) != "" {
+					count++
+				}
+			}
+			scope := strings.TrimSpace(proposalKey)
+			candidates = append(candidates, localSignedCommitChoiceSnapshot{
+				Scope:        scope,
+				ProposalHash: commitVoteProposalHashFromScope(height, scope),
+				Count:        count,
+				Quorum:       required > 0 && count >= required,
+			})
+		}
+	}
+	n.commitMu.Unlock()
+	if len(candidates) == 0 {
+		return localSignedCommitChoiceSnapshot{}
+	}
+	for i := range candidates {
+		if round, ok := n.proposalRoundForHash(height, candidates[i].ProposalHash); ok {
+			candidates[i].Round = round
+			candidates[i].RoundKnown = true
+		}
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		a := candidates[i]
+		b := candidates[j]
+		if a.Quorum != b.Quorum {
+			return a.Quorum
+		}
+		if a.RoundKnown != b.RoundKnown {
+			return a.RoundKnown
+		}
+		if a.Round != b.Round {
+			return a.Round > b.Round
+		}
+		if a.Count != b.Count {
+			return a.Count > b.Count
+		}
+		return a.Scope < b.Scope
+	})
+	return candidates[0]
+}
+
+func (n *Node) hasLocalSignedCommitScope(height uint64, scope string) bool {
+	if n == nil || height == 0 {
+		return false
+	}
+	localID := normalizeValidatorID(n.ID)
+	scope = strings.TrimSpace(scope)
+	if localID == "" || scope == "" {
+		return false
 	}
 	n.commitMu.Lock()
 	defer n.commitMu.Unlock()
-	for proposalKey, bySigner := range n.commitVoteSignatures[height] {
-		if strings.TrimSpace(bySigner[localID]) != "" {
-			return strings.TrimSpace(proposalKey)
-		}
-	}
-	return ""
+	return strings.TrimSpace(n.commitVoteSignatures[height][scope][localID]) != ""
 }
 
 func (n *Node) signedCommitQuorumForHash(height uint64, proposalHash string) bool {
@@ -2679,7 +2734,7 @@ func (n *Node) broadcastCommitVoteForProposal(block Block, execHash string, txMe
 	}
 	cm.Signature = hex.EncodeToString(sig)
 	commitScope := commitVoteResultScopeKey(cm.Height, cm.Hash, cm.ExecHash, cm.TxMerkle)
-	alreadySignedSameResult := strings.EqualFold(strings.TrimSpace(n.localSignedCommitChoiceScope(block.ID)), commitScope)
+	alreadySignedSameResult := n.hasLocalSignedCommitScope(block.ID, commitScope)
 	if !alreadySignedSameResult {
 		n.handleCommitMsg(cm)
 	}
