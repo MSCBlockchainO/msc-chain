@@ -34247,10 +34247,12 @@ func loadConfigOverrides(path string) error {
 }
 
 func resolveConfigPath(configArg, nodeID string, configExplicit bool) (string, error) {
-	_ = nodeID
 	cfg := strings.TrimSpace(configArg)
 	if strings.EqualFold(cfg, "config.toml") || cfg == "" {
 		return "config.toml", nil
+	}
+	if configExplicit && isNodeScopedMPCConfig(cfg, nodeID) {
+		return cfg, nil
 	}
 	if configExplicit && envBool("MSC_ALLOW_CONFIG_OVERRIDE") {
 		return cfg, nil
@@ -34259,6 +34261,24 @@ func resolveConfigPath(configArg, nodeID string, configExplicit bool) (string, e
 		return "", fmt.Errorf("only config.toml is allowed in single-config mode")
 	}
 	return "config.toml", nil
+}
+
+func isNodeScopedMPCConfig(configPath string, nodeID string) bool {
+	id := normalizeValidatorID(nodeID)
+	if id == "" {
+		return false
+	}
+	clean := filepath.ToSlash(filepath.Clean(strings.TrimSpace(configPath)))
+	if !strings.EqualFold(filepath.Base(clean), "config.mpc.toml") {
+		return false
+	}
+	parts := strings.Split(clean, "/")
+	for _, part := range parts {
+		if normalizeValidatorID(part) == id {
+			return true
+		}
+	}
+	return false
 }
 
 func main() {

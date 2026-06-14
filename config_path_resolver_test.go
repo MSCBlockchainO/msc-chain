@@ -45,6 +45,18 @@ func TestResolveConfigPathExplicitOverrideAllowed(t *testing.T) {
 	}
 }
 
+func TestResolveConfigPathAllowsNodeScopedMPCConfig(t *testing.T) {
+	tmp := t.TempDir()
+	withWorkingDir(t, tmp)
+	got, err := resolveConfigPath("runtime-data/distributed/A/config.mpc.toml", "A", true)
+	if err != nil {
+		t.Fatalf("resolve node-scoped mpc config: %v", err)
+	}
+	if got != "runtime-data/distributed/A/config.mpc.toml" {
+		t.Fatalf("expected node-scoped mpc config path, got %q", got)
+	}
+}
+
 func TestResolveConfigPathDoesNotAutoSelectPerNode(t *testing.T) {
 	tmp := t.TempDir()
 	withWorkingDir(t, tmp)
