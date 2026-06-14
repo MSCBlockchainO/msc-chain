@@ -1455,11 +1455,13 @@ type Handshake struct {
 }
 
 var (
-	apiToken       = strings.TrimSpace(os.Getenv("MSC_RPC_TOKEN"))
-	apiReadToken   = strings.TrimSpace(os.Getenv("MSC_RPC_READ_TOKEN"))
-	apiSubmitToken = strings.TrimSpace(os.Getenv("MSC_RPC_SUBMIT_TOKEN"))
-	rateMu         sync.Mutex
-	rateMap        = make(map[string][]time.Time)
+	apiToken            = strings.TrimSpace(os.Getenv("MSC_RPC_TOKEN"))
+	apiReadToken        = strings.TrimSpace(os.Getenv("MSC_RPC_READ_TOKEN"))
+	apiSubmitToken      = strings.TrimSpace(os.Getenv("MSC_RPC_SUBMIT_TOKEN"))
+	rateMu              sync.Mutex
+	rateMap             = make(map[string][]time.Time)
+	faucetMu            sync.Mutex
+	faucetLastByAddress = make(map[string]time.Time)
 )
 
 type Server struct {
@@ -2169,6 +2171,18 @@ type MapStats struct {
 	QueuedExecVotesKeys         int
 	QueuedExecVotesTotal        int
 	AcceptedProposal            int
+	AcceptedProposalBlocks      int
+	ExecPoolEpochs              int
+	ExecPoolPoolEpochs          int
+	ExecPoolResults             int
+	ExecPoolResultSigners       int
+	ExecPoolSignerScopes        int
+	ExecPoolSigners             int
+	ExecPoolChoiceScopes        int
+	ExecPoolChoices             int
+	ExecPoolFrozenScopes        int
+	ExecPoolEpochChoices        int
+	ExecPoolCommitChoices       int
 	ExecBroadcastedEpochs       int
 	ExecBroadcastedKeys         int
 	ExecSignerSeenEpochs        int

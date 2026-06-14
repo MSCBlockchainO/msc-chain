@@ -3932,40 +3932,13 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 
 	ExecPool.mu.Lock()
 	defer ExecPool.mu.Unlock()
+	ensureExecPoolTopMapsLocked()
 
-	if _, ok := ExecPool.frozen[epoch]; !ok {
-		ExecPool.frozen[epoch] = make(map[string]string)
-	}
 	if frozenHash, ok := ExecPool.frozen[epoch][poolScopeKey]; ok && frozenHash != "" && frozenHash != execHash {
 		if byHash, ok := ExecPool.pool[epoch][scopedExecKey]; ok {
 			return len(byHash), false, false
 		}
 		return 0, false, false
-	}
-
-	if _, ok := ExecPool.pool[epoch]; !ok {
-		ExecPool.pool[epoch] = make(map[string]map[string]ExecutionResult)
-	}
-	if _, ok := ExecPool.txMerkle[epoch]; !ok {
-		ExecPool.txMerkle[epoch] = make(map[string]string)
-	}
-	if _, ok := ExecPool.signers[epoch]; !ok {
-		ExecPool.signers[epoch] = make(map[string]map[string]bool)
-	}
-	if _, ok := ExecPool.choice[epoch]; !ok {
-		ExecPool.choice[epoch] = make(map[string]map[string]string)
-	}
-	if ExecPool.epochChoice == nil {
-		ExecPool.epochChoice = make(map[uint64]map[string]string)
-	}
-	if _, ok := ExecPool.epochChoice[epoch]; !ok {
-		ExecPool.epochChoice[epoch] = make(map[string]string)
-	}
-	if _, ok := ExecPool.signers[epoch][poolScopeKey]; !ok {
-		ExecPool.signers[epoch][poolScopeKey] = make(map[string]bool)
-	}
-	if _, ok := ExecPool.choice[epoch][poolScopeKey]; !ok {
-		ExecPool.choice[epoch][poolScopeKey] = make(map[string]string)
 	}
 
 	if execVoteCreditedGlobalLocked(epoch, poolScopeKey, signer, execHash, txMerkle) {
@@ -3975,11 +3948,8 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 		return 0, false, false
 	}
 
-	if existing, ok := ExecPool.txMerkle[epoch][scopedExecKey]; ok && existing != "" && existing != txMerkle {
-		return len(ExecPool.pool[epoch][scopedExecKey]), false, false
-	}
-	if _, ok := ExecPool.txMerkle[epoch][scopedExecKey]; !ok {
-		ExecPool.txMerkle[epoch][scopedExecKey] = txMerkle
+	if existing, ok := execPoolTxMerkleLocked(epoch, scopedExecKey); ok && existing != "" && existing != txMerkle {
+		return execPoolResultCountLocked(epoch, scopedExecKey), false, false
 	}
 
 	choice := execBroadcastKey(execHash, txMerkle)
@@ -3990,27 +3960,9 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 			if !releaseStaleExecPoolSignerChoiceLocked(epoch, signer, proposalKey, poolScopeKey, choice, res.Round, requiredQuorum) {
 				return 0, false, true
 			}
-			if _, ok := ExecPool.pool[epoch]; !ok {
-				ExecPool.pool[epoch] = make(map[string]map[string]ExecutionResult)
-			}
-			if _, ok := ExecPool.signers[epoch]; !ok {
-				ExecPool.signers[epoch] = make(map[string]map[string]bool)
-			}
-			if _, ok := ExecPool.choice[epoch]; !ok {
-				ExecPool.choice[epoch] = make(map[string]map[string]string)
-			}
-			if _, ok := ExecPool.epochChoice[epoch]; !ok {
-				ExecPool.epochChoice[epoch] = make(map[string]string)
-			}
-			if _, ok := ExecPool.signers[epoch][poolScopeKey]; !ok {
-				ExecPool.signers[epoch][poolScopeKey] = make(map[string]bool)
-			}
-			if _, ok := ExecPool.choice[epoch][poolScopeKey]; !ok {
-				ExecPool.choice[epoch][poolScopeKey] = make(map[string]string)
-			}
 		}
 	}
-	if prev, exists := ExecPool.choice[epoch][poolScopeKey][res.Signer]; exists {
+	if prev, exists := execPoolChoiceLocked(epoch, poolScopeKey, res.Signer); exists {
 		if prev != choice {
 			// Signed equivocation proof: same signer, same epoch+proposal, different exec vote.
 			return 0, false, true
@@ -4021,13 +3973,23 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 		return 0, false, false
 	}
 
-	if ExecPool.signers[epoch][poolScopeKey][res.Signer] {
+	if execPoolSignerKnownLocked(epoch, poolScopeKey, res.Signer) {
 		if byHash, ok := ExecPool.pool[epoch][scopedExecKey]; ok {
 			return len(byHash), false, false
 		}
 		return 0, false, false
 	}
 
+	if !execPoolCanAdmitVoteLocked(epoch, poolScopeKey, scopedExecKey, res.Signer) {
+		_ = pruneExecPoolLocked(0, nil)
+		if !execPoolCanAdmitVoteLocked(epoch, poolScopeKey, scopedExecKey, res.Signer) {
+			return execPoolResultCountLocked(epoch, scopedExecKey), false, false
+		}
+	}
+	ensureExecPoolScopeMapsLocked(epoch, poolScopeKey)
+	if _, ok := ExecPool.txMerkle[epoch][scopedExecKey]; !ok {
+		ExecPool.txMerkle[epoch][scopedExecKey] = txMerkle
+	}
 	if epochChoiceKey != "" {
 		ExecPool.epochChoice[epoch][epochChoiceKey] = epochChoice
 	}

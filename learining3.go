@@ -25312,6 +25312,8 @@ func StartNode(
 
 		node.SafeGoLoop("peer_hello_nonce_sweeper", 3*time.Second, func() { node.startPeerHelloNonceSweeper(ctx) })
 
+		node.SafeGoLoop("consensus_memory_guard", 3*time.Second, func() { node.startConsensusMemoryGuard(ctx) })
+
 		node.SafeGoLoop("monitor_goroutines", 3*time.Second, func() { monitorGoroutines(ctx, node) })
 
 		node.SafeGoLoop("self_heal", 3*time.Second, func() { node.startSelfHeal(ctx) })
@@ -39575,6 +39577,15 @@ func (s *Server) handleMetrics(
 	appendPromGauge(&out, "msc_map_pending_blocks", "Map stats: pending blocks.", baseLabels, float64(stats.PendingBlocks))
 	appendPromGauge(&out, "msc_map_queued_exec_votes_total", "Map stats: queued execution votes total.", baseLabels, float64(stats.QueuedExecVotesTotal))
 	appendPromGauge(&out, "msc_map_accepted_proposal", "Map stats: accepted proposal entries.", baseLabels, float64(stats.AcceptedProposal))
+	appendPromGauge(&out, "msc_map_accepted_proposal_blocks", "Map stats: accepted proposal block cache entries.", baseLabels, float64(stats.AcceptedProposalBlocks))
+	appendPromGauge(&out, "msc_map_exec_pool_epochs", "Map stats: global execution vote pool epochs.", baseLabels, float64(stats.ExecPoolEpochs))
+	appendPromGauge(&out, "msc_map_exec_pool_pool_epochs", "Map stats: global execution vote pool backing map epochs.", baseLabels, float64(stats.ExecPoolPoolEpochs))
+	appendPromGauge(&out, "msc_map_exec_pool_results", "Map stats: global execution vote pool result buckets.", baseLabels, float64(stats.ExecPoolResults))
+	appendPromGauge(&out, "msc_map_exec_pool_result_signers", "Map stats: global execution vote pool result signer entries.", baseLabels, float64(stats.ExecPoolResultSigners))
+	appendPromGauge(&out, "msc_map_exec_pool_signer_scopes", "Map stats: global execution vote pool signer scopes.", baseLabels, float64(stats.ExecPoolSignerScopes))
+	appendPromGauge(&out, "msc_map_exec_pool_signers", "Map stats: global execution vote pool signer entries.", baseLabels, float64(stats.ExecPoolSigners))
+	appendPromGauge(&out, "msc_map_exec_pool_choice_scopes", "Map stats: global execution vote pool choice scopes.", baseLabels, float64(stats.ExecPoolChoiceScopes))
+	appendPromGauge(&out, "msc_map_exec_pool_choices", "Map stats: global execution vote pool choice entries.", baseLabels, float64(stats.ExecPoolChoices))
 	appendPromGauge(&out, "msc_map_exec_broadcasted_epochs", "Map stats: execution broadcasted epochs.", baseLabels, float64(stats.ExecBroadcastedEpochs))
 	appendPromGauge(&out, "msc_map_exec_broadcasted_keys", "Map stats: execution broadcasted keys.", baseLabels, float64(stats.ExecBroadcastedKeys))
 	appendPromGauge(&out, "msc_map_exec_signer_seen_epochs", "Map stats: execution signer-seen epochs.", baseLabels, float64(stats.ExecSignerSeenEpochs))
@@ -45941,6 +45952,7 @@ func (n *Node) MapStats() MapStats {
 	}
 
 	stats.AcceptedProposal = len(n.acceptedProposal)
+	stats.AcceptedProposalBlocks = len(n.acceptedProposalBlocks)
 
 	stats.ExecBroadcastedEpochs = len(n.execBroadcasted)
 
@@ -45969,6 +45981,8 @@ func (n *Node) MapStats() MapStats {
 	}
 
 	n.execResultsMu.Unlock()
+
+	populateExecPoolMapStats(&stats)
 
 	n.execRebroadcastMu.Lock()
 
