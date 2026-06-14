@@ -824,6 +824,7 @@ const (
 	execRecentProposalWindow        = 64
 	execProposalSwitchRoundGap      = 4
 	execProposalStickyVoteThreshold = 2
+	maxEmbeddedProposalPerHeight    = 32
 )
 
 type execProposalSnapshot struct {
@@ -1769,30 +1770,211 @@ func (n *Node) resolveExecutionVoteProposal(height uint64, res ExecutionResultMs
 	return Block{}, execProposalSnapshot{}, false
 }
 
-func (n *Node) observeExecutionVoteProposalBlock(res ExecutionResultMsg) bool {
-	if n == nil || res.Block == nil || res.HeightHint == 0 {
-		return false
+func normalizeEmbeddedExecutionVoteHints(res ExecutionResultMsg) ExecutionResultMsg {
+	if res.Block == nil {
+		return res
 	}
 	block := *res.Block
+	if res.BlockHashHint == "" {
+		res.BlockHashHint = strings.TrimSpace(block.BlockHash)
+	}
+	if res.RoundHint == 0 && block.Round != 0 {
+		res.RoundHint = block.Round
+	}
+	if res.TxMerkle == "" {
+		res.TxMerkle = strings.TrimSpace(block.MempoolRoot)
+	}
+	return res
+}
+
+func stripEmbeddedExecutionVoteBlockForQueue(res ExecutionResultMsg) ExecutionResultMsg {
+	res = normalizeEmbeddedExecutionVoteHints(res)
+	res.Block = nil
+	return res
+}
+
+func (n *Node) embeddedExecutionVoteProposalKnown(block Block) bool {
+	if n == nil || block.ID == 0 || strings.TrimSpace(block.BlockHash) == "" {
+		return false
+	}
+	snap := proposalSnapshotFromBlock(block)
+	if snap.ProposalKey != "" {
+		n.execResultsMu.Lock()
+		_, ok := n.acceptedProposalBlocks[snap.ProposalKey]
+		n.execResultsMu.Unlock()
+		if ok {
+			return true
+		}
+	}
+	if leader, ok := n.getLeaderBlock(block.ID); ok &&
+		strings.EqualFold(strings.TrimSpace(leader.BlockHash), strings.TrimSpace(block.BlockHash)) {
+		return true
+	}
+	return false
+}
+
+func (n *Node) allowEmbeddedExecutionVoteProposal(block Block) bool {
+	if n == nil || block.ID == 0 || strings.TrimSpace(block.BlockHash) == "" {
+		return false
+	}
+	if n.embeddedExecutionVoteProposalKnown(block) {
+		return true
+	}
+	if maxEmbeddedProposalPerHeight <= 0 {
+		return true
+	}
+	committedHeight := n.committedReplayFenceHeight()
+	hash := strings.TrimSpace(block.BlockHash)
+
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+	if n.embeddedProposalSeen == nil {
+		n.embeddedProposalSeen = make(map[uint64]map[string]struct{})
+	}
+	for height := range n.embeddedProposalSeen {
+		if height <= committedHeight || height+execRecentProposalWindow < block.ID {
+			delete(n.embeddedProposalSeen, height)
+		}
+	}
+	if n.embeddedProposalSeen[block.ID] == nil {
+		n.embeddedProposalSeen[block.ID] = make(map[string]struct{})
+	}
+	if _, ok := n.embeddedProposalSeen[block.ID][hash]; ok {
+		return true
+	}
+	if len(n.embeddedProposalSeen[block.ID]) >= maxEmbeddedProposalPerHeight {
+		return false
+	}
+	n.embeddedProposalSeen[block.ID][hash] = struct{}{}
+	return true
+}
+
+func (n *Node) embeddedExecutionVoteParentHash(block Block) (string, bool) {
+	if n == nil || n.Blockchain == nil || block.ID == 0 {
+		return "", false
+	}
+	if block.ID == 1 {
+		if last := n.Blockchain.LastBlock(); last.ID == 0 && strings.TrimSpace(last.BlockHash) != "" {
+			return strings.TrimSpace(last.BlockHash), true
+		}
+		if strings.TrimSpace(GenesisHash) != "" {
+			return strings.TrimSpace(GenesisHash), true
+		}
+		return "", false
+	}
+	parentHeight := block.ID - 1
+	if parent, ok := n.Blockchain.GetBlock(parentHeight); ok && strings.TrimSpace(parent.BlockHash) != "" {
+		return strings.TrimSpace(parent.BlockHash), true
+	}
+	if parent, ok := n.LoadBlock(int(parentHeight)); ok && strings.TrimSpace(parent.BlockHash) != "" {
+		return strings.TrimSpace(parent.BlockHash), true
+	}
+	if last := n.Blockchain.LastBlock(); last.ID == parentHeight && strings.TrimSpace(last.BlockHash) != "" {
+		return strings.TrimSpace(last.BlockHash), true
+	}
+	return "", false
+}
+
+func (n *Node) validateEmbeddedExecutionVoteProposal(res ExecutionResultMsg, block Block) (bool, string) {
+	if block.ID == 0 || res.HeightHint == 0 || block.ID != res.HeightHint {
+		return false, "height_mismatch"
+	}
+	if block.Height != 0 && block.Height != block.ID {
+		return false, "height_alias_mismatch"
+	}
+	blockHash := strings.TrimSpace(block.BlockHash)
+	if blockHash == "" {
+		return false, "missing_block_hash"
+	}
+	if hashHint := strings.TrimSpace(res.BlockHashHint); hashHint == "" || !strings.EqualFold(blockHash, hashHint) {
+		return false, "block_hash_hint_mismatch"
+	}
+	if block.Round != res.RoundHint {
+		return false, "round_mismatch"
+	}
+	if strings.TrimSpace(block.StateRoot) == "" || !strings.EqualFold(strings.TrimSpace(block.StateRoot), strings.TrimSpace(res.ExecHash)) {
+		return false, "state_root_mismatch"
+	}
+	if strings.TrimSpace(block.MempoolRoot) != strings.TrimSpace(res.TxMerkle) {
+		return false, "tx_merkle_mismatch"
+	}
+	expectedResultHash := executionResultHashFromProposal(
+		res.HeightHint,
+		proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot),
+		block.BlockHash,
+		res.ExecHash,
+		res.TxMerkle,
+	)
+	if strings.TrimSpace(res.ExecutionResultHash) == "" || !executionResultHashMatches(res.ExecutionResultHash, expectedResultHash) {
+		return false, "execution_result_hash_mismatch"
+	}
+	if parentHash, ok := n.embeddedExecutionVoteParentHash(block); ok &&
+		!strings.EqualFold(strings.TrimSpace(block.PrevHash), parentHash) {
+		return false, "parent_hash_mismatch"
+	}
+	if validatorSetCommitmentV2EnabledAt(block.ID) && strings.TrimSpace(block.ValidatorSetHash) == "" {
+		return false, "missing_validator_set_hash"
+	}
+	if expectedHash, source := n.expectedValidatorSetHashWithSource(block.ID); validatorSetSourceIsChainAuthoritative(source) && strings.TrimSpace(expectedHash) == "" {
+		return false, "validator_set_expected_missing"
+	} else if strings.TrimSpace(expectedHash) != "" && !strings.EqualFold(strings.TrimSpace(expectedHash), strings.TrimSpace(block.ValidatorSetHash)) {
+		return false, "validator_set_hash_mismatch"
+	}
+	if err := n.validateBlockValidatorSetHashHeaderCommitment(block); err != nil {
+		return false, "validator_set_header_" + err.Error()
+	}
+	if err := n.validateBlockNextValidatorSetCommitment(block); err != nil {
+		return false, "next_validator_set_" + err.Error()
+	}
+	if err := n.validateBlockNextValidatorSetRootCommitment(block); err != nil {
+		return false, "next_validator_set_root_" + err.Error()
+	}
+	if err := n.validateBlockValidatorSetRootCommitment(block); err != nil {
+		return false, "validator_set_root_" + err.Error()
+	}
+	if err := n.validateBlockValidatorRegistryCommitment(block); err != nil {
+		return false, "validator_registry_" + err.Error()
+	}
+	if !strings.EqualFold(strings.TrimSpace(HashBlock(block)), blockHash) {
+		return false, "block_hash_mismatch"
+	}
+	if err := VerifyMempoolRoot(block); err != nil {
+		return false, "mempool_root_" + err.Error()
+	}
+	if err := VerifyReceiptRoot(block); err != nil {
+		return false, "receipt_root_" + err.Error()
+	}
+	return true, ""
+}
+
+func (n *Node) observeExecutionVoteProposalBlock(res ExecutionResultMsg) (bool, string) {
+	if n == nil || res.Block == nil || res.HeightHint == 0 {
+		return false, "missing_block"
+	}
+	res = normalizeEmbeddedExecutionVoteHints(res)
+	block := *res.Block
 	if block.ID != res.HeightHint || strings.TrimSpace(block.BlockHash) == "" {
-		return false
+		return false, "height_or_hash_missing"
 	}
-	if hashHint := strings.TrimSpace(res.BlockHashHint); hashHint != "" && !strings.EqualFold(strings.TrimSpace(block.BlockHash), hashHint) {
-		return false
+	if hashHint := strings.TrimSpace(res.BlockHashHint); hashHint == "" || !strings.EqualFold(strings.TrimSpace(block.BlockHash), hashHint) {
+		return false, "block_hash_hint_mismatch"
 	}
-	if txMerkle := strings.TrimSpace(res.TxMerkle); txMerkle != "" && strings.TrimSpace(block.MempoolRoot) != txMerkle {
-		return false
+	if !n.allowEmbeddedExecutionVoteProposal(block) {
+		return false, "embedded_proposal_limit"
 	}
-	if execHash := strings.TrimSpace(res.ExecHash); execHash != "" && strings.TrimSpace(block.StateRoot) != "" && !strings.EqualFold(strings.TrimSpace(block.StateRoot), execHash) {
-		return false
+	if ok, reason := n.validateEmbeddedExecutionVoteProposal(res, block); !ok {
+		return false, reason
+	}
+	if n.embeddedExecutionVoteProposalKnown(block) {
+		return true, ""
 	}
 	if !n.verifyLeaderBlock(block, "") {
-		return false
+		return false, "leader_block_verification_failed"
 	}
 	if !n.storeLeaderBlock(block) {
 		n.noteObservedProposal(block)
 	}
-	return true
+	return true, ""
 }
 
 func (n *Node) proposalSnapshotForEpoch(height uint64) (execProposalSnapshot, bool) {
@@ -5050,6 +5232,7 @@ func (n *Node) handleExecutionResultMsg(res ExecutionResultMsg) {
 }
 
 func (n *Node) queueExecResult(res ExecutionResultMsg) {
+	res = stripEmbeddedExecutionVoteBlockForQueue(res)
 	res.Signer = normalizeValidatorID(res.Signer)
 	if res.HeightHint == 0 || res.Signer == "" || res.ExecHash == "" {
 		return
@@ -5165,12 +5348,49 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		n.logExecutionVoteDrop("non_active_validator", res, execProposalSnapshot{})
 		return
 	}
+	res = normalizeEmbeddedExecutionVoteHints(res)
+	embeddedVoteSignatureVerified := false
+	if res.Block != nil {
+		if res.Signature == "" {
+			n.logExecutionVoteDrop("missing_signature", res, execProposalSnapshot{})
+			return
+		}
+		sig, err := hex.DecodeString(res.Signature)
+		if err != nil {
+			n.logExecutionVoteDrop("invalid_signature_encoding", res, execProposalSnapshot{})
+			return
+		}
+		candidates := n.execResultPubKeyCandidatesForHeight(res.Signer, targetEpoch)
+		if len(candidates) == 0 {
+			if allowQueue {
+				n.queueExecResult(res)
+				n.logExecutionVoteDrop("queued_missing_pubkey", res, execProposalSnapshot{})
+			}
+			return
+		}
+		if !verifyExecutionResultSignature(res, candidates, sig) {
+			if DebugConsensus {
+				fmt.Printf("Invalid embedded execution result signature: signer=%s height=%d exec=%s\n",
+					ShortID(res.Signer), res.HeightHint, ShortHash(res.ExecHash))
+			}
+			n.logExecutionVoteDrop("invalid_signature", res, execProposalSnapshot{})
+			return
+		}
+		embeddedVoteSignatureVerified = true
+	}
 	n.commitMu.Lock()
 	committedHeight := n.committedHeight
 	n.commitMu.Unlock()
 	committedEpoch := res.HeightHint <= committedHeight
 
-	if n.observeExecutionVoteProposalBlock(res) && res.Block != nil {
+	if res.Block != nil {
+		if observed, reason := n.observeExecutionVoteProposalBlock(res); !observed {
+			if reason == "" {
+				reason = "embedded_proposal_invalid"
+			}
+			n.logExecutionVoteDrop("embedded_proposal_"+reason, res, execProposalSnapshot{})
+			return
+		}
 		n.processQueuedExecutionVotesForProposal(*res.Block)
 	}
 	leaderBlock, proposalSnap, ok := n.resolveExecutionVoteProposal(targetEpoch, res)
@@ -5239,30 +5459,32 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 	}
 
 	// Enforce validator identity with signature.
-	if res.Signature == "" {
-		n.logExecutionVoteDrop("missing_signature", res, proposalSnap)
-		return
-	}
-	sig, err := hex.DecodeString(res.Signature)
-	if err != nil {
-		n.logExecutionVoteDrop("invalid_signature_encoding", res, proposalSnap)
-		return
-	}
-	candidates := n.execResultPubKeyCandidatesForHeight(res.Signer, targetEpoch)
-	if len(candidates) == 0 {
-		if allowQueue {
-			n.queueExecResult(res)
-			n.logExecutionVoteDrop("queued_missing_pubkey", res, proposalSnap)
+	if !embeddedVoteSignatureVerified {
+		if res.Signature == "" {
+			n.logExecutionVoteDrop("missing_signature", res, proposalSnap)
+			return
 		}
-		return
-	}
-	if !verifyExecutionResultSignature(res, candidates, sig) {
-		if DebugConsensus {
-			fmt.Printf("Invalid execution result signature: signer=%s height=%d exec=%s\n",
-				ShortID(res.Signer), res.HeightHint, ShortHash(res.ExecHash))
+		sig, err := hex.DecodeString(res.Signature)
+		if err != nil {
+			n.logExecutionVoteDrop("invalid_signature_encoding", res, proposalSnap)
+			return
 		}
-		n.logExecutionVoteDrop("invalid_signature", res, proposalSnap)
-		return
+		candidates := n.execResultPubKeyCandidatesForHeight(res.Signer, targetEpoch)
+		if len(candidates) == 0 {
+			if allowQueue {
+				n.queueExecResult(res)
+				n.logExecutionVoteDrop("queued_missing_pubkey", res, proposalSnap)
+			}
+			return
+		}
+		if !verifyExecutionResultSignature(res, candidates, sig) {
+			if DebugConsensus {
+				fmt.Printf("Invalid execution result signature: signer=%s height=%d exec=%s\n",
+					ShortID(res.Signer), res.HeightHint, ShortHash(res.ExecHash))
+			}
+			n.logExecutionVoteDrop("invalid_signature", res, proposalSnap)
+			return
+		}
 	}
 
 	if res.TxMerkle != leaderBlock.MempoolRoot {

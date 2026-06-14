@@ -71,6 +71,7 @@ func newTestNodeForResultGossip(t *testing.T, dataDir string, validators []strin
 		queuedExecVotes:            make(map[string][]ExecutionResultMsg),
 		acceptedProposal:           make(map[string]string),
 		acceptedProposalBlocks:     make(map[string]Block),
+		embeddedProposalSeen:       make(map[uint64]map[string]struct{}),
 		quorumLockedProposal:       make(map[string]string),
 		leaderBlocks:               make(map[uint64]Block),
 		committed:                  make(map[uint64]string),
@@ -155,6 +156,23 @@ func signedCommitMsgForTest(t *testing.T, block Block, signer string, priv ed255
 	}
 	msg.Signature = hex.EncodeToString(ed25519.Sign(priv, commitVoteSignBytes(msg.Height, msg.Hash, msg.ExecHash, msg.TxMerkle)))
 	return msg
+}
+
+func signedEmbeddedExecutionResultMsgForBlock(t *testing.T, signer string, priv ed25519.PrivateKey, block Block) ExecutionResultMsg {
+	t.Helper()
+	msg := signedExecutionResultMsgForBlock(t, signer, priv, block)
+	msg.Block = &block
+	msg.ExecutionResultHash = executionResultHashFromMessage(msg)
+	return msg
+}
+
+func resetProposedBlocksForTest(t *testing.T) {
+	t.Helper()
+	old := ProposedBlocks
+	ProposedBlocks = make(map[uint64]map[uint32]map[string]string)
+	t.Cleanup(func() {
+		ProposedBlocks = old
+	})
 }
 
 func recordSignedCommitVotesForTest(t *testing.T, node *Node, block Block, signers []string, privKeys map[string]ed25519.PrivateKey) {
@@ -3588,6 +3606,179 @@ func TestAcceptedProposalReleasesStaleStateRootLock(t *testing.T) {
 	wantKey := proposalVoteKey(incoming.ID, incoming.Round, incoming.BlockHash, incoming.MempoolRoot, incoming.StateRoot)
 	if gotKey != wantKey {
 		t.Fatalf("unexpected accepted proposal key: got=%q want=%q", gotKey, wantKey)
+	}
+}
+
+func TestProposalShouldHoldAgainstIncomingRequiresSignedCommitQuorum(t *testing.T) {
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	block := node.BuildLeaderBlock(1)
+	proposalKey := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot)
+	required := node.executionQuorumRequiredForEpoch(block.ID)
+	if required <= 0 || required > len(validators) {
+		t.Fatalf("unexpected required quorum: %d", required)
+	}
+
+	if keep, reason := node.proposalShouldHoldAgainstIncomingLocked(block.ID, proposalKey, block, required, block.Round+1); keep {
+		t.Fatalf("execution quorum/local state must not soft-lock against higher round, reason=%s", reason)
+	}
+
+	recordSignedCommitVotesForTest(t, node, block, validators[:required], privKeys)
+	if keep, reason := node.proposalShouldHoldAgainstIncomingLocked(block.ID, proposalKey, block, required, block.Round+1); !keep || reason != "signed_commit_quorum_locked" {
+		t.Fatalf("signed commit quorum should hard-lock proposal, keep=%t reason=%s", keep, reason)
+	}
+}
+
+func TestEmbeddedExecutionVoteProposalStoresAndProcessesImmediately(t *testing.T) {
+	setProposerRoundMaxForTest(t, 0)
+	resetProposedBlocksForTest(t)
+	resetExecPoolForTest(t)
+
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	sources := make(map[string]*Node, len(validators))
+	for _, id := range validators {
+		sources[id] = newValidatorRoundTestNode(t, t.TempDir(), id, validators, ValidatorPubKeys[id], privKeys[id])
+	}
+
+	target := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	block := buildProposalForRound(t, 1, 10, validators, sources)
+	msg := signedEmbeddedExecutionResultMsgForBlock(t, "B", privKeys["B"], block)
+
+	target.processExecutionResultMsg(msg, true)
+
+	key := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot)
+	target.execResultsMu.Lock()
+	_, observed := target.acceptedProposalBlocks[key]
+	queued := len(target.queuedExecVotes[fmt.Sprintf("%d", block.ID)])
+	target.execResultsMu.Unlock()
+	if !observed {
+		t.Fatalf("expected embedded proposal block to be cached")
+	}
+	if queued != 0 {
+		t.Fatalf("embedded proposal should resolve the vote immediately, queued=%d", queued)
+	}
+	if got := getExecCountGlobal(block.ID, key, block.StateRoot, block.MempoolRoot); got != 1 {
+		t.Fatalf("expected embedded vote to be counted immediately, got=%d", got)
+	}
+}
+
+func TestEmbeddedExecutionVoteProposalRejectsMismatchedCommitments(t *testing.T) {
+	setProposerRoundMaxForTest(t, 0)
+	resetProposedBlocksForTest(t)
+	resetExecPoolForTest(t)
+
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	sources := make(map[string]*Node, len(validators))
+	for _, id := range validators {
+		sources[id] = newValidatorRoundTestNode(t, t.TempDir(), id, validators, ValidatorPubKeys[id], privKeys[id])
+	}
+
+	t.Run("bad_parent", func(t *testing.T) {
+		resetProposedBlocksForTest(t)
+		target := newTestNodeForResultGossip(t, t.TempDir(), validators)
+		block := buildProposalForRound(t, 1, 12, validators, sources)
+		block.PrevHash = "wrong-parent"
+		proposer := normalizeValidatorID(block.Proposer)
+		source := sources[proposer]
+		if source == nil {
+			t.Fatalf("missing source for proposer %s", proposer)
+		}
+		source.SignBlock(&block)
+		msg := signedEmbeddedExecutionResultMsgForBlock(t, "B", privKeys["B"], block)
+
+		target.processExecutionResultMsg(msg, true)
+
+		key := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot)
+		if got := getExecCountGlobal(block.ID, key, block.StateRoot, block.MempoolRoot); got != 0 {
+			t.Fatalf("bad parent embedded proposal must not count votes, got=%d", got)
+		}
+		target.execResultsMu.Lock()
+		_, observed := target.acceptedProposalBlocks[key]
+		target.execResultsMu.Unlock()
+		if observed {
+			t.Fatalf("bad parent embedded proposal must not be cached")
+		}
+	})
+
+	t.Run("bad_execution_result_hash", func(t *testing.T) {
+		resetProposedBlocksForTest(t)
+		target := newTestNodeForResultGossip(t, t.TempDir(), validators)
+		block := buildProposalForRound(t, 1, 14, validators, sources)
+		msg := signedEmbeddedExecutionResultMsgForBlock(t, "B", privKeys["B"], block)
+		msg.ExecutionResultHash = executionResultHashFromProposal(block.ID, proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot), block.BlockHash, "different-root", block.MempoolRoot)
+
+		target.processExecutionResultMsg(msg, true)
+
+		key := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot)
+		if got := getExecCountGlobal(block.ID, key, block.StateRoot, block.MempoolRoot); got != 0 {
+			t.Fatalf("bad execution result hash must not count votes, got=%d", got)
+		}
+		target.execResultsMu.Lock()
+		_, observed := target.acceptedProposalBlocks[key]
+		target.execResultsMu.Unlock()
+		if observed {
+			t.Fatalf("bad execution result hash proposal must not be cached")
+		}
+	})
+}
+
+func TestQueuedExecutionVoteStripsEmbeddedProposalBlock(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	block := Block{
+		ID:          2,
+		Round:       3,
+		BlockHash:   "future-block",
+		MempoolRoot: "future-tx",
+		StateRoot:   "future-root",
+	}
+	msg := ExecutionResultMsg{
+		HeightHint: 2,
+		Block:      &block,
+		ExecHash:   block.StateRoot,
+		Signer:     "B",
+	}
+
+	node.processExecutionResultMsg(msg, true)
+
+	node.execResultsMu.Lock()
+	queued := append([]ExecutionResultMsg(nil), node.queuedExecVotes["2"]...)
+	node.execResultsMu.Unlock()
+	if len(queued) != 1 {
+		t.Fatalf("expected one future vote to be queued, got=%d", len(queued))
+	}
+	if queued[0].Block != nil {
+		t.Fatalf("queued execution vote must not retain embedded proposal block")
+	}
+	if queued[0].BlockHashHint != block.BlockHash {
+		t.Fatalf("queued vote block hash hint = %q, want %q", queued[0].BlockHashHint, block.BlockHash)
+	}
+	if queued[0].TxMerkle != block.MempoolRoot {
+		t.Fatalf("queued vote tx merkle = %q, want %q", queued[0].TxMerkle, block.MempoolRoot)
+	}
+}
+
+func TestEmbeddedExecutionVoteProposalCapRejectsNewHashes(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	for i := 0; i < maxEmbeddedProposalPerHeight; i++ {
+		block := Block{ID: 7, Round: uint32(i), BlockHash: fmt.Sprintf("block-%d", i), MempoolRoot: "tx-root", StateRoot: "state-root"}
+		if !node.allowEmbeddedExecutionVoteProposal(block) {
+			t.Fatalf("expected proposal %d to be admitted below cap", i)
+		}
+	}
+	if node.allowEmbeddedExecutionVoteProposal(Block{ID: 7, Round: 99, BlockHash: "over-cap", MempoolRoot: "tx-root", StateRoot: "state-root"}) {
+		t.Fatalf("expected new embedded proposal hash over cap to be rejected")
+	}
+
+	known := Block{ID: 7, Round: 100, BlockHash: "known", MempoolRoot: "tx-root", StateRoot: "state-root"}
+	key := proposalVoteKey(known.ID, known.Round, known.BlockHash, known.MempoolRoot, known.StateRoot)
+	node.execResultsMu.Lock()
+	node.acceptedProposalBlocks[key] = known
+	node.execResultsMu.Unlock()
+	if !node.allowEmbeddedExecutionVoteProposal(known) {
+		t.Fatalf("known proposal hash should bypass embedded proposal cap")
 	}
 }
 

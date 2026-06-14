@@ -1965,6 +1965,7 @@ type Node struct {
 	queuedExecVotes             map[string][]ExecutionResultMsg
 	acceptedProposal            map[string]string
 	acceptedProposalBlocks      map[string]Block
+	embeddedProposalSeen        map[uint64]map[string]struct{}
 	quorumLockedProposal        map[string]string
 	execVoteGuardMu             sync.Mutex
 	execVoteIngressSeen         map[string]time.Time
