@@ -169,6 +169,21 @@ func TestSelectSyncTargetRejectsSingleMinorityObservedVote(t *testing.T) {
 	}
 }
 
+func TestStatusNearTipSyncCompleteDoesNotMaskValidatorTailLag(t *testing.T) {
+	oldStarted := consensusStarted.Load()
+	consensusStarted.Store(true)
+	t.Cleanup(func() {
+		consensusStarted.Store(oldStarted)
+	})
+
+	if statusNearTipSyncCompleteAllowedForRole(100, 101, false, "validator") {
+		t.Fatalf("validator one-block lag must stay sync-incomplete until the block is stored")
+	}
+	if !statusNearTipSyncCompleteAllowedForRole(100, 101, false, "full") {
+		t.Fatalf("full nodes should retain near-tip status grace")
+	}
+}
+
 func TestSyncRealtimeGossipCompatibilityMapping(t *testing.T) {
 	if got := normalizeSyncStage("gossip"); got != "realtime_gossip" {
 		t.Fatalf("expected gossip alias to normalize to realtime_gossip, got=%q", got)

@@ -7206,6 +7206,9 @@ func statusNearTipSyncCompleteAllowedForRole(localHeight, targetHeight uint64, s
 	role = normalizeNodeRole(role)
 	lag := targetHeight - localHeight
 	grace := syncNearTipGraceBlocks()
+	if role == "validator" {
+		return false
+	}
 	if role == "full" || role == "light" {
 		grace = validatorLivenessMaxHeightDriftBlocks()
 		if grace < syncNearTipGraceBlocks() {
@@ -12622,7 +12625,7 @@ func (n *Node) syncBlockRangeToHeight(targetHeight uint64, stage string, action 
 	followupPending := false
 	if synced && localAfter >= targetHeight {
 		followupTarget = n.bestFollowupSyncTarget(localAfter)
-		followupPending = followupTarget > localAfter && !nearSyncTip(localAfter, followupTarget)
+		followupPending = followupTarget > localAfter
 	}
 	cleared := false
 	if n.Consensus != nil {
@@ -12721,7 +12724,7 @@ func (n *Node) syncDeltaReplayToHeight(targetHeight uint64, reason string, votes
 	followupPending := false
 	if synced && localAfter >= targetHeight {
 		followupTarget = n.bestFollowupSyncTarget(localAfter)
-		followupPending = followupTarget > localAfter && !nearSyncTip(localAfter, followupTarget)
+		followupPending = followupTarget > localAfter
 	}
 	cleared := false
 	if n.Consensus != nil {

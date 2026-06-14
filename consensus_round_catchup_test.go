@@ -1398,6 +1398,39 @@ func TestLeaderProposalRetryStateThrottlesSameRoundSameEpoch(t *testing.T) {
 	}
 }
 
+func TestRealignConsensusHeightToCurrentEpochAfterCatchup(t *testing.T) {
+	oldResultGossipOnly := ResultGossipOnly
+	t.Cleanup(func() {
+		ResultGossipOnly = oldResultGossipOnly
+	})
+	ResultGossipOnly = true
+
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.Consensus = NewConsensusState(1)
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = append(node.Blockchain.Blocks,
+		Block{ID: 1, BlockHash: "h1"},
+		Block{ID: 2, BlockHash: "h2"},
+	)
+	node.Blockchain.mu.Unlock()
+
+	epoch := node.currentEpoch()
+	if epoch != 3 {
+		t.Fatalf("unexpected current epoch: got=%d want=3", epoch)
+	}
+	if !node.realignConsensusHeightToEpoch(epoch, "unit_catchup") {
+		t.Fatalf("expected stale consensus height to realign to current epoch")
+	}
+	node.Consensus.mu.Lock()
+	gotHeight := node.Consensus.Height
+	gotRound := node.Consensus.Round
+	gotLastFinalized := node.Consensus.LastFinalized
+	node.Consensus.mu.Unlock()
+	if gotHeight != epoch || gotRound != 0 || gotLastFinalized != epoch-1 {
+		t.Fatalf("unexpected consensus state after realign: height=%d round=%d finalized=%d", gotHeight, gotRound, gotLastFinalized)
+	}
+}
+
 func TestSelectLiveLeaderForHeightRoundIgnoresLocalLiveness(t *testing.T) {
 	validators := []string{"A", "B", "C", "D"}
 	node := newTestNodeForResultGossip(t, t.TempDir(), validators)

@@ -1463,6 +1463,26 @@ func (n *Node) consensusRoundSnapshot(height uint64) (uint32, time.Time, bool) {
 	return n.Consensus.Round, n.Consensus.RoundStart, true
 }
 
+func (n *Node) realignConsensusHeightToEpoch(epoch uint64, reason string) bool {
+	if n == nil || n.Consensus == nil || epoch == 0 || n.isShuttingDown() {
+		return false
+	}
+	n.Consensus.mu.Lock()
+	current := n.Consensus.Height
+	syncing := n.Consensus.Syncing || n.Consensus.syncInFlight
+	paused := n.Consensus.Paused
+	n.Consensus.mu.Unlock()
+	if syncing || paused || current == epoch {
+		return false
+	}
+	n.clearImmediateRoundStart(epoch)
+	n.hardResetConsensus(epoch)
+	if DebugConsensus {
+		fmt.Printf("[CONSENSUS-REALIGN] reason=%s from=%d to=%d\n", strings.TrimSpace(reason), current, epoch)
+	}
+	return true
+}
+
 func (n *Node) startConsensusRound(height uint64, round uint32) bool {
 	if n == nil || n.Consensus == nil || height == 0 || n.isShuttingDown() {
 		return false
@@ -1843,6 +1863,14 @@ func (n *Node) ActivateConsensus(ctx context.Context) error {
 					}
 					holdRoundClock(epoch)
 					continue
+				}
+				if n.realignConsensusHeightToEpoch(epoch, "consensus_tick") {
+					lastEpoch = 0
+					lastEpochAt = time.Time{}
+					lastFallbackEpoch = 0
+					lastRound = 0
+					lastRoundGateEpoch = 0
+					lastRoundGateAt = time.Time{}
 				}
 				if epoch != lastEpoch {
 					lastEpoch = epoch
