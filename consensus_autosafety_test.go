@@ -139,6 +139,35 @@ func TestExecutionEquivocationPenaltyGatedDuringRecomputePause(t *testing.T) {
 	}
 }
 
+func TestExecutionEquivocationPolicyRecordsEvidenceWithoutPartitioningMesh(t *testing.T) {
+	oldMode := ConsensusPenaltyEnforceMode
+	ConsensusPenaltyEnforceMode = "always"
+	t.Cleanup(func() {
+		ConsensusPenaltyEnforceMode = oldMode
+	})
+
+	n := newConsensusAutoSafetyNode([]string{"A", "B", "C", "D"})
+	n.MisbehaviorLog = make(map[string][]SlashEvidence)
+	n.validatorStatus["B"] = &ValidatorStatus{Active: true, Enabled: true}
+	n.peerToValidator = map[string]string{"peer-B": "B"}
+	n.validatorToPeer = map[string]string{"B": "peer-B"}
+	n.connectedPeers = map[string]bool{"peer-B": true}
+	n.connectingPeers = make(map[string]bool)
+	n.quarantineUntil = make(map[string]time.Time)
+
+	n.handleExecutionEquivocationPolicy("B", 1, "exec-hash")
+
+	if got := len(n.MisbehaviorLog["B"]); got != 1 {
+		t.Fatalf("expected one equivocation evidence entry, got %d", got)
+	}
+	if !n.isPeerConnected("peer-B") {
+		t.Fatalf("exec equivocation evidence must not disconnect trusted validator peer")
+	}
+	if _, ok := n.validatorStatus["B"]; !ok {
+		t.Fatalf("exec equivocation evidence must not locally remove validator status")
+	}
+}
+
 func TestVerifyBlockRoundAwareProposerValidation(t *testing.T) {
 	oldResultMode := ResultGossipOnly
 	ResultGossipOnly = true

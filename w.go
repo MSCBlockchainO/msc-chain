@@ -2615,6 +2615,16 @@ func (n *Node) CheckSlashingThreshold(validator string, reason string) {
 	if reasonKey == "" {
 		return
 	}
+	if reasonKey == "exec_equivocation" {
+		if DebugConsensus {
+			fmt.Printf(
+				"SLASH deferred validator=%s reason=%s source=evidence_only\n",
+				ShortID(validator),
+				reasonKey,
+			)
+		}
+		return
+	}
 
 	const recentWindow = uint64(128)
 	var chainHeight uint64

@@ -3800,8 +3800,11 @@ func (n *Node) handleExecutionEquivocationPolicy(signer string, epoch uint64, ex
 		return
 	}
 	n.RecordMisbehavior(signer, "exec_equivocation_signed", int(epoch), execHash)
-	n.disconnectValidatorPeers(signer, "exec_equivocation")
-	n.SlashValidator(signer)
+	log.Printf("[EXEC-EQUIVOCATION-SOFT] signer=%s height=%d exec=%s action=record_evidence_keep_validator_mesh",
+		ShortID(signer),
+		epoch,
+		ShortHash(execHash),
+	)
 	n.maybeSyncToBestObservedHeight("exec_equivocation")
 	go n.forceSnapshotResyncNow(epoch, "exec_equivocation")
 }
