@@ -509,8 +509,8 @@ func TestValidatorMeshTargetsActiveOnly(t *testing.T) {
 }
 
 func TestValidatorMeshReconcileIntervalMainnet(t *testing.T) {
-	if got := validatorMeshReconcileInterval(); got != 8*time.Second {
-		t.Fatalf("mesh reconcile interval mismatch: got=%s want=8s", got)
+	if got := validatorMeshReconcileInterval(); got != 5*time.Second {
+		t.Fatalf("mesh reconcile interval mismatch: got=%s want=5s", got)
 	}
 	if mode := validatorMeshMode(); mode != "active_only" {
 		t.Fatalf("mesh mode mismatch: got=%q want=active_only", mode)
@@ -633,6 +633,42 @@ func TestValidatorMeshPeerFlapDoesNotQuarantine(t *testing.T) {
 	}
 	if _, ok := n.peerDialNext[peerID]; ok {
 		t.Fatalf("validator mesh peer dial backoff should be cleared after flap threshold")
+	}
+}
+
+func TestValidatorMeshPeerTransientProtocolQuarantineBypasses(t *testing.T) {
+	peerID := "12D3KooWValidatorProtocolPeer"
+	n := &Node{
+		ID:   "A",
+		Role: "validator",
+		Config: &NodeConfig{
+			PersistentPeers: []string{"/ip4/10.0.0.2/tcp/7002/p2p/" + peerID},
+		},
+	}
+	n.ensurePeerIsolationMaps()
+
+	n.quarantinePeer(peerID, "peerinfo_protocol_mismatch")
+
+	if n.isPeerQuarantined(peerID) {
+		t.Fatalf("trusted validator peer should not be quarantined for transient peerinfo protocol mismatch")
+	}
+}
+
+func TestValidatorMeshPeerHardMismatchStillQuarantines(t *testing.T) {
+	peerID := "12D3KooWValidatorMismatchPeer"
+	n := &Node{
+		ID:   "A",
+		Role: "validator",
+		Config: &NodeConfig{
+			PersistentPeers: []string{"/ip4/10.0.0.2/tcp/7002/p2p/" + peerID},
+		},
+	}
+	n.ensurePeerIsolationMaps()
+
+	n.quarantinePeer(peerID, "chain_id_mismatch")
+
+	if !n.isPeerQuarantined(peerID) {
+		t.Fatalf("trusted validator peer should still quarantine on hard chain mismatch")
 	}
 }
 

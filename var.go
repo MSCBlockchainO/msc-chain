@@ -147,7 +147,7 @@ var (
 	EnableMDNS                               = true
 	SelfHealEnabled                          = false
 	SelfHealInterval                         = 15 * time.Second
-	SelfHealMinPeers                         = 4
+	SelfHealMinPeers                         = 5
 	SelfHealStallSeconds              uint64 = 45
 	EnableAutoNAT                            = false
 	EnableRelay                              = false

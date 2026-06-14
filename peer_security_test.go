@@ -92,3 +92,24 @@ func TestPeerReputationPersistenceAdmissionBlocksLowScore(t *testing.T) {
 		t.Fatalf("expected low-reputation peer to be quarantined")
 	}
 }
+
+func TestPeerReputationAllowsPersistentValidatorPeer(t *testing.T) {
+	peerID := "12D3KooWPersistentLowScore"
+	n := &Node{
+		DataDir:        t.TempDir(),
+		syncPeerScores: make(map[string]*SyncPeerScore),
+		Role:           "validator",
+		Config: &NodeConfig{
+			PersistentPeers: []string{"/ip4/10.0.0.2/tcp/7002/p2p/" + peerID},
+		},
+	}
+	n.ensurePeerIsolationMaps()
+	n.syncPeerScores[peerID] = &SyncPeerScore{DialFailure: PeerAdmissionMinSamples, UpdatedAt: time.Now()}
+
+	if !n.peerAdmissionAllowed(peerID) {
+		t.Fatalf("persistent validator peer should remain admissible despite transient low dial score")
+	}
+	if n.isPeerQuarantined(peerID) {
+		t.Fatalf("persistent validator peer should not be quarantined by low reputation admission")
+	}
+}

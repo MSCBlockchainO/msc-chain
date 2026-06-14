@@ -163,6 +163,9 @@ func (n *Node) peerAdmissionAllowed(peerID string) bool {
 	if n == nil || peerID == "" {
 		return true
 	}
+	if n.isValidatorOrPersistentPeerID(peerID) {
+		return true
+	}
 	if n.isPeerQuarantined(peerID) {
 		return false
 	}

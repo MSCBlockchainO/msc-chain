@@ -298,7 +298,7 @@ peer_diversity_ipv6_prefix = 64
 mdns = true
 self_heal_enabled = true
 self_heal_interval_seconds = 5
-self_heal_min_peers = 3
+self_heal_min_peers = 5
 self_heal_stall_seconds = 20
 
 [sync]

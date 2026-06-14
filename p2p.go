@@ -6940,6 +6940,25 @@ func quarantineDurationFor(reason string) time.Duration {
 		return peerQuarantineFor
 	}
 }
+func trustedPeerCanBypassQuarantine(reason string) bool {
+	reason = strings.ToLower(strings.TrimSpace(reason))
+	if reason == "" || shouldForgetPeer(reason) {
+		return false
+	}
+	switch {
+	case strings.Contains(reason, "duplicate"),
+		strings.Contains(reason, "peer_id_mismatch"),
+		strings.Contains(reason, "bad_signature"),
+		strings.Contains(reason, "replay"),
+		strings.Contains(reason, "spoof"),
+		strings.Contains(reason, "identity"),
+		strings.Contains(reason, "drift_same_height"),
+		strings.Contains(reason, "dangerous"):
+		return false
+	default:
+		return true
+	}
+}
 func shouldForgetPeer(reason string) bool {
 	switch {
 	case strings.Contains(reason, "chain_id_mismatch"),
@@ -7187,12 +7206,15 @@ func (n *Node) quarantinePeer(peerID, reason string) {
 	if peerID == "" {
 		return
 	}
-	if strings.Contains(reason, "peer_flap") && n.isValidatorOrPersistentPeerID(peerID) {
+	if n.isValidatorOrPersistentPeerID(peerID) && trustedPeerCanBypassQuarantine(reason) {
 		// Validator mesh targets are safety-critical. A transport flap should
-		// trigger fast redial, not isolate a validator long enough to lose quorum.
-		n.clearDialBackoffForPeerID(peerID)
+		// trigger bounded redial backoff, not isolate a validator long enough
+		// to lose quorum. Hard identity/chain mismatches still quarantine.
+		n.peerStateMu.Lock()
+		delete(n.quarantineUntil, peerID)
+		n.peerStateMu.Unlock()
 		if DebugNet {
-			fmt.Printf("Peer flap quarantine bypassed for validator/persistent peer: %s reason=%s\n", peerID, reason)
+			fmt.Printf("Peer quarantine bypassed for validator/persistent peer: %s reason=%s\n", peerID, reason)
 		}
 		return
 	}
@@ -9734,7 +9756,7 @@ func validatorMeshMode() string {
 }
 
 func validatorMeshReconcileInterval() time.Duration {
-	return 8 * time.Second
+	return 5 * time.Second
 }
 
 func (n *Node) validatorMeshTargets() []string {
