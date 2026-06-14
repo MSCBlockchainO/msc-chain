@@ -480,6 +480,74 @@ func TestVerifyExecutionResultSignatureUsesCommittedRegistryPubKey(t *testing.T)
 	}
 }
 
+func TestVerifyExecutionResultSignatureUsesCoreRegistryWhenSnapshotMissing(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	const signer = "B"
+	validatorPubKeysMu.Lock()
+	oldRuntime, hadRuntime := ValidatorPubKeys[signer]
+	oldGenesis, hadGenesis := GenesisValidatorPubKeys[signer]
+	delete(ValidatorPubKeys, signer)
+	delete(GenesisValidatorPubKeys, signer)
+	validatorPubKeysMu.Unlock()
+	t.Cleanup(func() {
+		validatorPubKeysMu.Lock()
+		defer validatorPubKeysMu.Unlock()
+		if hadRuntime {
+			ValidatorPubKeys[signer] = oldRuntime
+		} else {
+			delete(ValidatorPubKeys, signer)
+		}
+		if hadGenesis {
+			GenesisValidatorPubKeys[signer] = oldGenesis
+		} else {
+			delete(GenesisValidatorPubKeys, signer)
+		}
+	})
+
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.coreRegistryEntries = map[string]CoreRegistryEntry{
+		signer: {ID: signer, ConsensusPubKey: hex.EncodeToString(pub)},
+	}
+	const height uint64 = 12
+	node.Blockchain.mu.Lock()
+	node.Blockchain.Blocks = []Block{{ID: 0, BlockHash: GenesisHash}}
+	for h := uint64(1); h < height; h++ {
+		node.Blockchain.Blocks = append(node.Blockchain.Blocks, Block{ID: h, BlockHash: fmt.Sprintf("block-%d", h)})
+	}
+	node.Blockchain.mu.Unlock()
+
+	block := Block{
+		ID:          height,
+		Round:       3,
+		PrevHash:    "block-11",
+		Proposer:    "A",
+		Type:        BlockTypeTime,
+		BlockTime:   LogicalTimeForEpochTick(height, TickFinalize),
+		StateRoot:   strings.Repeat("3", 64),
+		MempoolRoot: strings.Repeat("4", 64),
+	}
+	block.Timestamp = int64(SystemTimeUnits(block.BlockTime))
+	block.BlockHash = HashBlock(block)
+	proposalHash := executionVoteProposalHashForFinalBlock(block)
+	sig := ed25519.Sign(priv, execResultSignBytesV2(block.ID, block.Round, proposalHash, block.StateRoot, block.MempoolRoot))
+	result := ExecutionResult{
+		Height:     block.ID,
+		Round:      block.Round,
+		BlockHash:  proposalHash,
+		Signer:     signer,
+		ResultHash: block.StateRoot,
+		TxMerkle:   block.MempoolRoot,
+		Signature:  hex.EncodeToString(sig),
+	}
+
+	if err := node.verifyBlockExecutionResultSignature(result, block); err != nil {
+		t.Fatalf("expected core registry pubkey fallback to verify execution result: %v", err)
+	}
+}
+
 func TestVerifyBlockConsensusEvidenceAcceptsSignedOriginalProposalHash(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

@@ -3887,11 +3887,33 @@ func execResultPubKeyCandidates(signer string) []ed25519.PublicKey {
 	return candidates
 }
 
+func (n *Node) appendCoreRegistryExecResultPubKeyCandidate(candidates []ed25519.PublicKey, signer string) []ed25519.PublicKey {
+	if n == nil {
+		return candidates
+	}
+	signer = normalizeValidatorID(signer)
+	if signer == "" {
+		return candidates
+	}
+	n.coreRegistryMu.RLock()
+	entry, ok := n.coreRegistryEntries[signer]
+	n.coreRegistryMu.RUnlock()
+	if !ok {
+		return candidates
+	}
+	pubBytes, err := decodeConsensusPubKeyHex(entry.ConsensusPubKey)
+	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
+		return candidates
+	}
+	return appendExecResultPubKeyCandidate(candidates, ed25519.PublicKey(pubBytes))
+}
+
 func (n *Node) execResultPubKeyCandidatesForHeight(signer string, height uint64) []ed25519.PublicKey {
 	candidates := execResultPubKeyCandidates(signer)
 	if n == nil || height == 0 {
 		return candidates
 	}
+	candidates = n.appendCoreRegistryExecResultPubKeyCandidate(candidates, signer)
 	rec, ok := validatorRecordFromStakeSnapshot(n.validatorRegistrySnapshotForHeight(height), signer)
 	if !ok {
 		return candidates
