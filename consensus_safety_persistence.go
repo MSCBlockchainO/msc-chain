@@ -1045,7 +1045,10 @@ func (n *Node) restoreConsensusSafetyState() error {
 			ExecPool.commitChoice[height] = make(map[string]string)
 		}
 		for hash, bySigner := range byHash {
-			scope := commitVoteScopeKey(height, hash)
+			scope := strings.TrimSpace(hash)
+			if !strings.HasPrefix(scope, "block|") {
+				scope = commitVoteScopeKey(height, hash)
+			}
 			for signer := range bySigner {
 				ExecPool.commitChoice[height][normalizeValidatorID(signer)] = scope
 			}

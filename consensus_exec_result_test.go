@@ -158,6 +158,14 @@ func signedCommitMsgForTest(t *testing.T, block Block, signer string, priv ed255
 	return msg
 }
 
+func signedCommitMsgForExecHashForTest(t *testing.T, block Block, signer string, priv ed25519.PrivateKey, execHash string) CommitMsg {
+	t.Helper()
+	msg := signedCommitMsgForTest(t, block, signer, priv)
+	msg.ExecHash = execHash
+	msg.Signature = hex.EncodeToString(ed25519.Sign(priv, commitVoteSignBytes(msg.Height, msg.Hash, msg.ExecHash, msg.TxMerkle)))
+	return msg
+}
+
 func signedEmbeddedExecutionResultMsgForBlock(t *testing.T, signer string, priv ed25519.PrivateKey, block Block) ExecutionResultMsg {
 	t.Helper()
 	msg := signedExecutionResultMsgForBlock(t, signer, priv, block)
@@ -1356,6 +1364,49 @@ func TestRecordExecResultGlobalRejectsMismatchedExecutionResultHash(t *testing.T
 	}
 	if results[0].ExecutionResultHash != expectedHash {
 		t.Fatalf("stored execution result hash mismatch: got=%s want=%s", results[0].ExecutionResultHash, expectedHash)
+	}
+}
+
+func TestExecPoolResultKeySeparatesExecutionOutcomesForSameBlockHash(t *testing.T) {
+	resetExecPoolForTest(t)
+
+	epoch := uint64(12)
+	blockHash := "same-block-hash"
+	txMerkle := "same-tx-root"
+	proposalKey := proposalVoteKey(epoch, 3, blockHash, txMerkle, "")
+
+	for _, signer := range []string{"A", "B"} {
+		count, ok, equivocation := recordExecResultGlobal(epoch, proposalKey, "state-root-a", txMerkle, ExecutionResult{
+			Height:     epoch,
+			Round:      3,
+			BlockHash:  blockHash,
+			Signer:     signer,
+			ResultHash: "state-root-a",
+			TxMerkle:   txMerkle,
+		})
+		if !ok || equivocation || count == 0 {
+			t.Fatalf("failed to record state-root-a signer=%s count=%d ok=%t equivocation=%t", signer, count, ok, equivocation)
+		}
+	}
+	count, ok, equivocation := recordExecResultGlobal(epoch, proposalKey, "state-root-b", txMerkle, ExecutionResult{
+		Height:     epoch,
+		Round:      3,
+		BlockHash:  blockHash,
+		Signer:     "C",
+		ResultHash: "state-root-b",
+		TxMerkle:   txMerkle,
+	})
+	if !ok || equivocation || count != 1 {
+		t.Fatalf("expected state-root-b to start an independent bucket, count=%d ok=%t equivocation=%t", count, ok, equivocation)
+	}
+	if got := getExecCountGlobal(epoch, proposalKey, "state-root-a", txMerkle); got != 2 {
+		t.Fatalf("state-root-a bucket mixed or lost votes, got=%d want=2", got)
+	}
+	if got := getExecCountGlobal(epoch, proposalKey, "state-root-b", txMerkle); got != 1 {
+		t.Fatalf("state-root-b bucket mixed or lost votes, got=%d want=1", got)
+	}
+	if got := getExecCountForProposalScopeGlobal(epoch, proposalKey, txMerkle); got != 2 {
+		t.Fatalf("proposal scope should report best independent result bucket, got=%d want=2", got)
 	}
 }
 
@@ -3828,7 +3879,7 @@ func TestPublishExecutionResultRecordsLocalVoteWithoutPubSubLoopback(t *testing.
 		t.Fatalf("expected local self-vote to be recorded immediately, got=%d want=1", got)
 	}
 	node.execResultsMu.Lock()
-	seen := node.execSignerSeen[block.ID][execPoolScopeKey(block.ID, proposalKey)]["A"]
+	seen := node.execSignerSeen[block.ID][execPoolResultKey(block.ID, proposalKey, block.StateRoot)]["A"]
 	node.execResultsMu.Unlock()
 	if !seen {
 		t.Fatalf("expected local signer to be tracked without pubsub loopback")
@@ -3926,6 +3977,57 @@ func TestHandleCommitMsgFollowsSignedCommitEvidence(t *testing.T) {
 
 	if got := node.Blockchain.Height(); got < epoch {
 		t.Fatalf("expected local follow vote to finalize the near-quorum proposal, height=%d want_at_least=%d", got, epoch)
+	}
+}
+
+func TestSignedCommitQuorumDoesNotMixExecutionOutcomes(t *testing.T) {
+	resetExecPoolForTest(t)
+
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	epoch := node.currentEpoch()
+	block := node.BuildLeaderBlock(epoch)
+	rootA := block.StateRoot
+	rootB := strings.Repeat("b", 64)
+	if rootA == rootB {
+		t.Fatalf("test roots unexpectedly match")
+	}
+	required := node.executionQuorumRequiredForEpoch(epoch)
+	if required != 3 {
+		t.Fatalf("unexpected quorum requirement: got=%d want=3", required)
+	}
+
+	for _, signer := range []string{"A", "B"} {
+		if _, _, ok := node.recordVerifiedCommitVote(signedCommitMsgForExecHashForTest(t, block, signer, privKeys[signer], rootA)); !ok {
+			t.Fatalf("failed to record rootA commit signer=%s", signer)
+		}
+	}
+	if _, _, ok := node.recordVerifiedCommitVote(signedCommitMsgForExecHashForTest(t, block, "C", privKeys["C"], rootB)); !ok {
+		t.Fatalf("failed to record rootB commit signer=C")
+	}
+
+	_, _, countA, requiredA := node.commitVoteEvidenceForResult(epoch, block.BlockHash, rootA, block.MempoolRoot)
+	if countA != 2 || requiredA != required {
+		t.Fatalf("rootA evidence mixed counts: got=%d required=%d", countA, requiredA)
+	}
+	_, _, countB, requiredB := node.commitVoteEvidenceForResult(epoch, block.BlockHash, rootB, block.MempoolRoot)
+	if countB != 1 || requiredB != required {
+		t.Fatalf("rootB evidence mixed counts: got=%d required=%d", countB, requiredB)
+	}
+	_, _, bestCount, bestRequired := node.commitVoteEvidence(epoch, block.BlockHash)
+	if bestCount != 2 || bestRequired != required {
+		t.Fatalf("broad evidence should return best single result bucket, got=%d required=%d", bestCount, bestRequired)
+	}
+	if count, required, committed := node.proposalHasSignedCommitQuorum(block); committed || count != 2 || required != 3 {
+		t.Fatalf("mixed execution outcomes must not form signed commit quorum, count=%d required=%d committed=%t", count, required, committed)
+	}
+
+	if _, _, ok := node.recordVerifiedCommitVote(signedCommitMsgForExecHashForTest(t, block, "D", privKeys["D"], rootA)); !ok {
+		t.Fatalf("failed to record final rootA signer")
+	}
+	if count, required, committed := node.proposalHasSignedCommitQuorum(block); !committed || count != 3 || required != 3 {
+		t.Fatalf("matching execution outcome should form commit quorum, count=%d required=%d committed=%t", count, required, committed)
 	}
 }
 

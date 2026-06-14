@@ -576,7 +576,7 @@ func TestSignedCommitVoteCanMoveToHigherRoundBeforeQuorum(t *testing.T) {
 	ExecPool.mu.Lock()
 	choice := strings.TrimSpace(ExecPool.commitChoice[highBlock.ID]["A"])
 	ExecPool.mu.Unlock()
-	if choice != commitVoteScopeKey(highBlock.ID, highBlock.BlockHash) {
+	if choice != commitVoteResultScopeKey(highBlock.ID, highBlock.BlockHash, highBlock.StateRoot, highBlock.MempoolRoot) {
 		t.Fatalf("expected global commit choice to follow replacement, got=%q", choice)
 	}
 }
