@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -170,6 +171,123 @@ func TestStateCorruptionRecoveryLoadBestSnapshotSkipsCorruptLatest(t *testing.T)
 	}
 	if snapshot.Height != block.ID {
 		t.Fatalf("expected fallback snapshot height %d, got %d", block.ID, snapshot.Height)
+	}
+}
+
+func TestStateCorruptionRecoveryStartupSelectsDurableExportAboveStaleDBSnapshot(t *testing.T) {
+	oldRegistry := GlobalValidatorRegistry.Snapshot()
+	t.Cleanup(func() {
+		GlobalValidatorRegistry.Load(oldRegistry)
+	})
+
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.Consensus = nil
+
+	registry := testValidatorSetMaterializationRegistry()
+	ledger := NewLedger()
+	block1, snapshot1 := makeSnapshotLayerFixture(1, "genesis", ledger, registry)
+	block2, snapshot2 := makeSnapshotLayerFixture(2, block1.BlockHash, ledger, registry)
+	snapshot1.LedgerStage = snapshotLedgerStageExecution
+	snapshot2.LedgerStage = snapshotLedgerStageExecution
+	populateSnapshotDerivedFields(&snapshot1)
+	populateSnapshotDerivedFields(&snapshot2)
+	snapshot1.SnapshotHash = snapshotCanonicalHash(&snapshot1)
+	snapshot2.SnapshotHash = snapshotCanonicalHash(&snapshot2)
+
+	node.StoreBlock(block1)
+	node.StoreBlock(block2)
+	storeSnapshotForHeight(t, node.DB, snapshot1)
+	storeSnapshotForHeight(t, node.DB, snapshot2)
+	if err := node.exportSnapshotArtifacts(&snapshot2); err != nil {
+		t.Fatalf("export higher snapshot: %v", err)
+	}
+	if err := node.deleteStoredSnapshotHeight(block2.ID); err != nil {
+		t.Fatalf("delete higher DB snapshot: %v", err)
+	}
+	if node.committedStateSnapshotRecordExists(block2.ID) {
+		t.Fatalf("test setup expected higher snapshot only in durable export")
+	}
+
+	node.Blockchain.ReplaceChain([]Block{block1})
+	node.restoreCommittedHeightFromChain()
+
+	selected, anchor, reason := node.loadBestAnchoredStartupRecoverySnapshot()
+	if selected == nil {
+		t.Fatalf("expected durable exported snapshot selection, reason=%s", reason)
+	}
+	if selected.Height != block2.ID || selected.BlockHash != block2.BlockHash {
+		t.Fatalf("selected stale snapshot: height=%d hash=%q want height=%d hash=%q",
+			selected.Height, selected.BlockHash, block2.ID, block2.BlockHash)
+	}
+	if anchor.ID != block2.ID || anchor.BlockHash != block2.BlockHash {
+		t.Fatalf("selected anchor mismatch: height=%d hash=%q", anchor.ID, anchor.BlockHash)
+	}
+	if !node.applyStartupBestSnapshot(selected, true) {
+		t.Fatalf("expected startup recovery snapshot to apply")
+	}
+	if got := node.Blockchain.Height(); got != block2.ID {
+		t.Fatalf("startup recovery height=%d want=%d", got, block2.ID)
+	}
+	if !node.committedStateSnapshotRecordExists(block2.ID) {
+		t.Fatalf("startup recovery did not persist higher snapshot for the next restart")
+	}
+	if err := os.RemoveAll(node.snapshotExportDirForHeight(block2.ID)); err != nil {
+		t.Fatalf("remove recovered export before second restart: %v", err)
+	}
+	node.Blockchain.ReplaceChain([]Block{block1})
+	selectedAgain, anchorAgain, reason := node.loadBestAnchoredStartupRecoverySnapshot()
+	if selectedAgain == nil {
+		t.Fatalf("expected persisted recovery snapshot on second restart, reason=%s", reason)
+	}
+	if selectedAgain.Height != block2.ID ||
+		selectedAgain.BlockHash != block2.BlockHash ||
+		anchorAgain.BlockHash != block2.BlockHash {
+		t.Fatalf("second restart did not retain recovered anchor: snapshot=%d/%q anchor=%d/%q",
+			selectedAgain.Height, selectedAgain.BlockHash, anchorAgain.ID, anchorAgain.BlockHash)
+	}
+}
+
+func TestStateCorruptionRecoveryStartupRejectsCorruptDurableExport(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	node.Consensus = nil
+
+	registry := testValidatorSetMaterializationRegistry()
+	block1, snapshot1 := makeSnapshotLayerFixture(1, "genesis", NewLedger(), registry)
+	block2, snapshot2 := makeSnapshotLayerFixture(2, block1.BlockHash, NewLedger(), registry)
+	snapshot1.LedgerStage = snapshotLedgerStageExecution
+	snapshot2.LedgerStage = snapshotLedgerStageExecution
+	populateSnapshotDerivedFields(&snapshot1)
+	populateSnapshotDerivedFields(&snapshot2)
+	snapshot1.SnapshotHash = snapshotCanonicalHash(&snapshot1)
+	snapshot2.SnapshotHash = snapshotCanonicalHash(&snapshot2)
+
+	node.StoreBlock(block1)
+	node.StoreBlock(block2)
+	storeSnapshotForHeight(t, node.DB, snapshot1)
+	if err := node.exportSnapshotArtifacts(&snapshot2); err != nil {
+		t.Fatalf("export higher snapshot: %v", err)
+	}
+	chunkPath := filepath.Join(node.snapshotExportDirForHeight(block2.ID), "chunk_0000")
+	chunk, err := os.ReadFile(chunkPath)
+	if err != nil || len(chunk) == 0 {
+		t.Fatalf("read exported snapshot chunk: size=%d err=%v", len(chunk), err)
+	}
+	chunk[0] ^= 0xff
+	if err := os.WriteFile(chunkPath, chunk, 0o600); err != nil {
+		t.Fatalf("corrupt exported snapshot chunk: %v", err)
+	}
+	if _, err := node.loadExportedSnapshotArtifact(block2.ID); err == nil {
+		t.Fatalf("expected corrupt durable export verification failure")
+	}
+
+	node.Blockchain.ReplaceChain([]Block{block1})
+	node.restoreCommittedHeightFromChain()
+	selected, _, _ := node.loadBestAnchoredStartupRecoverySnapshot()
+	if selected != nil {
+		t.Fatalf("corrupt durable export was selected at height %d", selected.Height)
+	}
+	if got := node.Blockchain.Height(); got != block1.ID {
+		t.Fatalf("corrupt durable export changed local height: got=%d want=%d", got, block1.ID)
 	}
 }
 

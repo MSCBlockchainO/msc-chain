@@ -1,10 +1,21 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+)
+
+const (
+	maxStartupExportedSnapshotBytes         = uint64(1 << 30)
+	maxStartupExportedSnapshotChunks        = uint64(1 << 16)
+	maxStartupExportedSnapshotManifestBytes = int64(4 << 20)
 )
 
 func (n *Node) loadBestReadableSnapshotAtOrBelow(targetHeight uint64) (*StateSnapshot, error) {
@@ -36,55 +47,203 @@ func (n *Node) loadBestReadableSnapshotAtOrBelow(targetHeight uint64) (*StateSna
 }
 
 func (n *Node) loadBestAnchoredStartupRecoverySnapshot() (*StateSnapshot, Block, string) {
-	if n == nil || n.DB == nil || n.DB.SnapshotStore() == nil {
-		return nil, Block{}, "snapshot_db_unavailable"
+	if n == nil {
+		return nil, Block{}, "node_unavailable"
 	}
-	keys, err := listSnapshotKeysFromStores(n.DB.SnapshotStoresForRead(), 0)
-	if err != nil {
-		return nil, Block{}, err.Error()
-	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i].height > keys[j].height })
+
+	dbKeys := make(map[uint64][]byte)
 	lastReason := "anchored_snapshot_unavailable"
+	if n.DB != nil && n.DB.SnapshotStore() != nil {
+		keys, err := listSnapshotKeysFromStores(n.DB.SnapshotStoresForRead(), 0)
+		if err != nil {
+			lastReason = err.Error()
+		} else {
+			for _, candidate := range keys {
+				if candidate.height == 0 {
+					continue
+				}
+				dbKeys[candidate.height] = append([]byte{}, candidate.key...)
+			}
+		}
+	} else {
+		lastReason = "snapshot_db_unavailable"
+	}
+
+	exportedHeights, exportErr := n.exportedSnapshotArtifactHeights()
+	if exportErr != nil && len(dbKeys) == 0 {
+		lastReason = exportErr.Error()
+	}
+	heightSet := make(map[uint64]struct{}, len(dbKeys)+len(exportedHeights))
+	exportedHeightSet := make(map[uint64]struct{}, len(exportedHeights))
+	for height := range dbKeys {
+		heightSet[height] = struct{}{}
+	}
+	for _, height := range exportedHeights {
+		heightSet[height] = struct{}{}
+		exportedHeightSet[height] = struct{}{}
+	}
+	heights := make([]uint64, 0, len(heightSet))
+	for height := range heightSet {
+		heights = append(heights, height)
+	}
+	sort.Slice(heights, func(i, j int) bool { return heights[i] > heights[j] })
+
 	audited := 0
-	auditSkip := func(height uint64, reason string) {
+	auditSkip := func(height uint64, source string, reason string) {
 		if audited >= 12 {
 			return
 		}
 		audited++
-		log.Printf("[SNAPSHOT-RECOVERY-CANDIDATE] height=%d status=skip reason=%s", height, strings.TrimSpace(reason))
+		log.Printf("[SNAPSHOT-RECOVERY-CANDIDATE] height=%d source=%s status=skip reason=%s",
+			height, strings.TrimSpace(source), strings.TrimSpace(reason))
 	}
-	for _, candidate := range keys {
-		snapshot, err := readSnapshotFromStores(n.DB.SnapshotStoresForRead(), candidate.key)
-		if err != nil || snapshot == nil {
-			if err != nil {
-				lastReason = err.Error()
-			}
-			auditSkip(candidate.height, lastReason)
-			continue
+	validate := func(snapshot *StateSnapshot, anchor Block, source string) (*StateSnapshot, Block, bool) {
+		if snapshot == nil {
+			lastReason = "snapshot_unavailable"
+			return nil, Block{}, false
 		}
 		if ok, reason := n.canApplyUnanchoredStartupRecoverySnapshot(snapshot, true); !ok {
 			if strings.TrimSpace(reason) != "" {
 				lastReason = strings.TrimSpace(reason)
 			}
-			auditSkip(snapshot.Height, lastReason)
-			continue
-		}
-		anchor, ok := n.loadDurableBlock(snapshot.Height)
-		if !ok {
-			lastReason = "anchor_block_unavailable"
-			auditSkip(snapshot.Height, lastReason)
-			continue
+			auditSkip(snapshot.Height, source, lastReason)
+			return nil, Block{}, false
 		}
 		if !strings.EqualFold(strings.TrimSpace(anchor.BlockHash), strings.TrimSpace(snapshot.BlockHash)) {
 			lastReason = "block_hash_mismatch"
-			auditSkip(snapshot.Height, lastReason)
+			auditSkip(snapshot.Height, source, lastReason)
+			return nil, Block{}, false
+		}
+		log.Printf("[SNAPSHOT-RECOVERY-CANDIDATE] height=%d source=%s status=selected hash=%s",
+			snapshot.Height, strings.TrimSpace(source), ShortHash(snapshot.BlockHash))
+		return snapshot, anchor, true
+	}
+
+	for _, height := range heights {
+		anchor, ok := n.loadDurableBlock(height)
+		if !ok {
+			lastReason = "anchor_block_unavailable"
+			auditSkip(height, "durable_anchor", lastReason)
 			continue
 		}
-		log.Printf("[SNAPSHOT-RECOVERY-CANDIDATE] height=%d status=selected hash=%s",
-			snapshot.Height, ShortHash(snapshot.BlockHash))
-		return snapshot, anchor, ""
+		if key := dbKeys[height]; len(key) > 0 {
+			snapshot, err := readSnapshotFromStores(n.DB.SnapshotStoresForRead(), key)
+			if err != nil || snapshot == nil {
+				if err != nil {
+					lastReason = err.Error()
+				}
+				auditSkip(height, "snapshot_db", lastReason)
+			} else if selected, anchor, ok := validate(snapshot, anchor, "snapshot_db"); ok {
+				return selected, anchor, ""
+			}
+		}
+		if _, ok := exportedHeightSet[height]; ok {
+			if snapshot, err := n.loadExportedSnapshotArtifact(height); err != nil || snapshot == nil {
+				if err != nil {
+					lastReason = err.Error()
+					auditSkip(height, "snapshot_export", lastReason)
+				}
+			} else if selected, anchor, ok := validate(snapshot, anchor, "snapshot_export"); ok {
+				return selected, anchor, ""
+			}
+		}
 	}
 	return nil, Block{}, lastReason
+}
+
+func (n *Node) exportedSnapshotArtifactHeights() ([]uint64, error) {
+	if n == nil || strings.TrimSpace(n.DataDir) == "" {
+		return nil, fmt.Errorf("snapshot export directory unavailable")
+	}
+	entries, err := os.ReadDir(filepath.Join(n.DataDir, "snapshots"))
+	if err != nil {
+		return nil, err
+	}
+	heights := make([]uint64, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		height, err := strconv.ParseUint(strings.TrimSpace(entry.Name()), 10, 64)
+		if err != nil || height == 0 {
+			continue
+		}
+		heights = append(heights, height)
+	}
+	sort.Slice(heights, func(i, j int) bool { return heights[i] > heights[j] })
+	return heights, nil
+}
+
+func (n *Node) loadExportedSnapshotArtifact(height uint64) (*StateSnapshot, error) {
+	if n == nil || height == 0 || strings.TrimSpace(n.DataDir) == "" {
+		return nil, fmt.Errorf("snapshot export unavailable")
+	}
+	dir := filepath.Join(n.DataDir, "snapshots", fmt.Sprintf("%020d", height))
+	manifestPath := filepath.Join(dir, "meta.json")
+	manifestInfo, err := os.Stat(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	if manifestInfo.Size() <= 0 || manifestInfo.Size() > maxStartupExportedSnapshotManifestBytes {
+		return nil, fmt.Errorf("exported snapshot manifest size invalid")
+	}
+	rawManifest, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(rawManifest)) > maxStartupExportedSnapshotManifestBytes {
+		return nil, fmt.Errorf("exported snapshot manifest size invalid")
+	}
+	var manifest SnapshotManifest
+	if err := json.Unmarshal(rawManifest, &manifest); err != nil {
+		return nil, err
+	}
+	normalizeSnapshotManifest(&manifest)
+	if manifest.Height != height || !snapshotManifestBasicValid(&manifest, height, height) {
+		return nil, fmt.Errorf("invalid exported snapshot manifest")
+	}
+	if manifest.SnapshotSizeBytes == 0 || manifest.SnapshotSizeBytes > maxStartupExportedSnapshotBytes {
+		return nil, fmt.Errorf("exported snapshot payload size invalid")
+	}
+	if manifest.ChunkSize == 0 || manifest.ChunkSize > maxStartupExportedSnapshotBytes {
+		return nil, fmt.Errorf("exported snapshot chunk size invalid")
+	}
+	expectedChunks := manifest.SnapshotSizeBytes / manifest.ChunkSize
+	if manifest.SnapshotSizeBytes%manifest.ChunkSize != 0 {
+		expectedChunks++
+	}
+	if manifest.ChunkCount == 0 ||
+		manifest.ChunkCount > maxStartupExportedSnapshotChunks ||
+		manifest.ChunkCount != expectedChunks {
+		return nil, fmt.Errorf("exported snapshot chunk count invalid")
+	}
+
+	var payload bytes.Buffer
+	payload.Grow(int(manifest.SnapshotSizeBytes))
+	for idx := uint64(0); idx < manifest.ChunkCount; idx++ {
+		chunkPath := filepath.Join(dir, fmt.Sprintf("chunk_%04d", idx))
+		info, err := os.Stat(chunkPath)
+		if err != nil {
+			return nil, err
+		}
+		if info.Size() <= 0 || uint64(info.Size()) > manifest.ChunkSize {
+			return nil, fmt.Errorf("exported snapshot chunk size invalid index=%d", idx)
+		}
+		if uint64(payload.Len())+uint64(info.Size()) > manifest.SnapshotSizeBytes {
+			return nil, fmt.Errorf("exported snapshot payload size mismatch")
+		}
+		raw, err := os.ReadFile(chunkPath)
+		if err != nil {
+			return nil, err
+		}
+		if len(raw) == 0 ||
+			uint64(len(raw)) > manifest.ChunkSize ||
+			uint64(payload.Len())+uint64(len(raw)) > manifest.SnapshotSizeBytes {
+			return nil, fmt.Errorf("exported snapshot chunk size invalid index=%d", idx)
+		}
+		payload.Write(raw)
+	}
+	return verifySnapshotPayloadAgainstManifest(payload.Bytes(), &manifest, height)
 }
 
 func (n *Node) startupSnapshotMatchesCommittedTip(snapshot *StateSnapshot) (bool, string) {
@@ -115,11 +274,24 @@ func (n *Node) applyStartupBestSnapshot(snapshot *StateSnapshot, startupChainTru
 	switch {
 	case snapshot.Height > chainHeight:
 		if ok, reason := n.canApplyUnanchoredStartupRecoverySnapshot(snapshot, startupChainTruncated); ok {
-			log.Printf("[SNAPSHOT-RECOVERY] startup_apply_unanchored height=%d tip=%d source=backup_import",
+			recoverySource := "backup_import"
+			persistSource := "backup_import"
+			if anchorOK, _ := n.snapshotMatchesLocalAnchorDetailed(snapshot); anchorOK {
+				recoverySource = "durable_anchor"
+				persistSource = "startup_durable_anchor_recovery"
+			}
+			log.Printf("[SNAPSHOT-RECOVERY] startup_apply_unanchored height=%d tip=%d source=%s",
 				snapshot.Height,
 				chainHeight,
+				recoverySource,
 			)
-			return n.ApplySnapshotForRecovery(*snapshot)
+			if !n.ApplySnapshotForRecovery(*snapshot) {
+				return false
+			}
+			if err := n.storeCommittedStateSnapshotRecord(snapshot, persistSource); err != nil {
+				log.Printf("[WARN] startup recovered snapshot persist failed height=%d err=%v", snapshot.Height, err)
+			}
+			return true
 		} else if reason != "" {
 			log.Printf("[SNAPSHOT-SCRUB] skipped_unanchored_local_snapshot height=%d tip=%d chain_truncated=%t reason=%s",
 				snapshot.Height, chainHeight, startupChainTruncated, reason)
