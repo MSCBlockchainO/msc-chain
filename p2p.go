@@ -3266,8 +3266,8 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 	if n == nil || epoch == 0 || proposalKey == "" {
 		return false
 	}
+	proposalKey = strings.TrimSpace(proposalKey)
 	n.execResultsMu.Lock()
-	defer n.execResultsMu.Unlock()
 	if n.localExecVoteByRound == nil {
 		n.localExecVoteByRound = make(map[uint64]map[uint32]string)
 	}
@@ -3275,6 +3275,14 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 		n.localExecVoteByRound[epoch] = make(map[uint32]string)
 	}
 	existing := strings.TrimSpace(n.localExecVoteByRound[epoch][round])
+	// Commit-choice resolution reads proposal state guarded by execResultsMu.
+	// Snapshot local markers before resolving it to avoid self-deadlock.
+	priorByRound := make(map[uint32]string, len(n.localExecVoteByRound[epoch]))
+	for existingRound, existingKey := range n.localExecVoteByRound[epoch] {
+		priorByRound[existingRound] = strings.TrimSpace(existingKey)
+	}
+	n.execResultsMu.Unlock()
+
 	if existing == proposalKey {
 		return true
 	}
@@ -3306,8 +3314,7 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 
 	var highestRound uint32
 	hasPriorRound := false
-	for existingRound, existingKey := range n.localExecVoteByRound[epoch] {
-		existingKey = strings.TrimSpace(existingKey)
+	for existingRound, existingKey := range priorByRound {
 		if existingKey == "" {
 			continue
 		}
@@ -3325,6 +3332,23 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 			proposalKey,
 		)
 		return false
+	}
+
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+	if n.localExecVoteByRound == nil {
+		n.localExecVoteByRound = make(map[uint64]map[uint32]string)
+	}
+	if n.localExecVoteByRound[epoch] == nil {
+		n.localExecVoteByRound[epoch] = make(map[uint32]string)
+	}
+	if current := strings.TrimSpace(n.localExecVoteByRound[epoch][round]); current != "" && current != proposalKey {
+		return false
+	}
+	for existingRound, existingKey := range n.localExecVoteByRound[epoch] {
+		if strings.TrimSpace(existingKey) != "" && existingRound > round {
+			return false
+		}
 	}
 	n.localExecVoteByRound[epoch][round] = proposalKey
 	return true
