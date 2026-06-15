@@ -2819,9 +2819,9 @@ func (n *Node) validatorConsensusSigningAuthorityStatus(height uint64) (bool, st
 		return true, "registry_authority_not_committed"
 	}
 	registrySnapshot := n.validatorRegistrySnapshotForHeight(height)
-	expected := validatorConsensusPubKeyHexFromSnapshot(registrySnapshot, selfID)
-	source := validatorConsensusPubKeyAnchorSource(registrySnapshot, selfID)
-	if source == "" || expected == "" {
+	record, exists := validatorRecordFromStakeSnapshot(registrySnapshot, selfID)
+	expected := normalizeConsensusPubKeyHex(record.ConsensusPubKey)
+	if !exists || expected == "" {
 		return false, "validator_consensus_pubkey_unanchored"
 	}
 	local := strings.ToLower(hex.EncodeToString(n.ValidatorKey.PublicKey))

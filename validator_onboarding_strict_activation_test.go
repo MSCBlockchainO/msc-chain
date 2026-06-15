@@ -1481,6 +1481,7 @@ func TestValidatorParticipationRequiresCommittedConsensusSigningKey(t *testing.T
 	rec.ConsensusPubKey = ""
 	registry["F"] = rec
 	GlobalValidatorRegistry.Load(registry)
+	GenesisValidatorPubKeys["F"] = append(ed25519.PublicKey(nil), n.ValidatorKey.PublicKey...)
 	n.Blockchain.mu.Lock()
 	n.Blockchain.Blocks[len(n.Blockchain.Blocks)-1].ValidatorRegistryHash = ValidatorRegistrySnapshotHash(registry)
 	n.Blockchain.mu.Unlock()
