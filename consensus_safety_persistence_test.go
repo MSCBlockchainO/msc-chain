@@ -534,6 +534,67 @@ func TestRestoreCommittedHeightFromChainBackfillsFinalizedHashes(t *testing.T) {
 	}
 }
 
+func consensusSafetyJournalRecordCountForTest(t *testing.T, node *Node) int {
+	t.Helper()
+	count := 0
+	if err := node.DB.Meta.View(func(txn *Txn) error {
+		prefix := []byte(consensusSafetyJournalRecordPrefix)
+		it := txn.NewIterator(IteratorOptions{Prefix: prefix})
+		defer it.Close()
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			count++
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("count consensus safety journal records: %v", err)
+	}
+	return count
+}
+
+func TestConsensusSafetyJournalPruneIsBatchedAndBounded(t *testing.T) {
+	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), []string{"A", "B", "C"})
+	writes := consensusSafetyJournalKeepRecords*2 + 5
+	for i := 0; i < writes; i++ {
+		if err := node.persistConsensusSafetyState("batched_prune"); err != nil {
+			t.Fatalf("persist consensus safety state %d: %v", i, err)
+		}
+	}
+	maxRecords := consensusSafetyJournalKeepRecords + consensusSafetyJournalPruneEvery - 1
+	if got := consensusSafetyJournalRecordCountForTest(t, node); got > maxRecords {
+		t.Fatalf("journal record count exceeded batched bound: got=%d max=%d", got, maxRecords)
+	}
+}
+
+func TestConsensusSafetyAsyncPersistenceCoalescesBurst(t *testing.T) {
+	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), []string{"A", "B", "C"})
+	node.consensusSafetyPersistMu.Lock()
+	for i := 0; i < 100; i++ {
+		node.persistConsensusSafetyStateAsync("burst")
+	}
+	time.Sleep(20 * time.Millisecond)
+	node.consensusSafetyPersistMu.Unlock()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		node.consensusSafetyAsyncMu.Lock()
+		running := node.consensusSafetyAsyncRunning
+		node.consensusSafetyAsyncMu.Unlock()
+		if !running {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	node.consensusSafetyAsyncMu.Lock()
+	running := node.consensusSafetyAsyncRunning
+	node.consensusSafetyAsyncMu.Unlock()
+	if running {
+		t.Fatal("async consensus safety persistence did not drain")
+	}
+	if got := consensusSafetyJournalRecordCountForTest(t, node); got > 2 {
+		t.Fatalf("burst should coalesce to at most two journal writes, got=%d", got)
+	}
+}
+
 func TestReceiveBlockAlreadyCommittedConflictIsObservable(t *testing.T) {
 	node := newTestNodeForResultGossip(t, filepath.Join(t.TempDir(), "node"), []string{"A", "B", "C", "D"})
 	committed := Block{ID: 5, PrevHash: "hash-four", BlockHash: "partition-a-five"}

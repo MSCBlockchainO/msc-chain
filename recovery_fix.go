@@ -724,10 +724,28 @@ func (n *Node) ReceiveBlock(block Block, bc *Blockchain) error {
 	return nil
 }
 
+func (n *Node) snapshotOfferCooldownActive(validatorID string, now time.Time, cooldown time.Duration) bool {
+	if n == nil || validatorID == "" || cooldown <= 0 {
+		return false
+	}
+	n.snapshotOfferMu.Lock()
+	defer n.snapshotOfferMu.Unlock()
+	if lastAt := n.snapshotOfferSentAt[validatorID]; !lastAt.IsZero() && now.Sub(lastAt) < cooldown {
+		return true
+	}
+	return false
+}
+
 func (n *Node) maybeOfferSnapshotToValidator(validatorID string, _ uint64) {
 	if validatorID == "" || (n.ConsensusTopic == nil && n.ValidatorTopic == nil) {
 		return
 	}
+	now := time.Now()
+	const snapshotOfferReannounceCooldown = 15 * time.Second
+	if n.snapshotOfferCooldownActive(validatorID, now, snapshotOfferReannounceCooldown) {
+		return
+	}
+
 	height := n.committedHeight
 	if height == 0 {
 		height = n.Blockchain.Height()
@@ -735,12 +753,12 @@ func (n *Node) maybeOfferSnapshotToValidator(validatorID string, _ uint64) {
 	if height == 0 {
 		return
 	}
-	snap, err := n.GetSnapshotAtOrBelow(height)
-	if err != nil || snap == nil || snap.Height == 0 {
-		// Fallback to latest available snapshot; late joiners should jump forward fast.
-		if latest, latestErr := n.GetLatestSnapshot(); latestErr == nil && latest != nil && latest.Height > 0 {
-			snap = latest
-		} else {
+	// The latest pointer is a direct lookup. A full at-or-below scan is only
+	// needed when the pointer is unavailable or ahead of the committed tip.
+	snap, err := n.GetLatestSnapshot()
+	if err != nil || snap == nil || snap.Height == 0 || snap.Height > height {
+		snap, err = n.GetSnapshotAtOrBelow(height)
+		if err != nil || snap == nil || snap.Height == 0 {
 			return
 		}
 	}
@@ -752,8 +770,6 @@ func (n *Node) maybeOfferSnapshotToValidator(validatorID string, _ uint64) {
 	if n.snapshotOfferSentAt == nil {
 		n.snapshotOfferSentAt = make(map[string]time.Time)
 	}
-	now := time.Now()
-	const snapshotOfferReannounceCooldown = 15 * time.Second
 	if last, ok := n.snapshotOfferSent[validatorID]; ok && last >= snap.Height {
 		if lastAt := n.snapshotOfferSentAt[validatorID]; !lastAt.IsZero() && now.Sub(lastAt) < snapshotOfferReannounceCooldown {
 			n.snapshotOfferMu.Unlock()

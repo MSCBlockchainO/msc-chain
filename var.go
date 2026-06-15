@@ -1782,6 +1782,12 @@ type Node struct {
 	immediateRoundStartMu            sync.Mutex
 	immediateRoundStartPendingHeight uint64
 	immediateRoundStartStartedHeight uint64
+	consensusSafetyPersistMu         sync.Mutex
+	consensusSafetyWritesSincePrune  int
+	consensusSafetyAsyncMu           sync.Mutex
+	consensusSafetyAsyncRunning      bool
+	consensusSafetyAsyncPending      bool
+	consensusSafetyAsyncReason       string
 
 	ConsensusThread *NodeTaskThread
 	ExecutionThread *NodeTaskThread

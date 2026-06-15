@@ -23,6 +23,7 @@ const (
 	consensusSafetyVersion             = 1
 	consensusSafetyJournalVersion      = 1
 	consensusSafetyJournalKeepRecords  = 16
+	consensusSafetyJournalPruneEvery   = consensusSafetyJournalKeepRecords
 	finalizedHashDBPrefix              = "finalized_hash:"
 	consensusEvidenceDBPrefix          = "consensus_evidence:"
 	consensusTelemetryJSONL            = "consensus_events.jsonl"
@@ -725,11 +726,17 @@ func (n *Node) persistConsensusSafetyState(reason string) error {
 	if n == nil || n.DB == nil || n.DB.Meta == nil {
 		return nil
 	}
+	n.consensusSafetyPersistMu.Lock()
+	defer n.consensusSafetyPersistMu.Unlock()
+
 	snap := n.snapshotConsensusSafetyState(reason)
 	data, err := json.Marshal(snap)
 	if err != nil {
 		return err
 	}
+	n.consensusSafetyWritesSincePrune++
+	pruneJournal := consensusSafetyJournalPruneEvery <= 1 ||
+		n.consensusSafetyWritesSincePrune >= consensusSafetyJournalPruneEvery
 	if err := n.DB.Meta.Update(func(txn *Txn) error {
 		seq := consensusSafetyJournalNextSeq(txn)
 		record, err := encodeConsensusSafetyJournalRecord(seq, data)
@@ -750,8 +757,10 @@ func (n *Node) persistConsensusSafetyState(reason string) error {
 		if err := txn.Set([]byte(consensusSafetyJournalLatestKey), latest); err != nil {
 			return err
 		}
-		if err := consensusSafetyJournalPruneLocked(txn); err != nil {
-			return err
+		if pruneJournal {
+			if err := consensusSafetyJournalPruneLocked(txn); err != nil {
+				return err
+			}
 		}
 		enc, err := encryptDBValue(data)
 		if err != nil {
@@ -760,6 +769,9 @@ func (n *Node) persistConsensusSafetyState(reason string) error {
 		return txn.Set([]byte(consensusSafetyDBKey), enc)
 	}); err != nil {
 		return err
+	}
+	if pruneJournal {
+		n.consensusSafetyWritesSincePrune = 0
 	}
 	n.emitConsensusTelemetry(consensusTelemetryEvent{
 		Type:      "consensus_safety_persisted",
@@ -779,8 +791,29 @@ func (n *Node) persistConsensusSafetyStateAsync(reason string) {
 	if n == nil || n.DB == nil || n.DB.Meta == nil {
 		return
 	}
+	n.consensusSafetyAsyncMu.Lock()
+	n.consensusSafetyAsyncReason = strings.TrimSpace(reason)
+	n.consensusSafetyAsyncPending = true
+	if n.consensusSafetyAsyncRunning {
+		n.consensusSafetyAsyncMu.Unlock()
+		return
+	}
+	n.consensusSafetyAsyncRunning = true
+	n.consensusSafetyAsyncMu.Unlock()
+
 	go func() {
-		_ = n.persistConsensusSafetyState(reason)
+		for {
+			n.consensusSafetyAsyncMu.Lock()
+			if !n.consensusSafetyAsyncPending {
+				n.consensusSafetyAsyncRunning = false
+				n.consensusSafetyAsyncMu.Unlock()
+				return
+			}
+			pendingReason := n.consensusSafetyAsyncReason
+			n.consensusSafetyAsyncPending = false
+			n.consensusSafetyAsyncMu.Unlock()
+			_ = n.persistConsensusSafetyState(pendingReason)
+		}
 	}()
 }
 
