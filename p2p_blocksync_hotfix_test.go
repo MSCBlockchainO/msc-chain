@@ -1370,6 +1370,43 @@ func TestMaybeExitSyncModeArmsWarmupAfterCatchup(t *testing.T) {
 	}
 }
 
+func TestDurableSyncAnchorRequiresMeaningfulCatchup(t *testing.T) {
+	if shouldPersistDurableSyncAnchorAfterSyncClear(false, true) {
+		t.Fatal("pause-only consensus clear must not create a durable sync snapshot")
+	}
+	if shouldPersistDurableSyncAnchorAfterSyncClear(true, false) {
+		t.Fatal("routine short catch-up must not create a durable sync snapshot")
+	}
+	if !shouldPersistDurableSyncAnchorAfterSyncClear(true, true) {
+		t.Fatal("meaningful sync catch-up must retain a durable sync snapshot")
+	}
+}
+
+func TestMaybeExitSyncModePauseOnlyDoesNotCreateDurableSnapshot(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	for height := uint64(1); height <= 12; height++ {
+		block := node.BuildLeaderBlock(height)
+		block.BlockTime = LogicalTimeForEpochTick(block.ID, TickFinalize)
+		block.Timestamp = int64(SystemTimeUnits(block.BlockTime))
+		block.BlockHash = HashBlock(block)
+		node.Blockchain.AddBlock(block)
+	}
+
+	node.Consensus.mu.Lock()
+	node.Consensus.Paused = true
+	node.Consensus.mu.Unlock()
+
+	before := node.observabilityStatsSnapshot().SnapshotCreateTotal
+	if cleared := node.maybeExitSyncMode("commit"); !cleared {
+		t.Fatal("expected pause-only consensus state to clear")
+	}
+	time.Sleep(100 * time.Millisecond)
+	after := node.observabilityStatsSnapshot().SnapshotCreateTotal
+	if after != before {
+		t.Fatalf("pause-only consensus clear created durable snapshot: before=%d after=%d", before, after)
+	}
+}
+
 func TestSyncBlockRangeWarmupRequiresMeaningfulValidatorDrift(t *testing.T) {
 	previous := ValidatorLivenessMaxHeightDriftBlocks
 	ValidatorLivenessMaxHeightDriftBlocks = 8

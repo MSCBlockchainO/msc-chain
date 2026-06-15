@@ -12309,6 +12309,10 @@ func (n *Node) consumeSyncWarmupEligible() bool {
 	return eligible
 }
 
+func shouldPersistDurableSyncAnchorAfterSyncClear(hadSyncState bool, warmupEligible bool) bool {
+	return hadSyncState && warmupEligible
+}
+
 func (n *Node) armSyncWarmupAfterCatchup(reason string, localHeight uint64, targetHeight uint64) {
 	if n == nil || localHeight == 0 || targetHeight == 0 || !n.consumeSyncWarmupEligible() {
 		return
@@ -12334,9 +12338,11 @@ func (n *Node) maybeExitSyncMode(reason string) bool {
 	cleared := false
 	target := uint64(0)
 	armWarmup := false
+	hadSyncState := false
 
 	n.Consensus.mu.Lock()
 	target = n.Consensus.SyncTarget
+	hadSyncState = n.Consensus.Syncing || n.Consensus.syncInFlight || target > 0
 	if (n.Consensus.Syncing || n.Consensus.Paused || n.Consensus.syncInFlight) &&
 		(target == 0 || localHeight >= target) {
 		armWarmup = target > 0 && localHeight > 0
@@ -12349,10 +12355,15 @@ func (n *Node) maybeExitSyncMode(reason string) bool {
 	n.Consensus.mu.Unlock()
 
 	if cleared {
+		n.syncMu.Lock()
+		warmupEligible := n.syncWarmupEligible
+		n.syncMu.Unlock()
 		n.setSyncAction("idle", 0, "up_to_date")
 		n.setSyncProvider("")
 		n.closeSnapshotSession(true, "sync_cleared")
-		n.persistDurableSyncAnchorAsync(localHeight, reason)
+		if shouldPersistDurableSyncAnchorAfterSyncClear(hadSyncState, warmupEligible) {
+			n.persistDurableSyncAnchorAsync(localHeight, reason)
+		}
 		n.syncMu.Lock()
 		n.syncStallSeconds = 0
 		n.syncMu.Unlock()
