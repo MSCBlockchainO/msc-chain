@@ -173,6 +173,36 @@ func TestApplyBlockStatePersistsStakeConsensusPubKeyInLedger(t *testing.T) {
 	}
 }
 
+func TestExecuteTransactionPersistsStakeConsensusPubKeyInLedger(t *testing.T) {
+	defer withStakeConsensusPubKeyGlobals(t)()
+
+	ConfigAuthCoreValidators = []string{"A", "B", "C", "D"}
+	GlobalValidatorRegistry.Load(nil)
+
+	wallet := newStakeConsensusPubKeyTestWallet(t, "stake-pass")
+	ledger := GenesisLedger()
+	addBalance(&ledger, CoinSymbol, wallet.Address, 10_000)
+
+	validatorPub, _, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatalf("validator keygen failed: %v", err)
+	}
+	validatorPubHex := strings.ToLower(hex.EncodeToString(validatorPub))
+
+	tx, err := BuildSignedStakeTxSecure(wallet, "stake-pass", "F", validatorPubHex, 100, getNonce(ledger, wallet.Address), CoinSymbol, DefaultStakeLockEpochs)
+	if err != nil {
+		t.Fatalf("build stake tx: %v", err)
+	}
+	next, err := ExecuteTransaction(&ledger, tx, 1)
+	if err != nil {
+		t.Fatalf("execute stake tx: %v", err)
+	}
+	lock := next.Stakes[stakeKey(wallet.Address, "F")]
+	if lock.ConsensusPubKey != validatorPubHex {
+		t.Fatalf("stake lock consensus pubkey = %q, want %q", lock.ConsensusPubKey, validatorPubHex)
+	}
+}
+
 func TestUpdateValidatorMetricsSchedulesAlreadyStakedValidatorWhenPubKeyAnchored(t *testing.T) {
 	defer withStakeConsensusPubKeyGlobals(t)()
 

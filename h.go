@@ -1290,6 +1290,9 @@ func ExecuteTransaction(
 		key := stakeKey(tx.From, validatorID)
 		rec := ledger.Stakes[key]
 		rec.ValidatorID = validatorID
+		if normalizedPubKey := normalizeConsensusPubKeyHex(tx.ValidatorPubKey); normalizedPubKey != "" {
+			rec.ConsensusPubKey = normalizedPubKey
+		}
 		rec.Amount += tx.Amount
 		if lockUntil > rec.LockedUntil {
 			rec.LockedUntil = lockUntil
