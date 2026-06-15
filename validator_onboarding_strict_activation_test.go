@@ -1505,6 +1505,9 @@ func TestValidatorParticipationRequiresCommittedConsensusSigningKey(t *testing.T
 	if len(unsigned.Signature) != 0 {
 		t.Fatalf("unanchored active validator must not sign proposer blocks")
 	}
+	if n.broadcastCommitVoteForProposal(Block{ID: height, BlockHash: "unanchored-block"}, "unanchored-exec", "") {
+		t.Fatalf("unanchored active validator must not broadcast commit votes")
+	}
 	status := n.runtimeStatusSnapshot()
 	if status.ProposeEnabled || status.VoteEnabled {
 		t.Fatalf("runtime status must keep unanchored validator from proposing or voting, propose=%t vote=%t wait=%q",

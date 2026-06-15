@@ -2715,6 +2715,15 @@ func (n *Node) broadcastCommitVoteForProposal(block Block, execHash string, txMe
 	if n == nil || block.ID == 0 || strings.TrimSpace(block.BlockHash) == "" || n.isShuttingDown() {
 		return false
 	}
+	if ready, reason := n.validatorParticipationGateStatus(block.ID); !ready {
+		log.Printf("[COMMIT-BROADCAST-DEFER] validator=%s height=%d reason=%s block=%s",
+			ShortID(n.ID),
+			block.ID,
+			strings.TrimSpace(reason),
+			ShortHash(block.BlockHash),
+		)
+		return false
+	}
 	execHash = strings.TrimSpace(execHash)
 	txMerkle = strings.TrimSpace(txMerkle)
 	if execHash == "" || normalizeValidatorID(n.ID) == "" {

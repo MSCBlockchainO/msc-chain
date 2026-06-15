@@ -36984,7 +36984,7 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 	consensusLoopRunning := consensusStarted.Load()
 	if configuredValidator {
 		keyReady = isValidatorKeyUsable(n.ValidatorKey)
-		if keyReady && !statusFastPath {
+		if keyReady {
 			keyAuthorityReady, keyAuthorityReason = n.validatorConsensusSigningAuthorityStatus(nextHeight)
 		}
 		coreRegistryTrustReady = n.isCoreRegistryTrustReadyForValidatorParticipation()
