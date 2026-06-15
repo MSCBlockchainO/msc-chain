@@ -1489,6 +1489,12 @@ func TestValidatorParticipationRequiresCommittedConsensusSigningKey(t *testing.T
 	if ready, reason := n.validatorParticipationGateStatus(height); ready || reason != "validator_consensus_pubkey_unanchored" {
 		t.Fatalf("unanchored active validator must not participate, ready=%t reason=%q", ready, reason)
 	}
+	n.Blockchain.mu.Lock()
+	n.Blockchain.Blocks[len(n.Blockchain.Blocks)-1].ValidatorRegistryHash = ""
+	n.Blockchain.mu.Unlock()
+	if ready, reason := n.validatorParticipationGateStatus(height); ready || reason != "validator_consensus_pubkey_unanchored" {
+		t.Fatalf("missing local parent commitment must not bypass authority gate, ready=%t reason=%q", ready, reason)
+	}
 	unsigned := Block{ID: height, Proposer: "F", BlockTime: LogicalTimeForEpoch(height)}
 	n.SignBlock(&unsigned)
 	if len(unsigned.Signature) != 0 {
