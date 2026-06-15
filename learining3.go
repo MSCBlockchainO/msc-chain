@@ -36359,6 +36359,11 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 	if nextHeight == 0 {
 		nextHeight = 1
 	}
+	keyAuthorityReady := true
+	keyAuthorityReason := "ready"
+	if configuredValidator && isValidatorKeyUsable(n.ValidatorKey) {
+		keyAuthorityReady, keyAuthorityReason = n.validatorConsensusSigningAuthorityStatus(nextHeight)
+	}
 	out.ValidatorSetHashMode = validatorSetHashModeForHeight(nextHeight)
 	committee := canonicalValidatorIDs(n.frozenValidatorsForHeight(nextHeight))
 	if len(committee) == 0 {
@@ -36386,7 +36391,7 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 	out.QuorumPolicyMode = litePolicy.Mode
 	out.QuorumPolicyVersion = litePolicy.Version
 	out.ConsensusRunning = consensusStarted.Load()
-	participationReady := !configuredValidator || (isValidatorKeyUsable(n.ValidatorKey) && n.hasWalletLoginForValidator() && n.hasRequiredValidatorStake())
+	participationReady := !configuredValidator || (isValidatorKeyUsable(n.ValidatorKey) && keyAuthorityReady && n.hasWalletLoginForValidator() && n.hasRequiredValidatorStake())
 	strictActivationReady := true
 	strictActivationReason := ""
 	if configuredValidator {
@@ -36411,6 +36416,8 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 		switch {
 		case !isValidatorKeyUsable(n.ValidatorKey):
 			out.WaitReason = "validator_key_unavailable"
+		case !keyAuthorityReady:
+			out.WaitReason = strings.TrimSpace(keyAuthorityReason)
 		case !n.hasWalletLoginForValidator():
 			out.WaitReason = "wallet_auth_required"
 		case !n.hasRequiredValidatorStake():
@@ -36420,6 +36427,14 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 			out.ValidatorState = "activating"
 		case !out.ConsensusRunning:
 			out.WaitReason = "consensus_not_started"
+		}
+		if !participationReady {
+			out.Role = "full"
+			out.IsValidator = false
+			out.ValidatorState = "observer"
+			out.ConsensusMode = "observer"
+			out.VoteEnabled = false
+			out.ProposeEnabled = false
 		}
 	}
 	out.NetworkBestHeight = networkBestHeight

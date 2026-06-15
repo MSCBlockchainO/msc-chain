@@ -1513,6 +1513,11 @@ func TestValidatorParticipationRequiresCommittedConsensusSigningKey(t *testing.T
 		t.Fatalf("runtime status must keep unanchored validator from proposing or voting, propose=%t vote=%t wait=%q",
 			status.ProposeEnabled, status.VoteEnabled, status.WaitReason)
 	}
+	liteStatus := n.runtimeStatusSnapshotLite()
+	if liteStatus.ProposeEnabled || liteStatus.VoteEnabled || liteStatus.Ready || liteStatus.WaitReason == "ready" {
+		t.Fatalf("lite runtime status must not expose unanchored validator as ready, ready=%t propose=%t vote=%t wait=%q",
+			liteStatus.Ready, liteStatus.ProposeEnabled, liteStatus.VoteEnabled, liteStatus.WaitReason)
+	}
 
 	registry = GlobalValidatorRegistry.Snapshot()
 	rec = registry["F"]

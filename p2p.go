@@ -2716,12 +2716,15 @@ func (n *Node) broadcastCommitVoteForProposal(block Block, execHash string, txMe
 		return false
 	}
 	if ready, reason := n.validatorParticipationGateStatus(block.ID); !ready {
-		log.Printf("[COMMIT-BROADCAST-DEFER] validator=%s height=%d reason=%s block=%s",
-			ShortID(n.ID),
-			block.ID,
-			strings.TrimSpace(reason),
-			ShortHash(block.BlockHash),
-		)
+		reason = strings.TrimSpace(reason)
+		if n.shouldLogLivenessReason(fmt.Sprintf("commit_broadcast_defer:%d:%s", block.ID, reason), 10*time.Second) {
+			log.Printf("[COMMIT-BROADCAST-DEFER] validator=%s height=%d reason=%s block=%s",
+				ShortID(n.ID),
+				block.ID,
+				reason,
+				ShortHash(block.BlockHash),
+			)
+		}
 		return false
 	}
 	execHash = strings.TrimSpace(execHash)
