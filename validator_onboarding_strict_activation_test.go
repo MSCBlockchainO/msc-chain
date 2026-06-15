@@ -1457,6 +1457,72 @@ func TestRuntimeStatusUsesEffectiveRoleAndWalletAuthWaitReason(t *testing.T) {
 	}
 }
 
+func TestValidatorParticipationRequiresCommittedConsensusSigningKey(t *testing.T) {
+	defer withOnboardingStrictActivationGlobals(t)()
+	configureStrictActivationDefaults()
+
+	ConfigAuthRequireWallet = false
+	ValidatorRequireStake = false
+	ValidatorOnboardingStrictActivation = false
+
+	n := makeStrictActivationNode(50)
+	n.ID = "F"
+	n.ValidatorKey = strictActivationTestValidatorKey(15, "F")
+	height := n.currentEpoch()
+	committee := []string{"A", "B", "C", "D", "F"}
+	n.epochValidators[height] = append([]string{}, committee...)
+	n.frozenValidatorsByHeight[height] = append([]string{}, committee...)
+	n.frozenValidatorHashByHeight[height] = ValidatorSetHash(committee)
+
+	registry := GlobalValidatorRegistry.Snapshot()
+	rec := registry["F"]
+	rec.ID = "F"
+	rec.Status = ValidatorActive
+	rec.ConsensusPubKey = ""
+	registry["F"] = rec
+	GlobalValidatorRegistry.Load(registry)
+	n.Blockchain.mu.Lock()
+	n.Blockchain.Blocks[len(n.Blockchain.Blocks)-1].ValidatorRegistryHash = ValidatorRegistrySnapshotHash(registry)
+	n.Blockchain.mu.Unlock()
+
+	if ready, reason := n.validatorParticipationGateStatus(height); ready || reason != "validator_consensus_pubkey_unanchored" {
+		t.Fatalf("unanchored active validator must not participate, ready=%t reason=%q", ready, reason)
+	}
+	unsigned := Block{ID: height, Proposer: "F", BlockTime: LogicalTimeForEpoch(height)}
+	n.SignBlock(&unsigned)
+	if len(unsigned.Signature) != 0 {
+		t.Fatalf("unanchored active validator must not sign proposer blocks")
+	}
+	status := n.runtimeStatusSnapshot()
+	if status.ProposeEnabled || status.VoteEnabled {
+		t.Fatalf("runtime status must keep unanchored validator from proposing or voting, propose=%t vote=%t wait=%q",
+			status.ProposeEnabled, status.VoteEnabled, status.WaitReason)
+	}
+
+	registry = GlobalValidatorRegistry.Snapshot()
+	rec = registry["F"]
+	rec.ConsensusPubKey = strings.ToLower(hex.EncodeToString(strictActivationTestPub(16)))
+	registry["F"] = rec
+	GlobalValidatorRegistry.Load(registry)
+	if ready, reason := n.validatorParticipationGateStatus(height); ready || reason != "validator_consensus_pubkey_mismatch" {
+		t.Fatalf("mismatched active validator must not participate, ready=%t reason=%q", ready, reason)
+	}
+
+	registry = GlobalValidatorRegistry.Snapshot()
+	rec = registry["F"]
+	rec.ConsensusPubKey = strings.ToLower(hex.EncodeToString(n.ValidatorKey.PublicKey))
+	registry["F"] = rec
+	GlobalValidatorRegistry.Load(registry)
+	if ready, reason := n.validatorParticipationGateStatus(height); !ready {
+		t.Fatalf("matching committed signing key must restore participation, reason=%q", reason)
+	}
+	signed := Block{ID: height, Proposer: "F", BlockTime: LogicalTimeForEpoch(height)}
+	n.SignBlock(&signed)
+	if len(signed.Signature) != ed25519.SignatureSize {
+		t.Fatalf("matching committed signing key must restore proposer signing")
+	}
+}
+
 func TestObserveCandidatesOnCommitQueuesPendingValidatorInDeterministicMode(t *testing.T) {
 	defer withOnboardingStrictActivationGlobals(t)()
 	configureStrictActivationDefaults()

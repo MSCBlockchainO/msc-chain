@@ -31,6 +31,19 @@ func (n *Node) SignBlock(block *Block) {
 	if block == nil {
 		return
 	}
+	if n != nil && isValidatorSigningKeyUsable(n.ValidatorKey) {
+		signerID := normalizeValidatorID(n.ValidatorKey.ID)
+		proposerID := normalizeValidatorID(block.Proposer)
+		if proposerID == "" {
+			proposerID = signerID
+			block.Proposer = signerID
+		}
+		if signerID != "" && proposerID == signerID {
+			if ready, _ := n.validatorConsensusSigningAuthorityStatus(block.ID); !ready {
+				return
+			}
+		}
+	}
 	n.applyBlockQuorumPolicyMetadata(block)
 	hash := HashBlock(*block)
 	block.BlockHash = hash
@@ -2782,6 +2795,42 @@ func (n *Node) canParticipateInConsensusNow() bool {
 	return ready
 }
 
+func (n *Node) validatorConsensusSigningAuthorityStatus(height uint64) (bool, string) {
+	if n == nil {
+		return false, "node_unavailable"
+	}
+	if height == 0 {
+		height = n.currentEpoch()
+	}
+	selfID := normalizeValidatorID(n.ID)
+	if selfID == "" || len(n.ValidatorKey.PublicKey) != ed25519.PublicKeySize {
+		return false, "validator_key_unavailable"
+	}
+
+	committee := n.frozenValidatorsForHeight(height)
+	if len(committee) == 0 {
+		return true, "committee_not_frozen"
+	}
+	if !containsNormalizedValidatorID(committee, selfID) {
+		return true, "not_in_committee"
+	}
+
+	if _, committedAuthority := n.chainParentCommittedValidatorRegistryHash(height); !committedAuthority {
+		return true, "registry_authority_not_committed"
+	}
+	registrySnapshot := n.validatorRegistrySnapshotForHeight(height)
+	expected := validatorConsensusPubKeyHexFromSnapshot(registrySnapshot, selfID)
+	source := validatorConsensusPubKeyAnchorSource(registrySnapshot, selfID)
+	if source == "" || expected == "" {
+		return false, "validator_consensus_pubkey_unanchored"
+	}
+	local := strings.ToLower(hex.EncodeToString(n.ValidatorKey.PublicKey))
+	if !strings.EqualFold(local, expected) {
+		return false, "validator_consensus_pubkey_mismatch"
+	}
+	return true, "ready"
+}
+
 func (n *Node) validatorParticipationGateStatus(height uint64) (bool, string) {
 	if n == nil {
 		return false, "node_unavailable"
@@ -2800,6 +2849,9 @@ func (n *Node) validatorParticipationGateStatus(height uint64) (bool, string) {
 	}
 	if !isValidatorKeyUsable(n.ValidatorKey) {
 		return false, "validator_key_unavailable"
+	}
+	if ready, reason := n.validatorConsensusSigningAuthorityStatus(height); !ready {
+		return false, reason
 	}
 	if n.isCoreValidatorCurrent(n.ID) && !n.coreEligibleForConsensus(height) {
 		return false, "core_pending_activation"

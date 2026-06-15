@@ -15,6 +15,7 @@ const validatorUpdateCertDomain = "MSC_VALIDATOR_UPDATE_V1"
 type validatorUpdateExecutionContext struct {
 	height               uint64
 	expectedRegistryHash string
+	parentRegistry       map[string]ValidatorRecord
 	registrySnapshot     map[string]ValidatorRecord
 	activeValidators     []string
 	pendingAdds          map[string]uint64
@@ -315,6 +316,7 @@ func (n *Node) newValidatorUpdateExecutionContext(height uint64) *validatorUpdat
 	if registryHash == "" || (source != "snapshot_parent" && source != "registry_snapshot" && source != "chain_block" && source != "chain_parent_commitment" && source != "bootstrap_registry") {
 		return nil
 	}
+	parentRegistry := copyValidatorRegistrySnapshot(registrySnapshot)
 	registrySnapshot = n.validatorUpdateRegistrySnapshotWithLedgerCandidates(height, registrySnapshot)
 	if len(registrySnapshot) == 0 {
 		return nil
@@ -327,6 +329,7 @@ func (n *Node) newValidatorUpdateExecutionContext(height uint64) *validatorUpdat
 	return &validatorUpdateExecutionContext{
 		height:               height,
 		expectedRegistryHash: strings.ToLower(strings.TrimSpace(registryHash)),
+		parentRegistry:       parentRegistry,
 		registrySnapshot:     registrySnapshot,
 		activeValidators:     canonicalValidatorIDs(active),
 		pendingAdds:          pendingAdds,
@@ -1162,6 +1165,15 @@ func (ctx *validatorUpdateExecutionContext) validateAndApply(tx Transaction, led
 				ctx.activateRegistryRecord(validatorID, updateHeight)
 				break
 			}
+			parentRecord, parentExists := validatorRegistryRecordFromSnapshot(ctx.parentRegistry, validatorID)
+			if parentExists &&
+				normalizeConsensusPubKeyHex(parentRecord.ConsensusPubKey) == "" &&
+				normalizeConsensusPubKeyHex(record.ConsensusPubKey) != "" {
+				record.ID = normalizeValidatorID(validatorID)
+				record.Status = ValidatorActive
+				ctx.registrySnapshot[record.ID] = record
+				break
+			}
 			return fmt.Errorf("validator_update_already_active")
 		}
 		recordCopy := record
@@ -1174,6 +1186,9 @@ func (ctx *validatorUpdateExecutionContext) validateAndApply(tx Transaction, led
 		}
 		if recordCopy.JailUntilHeight > 0 && ctx.height < recordCopy.JailUntilHeight {
 			return fmt.Errorf("validator_update_jailed")
+		}
+		if normalizeConsensusPubKeyHex(recordCopy.ConsensusPubKey) == "" {
+			return fmt.Errorf("validator_update_missing_consensus_pubkey")
 		}
 		if !validatorPassesStakeGate(validatorID, recordCopy.Stake) {
 			return fmt.Errorf("validator_update_no_stake")

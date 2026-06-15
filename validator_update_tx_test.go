@@ -682,6 +682,103 @@ func TestValidatorUpdateProjectsMissingLedgerCandidateIntoRegistryCommitment(t *
 	}
 }
 
+func TestValidatorUpdateRejectsCandidateWithoutConsensusPubKey(t *testing.T) {
+	defer withValidatorUpdateTestGlobals(t)()
+
+	ValidatorSetCommitmentV2Height = 1
+	ValidatorSetActivationDelay = 1
+	DynamicValidatorSelectionEnabled = true
+	DeterministicValidatorSelection = true
+	ConfigAuthCoreValidators = []string{"A", "B", "C", "D"}
+
+	n := newValidatorUpdateTestNode()
+	signerKeys := installValidatorUpdateRegistryForIDs(t, []string{"A", "B", "C", "D"})
+	parentRegistryHash := ValidatorRegistrySnapshotHash(GlobalValidatorRegistry.Snapshot())
+	_, relayerPriv, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatalf("generate relayer key: %v", err)
+	}
+	n.Ledger.Stakes[stakeKey("wallet-f", "F")] = StakeLock{
+		ValidatorID: "F",
+		Amount:      1000,
+		LockedUntil: 1000,
+	}
+
+	ctx := n.newValidatorUpdateExecutionContext(1)
+	if ctx == nil {
+		t.Fatalf("expected validator update execution context")
+	}
+	tx := buildValidatorUpdateTestTx(t, relayerPriv, "add", "F", parentRegistryHash, 1, 1, []string{"A", "B", "C"}, signerKeys)
+	err = ctx.validateAndApply(tx, nil)
+	if err == nil || err.Error() != "validator_update_missing_consensus_pubkey" {
+		t.Fatalf("expected missing consensus pubkey rejection, got=%v", err)
+	}
+}
+
+func TestValidatorUpdateRepairsActiveMissingConsensusPubKeyFromLedger(t *testing.T) {
+	defer withValidatorUpdateTestGlobals(t)()
+
+	ValidatorSetCommitmentV2Height = 1
+	ValidatorSetActivationDelay = 1
+	DynamicValidatorSelectionEnabled = true
+	DeterministicValidatorSelection = true
+	ConfigAuthCoreValidators = []string{"A", "B", "C", "D"}
+
+	n := newValidatorUpdateTestNode()
+	signerKeys := installValidatorUpdateRegistryForIDs(t, []string{"A", "B", "C", "D", "F"})
+	parent := GlobalValidatorRegistry.Snapshot()
+	fRecord := parent["F"]
+	fRecord.ConsensusPubKey = ""
+	parent["F"] = fRecord
+	GlobalValidatorRegistry.Load(parent)
+	parentRegistryHash := ValidatorRegistrySnapshotHash(parent)
+
+	fPub, _, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatalf("generate F key: %v", err)
+	}
+	fPubHex := strings.ToLower(hex.EncodeToString(fPub))
+	n.Ledger.Stakes[stakeKey("wallet-f", "F")] = StakeLock{
+		ValidatorID:     "F",
+		ConsensusPubKey: fPubHex,
+		Amount:          1000,
+		LockedUntil:     1000,
+	}
+	n.GenesisValidators = []string{"A", "B", "C", "D", "F"}
+	n.frozenValidatorsByHeight[1] = append([]string{}, n.GenesisValidators...)
+	n.frozenValidatorHashByHeight[1] = ValidatorSetHash(n.GenesisValidators)
+
+	_, relayerPriv, err := ed25519.GenerateKey(cryptorand.Reader)
+	if err != nil {
+		t.Fatalf("generate relayer key: %v", err)
+	}
+	tx := buildValidatorUpdateTestTx(t, relayerPriv, "add", "F", parentRegistryHash, 1, 1, []string{"A", "B", "C"}, signerKeys)
+	ctx := n.newValidatorUpdateExecutionContext(1)
+	if ctx == nil {
+		t.Fatalf("expected validator update execution context")
+	}
+	if err := ctx.validateAndApply(tx, nil); err != nil {
+		t.Fatalf("active missing-key repair should validate: %v", err)
+	}
+	repaired := ctx.registrySnapshot["F"]
+	if !strings.EqualFold(repaired.ConsensusPubKey, fPubHex) {
+		t.Fatalf("repaired F pubkey = %q, want %q", repaired.ConsensusPubKey, fPubHex)
+	}
+	if got := ctx.projectedRegistryHash(); got == "" || strings.EqualFold(got, parentRegistryHash) {
+		t.Fatalf("repair must produce a new registry commitment, got=%q parent=%q", got, parentRegistryHash)
+	}
+
+	GlobalValidatorRegistry.Load(ctx.registrySnapshot)
+	second := n.newValidatorUpdateExecutionContext(1)
+	if second == nil {
+		t.Fatalf("expected second validator update execution context")
+	}
+	tx = buildValidatorUpdateTestTx(t, relayerPriv, "add", "F", second.expectedRegistryHash, 2, 2, []string{"A", "B", "C"}, signerKeys)
+	if err := second.validateAndApply(tx, nil); err == nil || err.Error() != "validator_update_already_active" {
+		t.Fatalf("active validator with anchored key must not be re-added, got=%v", err)
+	}
+}
+
 func TestValidatorUpdateCommitmentHeightUsesStrictParentCommitmentPath(t *testing.T) {
 	defer withValidatorUpdateTestGlobals(t)()
 

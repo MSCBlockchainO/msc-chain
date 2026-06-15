@@ -36967,6 +36967,8 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 	}
 
 	keyReady := true
+	keyAuthorityReady := true
+	keyAuthorityReason := "ready"
 	coreRegistryTrustReady := true
 	walletReady := true
 	stakeReady := true
@@ -36982,6 +36984,9 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 	consensusLoopRunning := consensusStarted.Load()
 	if configuredValidator {
 		keyReady = isValidatorKeyUsable(n.ValidatorKey)
+		if keyReady && !statusFastPath {
+			keyAuthorityReady, keyAuthorityReason = n.validatorConsensusSigningAuthorityStatus(nextHeight)
+		}
 		coreRegistryTrustReady = n.isCoreRegistryTrustReadyForValidatorParticipation()
 		walletReady = n.hasWalletLoginForValidator()
 		stakeReady = n.hasRequiredValidatorStake()
@@ -37035,7 +37040,7 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 	if out.ExecutionWaitReason == "" {
 		out.ExecutionWaitReason = "ready"
 	}
-	participationGateReady := configuredValidator && keyReady && coreRegistryTrustReady && walletReady && stakeReady
+	participationGateReady := configuredValidator && keyReady && keyAuthorityReady && coreRegistryTrustReady && walletReady && stakeReady
 	startupGateReady := !configuredValidator || (executionReady && startupSetReady && startupNetworkReady && out.SyncComplete && !out.Syncing && !snapshotSessionActive && out.SnapshotWarmupRemainingBlocks == 0)
 	strictGateReady := !configuredValidator || strictActivationReady
 	out.VoteEnabled = participationGateReady && startupGateReady && strictGateReady
@@ -37205,6 +37210,8 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 		out.WaitReason = "core_registry_unverified"
 	case configuredValidator && !keyReady:
 		out.WaitReason = "validator_key_unavailable"
+	case configuredValidator && !keyAuthorityReady:
+		out.WaitReason = strings.TrimSpace(keyAuthorityReason)
 	case configuredValidator && !walletReady:
 		out.WaitReason = "wallet_auth_required"
 	case configuredValidator && !stakeReady:
