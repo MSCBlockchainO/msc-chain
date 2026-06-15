@@ -1495,6 +1495,11 @@ func TestValidatorParticipationRequiresCommittedConsensusSigningKey(t *testing.T
 	if ready, reason := n.validatorParticipationGateStatus(height); ready || reason != "validator_consensus_pubkey_unanchored" {
 		t.Fatalf("missing local parent commitment must not bypass authority gate, ready=%t reason=%q", ready, reason)
 	}
+	n.frozenValidatorsByHeight[height] = []string{"A", "B", "C", "D"}
+	n.frozenValidatorHashByHeight[height] = ValidatorSetHash(n.frozenValidatorsByHeight[height])
+	if ready, reason := n.validatorParticipationGateStatus(height); ready || reason != "validator_consensus_pubkey_unanchored" {
+		t.Fatalf("local committee exclusion must not bypass signing authority, ready=%t reason=%q", ready, reason)
+	}
 	unsigned := Block{ID: height, Proposer: "F", BlockTime: LogicalTimeForEpoch(height)}
 	n.SignBlock(&unsigned)
 	if len(unsigned.Signature) != 0 {

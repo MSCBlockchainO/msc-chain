@@ -2807,14 +2807,6 @@ func (n *Node) validatorConsensusSigningAuthorityStatus(height uint64) (bool, st
 		return false, "validator_key_unavailable"
 	}
 
-	committee := n.frozenValidatorsForHeight(height)
-	if len(committee) == 0 {
-		return true, "committee_not_frozen"
-	}
-	if !containsNormalizedValidatorID(committee, selfID) {
-		return true, "not_in_committee"
-	}
-
 	if height <= 1 || !validatorSetCommitmentV2EnabledAt(height-1) {
 		return true, "registry_authority_not_committed"
 	}
