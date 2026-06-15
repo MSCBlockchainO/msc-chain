@@ -2815,14 +2815,10 @@ func (n *Node) validatorConsensusSigningAuthorityStatus(height uint64) (bool, st
 		return true, "not_in_committee"
 	}
 
-	chainHeight := uint64(0)
-	if n.Blockchain != nil {
-		chainHeight = n.Blockchain.Height()
-	}
-	if height <= 1 || chainHeight == 0 || !validatorSetCommitmentV2EnabledAt(height-1) {
+	if height <= 1 || !validatorSetCommitmentV2EnabledAt(height-1) {
 		return true, "registry_authority_not_committed"
 	}
-	if chainHeight == 1 {
+	if height == 2 {
 		if _, committedAuthority := n.chainParentCommittedValidatorRegistryHash(height); !committedAuthority {
 			return true, "registry_authority_not_committed"
 		}
