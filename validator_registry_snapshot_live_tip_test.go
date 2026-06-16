@@ -643,6 +643,48 @@ func TestValidatorRegistrySnapshotForHeightUsesCurrentSparseAnchorSnapshot(t *te
 	}
 }
 
+func TestSparseAnchorParentProjectionRepairsFromAppliedRuntimeRegistry(t *testing.T) {
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	registry := testValidatorSetMaterializationRegistry()
+	hash := ValidatorRegistrySnapshotHash(registry)
+	withValidatorRegistryTestState(t, registry)
+
+	anchor := Block{
+		ID:                    93000,
+		Height:                93000,
+		BlockHash:             "snapshot-anchor-93000",
+		PrevHash:              "block-92999",
+		ValidatorRegistryHash: hash,
+	}
+	n := testNodeWithRegistryBlocks(db, []Block{anchor})
+
+	parent, parentHash, parentSource, ok := n.resolveCommittedValidatorRegistrySnapshot(anchor.ID - 1)
+	if !ok {
+		t.Fatalf("expected sparse anchor parent projection to resolve from applied runtime registry")
+	}
+	if parentSource != "sparse_anchor_parent_projection" {
+		t.Fatalf("unexpected parent projection source: got=%q", parentSource)
+	}
+	if !strings.EqualFold(parentHash, hash) {
+		t.Fatalf("unexpected parent projection hash: got=%q want=%q", parentHash, hash)
+	}
+	if gotHash := ValidatorRegistrySnapshotHash(parent); !strings.EqualFold(gotHash, hash) {
+		t.Fatalf("unexpected projected registry hash: got=%q want=%q", gotHash, hash)
+	}
+	anchored, err := n.loadValidatorRegistrySnapshot(anchor.ID)
+	if err != nil {
+		t.Fatalf("expected runtime projection to persist anchor registry snapshot: %v", err)
+	}
+	if gotHash := ValidatorRegistrySnapshotHash(anchored); !strings.EqualFold(gotHash, hash) {
+		t.Fatalf("unexpected persisted anchor registry hash: got=%q want=%q", gotHash, hash)
+	}
+	if _, err := n.loadValidatorRegistrySnapshot(anchor.ID - 1); err == nil {
+		t.Fatalf("sparse parent projection must not overwrite the absent parent height")
+	}
+}
+
 func TestPersistValidatorRegistrySnapshotRepairsGenesisBootstrapProjection(t *testing.T) {
 	defer withValidatorUpdateTestGlobals(t)()
 

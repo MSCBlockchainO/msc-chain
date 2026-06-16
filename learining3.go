@@ -2688,6 +2688,9 @@ func (n *Node) sparseCommittedAnchorRegistrySnapshot(height uint64) map[string]V
 			return registry
 		}
 	}
+	if registry, _, ok := n.appliedRuntimeRegistryForAnchor(height, expectedHash, "sparse_anchor_registry"); ok {
+		return registry
+	}
 	return nil
 }
 
@@ -2731,7 +2734,105 @@ func (n *Node) sparseCommittedAnchorParentRegistrySnapshot(parentHeight uint64) 
 			return registry, expectedHash, true
 		}
 	}
+	if registry, hash, ok := n.appliedRuntimeRegistryForAnchor(anchorHeight, expectedHash, "sparse_anchor_parent_projection"); ok {
+		return registry, hash, true
+	}
 	return nil, "", false
+}
+
+func (n *Node) appliedRuntimeRegistryForAnchor(anchorHeight uint64, expectedHash string, reason string) (map[string]ValidatorRecord, string, bool) {
+	if n == nil || anchorHeight == 0 {
+		return nil, "", false
+	}
+	expectedHash = strings.TrimSpace(expectedHash)
+	if expectedHash == "" {
+		return nil, "", false
+	}
+	registry := copyValidatorRegistrySnapshot(GlobalValidatorRegistry.Snapshot())
+	if len(registry) == 0 {
+		return nil, "", false
+	}
+	hash := strings.TrimSpace(ValidatorRegistrySnapshotHash(registry))
+	if hash == "" || !strings.EqualFold(hash, expectedHash) {
+		return nil, "", false
+	}
+	if err := n.storeValidatorRegistrySnapshotRecord(anchorHeight, registry); err != nil {
+		key := fmt.Sprintf("registry_anchor_runtime_store:%d", anchorHeight)
+		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+			log.Printf("[WARN] registry anchor runtime repair store failed height=%d reason=%s err=%v",
+				anchorHeight,
+				strings.TrimSpace(reason),
+				err,
+			)
+		}
+	} else {
+		key := fmt.Sprintf("registry_anchor_runtime_store_ok:%d", anchorHeight)
+		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+			log.Printf("[REGISTRY-REPAIR] height=%d source=applied_runtime_anchor reason=%s validators=%d",
+				anchorHeight,
+				strings.TrimSpace(reason),
+				len(registry),
+			)
+		}
+	}
+	return registry, expectedHash, true
+}
+
+func (n *Node) persistAppliedSnapshotRegistryAnchor(snapshot StateSnapshot, reason string) bool {
+	if n == nil || snapshot.Height == 0 {
+		return false
+	}
+	anchor := snapshotAnchorBlock(snapshot)
+	expectedHash := strings.TrimSpace(anchor.ValidatorRegistryHash)
+	if expectedHash == "" {
+		expectedHash = strings.TrimSpace(snapshotValidatorRegistryHash(&snapshot))
+	}
+	if expectedHash == "" {
+		return false
+	}
+	registry := copyValidatorRegistrySnapshot(snapshot.ValidatorRegistry)
+	if len(registry) == 0 && len(snapshot.StateValidators) > 0 {
+		registry = validatorRegistrySnapshotFromOnChainValidators(snapshot.StateValidators)
+	}
+	if len(registry) == 0 {
+		registry = copyValidatorRegistrySnapshot(GlobalValidatorRegistry.Snapshot())
+	}
+	if len(registry) == 0 {
+		return false
+	}
+	hash := strings.TrimSpace(ValidatorRegistrySnapshotHash(registry))
+	if hash == "" || !strings.EqualFold(hash, expectedHash) {
+		key := fmt.Sprintf("registry_snapshot_anchor_mismatch:%d", snapshot.Height)
+		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+			log.Printf("[REGISTRY-REPAIR FAILED] height=%d reason=snapshot_anchor_hash_mismatch expected=%s got=%s source=%s",
+				snapshot.Height,
+				ShortHash(expectedHash),
+				ShortHash(hash),
+				strings.TrimSpace(reason),
+			)
+		}
+		return false
+	}
+	if err := n.storeValidatorRegistrySnapshotRecord(snapshot.Height, registry); err != nil {
+		key := fmt.Sprintf("registry_snapshot_anchor_store:%d", snapshot.Height)
+		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+			log.Printf("[WARN] registry snapshot anchor store failed height=%d source=%s err=%v",
+				snapshot.Height,
+				strings.TrimSpace(reason),
+				err,
+			)
+		}
+		return false
+	}
+	key := fmt.Sprintf("registry_snapshot_anchor_store_ok:%d", snapshot.Height)
+	if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+		log.Printf("[REGISTRY-REPAIR] height=%d source=snapshot_anchor_registry reason=%s validators=%d",
+			snapshot.Height,
+			strings.TrimSpace(reason),
+			len(registry),
+		)
+	}
+	return true
 }
 
 func (n *Node) validatorRegistrySnapshotForHeight(height uint64) map[string]ValidatorRecord {

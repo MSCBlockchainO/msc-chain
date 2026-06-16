@@ -3626,6 +3626,7 @@ func (n *Node) ApplySnapshotForSync(snapshot StateSnapshot) (applied bool) {
 	n.applySnapshotValidators(snapshot)
 	n.applySnapshotValidatorTransitions(snapshot)
 	n.applySnapshotValidatorRegistry(snapshot)
+	n.persistAppliedSnapshotRegistryAnchor(snapshot, "snapshot_sync")
 	if shouldStoreAnchor {
 		n.ensureSnapshotAnchorBlockStored(anchor)
 	}
@@ -3742,6 +3743,7 @@ func (n *Node) ApplySnapshotForRecovery(snapshot StateSnapshot) (applied bool) {
 				n.applySnapshotValidatorTransitions(snapshot)
 				n.applySnapshotValidatorRegistry(snapshot)
 				n.snapshotEpochValidators(snapshot.Height + 1)
+				n.persistAppliedSnapshotRegistryAnchor(snapshot, "snapshot_recovery_same_height")
 				n.ensureSnapshotAnchorBlockStored(snapshotAnchorBlock(snapshot))
 				n.persistAppliedSnapshotExecutionAuthority(snapshot, "snapshot_recovery_same_height")
 				n.applySnapshotExecutionTipLedger(snapshot, "snapshot_recovery_same_height")
@@ -3813,6 +3815,7 @@ func (n *Node) ApplySnapshotForRecovery(snapshot StateSnapshot) (applied bool) {
 		n.validatorSetMu.Unlock()
 	}
 	n.applySnapshotValidatorRegistry(snapshot)
+	n.persistAppliedSnapshotRegistryAnchor(snapshot, "snapshot_recovery")
 	n.ensureSnapshotAnchorBlockStored(anchor)
 	n.persistAppliedSnapshotExecutionAuthority(snapshot, "snapshot_recovery")
 	resumeLedger = n.applySnapshotExecutionTipLedger(snapshot, "snapshot_recovery")
