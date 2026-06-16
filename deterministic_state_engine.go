@@ -6,10 +6,46 @@ import (
 	"strings"
 )
 
+const preCommitRegistrySourceChainHeaderContinuity = "chain_header_registry_continuity"
+
 // deterministicRegistryHash canonicalizes registry hashing through the
 // committed-snapshot representation used by consensus.
 func deterministicRegistryHash(registry map[string]ValidatorRecord) string {
 	return strings.TrimSpace(ValidatorRegistrySnapshotHash(copyValidatorRegistrySnapshot(registry)))
+}
+
+func blockHasValidatorRegistryMutation(block Block) bool {
+	for _, tx := range block.Transactions {
+		switch tx.Type {
+		case TxValidatorUpdate, TxStake, TxUnstake:
+			return true
+		}
+	}
+	return false
+}
+
+func (n *Node) blockCarriesForwardParentValidatorRegistryHash(block Block) bool {
+	if n == nil || block.ID <= 1 || blockHasValidatorRegistryMutation(block) {
+		return false
+	}
+	expectedHash := strings.TrimSpace(block.ValidatorRegistryHash)
+	if expectedHash == "" {
+		return false
+	}
+	parentHash, ok := n.chainParentCommittedValidatorRegistryHash(block.ID)
+	return ok && strings.EqualFold(strings.TrimSpace(parentHash), expectedHash)
+}
+
+func shouldSkipPreCommitRegistryPersistence(source string, registry map[string]ValidatorRecord, expectedHash string) bool {
+	if source != preCommitRegistrySourceChainHeaderContinuity {
+		return false
+	}
+	expectedHash = strings.TrimSpace(expectedHash)
+	if expectedHash == "" {
+		return false
+	}
+	got := deterministicRegistryHash(registry)
+	return got == "" || !strings.EqualFold(got, expectedHash)
 }
 
 // deterministicValidatorRoot computes the canonical validator root for a height
@@ -131,6 +167,18 @@ func (n *Node) deterministicPreCommitRegistrySnapshot(block Block) (map[string]V
 		if got := deterministicRegistryHash(bootstrap); got != "" && strings.EqualFold(got, expectedHash) {
 			return bootstrap, "startup_bootstrap_projection", nil
 		}
+	}
+	if len(runtime) > 0 && n.blockCarriesForwardParentValidatorRegistryHash(block) {
+		if DebugConsensus {
+			fmt.Printf("[REGISTRY-PRECOMMIT-REPAIR] height=%d source=%s expected=%s runtime=%s validators=%d\n",
+				block.ID,
+				preCommitRegistrySourceChainHeaderContinuity,
+				ShortHash(expectedHash),
+				ShortHash(runtimeHash),
+				len(runtime),
+			)
+		}
+		return runtime, preCommitRegistrySourceChainHeaderContinuity, nil
 	}
 	if err := n.validatePersistableValidatorRegistrySource(block.ID, expectedHash, runtime); err == nil {
 		return runtime, "runtime_repairable", nil

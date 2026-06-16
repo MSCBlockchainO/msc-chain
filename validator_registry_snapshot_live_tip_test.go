@@ -408,6 +408,71 @@ func TestValidatorRegistrySnapshotForHeightDoesNotRepairHistoricalParent(t *test
 	}
 }
 
+func TestDeterministicPreCommitRegistrySnapshotAllowsHeaderContinuityWithoutPersistingRuntime(t *testing.T) {
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	committed := testValidatorSetMaterializationRegistry()
+	committedHash := ValidatorRegistrySnapshotHash(committed)
+	runtime := copyValidatorRegistrySnapshot(committed)
+	rec := runtime["A"]
+	rec.Stake++
+	runtime["A"] = rec
+	runtimeHash := ValidatorRegistrySnapshotHash(runtime)
+	if strings.EqualFold(runtimeHash, committedHash) {
+		t.Fatalf("test fixture must have mismatched runtime and committed registry hashes")
+	}
+	withValidatorRegistryTestState(t, runtime)
+
+	parent := Block{ID: 93000, BlockHash: "block-93000", ValidatorRegistryHash: committedHash}
+	child := Block{ID: 93001, BlockHash: "block-93001", PrevHash: parent.BlockHash, ValidatorRegistryHash: committedHash}
+	n := testNodeWithRegistryBlocks(db, []Block{parent})
+
+	got, source, err := n.deterministicPreCommitRegistrySnapshot(child)
+	if err != nil {
+		t.Fatalf("expected header-continuity precommit repair, got error: %v", err)
+	}
+	if source != preCommitRegistrySourceChainHeaderContinuity {
+		t.Fatalf("unexpected source: got=%q want=%q", source, preCommitRegistrySourceChainHeaderContinuity)
+	}
+	if gotHash := ValidatorRegistrySnapshotHash(got); !strings.EqualFold(gotHash, runtimeHash) {
+		t.Fatalf("expected runtime registry to remain unadopted, got hash=%q want runtime=%q", gotHash, runtimeHash)
+	}
+	if !shouldSkipPreCommitRegistryPersistence(source, got, committedHash) {
+		t.Fatalf("expected mismatched continuity source to skip durable registry persistence")
+	}
+	if n.registrySnapshotExists(child.ID) {
+		t.Fatalf("continuity repair must not persist a mismatched runtime registry")
+	}
+}
+
+func TestDeterministicPreCommitRegistrySnapshotRejectsHeaderContinuityWithRegistryMutation(t *testing.T) {
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	committed := testValidatorSetMaterializationRegistry()
+	committedHash := ValidatorRegistrySnapshotHash(committed)
+	runtime := copyValidatorRegistrySnapshot(committed)
+	rec := runtime["A"]
+	rec.Stake++
+	runtime["A"] = rec
+	withValidatorRegistryTestState(t, runtime)
+
+	parent := Block{ID: 93000, BlockHash: "block-93000", ValidatorRegistryHash: committedHash}
+	child := Block{
+		ID:                    93001,
+		BlockHash:             "block-93001",
+		PrevHash:              parent.BlockHash,
+		ValidatorRegistryHash: committedHash,
+		Transactions:          []Transaction{{Type: TxStake, To: "A", Amount: 1}},
+	}
+	n := testNodeWithRegistryBlocks(db, []Block{parent})
+
+	if got, source, err := n.deterministicPreCommitRegistrySnapshot(child); err == nil {
+		t.Fatalf("expected registry mutation to reject header-continuity shortcut, got=%v source=%q", got, source)
+	}
+}
+
 func TestResolveCommittedValidatorRegistrySnapshotFallsBackToStoredBlock(t *testing.T) {
 	db, cleanup := openNodeDBForTest(t)
 	defer cleanup()

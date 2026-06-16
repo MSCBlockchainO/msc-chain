@@ -536,10 +536,23 @@ func (n *Node) ReceiveBlock(block Block, bc *Blockchain) error {
 
 	// Persist committed registry snapshot from the captured pre-commit source.
 	logSyncCommitPhase("persist_registry_begin")
-	if err := n.deterministicPersistRegistrySnapshot(block.ID, preCommitRegistrySnapshot, strings.TrimSpace(block.ValidatorRegistryHash)); err != nil {
-		applyErr, _ := rejectBlock(err.Error(), err)
-		logSyncCommitPhase("persist_registry_failed")
-		return applyErr
+	expectedRegistryHash := strings.TrimSpace(block.ValidatorRegistryHash)
+	if shouldSkipPreCommitRegistryPersistence(preCommitRegistrySource, preCommitRegistrySnapshot, expectedRegistryHash) {
+		key := fmt.Sprintf("registry_persist_header_continuity_skip:%d", block.ID)
+		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+			log.Printf("[REGISTRY-PERSIST-SKIP] height=%d source=%s expected=%s runtime=%s",
+				block.ID,
+				preCommitRegistrySource,
+				ShortHash(expectedRegistryHash),
+				ShortHash(deterministicRegistryHash(preCommitRegistrySnapshot)),
+			)
+		}
+	} else {
+		if err := n.deterministicPersistRegistrySnapshot(block.ID, preCommitRegistrySnapshot, expectedRegistryHash); err != nil {
+			applyErr, _ := rejectBlock(err.Error(), err)
+			logSyncCommitPhase("persist_registry_failed")
+			return applyErr
+		}
 	}
 	registry, _, source, ok := n.resolveCommittedValidatorRegistrySnapshot(block.ID)
 	if !ok && n.Blockchain != nil && n.Blockchain.Height() == block.ID {
