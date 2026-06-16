@@ -5443,9 +5443,6 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		} else if strings.TrimSpace(final.ExecutionResults[i].BlockHash) == "" {
 			final.ExecutionResults[i].BlockHash = executionVoteProposalHashForFinalBlock(final)
 		}
-		if final.ExecutionResults[i].Round == 0 {
-			final.ExecutionResults[i].Round = final.Round
-		}
 		final.ExecutionResults[i].Height = final.ID
 		final.ExecutionResults[i].TxMerkle = txMerkle
 		final.ExecutionResults[i].ExecutionResultHash = executionResultHashFromBlockResult(final.ExecutionResults[i], final)

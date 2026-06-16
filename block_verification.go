@@ -330,10 +330,22 @@ func (n *Node) verifyBlockExecutionResultSignatureForHint(result ExecutionResult
 		Signer:        strings.TrimSpace(result.Signer),
 		Signature:     sigHex,
 	}
-	if result.Round > 0 {
-		msg.RoundHint = result.Round
+	for _, roundHint := range executionResultRoundHints(result, block) {
+		candidate := msg
+		candidate.RoundHint = roundHint
+		if verifyExecutionResultSignature(candidate, candidates, sig) {
+			return true
+		}
 	}
-	return verifyExecutionResultSignature(msg, candidates, sig)
+	return false
+}
+
+func executionResultRoundHints(result ExecutionResult, block Block) []uint32 {
+	rounds := []uint32{result.Round}
+	if block.Round != result.Round {
+		rounds = append(rounds, block.Round)
+	}
+	return rounds
 }
 
 func verifyBlockQuorumMetadata(block Block, validatorCount int) error {
@@ -423,9 +435,6 @@ func (n *Node) verifyBlockExecutionResultSignature(result ExecutionResult, block
 		Signer:     strings.TrimSpace(result.Signer),
 		Signature:  sigHex,
 	}
-	if result.Round > 0 {
-		base.RoundHint = result.Round
-	}
 	blockHashHints := []string{
 		strings.TrimSpace(result.BlockHash),
 		strings.TrimSpace(block.BlockHash),
@@ -444,15 +453,21 @@ func (n *Node) verifyBlockExecutionResultSignature(result ExecutionResult, block
 		candidate := base
 		candidate.BlockHashHint = hint
 		candidate.SigVersion = execResultSigVersionV2
-		if verifyExecutionResultSignature(candidate, candidates, sig) {
-			return nil
+		for _, roundHint := range executionResultRoundHints(result, block) {
+			candidate.RoundHint = roundHint
+			if verifyExecutionResultSignature(candidate, candidates, sig) {
+				return nil
+			}
 		}
 	}
 	legacy := base
 	legacy.BlockHashHint = ""
 	legacy.SigVersion = execResultSigVersionV1
-	if verifyExecutionResultSignature(legacy, candidates, sig) {
-		return nil
+	for _, roundHint := range executionResultRoundHints(result, block) {
+		legacy.RoundHint = roundHint
+		if verifyExecutionResultSignature(legacy, candidates, sig) {
+			return nil
+		}
 	}
 	return errors.New("invalid_execution_result_signature")
 }

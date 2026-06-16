@@ -395,6 +395,62 @@ func TestVerifyExecutionResultSignatureUsesStoredVoteRound(t *testing.T) {
 	}
 }
 
+func TestVerifyExecutionResultSignatureAcceptsRoundZeroVoteOnHigherFinalRound(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	const signer = "ROUNDZERO"
+	validatorPubKeysMu.Lock()
+	oldRuntime, hadRuntime := ValidatorPubKeys[signer]
+	oldGenesis, hadGenesis := GenesisValidatorPubKeys[signer]
+	ValidatorPubKeys[signer] = pub
+	GenesisValidatorPubKeys[signer] = pub
+	validatorPubKeysMu.Unlock()
+	t.Cleanup(func() {
+		validatorPubKeysMu.Lock()
+		defer validatorPubKeysMu.Unlock()
+		if hadRuntime {
+			ValidatorPubKeys[signer] = oldRuntime
+		} else {
+			delete(ValidatorPubKeys, signer)
+		}
+		if hadGenesis {
+			GenesisValidatorPubKeys[signer] = oldGenesis
+		} else {
+			delete(GenesisValidatorPubKeys, signer)
+		}
+	})
+
+	block := Block{
+		ID:          12,
+		Round:       6,
+		PrevHash:    "parent",
+		Proposer:    "F",
+		Type:        BlockTypeTime,
+		BlockTime:   LogicalTimeForEpochTick(12, TickFinalize),
+		StateRoot:   strings.Repeat("e", 64),
+		MempoolRoot: strings.Repeat("f", 64),
+	}
+	block.Timestamp = int64(SystemTimeUnits(block.BlockTime))
+	block.BlockHash = HashBlock(block)
+	proposalHash := executionVoteProposalHashForFinalBlock(block)
+	sig := ed25519.Sign(priv, execResultSignBytesV2(block.ID, 0, proposalHash, block.StateRoot, block.MempoolRoot))
+
+	result := ExecutionResult{
+		Height:     block.ID,
+		Round:      0,
+		BlockHash:  proposalHash,
+		Signer:     signer,
+		ResultHash: block.StateRoot,
+		TxMerkle:   block.MempoolRoot,
+		Signature:  hex.EncodeToString(sig),
+	}
+	if err := verifyBlockExecutionResultSignature(result, block); err != nil {
+		t.Fatalf("expected round-zero execution signature to verify on higher-round final block: %v", err)
+	}
+}
+
 func TestVerifyExecutionResultSignatureUsesCommittedRegistryPubKey(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
