@@ -555,10 +555,10 @@ func TestSignedCommitVoteCanMoveToHigherRoundBeforeQuorum(t *testing.T) {
 	node.noteObservedProposal(lowBlock)
 	node.noteObservedProposal(highBlock)
 
-	if _, _, ok := node.recordVerifiedCommitVote(signedCommitMsgForTest(t, lowBlock, "A", privKeys["A"])); !ok {
+	if _, _, ok, _ := node.recordVerifiedCommitVote(signedCommitMsgForTest(t, lowBlock, "A", privKeys["A"])); !ok {
 		t.Fatalf("expected first signed commit vote to record")
 	}
-	if _, _, ok := node.recordVerifiedCommitVote(signedCommitMsgForTest(t, highBlock, "A", privKeys["A"])); !ok {
+	if _, _, ok, _ := node.recordVerifiedCommitVote(signedCommitMsgForTest(t, highBlock, "A", privKeys["A"])); !ok {
 		t.Fatalf("expected higher-round signed commit vote to replace non-quorum prior vote")
 	}
 	if got := node.localSignedCommitChoice(lowBlock.ID); got != highBlock.BlockHash {
@@ -581,6 +581,25 @@ func TestSignedCommitVoteCanMoveToHigherRoundBeforeQuorum(t *testing.T) {
 	}
 }
 
+func TestSignedCommitVoteDuplicateIsNotNewVote(t *testing.T) {
+	resetExecPoolForTest(t)
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	node.ID = "A"
+
+	block := Block{ID: 1, Round: 0, BlockHash: "duplicate-commit-block", StateRoot: "duplicate-root"}
+	node.noteObservedProposal(block)
+	msg := signedCommitMsgForTest(t, block, "A", privKeys["A"])
+
+	if _, _, ok, newVote := node.recordVerifiedCommitVote(msg); !ok || !newVote {
+		t.Fatalf("expected first signed commit vote to record as new, ok=%t new=%t", ok, newVote)
+	}
+	if _, _, ok, newVote := node.recordVerifiedCommitVote(msg); !ok || newVote {
+		t.Fatalf("expected duplicate signed commit vote to be accepted but not new, ok=%t new=%t", ok, newVote)
+	}
+}
+
 func TestSignedCommitVoteCannotReplaceQuorumChoice(t *testing.T) {
 	resetExecPoolForTest(t)
 	validators := []string{"A", "B", "C", "D"}
@@ -594,7 +613,7 @@ func TestSignedCommitVoteCannotReplaceQuorumChoice(t *testing.T) {
 	node.noteObservedProposal(highBlock)
 	recordSignedCommitVotesForTest(t, node, lowBlock, []string{"A", "B", "C"}, privKeys)
 
-	if _, _, ok := node.recordVerifiedCommitVote(signedCommitMsgForTest(t, highBlock, "A", privKeys["A"])); ok {
+	if _, _, ok, _ := node.recordVerifiedCommitVote(signedCommitMsgForTest(t, highBlock, "A", privKeys["A"])); ok {
 		t.Fatalf("signed commit quorum must reject conflicting higher-round replacement")
 	}
 	if got := node.localSignedCommitChoice(lowBlock.ID); got != lowBlock.BlockHash {

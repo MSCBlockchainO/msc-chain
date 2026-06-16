@@ -1994,17 +1994,18 @@ type Node struct {
 	lastLeaderEpoch             uint64
 	lastLeaderRound             uint32
 
-	commitMu             sync.Mutex
-	applyMu              sync.Mutex
-	committed            map[uint64]string                         // height -> hash
-	committedHeight      uint64                                    // monotonic finalized height (idempotent barrier)
-	lastCommitHeight     uint64                                    // last committed height observed locally
-	lastCommitAt         time.Time                                 // wall-clock time of last committed-height progress
-	finalizedHeight      uint64                                    // supermajority-finalized height (can lag committed)
-	commitVotes          map[uint64]map[string]map[string]struct{} // height -> proposal hash -> voter
-	commitVoted          map[uint64]map[string]string              // height -> voter -> proposal hash (one commit vote per height)
-	commitVoteSignatures map[uint64]map[string]map[string]string   // height -> proposal hash -> voter -> signature
-	commitInFlight       map[uint64]string                         // height -> hash currently being applied
+	commitMu              sync.Mutex
+	applyMu               sync.Mutex
+	committed             map[uint64]string                         // height -> hash
+	committedHeight       uint64                                    // monotonic finalized height (idempotent barrier)
+	lastCommitHeight      uint64                                    // last committed height observed locally
+	lastCommitAt          time.Time                                 // wall-clock time of last committed-height progress
+	finalizedHeight       uint64                                    // supermajority-finalized height (can lag committed)
+	commitVotes           map[uint64]map[string]map[string]struct{} // height -> proposal hash -> voter
+	commitVoted           map[uint64]map[string]string              // height -> voter -> proposal hash (one commit vote per height)
+	commitVoteSignatures  map[uint64]map[string]map[string]string   // height -> proposal hash -> voter -> signature
+	commitVoteBroadcasted map[uint64]map[string]time.Time           // height -> commit-result scope -> first local broadcast
+	commitInFlight        map[uint64]string                         // height -> hash currently being applied
 
 	heartbeatMu            sync.Mutex
 	lastHeartbeatReported  uint64

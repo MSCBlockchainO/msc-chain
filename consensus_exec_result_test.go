@@ -187,7 +187,7 @@ func recordSignedCommitVotesForTest(t *testing.T, node *Node, block Block, signe
 	t.Helper()
 	for _, signer := range signers {
 		msg := signedCommitMsgForTest(t, block, signer, privKeys[signer])
-		if _, _, ok := node.recordVerifiedCommitVote(msg); !ok {
+		if _, _, ok, _ := node.recordVerifiedCommitVote(msg); !ok {
 			t.Fatalf("failed to record signed commit vote for %s", signer)
 		}
 	}
@@ -3999,11 +3999,11 @@ func TestSignedCommitQuorumDoesNotMixExecutionOutcomes(t *testing.T) {
 	}
 
 	for _, signer := range []string{"A", "B"} {
-		if _, _, ok := node.recordVerifiedCommitVote(signedCommitMsgForExecHashForTest(t, block, signer, privKeys[signer], rootA)); !ok {
+		if _, _, ok, _ := node.recordVerifiedCommitVote(signedCommitMsgForExecHashForTest(t, block, signer, privKeys[signer], rootA)); !ok {
 			t.Fatalf("failed to record rootA commit signer=%s", signer)
 		}
 	}
-	if _, _, ok := node.recordVerifiedCommitVote(signedCommitMsgForExecHashForTest(t, block, "C", privKeys["C"], rootB)); !ok {
+	if _, _, ok, _ := node.recordVerifiedCommitVote(signedCommitMsgForExecHashForTest(t, block, "C", privKeys["C"], rootB)); !ok {
 		t.Fatalf("failed to record rootB commit signer=C")
 	}
 
@@ -4023,7 +4023,7 @@ func TestSignedCommitQuorumDoesNotMixExecutionOutcomes(t *testing.T) {
 		t.Fatalf("mixed execution outcomes must not form signed commit quorum, count=%d required=%d committed=%t", count, required, committed)
 	}
 
-	if _, _, ok := node.recordVerifiedCommitVote(signedCommitMsgForExecHashForTest(t, block, "D", privKeys["D"], rootA)); !ok {
+	if _, _, ok, _ := node.recordVerifiedCommitVote(signedCommitMsgForExecHashForTest(t, block, "D", privKeys["D"], rootA)); !ok {
 		t.Fatalf("failed to record final rootA signer")
 	}
 	if count, required, committed := node.proposalHasSignedCommitQuorum(block); !committed || count != 3 || required != 3 {

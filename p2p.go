@@ -2561,6 +2561,44 @@ func (n *Node) hasLocalSignedCommitScope(height uint64, scope string) bool {
 	return strings.TrimSpace(n.commitVoteSignatures[height][scope][localID]) != ""
 }
 
+func (n *Node) hasRecordedCommitVote(cm CommitMsg) bool {
+	if n == nil || cm.Height == 0 {
+		return false
+	}
+	from := normalizeValidatorID(cm.From)
+	scope := commitVoteResultScopeKey(cm.Height, strings.TrimSpace(cm.Hash), strings.TrimSpace(cm.ExecHash), strings.TrimSpace(cm.TxMerkle))
+	signature := strings.TrimSpace(cm.Signature)
+	if from == "" || scope == "" || signature == "" {
+		return false
+	}
+	n.commitMu.Lock()
+	defer n.commitMu.Unlock()
+	return strings.EqualFold(strings.TrimSpace(n.commitVoteSignatures[cm.Height][scope][from]), signature)
+}
+
+func (n *Node) markLocalCommitVoteBroadcasted(height uint64, scope string) bool {
+	if n == nil || height == 0 {
+		return false
+	}
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		return false
+	}
+	n.commitMu.Lock()
+	defer n.commitMu.Unlock()
+	if n.commitVoteBroadcasted == nil {
+		n.commitVoteBroadcasted = make(map[uint64]map[string]time.Time)
+	}
+	if n.commitVoteBroadcasted[height] == nil {
+		n.commitVoteBroadcasted[height] = make(map[string]time.Time)
+	}
+	if !n.commitVoteBroadcasted[height][scope].IsZero() {
+		return false
+	}
+	n.commitVoteBroadcasted[height][scope] = time.Now()
+	return true
+}
+
 func (n *Node) signedCommitQuorumForHash(height uint64, proposalHash string) bool {
 	_, _, count, required := n.commitVoteEvidence(height, proposalHash)
 	return required > 0 && count >= required
@@ -2600,20 +2638,20 @@ func (n *Node) shouldFollowCommitEvidence(height uint64, proposalHash string, co
 	return incomingKnown && localKnown && incomingRound > localRound
 }
 
-func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
+func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool, bool) {
 	if n == nil || !verifyCommitVoteSignature(cm) {
-		return 0, 0, false
+		return 0, 0, false, false
 	}
 	cm.From = normalizeValidatorID(cm.From)
 	cm.Hash = strings.TrimSpace(cm.Hash)
 	cm.Signature = strings.TrimSpace(cm.Signature)
 	validators, _, ok := n.deterministicCommitteeValidatorsForHeight(cm.Height)
 	if !ok || len(validators) == 0 || !containsValidatorID(validators, cm.From) {
-		return 0, n.executionQuorumRequiredForEpoch(cm.Height), false
+		return 0, n.executionQuorumRequiredForEpoch(cm.Height), false, false
 	}
 	required := n.executionQuorumRequiredForEpoch(cm.Height)
 	if required == 0 {
-		return 0, 0, false
+		return 0, 0, false, false
 	}
 
 	proposalRounds := make(map[string]uint32)
@@ -2629,7 +2667,7 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
 	incomingRound, incomingRoundKnown := proposalRounds[cm.Hash]
 	commitScope := commitVoteResultScopeKey(cm.Height, cm.Hash, cm.ExecHash, cm.TxMerkle)
 	if commitScope == "" {
-		return 0, required, false
+		return 0, required, false, false
 	}
 
 	n.commitMu.Lock()
@@ -2655,7 +2693,7 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
 			}
 			if existingCount >= required || !incomingRoundKnown || !existingRoundKnown || incomingRound <= existingRound {
 				n.commitMu.Unlock()
-				return 0, required, false
+				return 0, required, false, false
 			}
 			delete(bySigner, cm.From)
 			if len(bySigner) == 0 {
@@ -2673,6 +2711,11 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
 		}
 	}
 	existing := strings.TrimSpace(n.commitVoteSignatures[cm.Height][commitScope][cm.From])
+	if existing != "" && !strings.EqualFold(existing, cm.Signature) {
+		n.commitMu.Unlock()
+		return 0, required, false, false
+	}
+	newVote := existing == "" || replacedPrior
 	n.commitVoteSignatures[cm.Height][commitScope][cm.From] = cm.Signature
 	if n.commitVoted == nil {
 		n.commitVoted = make(map[uint64]map[string]string)
@@ -2693,7 +2736,7 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
 	n.commitVotes[cm.Height][commitScope][cm.From] = struct{}{}
 	count := len(n.commitVoteSignatures[cm.Height][commitScope])
 	n.commitMu.Unlock()
-	if existing == "" || replacedPrior {
+	if newVote {
 		n.persistConsensusSafetyStateAsync("signed_commit_vote")
 	}
 	scope := commitScope
@@ -2708,7 +2751,7 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
 		ExecPool.commitChoice[cm.Height][cm.From] = scope
 	}
 	ExecPool.mu.Unlock()
-	return count, required, true
+	return count, required, true, newVote
 }
 
 func (n *Node) broadcastCommitVoteForProposal(block Block, execHash string, txMerkle string) bool {
@@ -2732,6 +2775,11 @@ func (n *Node) broadcastCommitVoteForProposal(block Block, execHash string, txMe
 	if execHash == "" || normalizeValidatorID(n.ID) == "" {
 		return false
 	}
+	commitScope := commitVoteResultScopeKey(block.ID, strings.TrimSpace(block.BlockHash), execHash, txMerkle)
+	if commitScope == "" {
+		return false
+	}
+	alreadySignedSameResult := n.hasLocalSignedCommitScope(block.ID, commitScope)
 	cm := CommitMsg{
 		Height:   block.ID,
 		Hash:     strings.TrimSpace(block.BlockHash),
@@ -2745,8 +2793,9 @@ func (n *Node) broadcastCommitVoteForProposal(block Block, execHash string, txMe
 		return false
 	}
 	cm.Signature = hex.EncodeToString(sig)
-	commitScope := commitVoteResultScopeKey(cm.Height, cm.Hash, cm.ExecHash, cm.TxMerkle)
-	alreadySignedSameResult := n.hasLocalSignedCommitScope(block.ID, commitScope)
+	if !n.markLocalCommitVoteBroadcasted(block.ID, commitScope) {
+		return true
+	}
 	if !alreadySignedSameResult {
 		n.handleCommitMsg(cm)
 	}
@@ -3540,6 +3589,10 @@ func (n *Node) tryFinalizeExecutionQuorumFromPool(targetEpoch uint64, proposalSn
 	}
 	if total == 0 || required == 0 {
 		return false
+	}
+	commitScope := commitVoteResultScopeKey(targetEpoch, proposalSnap.BlockHash, execHash, txMerkle)
+	if commitScope != "" && n.hasLocalSignedCommitScope(targetEpoch, commitScope) {
+		return true
 	}
 	storedCount := getExecCountGlobal(targetEpoch, proposalSnap.ProposalKey, execHash, txMerkle)
 	if storedCount < required {
@@ -4366,6 +4419,11 @@ func (n *Node) clearCommitVoteStateUpTo(height uint64) {
 	for h := range n.commitVoteSignatures {
 		if h <= height {
 			delete(n.commitVoteSignatures, h)
+		}
+	}
+	for h := range n.commitVoteBroadcasted {
+		if h <= height {
+			delete(n.commitVoteBroadcasted, h)
 		}
 	}
 	n.commitMu.Unlock()
@@ -6330,6 +6388,9 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 	if cm.From == "" || cm.Hash == "" || cm.ExecHash == "" || cm.Signature == "" {
 		return
 	}
+	if n.hasRecordedCommitVote(cm) {
+		return
+	}
 	block, ok := n.proposalBlockByHash(cm.Height, cm.Hash)
 	if !ok && cm.Block.ID == cm.Height && strings.EqualFold(strings.TrimSpace(cm.Block.BlockHash), cm.Hash) {
 		if n.verifyLeaderBlock(cm.Block, "") {
@@ -6348,18 +6409,20 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 	if expected == "" || !strings.EqualFold(expected, cm.ExecHash) || strings.TrimSpace(block.MempoolRoot) != cm.TxMerkle {
 		return
 	}
-	count, required, accepted := n.recordVerifiedCommitVote(cm)
+	count, required, accepted, newVote := n.recordVerifiedCommitVote(cm)
 	if !accepted {
 		return
 	}
-	log.Printf("[COMMIT-VOTE] signer=%s height=%d block=%s votes=%d required=%d",
-		ShortID(cm.From),
-		cm.Height,
-		ShortHash(cm.Hash),
-		count,
-		required,
-	)
-	if n.shouldFollowCommitEvidence(cm.Height, cm.Hash, count, required) {
+	if newVote {
+		log.Printf("[COMMIT-VOTE] signer=%s height=%d block=%s votes=%d required=%d",
+			ShortID(cm.From),
+			cm.Height,
+			ShortHash(cm.Hash),
+			count,
+			required,
+		)
+	}
+	if newVote && n.shouldFollowCommitEvidence(cm.Height, cm.Hash, count, required) {
 		log.Printf("[COMMIT-FOLLOW] validator=%s height=%d block=%s votes=%d required=%d action=broadcast_commit_vote",
 			ShortID(n.ID),
 			cm.Height,

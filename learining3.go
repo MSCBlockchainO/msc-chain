@@ -24876,6 +24876,8 @@ func StartNode(
 
 		commitVoted: make(map[uint64]map[string]string),
 
+		commitVoteBroadcasted: make(map[uint64]map[string]time.Time),
+
 		logicalClock: LogicalTimeForEpoch(1),
 
 		heightReports: make(map[uint64]map[string]time.Time),
