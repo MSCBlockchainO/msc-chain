@@ -265,10 +265,11 @@ func TestEnsureCommittedTipStateSnapshotDefersNonCheckpointResolverReason(t *tes
 		DB:                db,
 		Ledger:            ledger.Clone(),
 		Blockchain:        &Blockchain{Blocks: []Block{block1, block2, block3}},
+		Consensus:         &ConsensusState{},
 		GenesisValidators: canonicalValidatorIDs([]string{"A", "B", "C", "D"}),
 	}
 
-	source, ok := n.ensureCommittedTipStateSnapshot(3, "resolver_tip_missing")
+	source, ok := n.ensureCommittedTipStateSnapshot(3, n.committedSnapshotResolverReason(3))
 	if !ok {
 		t.Fatalf("expected non-checkpoint resolver reason to defer cleanly")
 	}
@@ -287,7 +288,10 @@ func TestSnapshotCheckpointBypassReasons(t *testing.T) {
 	if !shouldBypassSnapshotCheckpointDeferral("startup") {
 		t.Fatalf("startup repair should still bypass checkpoint deferral")
 	}
-	for _, reason := range []string{"resolver_tip_missing", "integrity_monitor", "snapshot_create_worker", "test_checkpoint_defer"} {
+	if !shouldBypassSnapshotCheckpointDeferral("resolver_tip_missing") {
+		t.Fatalf("startup resolver must still support sparse recovery materialization")
+	}
+	for _, reason := range []string{"resolver_tip_missing_live", "integrity_monitor", "snapshot_create_worker", "test_checkpoint_defer"} {
 		if shouldBypassSnapshotCheckpointDeferral(reason) {
 			t.Fatalf("unexpected checkpoint bypass for reason %q", reason)
 		}

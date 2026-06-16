@@ -855,7 +855,7 @@ func shouldAutoCreateSnapshotAtHeight(height uint64) bool {
 
 func shouldBypassSnapshotCheckpointDeferral(reason string) bool {
 	switch strings.TrimSpace(reason) {
-	case "startup", "sync_complete":
+	case "resolver_tip_missing", "startup", "sync_complete":
 		return true
 	default:
 		return false
@@ -975,6 +975,19 @@ func (n *Node) ensureCommittedTipStateSnapshot(height uint64, reason string) (so
 	return "none", false
 }
 
+func (n *Node) committedSnapshotResolverReason(height uint64) string {
+	if n == nil || shouldAutoCreateSnapshotAtHeight(height) {
+		return "resolver_tip_missing"
+	}
+	// Startup recovery runs before the consensus engine is installed and may
+	// need to materialize a sparse durable anchor. Once consensus is live,
+	// ordinary resolver reads must not force-create every non-checkpoint tip.
+	if n.Consensus != nil {
+		return "resolver_tip_missing_live"
+	}
+	return "resolver_tip_missing"
+}
+
 func (n *Node) latestCommittedSnapshotMeta() (*StateSnapshot, *SnapshotMetaRecord, string, error) {
 	if n == nil {
 		return nil, nil, "", errors.New("node unavailable")
@@ -1078,7 +1091,7 @@ func (n *Node) ResolveCommittedStateSnapshot(height uint64) (*StateSnapshot, str
 	} else if strings.TrimSpace(reason) != "" {
 		failureReason = strings.TrimSpace(reason)
 	}
-	if source, repaired := n.ensureCommittedTipStateSnapshot(height, "resolver_tip_missing"); repaired {
+	if source, repaired := n.ensureCommittedTipStateSnapshot(height, n.committedSnapshotResolverReason(height)); repaired {
 		if snap, hash, ok := n.resolveCommittedStateSnapshotFromStorage(height); ok {
 			return snap, hash, source, true
 		}
