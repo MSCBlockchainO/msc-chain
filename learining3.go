@@ -24800,6 +24800,7 @@ func StartNode(
 		snapshotOfferSentAt: make(map[string]time.Time),
 
 		snapshotExecutionLedgerByHeight: make(map[uint64]Ledger),
+		snapshotMissingUntil:            make(map[uint64]time.Time),
 
 		snapshotMetaGossipCache:  make(map[string]SnapshotMetaGossip),
 		snapshotChunkGossipCache: make(map[string]SnapshotChunkGossip),

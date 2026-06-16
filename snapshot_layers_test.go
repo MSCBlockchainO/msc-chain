@@ -241,7 +241,7 @@ func TestEnsureCommittedTipStateSnapshotDefersOutsideCheckpointInterval(t *testi
 	}
 }
 
-func TestEnsureCommittedTipStateSnapshotMaterializesTipForResolverReason(t *testing.T) {
+func TestEnsureCommittedTipStateSnapshotDefersNonCheckpointResolverReason(t *testing.T) {
 	db, cleanup := openNodeDBForTest(t)
 	defer cleanup()
 
@@ -270,13 +270,27 @@ func TestEnsureCommittedTipStateSnapshotMaterializesTipForResolverReason(t *test
 
 	source, ok := n.ensureCommittedTipStateSnapshot(3, "resolver_tip_missing")
 	if !ok {
-		t.Fatalf("expected resolver-triggered tip materialization to succeed")
+		t.Fatalf("expected non-checkpoint resolver reason to defer cleanly")
 	}
-	if source != "tip_create_snapshot_repair" {
-		t.Fatalf("unexpected source: got=%q want=%q", source, "tip_create_snapshot_repair")
+	if source != "checkpoint_interval_deferred" {
+		t.Fatalf("unexpected source: got=%q want=%q", source, "checkpoint_interval_deferred")
 	}
-	if _, err := n.GetSnapshot(3); err != nil {
-		t.Fatalf("expected tip snapshot persisted after resolver materialization: %v", err)
+	if _, err := n.GetSnapshot(3); err == nil {
+		t.Fatalf("resolver-triggered non-checkpoint tip should not force-create a snapshot")
+	}
+}
+
+func TestSnapshotCheckpointBypassReasons(t *testing.T) {
+	if !shouldBypassSnapshotCheckpointDeferral("sync_complete") {
+		t.Fatalf("sync_complete must still persist a durable catch-up anchor")
+	}
+	if !shouldBypassSnapshotCheckpointDeferral("startup") {
+		t.Fatalf("startup repair should still bypass checkpoint deferral")
+	}
+	for _, reason := range []string{"resolver_tip_missing", "integrity_monitor", "snapshot_create_worker", "test_checkpoint_defer"} {
+		if shouldBypassSnapshotCheckpointDeferral(reason) {
+			t.Fatalf("unexpected checkpoint bypass for reason %q", reason)
+		}
 	}
 }
 
@@ -1091,6 +1105,77 @@ func TestVerifySnapshotIntegrityDepthSkipsHistoricalMissingAsMaterializing(t *te
 	}
 	if _, err := n.GetSnapshot(3); err != nil {
 		t.Fatalf("expected tip snapshot to remain available: %v", err)
+	}
+}
+
+func TestVerifySnapshotIntegrityDepthSkipsNonCheckpointMissingTip(t *testing.T) {
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	prevInterval := SyncCheckpointIntervalBlocks
+	SyncCheckpointIntervalBlocks = 32
+	defer func() { SyncCheckpointIntervalBlocks = prevInterval }()
+
+	registry := testValidatorSetMaterializationRegistry()
+	ledger := NewLedger()
+	ledger.Balances["alice"] = 5
+	block1, snap1 := makeSnapshotLayerFixture(1, "", ledger, registry)
+	block2, snap2 := makeSnapshotLayerFixture(2, block1.BlockHash, ledger, registry)
+	block3, _ := makeSnapshotLayerFixture(3, block2.BlockHash, ledger, registry)
+
+	n := &Node{
+		DB:         db,
+		Ledger:     ledger.Clone(),
+		Blockchain: &Blockchain{Blocks: []Block{block1, block2, block3}},
+	}
+	if err := n.storeCommittedStateSnapshotRecord(&snap1, "test"); err != nil {
+		t.Fatalf("store snapshot 1: %v", err)
+	}
+	if err := n.storeCommittedStateSnapshotRecord(&snap2, "test"); err != nil {
+		t.Fatalf("store snapshot 2: %v", err)
+	}
+
+	if err := n.verifySnapshotIntegrityDepth(10); err != nil {
+		t.Fatalf("verify snapshot integrity: %v", err)
+	}
+	if _, err := n.GetSnapshot(3); err == nil {
+		t.Fatalf("missing non-checkpoint tip should not be force-created by integrity monitor")
+	}
+	if got := n.observabilityStatsSnapshot().SnapshotCreateTotal; got != 0 {
+		t.Fatalf("unexpected snapshot create count: got=%d want=0", got)
+	}
+}
+
+func TestGetSnapshotMissingCacheSuppressesRepeatedLoadMetrics(t *testing.T) {
+	db, cleanup := openNodeDBForTest(t)
+	defer cleanup()
+
+	n := &Node{DB: db}
+	if _, err := n.GetSnapshot(99); err == nil {
+		t.Fatalf("expected first missing snapshot lookup to fail")
+	}
+	afterFirst := n.observabilityStatsSnapshot().SnapshotLoadTotal
+	if afterFirst != 1 {
+		t.Fatalf("unexpected first load count: got=%d want=1", afterFirst)
+	}
+	if _, err := n.GetSnapshot(99); err == nil {
+		t.Fatalf("expected cached missing snapshot lookup to fail")
+	}
+	afterSecond := n.observabilityStatsSnapshot().SnapshotLoadTotal
+	if afterSecond != afterFirst {
+		t.Fatalf("cached missing lookup should not record another load: got=%d want=%d", afterSecond, afterFirst)
+	}
+
+	_, snap := makeSnapshotLayerFixture(99, "block-98", NewLedger(), testValidatorSetMaterializationRegistry())
+	if err := n.storeCommittedStateSnapshotRecord(&snap, "test"); err != nil {
+		t.Fatalf("store snapshot: %v", err)
+	}
+	loaded, err := n.GetSnapshot(99)
+	if err != nil {
+		t.Fatalf("expected stored snapshot to clear missing cache: %v", err)
+	}
+	if loaded == nil || loaded.SnapshotHash != snap.SnapshotHash {
+		t.Fatalf("unexpected loaded snapshot after cache clear")
 	}
 }
 

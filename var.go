@@ -2113,6 +2113,8 @@ type Node struct {
 
 	snapshotExecutionLedgerMu                    sync.Mutex
 	snapshotExecutionLedgerByHeight              map[uint64]Ledger
+	snapshotMissingMu                            sync.Mutex
+	snapshotMissingUntil                         map[uint64]time.Time
 	postCommitLedgerMu                           sync.Mutex
 	postCommitLedgerByHeight                     map[uint64]Ledger
 	executionLedgerConsistencyMu                 sync.Mutex

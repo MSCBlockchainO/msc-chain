@@ -2948,16 +2948,74 @@ func (n *Node) resolveSnapshotValidatorList(nextHeight uint64, block Block) ([]s
 	return list, err
 }
 
+const snapshotMissingCacheTTL = 5 * time.Second
+
+func (n *Node) snapshotMissingCacheHit(height uint64) bool {
+	if n == nil || height == 0 {
+		return false
+	}
+	n.snapshotMissingMu.Lock()
+	defer n.snapshotMissingMu.Unlock()
+	if n.snapshotMissingUntil == nil {
+		return false
+	}
+	until, ok := n.snapshotMissingUntil[height]
+	if !ok {
+		return false
+	}
+	if time.Now().Before(until) {
+		return true
+	}
+	delete(n.snapshotMissingUntil, height)
+	return false
+}
+
+func (n *Node) markSnapshotMissing(height uint64) {
+	if n == nil || height == 0 {
+		return
+	}
+	n.snapshotMissingMu.Lock()
+	defer n.snapshotMissingMu.Unlock()
+	if n.snapshotMissingUntil == nil {
+		n.snapshotMissingUntil = make(map[uint64]time.Time)
+	}
+	n.snapshotMissingUntil[height] = time.Now().Add(snapshotMissingCacheTTL)
+}
+
+func (n *Node) clearSnapshotMissing(height uint64) {
+	if n == nil || height == 0 {
+		return
+	}
+	n.snapshotMissingMu.Lock()
+	defer n.snapshotMissingMu.Unlock()
+	if n.snapshotMissingUntil != nil {
+		delete(n.snapshotMissingUntil, height)
+	}
+}
+
 func (n *Node) GetSnapshot(height uint64) (snap *StateSnapshot, err error) {
 	started := time.Now()
+	observe := true
 	defer func() {
-		n.observeSnapshotOperation("load", height, time.Since(started), err == nil)
+		if observe {
+			n.observeSnapshotOperation("load", height, time.Since(started), err == nil)
+		}
 	}()
 	if n.DB == nil || n.DB.SnapshotStore() == nil {
 		return nil, fmt.Errorf("snapshot db not initialized")
 	}
+	if n.snapshotMissingCacheHit(height) {
+		observe = false
+		return nil, ErrKeyNotFound
+	}
 	key := []byte(fmt.Sprintf("snapshot:%d", height))
-	return readSnapshotFromStores(n.DB.SnapshotStoresForRead(), key)
+	snap, err = readSnapshotFromStores(n.DB.SnapshotStoresForRead(), key)
+	if err == nil && snap != nil {
+		n.clearSnapshotMissing(height)
+	} else if errors.Is(err, ErrKeyNotFound) {
+		n.markSnapshotMissing(height)
+	}
+	return snap, err
 }
 
 func appendUniqueSnapshotAnchorCandidate(candidates []Block, seen map[string]struct{}, candidate Block) []Block {
@@ -3070,6 +3128,7 @@ func (n *Node) deleteStoredSnapshotHeight(height uint64) error {
 			return err
 		}
 	}
+	n.markSnapshotMissing(height)
 	for _, store := range n.DB.SnapshotMetaStoresForRead() {
 		if err := store.Update(func(txn *Txn) error {
 			item, err := txn.Get(latestKey)

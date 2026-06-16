@@ -697,6 +697,7 @@ func (n *Node) storeCommittedStateSnapshotRecord(snapshot *StateSnapshot, source
 		!strings.EqualFold(strings.TrimSpace(stored.SnapshotHash), strings.TrimSpace(snapshot.SnapshotHash)) {
 		return fmt.Errorf("snapshot write verification mismatch height=%d", snapshot.Height)
 	}
+	n.clearSnapshotMissing(snapshot.Height)
 	if n.DB.SnapshotMetaStore() == nil {
 		return errors.New("snapshot meta db not initialized")
 	}
@@ -854,7 +855,7 @@ func shouldAutoCreateSnapshotAtHeight(height uint64) bool {
 
 func shouldBypassSnapshotCheckpointDeferral(reason string) bool {
 	switch strings.TrimSpace(reason) {
-	case "resolver_tip_missing", "integrity_monitor", "startup", "sync_complete":
+	case "startup", "sync_complete":
 		return true
 	default:
 		return false
@@ -1813,11 +1814,11 @@ func (n *Node) verifySnapshotIntegrityDepth(depth uint64) error {
 			continue
 		}
 		recordExists := n.committedStateSnapshotRecordExists(height)
-		if !recordExists && height < tip {
+		if !recordExists && (height < tip || !shouldAutoCreateSnapshotAtHeight(height)) {
 			// Checkpoint-only snapshot policies intentionally leave most historical
-			// heights without a committed snapshot record. Avoid loading and
-			// verifying snapshot state for those expected gaps; on small nodes that
-			// work can otherwise monopolize CPU during every integrity pass.
+			// heights and non-checkpoint tips without a committed snapshot record.
+			// Avoid loading, rebuilding, or force-creating snapshots for those
+			// expected gaps; durable sync anchors still bypass this via sync_complete.
 			if n.shouldLogLivenessReason(fmt.Sprintf("snapshot_materializing:%d", height), livenessReasonLogCooldown) {
 				log.Printf("[SNAPSHOT-MATERIALIZING] height=%d chain_tip=%d kind=missing_committed", height, tip)
 			}
