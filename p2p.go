@@ -3600,7 +3600,11 @@ func (n *Node) tryFinalizeExecutionQuorumFromPool(targetEpoch uint64, proposalSn
 	}
 	results, _, _, ok := getExecResultsGlobal(targetEpoch, proposalSnap.ProposalKey, execHash, txMerkle)
 	if !ok || len(results) < required {
-		return false
+		var votes int
+		results, _, votes, ok = getExecResultsForBlockHashGlobal(targetEpoch, proposalSnap.BlockHash, execHash, txMerkle)
+		if !ok || votes < required || len(results) < required {
+			return false
+		}
 	}
 	for _, result := range results {
 		n.mirrorConsensusExecVote(targetEpoch, proposalSnap.BlockHash, result)
@@ -4239,6 +4243,72 @@ func getExecResultsGlobal(epoch uint64, proposalKey string, execHash string, txM
 	}
 
 	return results, signers, len(resultsMap), true
+}
+
+func getExecResultsForBlockHashGlobal(epoch uint64, blockHash string, execHash string, txMerkle string) ([]ExecutionResult, []string, int, bool) {
+	blockHash = strings.TrimSpace(blockHash)
+	execHash = strings.TrimSpace(execHash)
+	txMerkle = strings.TrimSpace(txMerkle)
+	if epoch == 0 || blockHash == "" || execHash == "" {
+		return nil, nil, 0, false
+	}
+	scope := commitVoteScopeKey(epoch, blockHash)
+	if scope == "" {
+		return nil, nil, 0, false
+	}
+
+	ExecPool.mu.Lock()
+	defer ExecPool.mu.Unlock()
+
+	byHash, ok := ExecPool.pool[epoch]
+	if !ok {
+		return nil, nil, 0, false
+	}
+	prefix := scope + "|"
+	bySigner := make(map[string]ExecutionResult)
+	for scopedExecKey, resultsMap := range byHash {
+		if !strings.HasPrefix(scopedExecKey, prefix) {
+			continue
+		}
+		if txMerkle != "" {
+			if expected, ok := ExecPool.txMerkle[epoch][scopedExecKey]; ok && expected != "" && expected != txMerkle {
+				continue
+			}
+		}
+		for signer, res := range resultsMap {
+			signer = normalizeValidatorID(signer)
+			if signer == "" {
+				signer = normalizeValidatorID(res.Signer)
+			}
+			if signer == "" {
+				continue
+			}
+			if strings.TrimSpace(res.ResultHash) != "" && !strings.EqualFold(strings.TrimSpace(res.ResultHash), execHash) {
+				continue
+			}
+			if txMerkle != "" && strings.TrimSpace(res.TxMerkle) != "" && strings.TrimSpace(res.TxMerkle) != txMerkle {
+				continue
+			}
+			res.Signer = signer
+			if existing, ok := bySigner[signer]; !ok || executionResultSortLess(res, existing) {
+				bySigner[signer] = res
+			}
+		}
+	}
+	if len(bySigner) == 0 {
+		return nil, nil, 0, false
+	}
+	results := make([]ExecutionResult, 0, len(bySigner))
+	signers := make([]string, 0, len(bySigner))
+	for signer, res := range bySigner {
+		results = append(results, res)
+		signers = append(signers, signer)
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return executionResultSortLess(results[i], results[j])
+	})
+	signers = canonicalValidatorIDs(signers)
+	return results, signers, len(results), true
 }
 
 func getExecCountGlobal(epoch uint64, proposalKey string, execHash string, txMerkle string) int {
@@ -6440,7 +6510,18 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 	proposalKey := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, expected)
 	results, signers, executionVotes, executionOK := getExecResultsGlobal(block.ID, proposalKey, expected, block.MempoolRoot)
 	if !executionOK || executionVotes < required {
-		return
+		results, signers, executionVotes, executionOK = getExecResultsForBlockHashGlobal(block.ID, block.BlockHash, expected, block.MempoolRoot)
+		if !executionOK || executionVotes < required {
+			if DebugConsensus {
+				log.Printf("[EXEC-COMMIT-DEFER] height=%d reason=execution_votes_missing_for_commit block=%s votes=%d required=%d",
+					block.ID,
+					ShortHash(block.BlockHash),
+					executionVotes,
+					required,
+				)
+			}
+			return
+		}
 	}
 	n.execResultsMu.Lock()
 	_ = n.setQuorumLockedProposalLocked(block, "signed_commit_quorum", executionVotes, required)

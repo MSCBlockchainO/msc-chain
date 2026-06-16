@@ -3980,6 +3980,68 @@ func TestHandleCommitMsgFollowsSignedCommitEvidence(t *testing.T) {
 	}
 }
 
+func TestHandleCommitMsgFinalizesBlockScopedExecutionVotesAcrossRoundBuckets(t *testing.T) {
+	oldRequireWallet := ConfigAuthRequireWallet
+	oldRequireStake := ValidatorRequireStake
+	oldStrictActivation := ValidatorOnboardingStrictActivation
+	t.Cleanup(func() {
+		ConfigAuthRequireWallet = oldRequireWallet
+		ValidatorRequireStake = oldRequireStake
+		ValidatorOnboardingStrictActivation = oldStrictActivation
+	})
+	ConfigAuthRequireWallet = false
+	ValidatorRequireStake = false
+	ValidatorOnboardingStrictActivation = false
+
+	resetExecPoolForTest(t)
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	node.ID = "A"
+	node.Role = "validator"
+
+	epoch := node.currentEpoch()
+	block := node.BuildLeaderBlock(epoch)
+	if !node.storeLeaderBlock(block) {
+		t.Fatalf("failed to store leader block")
+	}
+	higherRound := block
+	higherRound.Round = block.Round + 7
+	if !node.storeLeaderBlock(higherRound) {
+		t.Fatalf("failed to store higher-round same-hash block")
+	}
+
+	legacyScopeKey := proposalExecKey(commitVoteScopeKey(epoch, block.BlockHash), block.StateRoot)
+	ExecPool.mu.Lock()
+	ensureExecPoolTopMapsLocked()
+	if ExecPool.pool[epoch] == nil {
+		ExecPool.pool[epoch] = make(map[string]map[string]ExecutionResult)
+	}
+	if ExecPool.txMerkle[epoch] == nil {
+		ExecPool.txMerkle[epoch] = make(map[string]string)
+	}
+	ExecPool.pool[epoch][legacyScopeKey] = map[string]ExecutionResult{}
+	ExecPool.txMerkle[epoch][legacyScopeKey] = block.MempoolRoot
+	for _, signer := range []string{"B", "C", "D"} {
+		ExecPool.pool[epoch][legacyScopeKey][signer] = ExecutionResult{
+			Height:     epoch,
+			Round:      block.Round,
+			BlockHash:  block.BlockHash,
+			Signer:     signer,
+			ResultHash: block.StateRoot,
+			TxMerkle:   block.MempoolRoot,
+		}
+	}
+	ExecPool.mu.Unlock()
+
+	for _, signer := range []string{"B", "C", "D"} {
+		node.handleCommitMsg(signedCommitMsgForTest(t, block, signer, privKeys[signer]))
+	}
+	if got := node.Blockchain.Height(); got < epoch {
+		t.Fatalf("expected block-scoped execution votes to finalize after commit quorum, height=%d want_at_least=%d", got, epoch)
+	}
+}
+
 func TestSignedCommitQuorumDoesNotMixExecutionOutcomes(t *testing.T) {
 	resetExecPoolForTest(t)
 
