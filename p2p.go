@@ -6422,7 +6422,9 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 			required,
 		)
 	}
-	if newVote && n.shouldFollowCommitEvidence(cm.Height, cm.Hash, count, required) {
+	commitScope := commitVoteResultScopeKey(cm.Height, cm.Hash, expected, block.MempoolRoot)
+	localAlreadySigned := commitScope != "" && n.hasLocalSignedCommitScope(cm.Height, commitScope)
+	if newVote && !localAlreadySigned && n.shouldFollowCommitEvidence(cm.Height, cm.Hash, count, required) {
 		log.Printf("[COMMIT-FOLLOW] validator=%s height=%d block=%s votes=%d required=%d action=broadcast_commit_vote",
 			ShortID(n.ID),
 			cm.Height,
