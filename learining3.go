@@ -28309,6 +28309,10 @@ type ChainConfig struct {
 	GenesisHash string `toml:"genesis_hash"`
 }
 
+type LocalNodeConfig struct {
+	NodeID string `toml:"node_id"`
+}
+
 type P2PConfig struct {
 	Laddr string `toml:"laddr"`
 
@@ -28964,6 +28968,8 @@ type StorageConfig struct {
 }
 
 type ConfigFile struct {
+	Node LocalNodeConfig `toml:"node"`
+
 	Chain ChainConfig `toml:"chain"`
 
 	P2P P2PConfig `toml:"p2p"`
@@ -34396,6 +34402,36 @@ func isNodeScopedMPCConfig(configPath string, nodeID string) bool {
 	return false
 }
 
+func loadStartupNodeID(dataDir string) string {
+	dir := strings.TrimSpace(dataDir)
+	if dir == "" {
+		return ""
+	}
+
+	var cfg struct {
+		Node LocalNodeConfig `toml:"node"`
+	}
+	configPath := filepath.Join(dir, "config.toml")
+	if _, err := os.Stat(configPath); err == nil {
+		if _, err := toml.DecodeFile(configPath, &cfg); err == nil {
+			if id := strings.TrimSpace(cfg.Node.NodeID); id != "" {
+				return id
+			}
+		}
+	}
+
+	var identity struct {
+		NodeID string `json:"node_id"`
+	}
+	identityPath := filepath.Join(dir, "node_identity.json")
+	if raw, err := os.ReadFile(identityPath); err == nil {
+		if err := json.Unmarshal(raw, &identity); err == nil {
+			return strings.TrimSpace(identity.NodeID)
+		}
+	}
+	return ""
+}
+
 func main() {
 
 	// =====================================================
@@ -34468,6 +34504,12 @@ func main() {
 	if strings.TrimSpace(*p2pExternalAddr) == "" {
 		if envExternal := strings.TrimSpace(os.Getenv("MSC_P2P_EXTERNAL_ADDR")); envExternal != "" {
 			*p2pExternalAddr = envExternal
+		}
+	}
+	if strings.TrimSpace(*nodeID) == "" {
+		if startupNodeID := loadStartupNodeID(*dataDir); startupNodeID != "" {
+			*nodeID = startupNodeID
+			log.Printf("[NODE-ID] loaded id=%s source=datadir_identity", startupNodeID)
 		}
 	}
 	modeValue := strings.ToLower(strings.TrimSpace(*mode))
