@@ -1201,22 +1201,33 @@ func validateValidatorBackup(nodePath string, fingerprint string) (bool, uint64,
 func restoreValidatorKeyFromBackup(nodeID, nodePath, keyPath string) error {
 	manifest, manifestErr := readValidatorKeyBackupManifest(nodePath)
 	candidates := make([]string, 0, 2)
+	addCandidate := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		clean := filepath.Clean(path)
+		for _, c := range candidates {
+			if filepath.Clean(c) == clean {
+				return
+			}
+		}
+		candidates = append(candidates, clean)
+	}
 	if manifestErr == nil {
 		if p := fromManifestPath(nodePath, manifest.BackupPath); strings.TrimSpace(p) != "" {
-			candidates = append(candidates, p)
+			addCandidate(p)
 		}
 	}
 	defaultPath := defaultValidatorKeyBackupPath(nodePath)
-	if defaultPath != "" {
-		duplicate := false
-		for _, c := range candidates {
-			if filepath.Clean(c) == filepath.Clean(defaultPath) {
-				duplicate = true
-				break
-			}
+	addCandidate(defaultPath)
+	if parent := filepath.Dir(filepath.Clean(nodePath)); parent != "" && parent != "." && parent != filepath.Clean(nodePath) {
+		backupDir := strings.TrimSpace(ValidatorKeyBackupDir)
+		if backupDir == "" {
+			backupDir = "secure-backups"
 		}
-		if !duplicate {
-			candidates = append(candidates, defaultPath)
+		if !filepath.IsAbs(backupDir) {
+			addCandidate(filepath.Join(parent, backupDir, validatorKeyBackupFileName))
 		}
 	}
 	var lastErr error
