@@ -13041,6 +13041,9 @@ func (n *Node) startSyncStallWatchdog(ctx context.Context) {
 			if !shouldRestart {
 				continue
 			}
+			if n.maybeRewindForkedTipFromAheadPeers(target, "sync_stall_watchdog") {
+				continue
+			}
 			n.syncMu.Lock()
 			failedProvider := strings.TrimSpace(n.syncProvider)
 			n.syncMu.Unlock()
