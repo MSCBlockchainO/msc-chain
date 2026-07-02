@@ -1114,6 +1114,54 @@ func copyFilePrivate(dstPath, srcPath string) error {
 	return writePrivateFile(dstPath, raw)
 }
 
+type legacyValidatorKeyFile struct {
+	NodeID      string `json:"node_id"`
+	ValidatorID string `json:"validator_id"`
+	PublicKey   string `json:"public_key"`
+	PrivateKey  string `json:"private_key"`
+}
+
+func loadLegacyValidatorKeyBytes(nodeID string, data []byte) (ValidatorKey, bool, error) {
+	var legacy legacyValidatorKeyFile
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return ValidatorKey{}, false, nil
+	}
+	if strings.TrimSpace(legacy.PrivateKey) == "" {
+		return ValidatorKey{}, false, nil
+	}
+	privRaw, err := hex.DecodeString(strings.TrimSpace(legacy.PrivateKey))
+	if err != nil {
+		return ValidatorKey{}, true, fmt.Errorf("legacy validator key private_key invalid hex: %w", err)
+	}
+	var priv ed25519.PrivateKey
+	switch len(privRaw) {
+	case ed25519.SeedSize:
+		priv = ed25519.NewKeyFromSeed(privRaw)
+	case ed25519.PrivateKeySize:
+		priv = ed25519.PrivateKey(append([]byte(nil), privRaw...))
+	default:
+		return ValidatorKey{}, true, fmt.Errorf("legacy validator key private_key invalid length: %d", len(privRaw))
+	}
+	pub, ok := priv.Public().(ed25519.PublicKey)
+	if !ok || len(pub) != ed25519.PublicKeySize {
+		return ValidatorKey{}, true, errors.New("legacy validator key public key unavailable")
+	}
+	if strings.TrimSpace(legacy.PublicKey) != "" {
+		wantPub, err := hex.DecodeString(strings.TrimSpace(legacy.PublicKey))
+		if err != nil {
+			return ValidatorKey{}, true, fmt.Errorf("legacy validator key public_key invalid hex: %w", err)
+		}
+		if !bytes.Equal(wantPub, pub) {
+			return ValidatorKey{}, true, errors.New("legacy validator key public_key does not match private_key")
+		}
+	}
+	return ValidatorKey{
+		ID:         nodeID,
+		PublicKey:  ed25519.PublicKey(append([]byte(nil), pub...)),
+		PrivateKey: priv,
+	}, true, nil
+}
+
 func refreshValidatorKeyArtifacts(nodeID, nodePath, keyPath string, key ValidatorKey, crypto EncryptedKey) error {
 	if !isValidatorKeyUsable(key) {
 		return errors.New("validator key unusable")
@@ -1485,6 +1533,18 @@ func loadOrCreateValidatorKeyInternal(nodeID, path string, allowRestore bool, pr
 	if data, err := os.ReadFile(keyPath); err == nil {
 		if err := ensurePrivateFilePermissions(keyPath); err != nil {
 			log.Printf("[WARN] insecure validator key file permissions: %v", err)
+		}
+
+		if legacyKey, ok, legacyErr := loadLegacyValidatorKeyBytes(nodeID, data); ok {
+			if legacyErr != nil {
+				return fallbackValidatorKey(nodeID, legacyErr.Error())
+			}
+			log.Printf("[KEY-LEGACY] validator=%s source=validator.sec result=loaded", nodeID)
+			legacyWallet := SecureWallet{
+				Address:   nodeID,
+				PublicKey: hex.EncodeToString(legacyKey.PublicKey),
+			}
+			return finalizeValidatorKeyLoad(nodeID, path, keyPath, "legacy", legacyKey, legacyWallet)
 		}
 
 		var enc SecureWallet

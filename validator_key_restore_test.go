@@ -1,6 +1,10 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,5 +36,34 @@ func TestRestoreValidatorKeyFromLegacyParentBackup(t *testing.T) {
 	}
 	if string(got) != string(want) {
 		t.Fatalf("restored key = %q, want %q", got, want)
+	}
+}
+
+func TestLoadOrCreateValidatorKeyLoadsLegacyPlaintextFile(t *testing.T) {
+	base := t.TempDir()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	legacy := legacyValidatorKeyFile{
+		NodeID:      "msc_legacy",
+		ValidatorID: "VAL_LEGACY",
+		PublicKey:   hex.EncodeToString(pub),
+		PrivateKey:  hex.EncodeToString(priv),
+	}
+	raw, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("marshal legacy key: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "validator.sec"), raw, 0600); err != nil {
+		t.Fatalf("write legacy key: %v", err)
+	}
+
+	got := LoadOrCreateValidatorKey("msc_legacy", base)
+	if !isValidatorKeyUsable(got) {
+		t.Fatalf("legacy key was not loaded")
+	}
+	if !got.PublicKey.Equal(pub) {
+		t.Fatalf("public key mismatch after legacy load")
 	}
 }
