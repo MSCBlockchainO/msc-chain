@@ -441,7 +441,11 @@ func (n *Node) syncFrozenValidatorSetHashesFromChain() int {
 		}
 		return nil
 	}
-	for h := uint64(1); h <= tip; h++ {
+	startHeight := uint64(1)
+	if tip > recentMaterializationWindow {
+		startHeight = tip - recentMaterializationWindow
+	}
+	for h := startHeight; h <= tip; h++ {
 		blk, ok := n.Blockchain.GetBlock(h)
 		if !ok {
 			continue
