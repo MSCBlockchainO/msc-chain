@@ -25176,16 +25176,36 @@ func StartNode(
 	node.logicalMu.Unlock()
 
 	startupConsensusRecovery := func() {
+		started := time.Now()
+		log.Printf("[STARTUP-RECOVERY] consensus_recovery start role=%s height=%d", node.Role, node.Blockchain.Height())
+		log.Printf("[STARTUP-RECOVERY] step=replay_validator_freeze_journal start")
 		node.replayValidatorFreezeJournal()
+		log.Printf("[STARTUP-RECOVERY] step=replay_validator_freeze_journal done")
+		log.Printf("[STARTUP-RECOVERY] step=sync_frozen_validator_set_hashes start")
 		node.syncFrozenValidatorSetHashesFromChain()
+		log.Printf("[STARTUP-RECOVERY] step=sync_frozen_validator_set_hashes done")
+		log.Printf("[STARTUP-RECOVERY] step=snapshot_epoch_validators start epoch=%d", node.currentEpoch())
 		node.snapshotEpochValidators(node.currentEpoch())
+		log.Printf("[STARTUP-RECOVERY] step=snapshot_epoch_validators done")
+		log.Printf("[STARTUP-RECOVERY] step=apply_startup_consensus_recovery start")
 		node.applyStartupConsensusRecovery()
+		log.Printf("[STARTUP-RECOVERY] step=apply_startup_consensus_recovery done")
 		if chainHeight := uint64(node.Blockchain.Height()); node.recoverDueValidatorTransitionsAtStartup(chainHeight) {
 			log.Printf("[STARTUP-RECOVERY] applied due validator transition height=%d", chainHeight)
 		}
+		log.Printf("[STARTUP-RECOVERY] consensus_recovery done duration=%s", time.Since(started).Truncate(time.Millisecond))
 	}
 	if node.Role == "validator" {
-		startupConsensusRecovery()
+		done := make(chan struct{})
+		node.SafeGo("startup_consensus_recovery", func() {
+			defer close(done)
+			startupConsensusRecovery()
+		})
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			log.Printf("[STARTUP-RECOVERY] consensus_recovery continuing_in_background wait=5s height=%d", node.Blockchain.Height())
+		}
 	} else {
 		node.SafeGo("startup_consensus_recovery", startupConsensusRecovery)
 	}
