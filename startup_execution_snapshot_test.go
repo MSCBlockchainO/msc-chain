@@ -912,6 +912,23 @@ func TestRuntimeStatusSeparatesExecutionReadyFromSyncComplete(t *testing.T) {
 	}
 }
 
+func TestStartupExecutionSnapshotMissingRunsInBackgroundWhenLiveTipExecutionLedgerPresent(t *testing.T) {
+	node, parent, execLedger, _ := setupStartupExecutionSnapshotNode(t, []string{"A", "B", "C", "D"})
+
+	liveTipLedger := execLedger.Clone()
+	addBalance(&liveTipLedger, CoinSymbol, TREASURY_ADDRESS, 55)
+	node.Ledger = liveTipLedger.Clone()
+	node.setExecutionLedger(liveTipLedger)
+
+	ok, reason := node.startupExecutionSnapshotStatus(parent.ID)
+	if !ok {
+		t.Fatalf("expected missing startup execution snapshot to run in background, got reason=%q", reason)
+	}
+	if want := startupExecutionSnapshotBackgroundReason(parent.ID); reason != want {
+		t.Fatalf("unexpected background reason: got=%q want=%q", reason, want)
+	}
+}
+
 func TestStartupExecutionSnapshotCanRebuildLocallyRequiresFullHistory(t *testing.T) {
 	node, parent, _, _ := setupStartupExecutionSnapshotNode(t, []string{"A", "B", "C", "D"})
 

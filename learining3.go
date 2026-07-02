@@ -14348,6 +14348,33 @@ func (n *Node) authoritativeExecutionLedgerAvailable(height uint64) bool {
 	return false
 }
 
+func startupExecutionSnapshotBackgroundReason(finalized uint64) string {
+	return fmt.Sprintf("startup_execution_snapshot_rebuild_background_h_%d", finalized)
+}
+
+func (n *Node) startupExecutionSnapshotCanRunInBackground(finalized uint64) bool {
+	if n == nil || finalized == 0 || n.Blockchain == nil {
+		return false
+	}
+	if n.Blockchain.Height() < finalized || n.localCommittedHistoryHeight() < finalized {
+		return false
+	}
+	block, ok := n.Blockchain.GetBlock(finalized)
+	if !ok {
+		block, ok = n.LoadBlock(int(finalized))
+	}
+	if !ok || strings.TrimSpace(block.StateRoot) == "" {
+		return false
+	}
+	if syncing, _, _ := n.effectiveConsensusSyncState(finalized); syncing {
+		return false
+	}
+	if n.snapshotSessionActive() {
+		return false
+	}
+	return ledgerHasInitializedBacking(n.ExecutionLedger)
+}
+
 func (n *Node) markExecutionSnapshotReadyHeight(height uint64) {
 	if n == nil || height == 0 {
 		return
@@ -14695,6 +14722,10 @@ func (n *Node) startupExecutionSnapshotStatus(finalized uint64) (bool, string) {
 	if n.authoritativeExecutionLedgerAvailable(finalized) {
 		return true, "ready"
 	}
+	if n.startupExecutionSnapshotCanRunInBackground(finalized) {
+		n.maybeScheduleStartupExecutionSnapshotRebuild(finalized, "live_tip_execution_available")
+		return true, startupExecutionSnapshotBackgroundReason(finalized)
+	}
 	n.executionSnapshotRebuildMu.Lock()
 	readyHeight := n.executionSnapshotRebuildReadyHeight
 	failedHeight := n.executionSnapshotRebuildFailedHeight
@@ -14930,6 +14961,10 @@ func (n *Node) ensureStartupTrustedExecutionSnapshotsInternal(finalized uint64, 
 	if n.authoritativeExecutionLedgerAvailable(finalized) {
 		n.markExecutionSnapshotReadyHeight(finalized)
 		return true, "ready"
+	}
+	if n.startupExecutionSnapshotCanRunInBackground(finalized) {
+		n.maybeScheduleStartupExecutionSnapshotRebuild(finalized, "live_tip_execution_available")
+		return true, startupExecutionSnapshotBackgroundReason(finalized)
 	}
 	canRebuildLocally := n.startupExecutionSnapshotCanRebuildLocally(finalized)
 	if !canRebuildLocally {
