@@ -34944,7 +34944,7 @@ func main() {
 
 	node.SafeGoLoop("status_tick", 3*time.Second, func() {
 
-		ticker := time.NewTicker(15 * time.Second)
+		ticker := time.NewTicker(5 * time.Second)
 
 		defer ticker.Stop()
 
@@ -34954,6 +34954,7 @@ func main() {
 
 			case <-ticker.C:
 				node.maybeSyncToBestObservedHeight("status_tick")
+				_ = node.recoverSignedCommitQuorumAtCurrentHeight("status_tick")
 
 				fmt.Printf(
 
@@ -36642,8 +36643,8 @@ func blockProductionStaleThreshold() time.Duration {
 	if threshold <= 0 {
 		threshold = 15 * time.Second
 	}
-	if threshold > 15*time.Second {
-		threshold = 15 * time.Second
+	if threshold > 10*time.Second {
+		threshold = 10 * time.Second
 	}
 	return threshold
 }

@@ -4093,6 +4093,52 @@ func TestSignedCommitQuorumDoesNotMixExecutionOutcomes(t *testing.T) {
 	}
 }
 
+func TestSignedCommitQuorumRecoversWithMissingExecutionVoteCache(t *testing.T) {
+	oldRequireWallet := ConfigAuthRequireWallet
+	oldRequireStake := ValidatorRequireStake
+	oldStrictActivation := ValidatorOnboardingStrictActivation
+	t.Cleanup(func() {
+		ConfigAuthRequireWallet = oldRequireWallet
+		ValidatorRequireStake = oldRequireStake
+		ValidatorOnboardingStrictActivation = oldStrictActivation
+	})
+	ConfigAuthRequireWallet = false
+	ValidatorRequireStake = false
+	ValidatorOnboardingStrictActivation = false
+
+	resetExecPoolForTest(t)
+	validators := []string{"A", "B", "C", "D"}
+	privKeys := installCommitVoteKeysForTest(t, validators)
+	node := newTestNodeForResultGossip(t, t.TempDir(), validators)
+	node.ID = "A"
+	node.Role = "validator"
+
+	epoch := node.currentEpoch()
+	block := node.BuildLeaderBlock(epoch)
+	if !node.storeLeaderBlock(block) {
+		t.Fatalf("failed to store leader block")
+	}
+	required := node.executionQuorumRequiredForEpoch(epoch)
+	if required != 3 {
+		t.Fatalf("unexpected quorum requirement: got=%d want=3", required)
+	}
+
+	for _, signer := range []string{"A", "B", "C"} {
+		node.handleCommitMsg(signedCommitMsgForTest(t, block, signer, privKeys[signer]))
+	}
+	if got := node.Blockchain.Height(); got < epoch {
+		t.Fatalf("signed commit quorum should recover without execution-vote cache, height=%d want_at_least=%d", got, epoch)
+	}
+	final := node.Blockchain.LastBlock()
+	if len(final.ExecutionResults) < required {
+		t.Fatalf("expected commit witnesses to backfill execution evidence, got=%d required=%d", len(final.ExecutionResults), required)
+	}
+	finalValidators := node.freezeValidatorSetForHeight(final.ID, node.GetConsensusValidators(int(final.ID)))
+	if err := node.verifyBlockConsensusEvidence(final, finalValidators); err != nil {
+		t.Fatalf("recovered final block evidence did not verify: %v", err)
+	}
+}
+
 func commitFollowTestProposal(node *Node, epoch uint64, round uint32, fill string) Block {
 	block := node.BuildLeaderBlock(epoch)
 	block.Round = round

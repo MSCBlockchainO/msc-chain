@@ -5169,6 +5169,58 @@ func canonicalExecutionResults(results []ExecutionResult) []ExecutionResult {
 	return out
 }
 
+func executionResultsWithCommitWitnesses(block Block, execHash string, txMerkle string, results []ExecutionResult, witnesses []ValidatorSignature) []ExecutionResult {
+	execHash = strings.TrimSpace(execHash)
+	txMerkle = strings.TrimSpace(txMerkle)
+	out := append([]ExecutionResult{}, results...)
+	seen := make(map[string]struct{}, len(out)+len(witnesses))
+	for i := range out {
+		signer := normalizeValidatorID(out[i].Signer)
+		if signer == "" {
+			continue
+		}
+		out[i].Signer = signer
+		seen[signer] = struct{}{}
+	}
+	for _, witness := range witnesses {
+		signer := normalizeValidatorID(witness.Validator)
+		sig := strings.TrimSpace(witness.Signature)
+		if signer == "" || sig == "" {
+			continue
+		}
+		if _, ok := seen[signer]; ok {
+			continue
+		}
+		seen[signer] = struct{}{}
+		out = append(out, ExecutionResult{
+			Height:              block.ID,
+			Round:               block.Round,
+			BlockHash:           strings.TrimSpace(block.BlockHash),
+			Signer:              signer,
+			ResultHash:          execHash,
+			TxMerkle:            txMerkle,
+			ExecutionResultHash: canonicalExecutionResultHash(block.ID, strings.TrimSpace(block.BlockHash), execHash, txMerkle),
+			Signature:           sig,
+		})
+	}
+	return out
+}
+
+func executionResultsFromCommitWitnesses(block Block, execHash string, txMerkle string, witnesses []ValidatorSignature) ([]ExecutionResult, []string, int, bool) {
+	results := canonicalExecutionResults(executionResultsWithCommitWitnesses(block, execHash, txMerkle, nil, witnesses))
+	if len(results) == 0 {
+		return nil, nil, 0, false
+	}
+	signers := make([]string, 0, len(results))
+	for _, result := range results {
+		if signer := normalizeValidatorID(result.Signer); signer != "" {
+			signers = append(signers, signer)
+		}
+	}
+	signers = canonicalValidatorIDs(signers)
+	return results, signers, len(results), len(results) > 0
+}
+
 func (n *Node) executionCommitPrecondition(epoch uint64, leaderBlock Block) (int, int, bool, string) {
 	if n == nil || epoch == 0 || leaderBlock.ID != epoch {
 		return 0, 0, false, "invalid_commit_target"
@@ -5425,7 +5477,7 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 	if expected == "" || expected != execHash {
 		return false
 	}
-	commitSigners, _, commitCount, commitRequired := n.commitVoteEvidenceForResult(epoch, leaderBlock.BlockHash, expected, leaderBlock.MempoolRoot)
+	commitSigners, commitWitnesses, commitCount, commitRequired := n.commitVoteEvidenceForResult(epoch, leaderBlock.BlockHash, expected, leaderBlock.MempoolRoot)
 	if commitRequired == 0 {
 		commitRequired = required
 	}
@@ -5500,7 +5552,7 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 	final.RequiredQuorum = policy.Required
 	final.StrictQuorum = policy.StrictRequired
 
-	final.ExecutionResults = canonicalExecutionResults(results)
+	final.ExecutionResults = canonicalExecutionResults(executionResultsWithCommitWitnesses(leaderBlock, execHash, txMerkle, results, commitWitnesses))
 	final.Signatures = commitSigners
 	proposalHashForVotes := executionVoteProposalHashForFinalBlock(final)
 	for i := range final.ExecutionResults {
@@ -6399,6 +6451,76 @@ func (n *Node) tryFinalizeFromStoredResults() {
 			return
 		}
 	}
+	_ = n.recoverSignedCommitQuorumAtCurrentHeight("stored_results_quorum_shortfall")
+}
+
+func (n *Node) recoverSignedCommitQuorumAtCurrentHeight(reason string) bool {
+	if n == nil || n.Blockchain == nil || n.consensusRecomputePauseActive() {
+		return false
+	}
+	epoch := n.Blockchain.Height() + 1
+	if epoch == 0 || epoch != n.currentEpoch() {
+		return false
+	}
+	for _, block := range n.candidateProposalBlocksForEpoch(epoch) {
+		if block.ID != epoch {
+			continue
+		}
+		execHash := strings.TrimSpace(block.StateRoot)
+		if execHash == "" {
+			execHash = strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
+		}
+		if execHash == "" {
+			continue
+		}
+		txMerkle := strings.TrimSpace(block.MempoolRoot)
+		_, commitWitnesses, commitVotes, required := n.commitVoteEvidenceForResult(epoch, block.BlockHash, execHash, txMerkle)
+		if required == 0 {
+			required = n.executionQuorumRequiredForEpoch(epoch)
+		}
+		if required == 0 || commitVotes < required {
+			continue
+		}
+		proposalKey := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, execHash)
+		results, signers, executionVotes, executionOK := getExecResultsGlobal(epoch, proposalKey, execHash, txMerkle)
+		if !executionOK || executionVotes < required {
+			results, signers, executionVotes, executionOK = getExecResultsForBlockHashGlobal(epoch, block.BlockHash, execHash, txMerkle)
+		}
+		if !executionOK || executionVotes < required {
+			results, signers, executionVotes, executionOK = executionResultsFromCommitWitnesses(block, execHash, txMerkle, commitWitnesses)
+		}
+		if !executionOK || executionVotes < required {
+			if DebugConsensus {
+				log.Printf("[SIGNED-COMMIT-RECOVER-DEFER] height=%d reason=execution_votes_missing block=%s exec=%s commit_votes=%d required=%d exec_votes=%d trigger=%s",
+					epoch,
+					ShortHash(block.BlockHash),
+					ShortHash(execHash),
+					commitVotes,
+					required,
+					executionVotes,
+					strings.TrimSpace(reason),
+				)
+			}
+			continue
+		}
+		n.execResultsMu.Lock()
+		_ = n.setQuorumLockedProposalLocked(block, "signed_commit_recovery", commitVotes, required)
+		n.execResultsMu.Unlock()
+		freezeExecPool(epoch, proposalKey, execHash)
+		if n.finalizeExecutionResult(epoch, execHash, txMerkle, results, signers) {
+			log.Printf("[SIGNED-COMMIT-RECOVER] height=%d reason=%s block=%s exec=%s commit_votes=%d execution_votes=%d required=%d",
+				epoch,
+				strings.TrimSpace(reason),
+				ShortHash(block.BlockHash),
+				ShortHash(execHash),
+				commitVotes,
+				executionVotes,
+				required,
+			)
+			return true
+		}
+	}
+	return false
 }
 
 func (n *Node) hasFinalExecutionResult(epoch uint64, execHash string, txMerkle string) bool {
@@ -6507,25 +6629,32 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 	if required == 0 || count < required || cm.Height != n.currentEpoch() {
 		return
 	}
+	n.execResultsMu.Lock()
+	_ = n.setQuorumLockedProposalLocked(block, "signed_commit_quorum", count, required)
+	n.execResultsMu.Unlock()
 	proposalKey := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, expected)
 	results, signers, executionVotes, executionOK := getExecResultsGlobal(block.ID, proposalKey, expected, block.MempoolRoot)
 	if !executionOK || executionVotes < required {
 		results, signers, executionVotes, executionOK = getExecResultsForBlockHashGlobal(block.ID, block.BlockHash, expected, block.MempoolRoot)
 		if !executionOK || executionVotes < required {
-			if DebugConsensus {
-				log.Printf("[EXEC-COMMIT-DEFER] height=%d reason=execution_votes_missing_for_commit block=%s votes=%d required=%d",
-					block.ID,
-					ShortHash(block.BlockHash),
-					executionVotes,
-					required,
-				)
+			var commitWitnesses []ValidatorSignature
+			_, commitWitnesses, _, _ = n.commitVoteEvidenceForResult(block.ID, block.BlockHash, expected, block.MempoolRoot)
+			results, signers, executionVotes, executionOK = executionResultsFromCommitWitnesses(block, expected, block.MempoolRoot, commitWitnesses)
+			if !executionOK || executionVotes < required {
+				if DebugConsensus {
+					log.Printf("[EXEC-COMMIT-DEFER] height=%d reason=execution_votes_missing_for_commit block=%s exec=%s commit_votes=%d required=%d exec_votes=%d",
+						block.ID,
+						ShortHash(block.BlockHash),
+						ShortHash(expected),
+						count,
+						required,
+						executionVotes,
+					)
+				}
+				return
 			}
-			return
 		}
 	}
-	n.execResultsMu.Lock()
-	_ = n.setQuorumLockedProposalLocked(block, "signed_commit_quorum", executionVotes, required)
-	n.execResultsMu.Unlock()
 	freezeExecPool(block.ID, proposalKey, expected)
 	_ = n.finalizeExecutionResult(block.ID, expected, block.MempoolRoot, results, signers)
 }

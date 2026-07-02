@@ -469,6 +469,33 @@ func (n *Node) verifyBlockExecutionResultSignature(result ExecutionResult, block
 			return nil
 		}
 	}
+	if block.BlockTime.Tick == TickFinalize {
+		hints := []string{
+			strings.TrimSpace(result.BlockHash),
+			executionVoteProposalHashForFinalBlock(block),
+		}
+		seenHints := make(map[string]struct{}, len(hints))
+		for _, proposalHash := range hints {
+			proposalHash = strings.TrimSpace(proposalHash)
+			if proposalHash == "" {
+				continue
+			}
+			if _, ok := seenHints[proposalHash]; ok {
+				continue
+			}
+			seenHints[proposalHash] = struct{}{}
+			if verifyCommitVoteSignature(CommitMsg{
+				Height:    block.ID,
+				Hash:      proposalHash,
+				ExecHash:  strings.TrimSpace(result.ResultHash),
+				TxMerkle:  strings.TrimSpace(result.TxMerkle),
+				From:      strings.TrimSpace(result.Signer),
+				Signature: sigHex,
+			}) {
+				return nil
+			}
+		}
+	}
 	return errors.New("invalid_execution_result_signature")
 }
 
