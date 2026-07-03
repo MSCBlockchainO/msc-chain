@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 func TestRuntimeAutoMemoryLimitMiB(t *testing.T) {
 	tests := []struct {
@@ -59,6 +62,32 @@ func TestRuntimeRequestedMaxProcsHonorsEnv(t *testing.T) {
 	got, source := runtimeRequestedMaxProcs("validator")
 	if got != 3 || source != "MSC_RUNTIME_MAX_PROCS" {
 		t.Fatalf("runtime max procs = %d/%s, want 3/MSC_RUNTIME_MAX_PROCS", got, source)
+	}
+}
+
+func TestRuntimeCPUSyncProfileCapsValidatorWorkers(t *testing.T) {
+	oldMaxProcs := runtime.GOMAXPROCS(2)
+	oldDelta := SyncDeltaReplayVerifyWorkers
+	oldEd25519 := SyncEd25519BatchVerifyWorkers
+	oldSnapshot := SyncSnapshotParallelChunks
+	t.Cleanup(func() {
+		runtime.GOMAXPROCS(oldMaxProcs)
+		SyncDeltaReplayVerifyWorkers = oldDelta
+		SyncEd25519BatchVerifyWorkers = oldEd25519
+		SyncSnapshotParallelChunks = oldSnapshot
+	})
+
+	SyncDeltaReplayVerifyWorkers = 8
+	SyncEd25519BatchVerifyWorkers = 8
+	SyncSnapshotParallelChunks = 8
+	applyRuntimeCPUSyncProfile("validator")
+
+	if SyncDeltaReplayVerifyWorkers != 2 || SyncEd25519BatchVerifyWorkers != 2 || SyncSnapshotParallelChunks != 2 {
+		t.Fatalf("validator CPU profile workers = delta:%d ed25519:%d snapshot:%d, want all 2",
+			SyncDeltaReplayVerifyWorkers,
+			SyncEd25519BatchVerifyWorkers,
+			SyncSnapshotParallelChunks,
+		)
 	}
 }
 

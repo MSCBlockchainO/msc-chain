@@ -7591,6 +7591,54 @@ func applyFullNodeSafeSyncProfile(role string) {
 	}
 }
 
+func runtimeSyncWorkerCap(role string) int {
+	role = normalizeNodeRole(role)
+	maxProcs := runtime.GOMAXPROCS(0)
+	if maxProcs <= 0 {
+		maxProcs = runtimeAutoMaxProcs(runtime.NumCPU(), role)
+	}
+	if maxProcs <= 0 {
+		maxProcs = 1
+	}
+	if role == "validator" && maxProcs > 2 {
+		maxProcs = 2
+	}
+	return maxProcs
+}
+
+func applyRuntimeCPUSyncProfile(role string) {
+	role = normalizeNodeRole(role)
+	if role != "validator" || truthyEnv("MSC_DISABLE_RUNTIME_CPU_GUARD") {
+		return
+	}
+	workerCap := runtimeSyncWorkerCap(role)
+	if workerCap <= 0 {
+		return
+	}
+	changes := []string{}
+	capInt := func(name string, ptr *int) {
+		if ptr == nil {
+			return
+		}
+		if *ptr > 0 && *ptr <= workerCap {
+			return
+		}
+		old := *ptr
+		*ptr = workerCap
+		changes = append(changes, fmt.Sprintf("%s=%d->%d", name, old, *ptr))
+	}
+	capInt("delta_replay_verify_workers", &SyncDeltaReplayVerifyWorkers)
+	capInt("ed25519_batch_verify_workers", &SyncEd25519BatchVerifyWorkers)
+	capInt("snapshot_parallel_chunks", &SyncSnapshotParallelChunks)
+	if len(changes) > 0 {
+		log.Printf("[SYNC-PROFILE] role=%s profile=validator_cpu_guard gomaxprocs=%d changes=%s",
+			role,
+			runtime.GOMAXPROCS(0),
+			strings.Join(changes, ","),
+		)
+	}
+}
+
 func deltaReplayVerifyWorkerCount(batchSize int) int {
 	if batchSize <= 0 {
 		return 1
@@ -24681,6 +24729,7 @@ func StartNode(
 		role = "full"
 	}
 	applyFullNodeSafeSyncProfile(role)
+	applyRuntimeCPUSyncProfile(role)
 	keyFP := validatorKeyFingerprint(vKey.PublicKey)
 	if keyLoaded {
 		log.Printf("[IDENTITY] key_loaded=true validator=%s fingerprint=%s expected=%s match=%t source=%s mode=%s",

@@ -907,6 +907,25 @@ func TestQueuedExecutionVoteDropThrottleStaysCoarseInDebugMode(t *testing.T) {
 	}
 }
 
+func TestExecutionVoteFarFutureOverflowWhileSyncing(t *testing.T) {
+	oldDirect := SyncDirectGossipMaxBlocks
+	oldDrift := ValidatorLivenessMaxHeightDriftBlocks
+	t.Cleanup(func() {
+		SyncDirectGossipMaxBlocks = oldDirect
+		ValidatorLivenessMaxHeightDriftBlocks = oldDrift
+	})
+
+	SyncDirectGossipMaxBlocks = 128
+	ValidatorLivenessMaxHeightDriftBlocks = 8
+
+	if executionVoteTooFarAheadWhileSyncing(100, 116) {
+		t.Fatal("vote inside sync queue window should be accepted for queueing")
+	}
+	if !executionVoteTooFarAheadWhileSyncing(100, 117) {
+		t.Fatal("vote outside sync queue window should be dropped during sync")
+	}
+}
+
 func TestRecordExecResultGlobalMovesChoiceForwardAcrossRoundGap(t *testing.T) {
 	resetExecPoolForTest(t)
 

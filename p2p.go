@@ -78,6 +78,7 @@ const (
 	execVoteReplayTTL               = 2 * time.Minute
 	execVoteStaleIngressTTL         = 30 * time.Second
 	execVoteRebroadcastCooldown     = 5 * time.Second
+	execVoteSyncDropLogCooldown     = 30 * time.Second
 	execVoteRatePerSigner           = 8
 	execVoteRateBurst               = 8
 	execMismatchStrikeWindow        = 3 * time.Minute
@@ -3065,6 +3066,24 @@ func executionVoteTooFarBehind(currentEpoch uint64, voteHeight uint64) bool {
 	return ok && lag > execVoteStaleLagBlocks
 }
 
+func executionVoteSyncQueueWindow() uint64 {
+	window := validatorLivenessMaxHeightDriftBlocks() * 2
+	if window < 16 {
+		window = 16
+	}
+	if direct := syncDirectGossipMaxBlocks(); direct > 0 && window > direct {
+		window = direct
+	}
+	return window
+}
+
+func executionVoteTooFarAheadWhileSyncing(currentEpoch uint64, voteHeight uint64) bool {
+	if currentEpoch == 0 || voteHeight == 0 || voteHeight <= currentEpoch {
+		return false
+	}
+	return voteHeight-currentEpoch > executionVoteSyncQueueWindow()
+}
+
 func benignExecutionVoteIngressReason(reason string) bool {
 	switch strings.TrimSpace(reason) {
 	case "ignored_committed_vote", "ignored_committed_vote_cached", "ignored_late_vote", "ignored_late_vote_cached":
@@ -3481,7 +3500,7 @@ func shouldThrottleExecutionVoteDrop(reason string) bool {
 		return true
 	}
 	switch reason {
-	case "duplicate_exec_vote", "duplicate_signer_proposal", "rate_limited", "replay_cache", "stale_committed_height":
+	case "duplicate_exec_vote", "duplicate_signer_proposal", "rate_limited", "replay_cache", "stale_committed_height", "sync_future_overflow", "future_epoch_overflow":
 		return true
 	default:
 		return false
@@ -3508,7 +3527,14 @@ func (n *Node) shouldLogExecutionVoteDrop(reason string, res ExecutionResultMsg,
 			ShortHash(strings.TrimSpace(proposalSnap.ProposalKey)),
 		)
 	}
-	return n.shouldLogLivenessReason(key, livenessReasonLogCooldown)
+	cooldown := livenessReasonLogCooldown
+	if strings.HasPrefix(strings.TrimSpace(reason), "queued_") ||
+		reason == "stale_committed_height" ||
+		reason == "sync_future_overflow" ||
+		reason == "future_epoch_overflow" {
+		cooldown = execVoteSyncDropLogCooldown
+	}
+	return n.shouldLogLivenessReason(key, cooldown)
 }
 
 func (n *Node) logExecutionVoteDrop(reason string, res ExecutionResultMsg, proposalSnap execProposalSnapshot) {
@@ -5703,6 +5729,11 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 	}
 	if blocked, reason, _ := n.consensusSyncGateForHeight(res.HeightHint); blocked {
 		if allowQueue {
+			currentEpoch := n.currentEpoch()
+			if executionVoteTooFarAheadWhileSyncing(currentEpoch, res.HeightHint) {
+				n.logExecutionVoteDrop("sync_future_overflow", res, execProposalSnapshot{})
+				return
+			}
 			n.queueExecResult(res)
 			if reason == "" {
 				reason = "syncing"
@@ -5716,6 +5747,10 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 	// Queue them instead of misclassifying as "non-active validator".
 	if res.HeightHint > currentEpoch {
 		if allowQueue {
+			if executionVoteTooFarAheadWhileSyncing(currentEpoch, res.HeightHint) {
+				n.logExecutionVoteDrop("future_epoch_overflow", res, execProposalSnapshot{})
+				return
+			}
 			n.queueExecResult(res)
 			n.logExecutionVoteDrop("queued_future_epoch", res, execProposalSnapshot{})
 		}
