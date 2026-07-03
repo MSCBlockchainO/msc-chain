@@ -7445,6 +7445,31 @@ func replacePeerAddrForBase(list []string, fixedAddr string) []string {
 	out = append(out, fixedAddr)
 	return sanitizePeerListWithPreferred(out, []string{fixedAddr})
 }
+
+func (n *Node) isTrustedConfiguredPeerAddr(rawAddr string) bool {
+	if n == nil {
+		return false
+	}
+	base := strings.TrimSpace(stripP2PComponent(rawAddr))
+	if base == "" {
+		return false
+	}
+	persistent, seeds := n.configPeerListsSnapshot()
+	for _, addr := range append(persistent, seeds...) {
+		if strings.EqualFold(strings.TrimSpace(stripP2PComponent(addr)), base) {
+			return true
+		}
+	}
+	ValidatorAddrBook.mu.RLock()
+	defer ValidatorAddrBook.mu.RUnlock()
+	for _, addr := range ValidatorAddrBook.m {
+		if strings.EqualFold(strings.TrimSpace(stripP2PComponent(addr)), base) {
+			return true
+		}
+	}
+	return false
+}
+
 func (n *Node) resetPeerRetryState(peerID string) {
 	if n == nil || peerID == "" {
 		return
@@ -7460,8 +7485,10 @@ func (n *Node) refreshPeerIDMismatch(rawAddr, expectedPeerID string, dialErr err
 	if n == nil || expectedPeerID == "" || rawAddr == "" || dialErr == nil {
 		return false
 	}
-	// Auto-heal only for private/LAN targets to avoid trusting public mismatches.
-	if !isPeerAddrPrivate(rawAddr) {
+	// Auto-heal public mismatches only when the endpoint is already operator-
+	// trusted. EC2 validators often advertise public IPs, so a strict private
+	// gate leaves stale persistent peer IDs permanently isolated after rebuilds.
+	if !isPeerAddrPrivate(rawAddr) && !n.isTrustedConfiguredPeerAddr(rawAddr) {
 		return false
 	}
 	remotePeerID := remotePeerIDFromMismatchError(dialErr)
@@ -9826,6 +9853,18 @@ func (n *Node) startMDNS() {
 		fmt.Printf("Ã°Å¸â€œÂ¡ mDNS discovery enabled (%s)\n", serviceTag)
 	}
 }
+
+func pubsubValidateWorkerCount() int {
+	validateWorkers := runtime.GOMAXPROCS(0)
+	if validateWorkers < 1 {
+		validateWorkers = 1
+	}
+	if MaxValidateWorkers > 0 && validateWorkers > MaxValidateWorkers {
+		validateWorkers = MaxValidateWorkers
+	}
+	return validateWorkers
+}
+
 func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 	// =====================================================
 	// Ã°Å¸â€â€˜ CONVERT VALIDATOR KEY TO LIBP2P KEY
@@ -9936,13 +9975,7 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 	// =====================================================
 	params := pubsub.DefaultGossipSubParams()
 	params.HeartbeatInterval = 5 * time.Second
-	validateWorkers := runtime.NumCPU()
-	if validateWorkers < 2 {
-		validateWorkers = 2
-	}
-	if MaxValidateWorkers > 0 && validateWorkers > MaxValidateWorkers {
-		validateWorkers = MaxValidateWorkers
-	}
+	validateWorkers := pubsubValidateWorkerCount()
 	validateQueue := MaxValidateQueue
 	if validateQueue <= 0 {
 		validateQueue = 128

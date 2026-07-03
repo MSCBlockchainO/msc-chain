@@ -91,6 +91,32 @@ func TestRuntimeCPUSyncProfileCapsValidatorWorkers(t *testing.T) {
 	}
 }
 
+func TestRuntimeCPUSyncProfileCapsFullNodeWorkers(t *testing.T) {
+	oldMaxProcs := runtime.GOMAXPROCS(2)
+	oldDelta := SyncDeltaReplayVerifyWorkers
+	oldEd25519 := SyncEd25519BatchVerifyWorkers
+	oldSnapshot := SyncSnapshotParallelChunks
+	t.Cleanup(func() {
+		runtime.GOMAXPROCS(oldMaxProcs)
+		SyncDeltaReplayVerifyWorkers = oldDelta
+		SyncEd25519BatchVerifyWorkers = oldEd25519
+		SyncSnapshotParallelChunks = oldSnapshot
+	})
+
+	SyncDeltaReplayVerifyWorkers = 8
+	SyncEd25519BatchVerifyWorkers = 8
+	SyncSnapshotParallelChunks = 8
+	applyRuntimeCPUSyncProfile("full")
+
+	if SyncDeltaReplayVerifyWorkers != 2 || SyncEd25519BatchVerifyWorkers != 2 || SyncSnapshotParallelChunks != 2 {
+		t.Fatalf("full-node CPU profile workers = delta:%d ed25519:%d snapshot:%d, want all 2",
+			SyncDeltaReplayVerifyWorkers,
+			SyncEd25519BatchVerifyWorkers,
+			SyncSnapshotParallelChunks,
+		)
+	}
+}
+
 func TestRuntimePressureModeFor(t *testing.T) {
 	tests := []struct {
 		name       string

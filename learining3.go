@@ -7608,7 +7608,12 @@ func runtimeSyncWorkerCap(role string) int {
 
 func applyRuntimeCPUSyncProfile(role string) {
 	role = normalizeNodeRole(role)
-	if role != "validator" || truthyEnv("MSC_DISABLE_RUNTIME_CPU_GUARD") {
+	if truthyEnv("MSC_DISABLE_RUNTIME_CPU_GUARD") {
+		return
+	}
+	switch role {
+	case "validator", "auto", "full", "archive":
+	default:
 		return
 	}
 	workerCap := runtimeSyncWorkerCap(role)
@@ -7631,7 +7636,7 @@ func applyRuntimeCPUSyncProfile(role string) {
 	capInt("ed25519_batch_verify_workers", &SyncEd25519BatchVerifyWorkers)
 	capInt("snapshot_parallel_chunks", &SyncSnapshotParallelChunks)
 	if len(changes) > 0 {
-		log.Printf("[SYNC-PROFILE] role=%s profile=validator_cpu_guard gomaxprocs=%d changes=%s",
+		log.Printf("[SYNC-PROFILE] role=%s profile=runtime_cpu_guard gomaxprocs=%d changes=%s",
 			role,
 			runtime.GOMAXPROCS(0),
 			strings.Join(changes, ","),
@@ -12417,6 +12422,31 @@ func (n *Node) scheduleImmediateSyncResume(reason string, targetHeight uint64) {
 	}()
 }
 
+func (n *Node) recoverNearTipSyncStall(targetHeight uint64, reason string) bool {
+	if n == nil || n.Blockchain == nil || targetHeight == 0 {
+		return false
+	}
+	localHeight := n.Blockchain.Height()
+	if targetHeight <= localHeight || targetHeight-localHeight > 2 {
+		return false
+	}
+	missingHeight := localHeight + 1
+	if DebugSync || DebugConsensus {
+		fmt.Printf("[SYNC-WATCHDOG] near_tip_recovery local=%d target=%d missing=%d reason=%s\n",
+			localHeight, targetHeight, missingHeight, strings.TrimSpace(reason))
+	}
+	if !n.recoverMissingBlockFromPeers(missingHeight, reason) {
+		return false
+	}
+	afterHeight := n.Blockchain.Height()
+	if afterHeight >= targetHeight {
+		n.maybeExitSyncMode(reason)
+		return true
+	}
+	n.scheduleImmediateSyncResume(reason+"_followup", targetHeight)
+	return true
+}
+
 func (n *Node) maybeForceNearTipValidatorSetResync(localHeight uint64, mismatchHeight uint64, reason string) {
 	if n == nil || mismatchHeight == 0 {
 		return
@@ -13120,6 +13150,9 @@ func (n *Node) startSyncStallWatchdog(ctx context.Context) {
 			}
 
 			if !shouldRestart {
+				continue
+			}
+			if n.recoverNearTipSyncStall(target, "sync_stall_watchdog_near_tip") {
 				continue
 			}
 			if n.maybeRewindForkedTipFromAheadPeers(target, "sync_stall_watchdog") {
