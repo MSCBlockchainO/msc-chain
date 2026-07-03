@@ -7536,10 +7536,11 @@ func syncDeltaReplayBatchBlocks() uint64 {
 }
 
 func syncDeltaReplayVerifyWorkers() int {
-	if SyncDeltaReplayVerifyWorkers <= 0 {
-		return 8
+	workers := SyncDeltaReplayVerifyWorkers
+	if workers <= 0 {
+		workers = runtimeWorkerBudget()
 	}
-	return SyncDeltaReplayVerifyWorkers
+	return capRuntimeWorkers(workers)
 }
 
 func applyFullNodeSafeSyncProfile(role string) {
@@ -7600,8 +7601,8 @@ func runtimeSyncWorkerCap(role string) int {
 	if maxProcs <= 0 {
 		maxProcs = 1
 	}
-	if role == "validator" && maxProcs > 2 {
-		maxProcs = 2
+	if limit := runtimeCPUHardLimit(role); limit > 0 && maxProcs > limit {
+		maxProcs = limit
 	}
 	return maxProcs
 }
@@ -7649,9 +7650,6 @@ func deltaReplayVerifyWorkerCount(batchSize int) int {
 		return 1
 	}
 	workers := syncDeltaReplayVerifyWorkers()
-	if workers > 16 {
-		workers = 16
-	}
 	if workers < 1 {
 		workers = 1
 	}
@@ -8168,10 +8166,11 @@ func syncSnapshotChunkSizeBytes() uint64 {
 }
 
 func syncSnapshotParallelChunks() int {
-	if SyncSnapshotParallelChunks <= 0 {
-		return 8
+	workers := SyncSnapshotParallelChunks
+	if workers <= 0 {
+		workers = runtimeWorkerBudget()
 	}
-	return SyncSnapshotParallelChunks
+	return capRuntimeWorkers(workers)
 }
 
 func syncSnapshotDistributionEnabled() bool {
@@ -8199,12 +8198,9 @@ func syncDeltaStateSyncEnabled() bool {
 func syncEd25519BatchVerifyWorkers() int {
 	workers := SyncEd25519BatchVerifyWorkers
 	if workers <= 0 {
-		return 8
+		workers = runtimeWorkerBudget()
 	}
-	if workers > 32 {
-		return 32
-	}
-	return workers
+	return capRuntimeWorkers(workers)
 }
 
 func snapshotChunkWorkerCount(missingCount int) int {
@@ -8213,10 +8209,7 @@ func snapshotChunkWorkerCount(missingCount int) int {
 	}
 	workers := syncSnapshotParallelChunks()
 	if workers <= 0 {
-		workers = 8
-	}
-	if workers > 16 {
-		workers = 16
+		workers = 1
 	}
 	if workers > missingCount {
 		workers = missingCount
@@ -17841,6 +17834,12 @@ func (n *Node) syncBlocksFromPeersWithStage(targetHeight, batchMax uint64, prefl
 			if peerLimit < 2 {
 				peerLimit = 2
 			}
+			if workerCap := runtimeSyncWorkerCap(n.Role); workerCap > 0 && peerLimit > workerCap {
+				peerLimit = workerCap
+			}
+			if peerLimit < 1 {
+				peerLimit = 1
+			}
 			selectedPeers := n.pickSyncPeers(start, exclude, peerLimit)
 			if len(selectedPeers) == 0 {
 				fmt.Printf("[SYNC-BATCH-STOP] stage=%s local=%d target=%d reason=no_sync_peer exclude=%d\n",
@@ -17890,6 +17889,12 @@ func (n *Node) syncBlocksFromPeersWithStage(targetHeight, batchMax uint64, prefl
 			if peerLimit > 8 {
 				peerLimit = 8
 			}
+		}
+		if workerCap := runtimeSyncWorkerCap(n.Role); workerCap > 0 && peerLimit > workerCap {
+			peerLimit = workerCap
+		}
+		if peerLimit < 1 {
+			peerLimit = 1
 		}
 		selectedPeers := n.pickSyncPeers(windowTarget, exclude, peerLimit)
 		assignments := planReplicatedSyncRangeAssignments(start, targetHeight, fetchWindow, selectedPeers, replicationFactor)

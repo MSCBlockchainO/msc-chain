@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"runtime"
@@ -85,6 +86,92 @@ func runtimeAutoMaxProcs(cpuCount int, role string) int {
 	return maxProcs
 }
 
+func runtimeHighCPUOverrideEnabled() bool {
+	return truthyEnv("MSC_ALLOW_HIGH_NODE_CPU") || truthyEnv("MSC_ALLOW_HIGH_VALIDATOR_CPU")
+}
+
+func runtimeCPUHardLimit(role string) int {
+	if runtimeHighCPUOverrideEnabled() || truthyEnv("MSC_DISABLE_RUNTIME_CPU_HARD_LIMIT") {
+		return 0
+	}
+	if value, ok := parsePositiveIntEnv("MSC_RUNTIME_CPU_HARD_LIMIT"); ok {
+		return value
+	}
+	role = strings.ToLower(strings.TrimSpace(role))
+	switch role {
+	case "light":
+		if value, ok := parsePositiveIntEnv("MSC_LIGHT_CPU_HARD_LIMIT"); ok {
+			return value
+		}
+		return 1
+	case "archive":
+		if value, ok := parsePositiveIntEnv("MSC_ARCHIVE_CPU_HARD_LIMIT"); ok {
+			return value
+		}
+		return 4
+	case "validator", "auto", "":
+		if value, ok := parsePositiveIntEnv("MSC_VALIDATOR_CPU_HARD_LIMIT"); ok {
+			return value
+		}
+		return 2
+	case "full":
+		if value, ok := parsePositiveIntEnv("MSC_FULLNODE_CPU_HARD_LIMIT"); ok {
+			return value
+		}
+		return 2
+	default:
+		return 2
+	}
+}
+
+func clampRuntimeMaxProcs(role string, target int) int {
+	if target <= 0 {
+		return target
+	}
+	limit := runtimeCPUHardLimit(role)
+	if limit > 0 && target > limit {
+		return limit
+	}
+	return target
+}
+
+func runtimeWorkerBudget() int {
+	workers := runtime.GOMAXPROCS(0)
+	if workers <= 0 {
+		workers = runtimeAutoMaxProcs(runtime.NumCPU(), "auto")
+	}
+	if workers <= 0 {
+		workers = 1
+	}
+	if value, ok := parsePositiveIntEnv("MSC_RUNTIME_WORKER_BUDGET"); ok {
+		if workers > value {
+			workers = value
+		}
+	} else if !runtimeHighCPUOverrideEnabled() {
+		if limit := runtimeCPUHardLimit("auto"); limit > 0 && workers > limit {
+			workers = limit
+		}
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	return workers
+}
+
+func capRuntimeWorkers(workers int) int {
+	budget := runtimeWorkerBudget()
+	if workers <= 0 {
+		return budget
+	}
+	if workers > budget {
+		return budget
+	}
+	if workers < 1 {
+		return 1
+	}
+	return workers
+}
+
 func parsePositiveIntEnv(name string) (int, bool) {
 	raw := strings.TrimSpace(os.Getenv(name))
 	if raw == "" {
@@ -124,13 +211,19 @@ func configureRuntimeCPUGuard(role string) {
 	if cpuCount := runtime.NumCPU(); cpuCount > 0 && target > cpuCount {
 		target = cpuCount
 	}
+	requested := target
+	target = clampRuntimeMaxProcs(role, target)
 	current := runtime.GOMAXPROCS(0)
 	if target != current {
 		runtime.GOMAXPROCS(target)
-		log.Printf("[RUNTIME-GUARD] gomaxprocs=%d role=%s source=%s previous=%d cpus=%d", target, role, source, current, runtime.NumCPU())
+		capNote := ""
+		if requested != target {
+			capNote = fmt.Sprintf(" requested=%d hard_limit=%d", requested, runtimeCPUHardLimit(role))
+		}
+		log.Printf("[RUNTIME-GUARD] gomaxprocs=%d role=%s source=%s previous=%d cpus=%d%s", target, role, source, current, runtime.NumCPU(), capNote)
 		return
 	}
-	log.Printf("[RUNTIME-GUARD] gomaxprocs_existing=%d role=%s source=%s cpus=%d", current, role, source, runtime.NumCPU())
+	log.Printf("[RUNTIME-GUARD] gomaxprocs_existing=%d role=%s source=%s cpus=%d hard_limit=%d", current, role, source, runtime.NumCPU(), runtimeCPUHardLimit(role))
 }
 
 func homeNodeStatusFields(role string) map[string]any {
@@ -142,7 +235,10 @@ func homeNodeStatusFields(role string) map[string]any {
 		"gomaxprocs":                         runtime.GOMAXPROCS(0),
 		"host_cpu_count":                     runtime.NumCPU(),
 		"cpu_guard_auto_max_procs":           runtimeAutoMaxProcs(runtime.NumCPU(), role),
+		"cpu_guard_hard_limit":               runtimeCPUHardLimit(role),
+		"cpu_guard_high_cpu_override":        runtimeHighCPUOverrideEnabled(),
 		"cpu_guard_disabled":                 truthyEnv("MSC_DISABLE_RUNTIME_CPU_GUARD"),
+		"runtime_worker_budget":              runtimeWorkerBudget(),
 		"sync_worker_cpu_cap":                runtimeSyncWorkerCap(role),
 		"sync_delta_replay_verify_workers":   SyncDeltaReplayVerifyWorkers,
 		"sync_ed25519_batch_verify_workers":  SyncEd25519BatchVerifyWorkers,

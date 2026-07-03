@@ -20,6 +20,7 @@ func ParallelValidateTransactions(txs []Transaction, ledger Ledger, workers int)
 	if workers <= 0 {
 		workers = runtime.GOMAXPROCS(0)
 	}
+	workers = capRuntimeWorkers(workers)
 	if workers < 1 {
 		workers = 1
 	}

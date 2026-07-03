@@ -11,23 +11,31 @@ import (
 )
 
 func syncSnapshotChunkReplicationFactor() int {
-	if SyncSnapshotChunkReplicationFactor <= 0 {
-		return 2
+	factor := SyncSnapshotChunkReplicationFactor
+	if factor <= 0 {
+		factor = 2
 	}
-	if SyncSnapshotChunkReplicationFactor > 3 {
-		return 3
+	if factor > 3 {
+		factor = 3
 	}
-	return SyncSnapshotChunkReplicationFactor
+	if budget := runtimeWorkerBudget(); budget <= 2 && factor > 1 {
+		factor = 1
+	}
+	return factor
 }
 
 func syncBlockRangeReplicationFactor() int {
-	if SyncBlockRangeReplicationFactor <= 0 {
-		return 2
+	factor := SyncBlockRangeReplicationFactor
+	if factor <= 0 {
+		factor = 2
 	}
-	if SyncBlockRangeReplicationFactor > 3 {
-		return 3
+	if factor > 3 {
+		factor = 3
 	}
-	return SyncBlockRangeReplicationFactor
+	if budget := runtimeWorkerBudget(); budget <= 2 && factor > 1 {
+		factor = 1
+	}
+	return factor
 }
 
 func snapshotChunkReplicaProviders(providers []peer.ID, idx uint64, batchStart int, replicationFactor int) []peer.ID {

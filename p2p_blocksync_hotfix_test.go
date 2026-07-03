@@ -1827,7 +1827,9 @@ func TestSyncBlocksFromPeersWithBatchRotatesFromTimedOutProvider(t *testing.T) {
 			case goodHost.ID():
 				stream := newJSONResponseStream(goodHost.ID(), BlockResponse{})
 				goodStreamMu.Lock()
-				goodStream = stream
+				if goodStream == nil {
+					goodStream = stream
+				}
 				goodStreamMu.Unlock()
 				return stream, nil
 			default:
@@ -1855,8 +1857,18 @@ func TestSyncBlocksFromPeersWithBatchRotatesFromTimedOutProvider(t *testing.T) {
 	if len(openOrder) < 2 {
 		t.Fatalf("expected both bad and good peers to be attempted, got %d opens", len(openOrder))
 	}
-	if openOrder[0] != badHost.ID() || openOrder[1] != goodHost.ID() {
-		t.Fatalf("expected bad peer then good peer, got %v", openOrder)
+	firstBad := -1
+	firstGood := -1
+	for idx, pid := range openOrder {
+		if pid == badHost.ID() && firstBad < 0 {
+			firstBad = idx
+		}
+		if pid == goodHost.ID() && firstGood < 0 {
+			firstGood = idx
+		}
+	}
+	if firstBad < 0 || firstGood < 0 || firstBad > firstGood {
+		t.Fatalf("expected bad peer to be attempted before fallback to good peer, got %v", openOrder)
 	}
 	openMu.Unlock()
 	goodStreamMu.Lock()

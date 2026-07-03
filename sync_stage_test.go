@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"testing"
 
 	peer "github.com/libp2p/go-libp2p/core/peer"
@@ -629,28 +630,30 @@ func TestSyncPipelineStageSelection(t *testing.T) {
 }
 
 func TestSnapshotChunkWorkerCountUsesRecommendedBounds(t *testing.T) {
+	oldMaxProcs := runtime.GOMAXPROCS(2)
 	oldParallel := SyncSnapshotParallelChunks
 	t.Cleanup(func() {
+		runtime.GOMAXPROCS(oldMaxProcs)
 		SyncSnapshotParallelChunks = oldParallel
 	})
 
 	SyncSnapshotParallelChunks = 0
-	if got := snapshotChunkWorkerCount(8192); got != 8 {
-		t.Fatalf("expected default worker count 8, got=%d", got)
+	if got := snapshotChunkWorkerCount(8192); got != 2 {
+		t.Fatalf("expected CPU-budget default worker count 2, got=%d", got)
 	}
 
 	SyncSnapshotParallelChunks = 12
-	if got := snapshotChunkWorkerCount(8192); got != 12 {
-		t.Fatalf("expected explicit worker count 12, got=%d", got)
+	if got := snapshotChunkWorkerCount(8192); got != 2 {
+		t.Fatalf("expected explicit worker count to clamp to CPU budget 2, got=%d", got)
 	}
 
 	SyncSnapshotParallelChunks = 32
-	if got := snapshotChunkWorkerCount(8192); got != 16 {
-		t.Fatalf("expected clamped worker count 16, got=%d", got)
+	if got := snapshotChunkWorkerCount(8192); got != 2 {
+		t.Fatalf("expected high explicit worker count to clamp to CPU budget 2, got=%d", got)
 	}
 
 	SyncSnapshotParallelChunks = 12
-	if got := snapshotChunkWorkerCount(3); got != 3 {
+	if got := snapshotChunkWorkerCount(1); got != 1 {
 		t.Fatalf("expected worker count to clamp to missing chunk count, got=%d", got)
 	}
 }
@@ -688,28 +691,30 @@ func TestSnapshotChunkProviderForIndexDistributesRoundRobin(t *testing.T) {
 }
 
 func TestDeltaReplayVerifyWorkerCountUsesRecommendedBounds(t *testing.T) {
+	oldMaxProcs := runtime.GOMAXPROCS(2)
 	oldWorkers := SyncDeltaReplayVerifyWorkers
 	t.Cleanup(func() {
+		runtime.GOMAXPROCS(oldMaxProcs)
 		SyncDeltaReplayVerifyWorkers = oldWorkers
 	})
 
 	SyncDeltaReplayVerifyWorkers = 0
-	if got := deltaReplayVerifyWorkerCount(1000); got != 8 {
-		t.Fatalf("expected default delta replay worker count 8, got=%d", got)
+	if got := deltaReplayVerifyWorkerCount(1000); got != 2 {
+		t.Fatalf("expected CPU-budget default delta replay worker count 2, got=%d", got)
 	}
 
 	SyncDeltaReplayVerifyWorkers = 12
-	if got := deltaReplayVerifyWorkerCount(1000); got != 12 {
-		t.Fatalf("expected explicit delta replay worker count 12, got=%d", got)
+	if got := deltaReplayVerifyWorkerCount(1000); got != 2 {
+		t.Fatalf("expected explicit delta replay worker count to clamp to CPU budget 2, got=%d", got)
 	}
 
 	SyncDeltaReplayVerifyWorkers = 32
-	if got := deltaReplayVerifyWorkerCount(1000); got != 16 {
-		t.Fatalf("expected clamped delta replay worker count 16, got=%d", got)
+	if got := deltaReplayVerifyWorkerCount(1000); got != 2 {
+		t.Fatalf("expected high explicit delta replay worker count to clamp to CPU budget 2, got=%d", got)
 	}
 
 	SyncDeltaReplayVerifyWorkers = 12
-	if got := deltaReplayVerifyWorkerCount(3); got != 3 {
+	if got := deltaReplayVerifyWorkerCount(1); got != 1 {
 		t.Fatalf("expected worker count to clamp to batch size, got=%d", got)
 	}
 }

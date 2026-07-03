@@ -65,6 +65,29 @@ func TestRuntimeRequestedMaxProcsHonorsEnv(t *testing.T) {
 	}
 }
 
+func TestRuntimeCPUGuardHardCapsValidatorEnv(t *testing.T) {
+	oldMaxProcs := runtime.GOMAXPROCS(4)
+	t.Cleanup(func() {
+		runtime.GOMAXPROCS(oldMaxProcs)
+	})
+	t.Setenv("MSC_RUNTIME_MAX_PROCS", "")
+	t.Setenv("MSC_VALIDATOR_MAX_PROCS", "8")
+	t.Setenv("GOMAXPROCS", "")
+	t.Setenv("MSC_ALLOW_HIGH_VALIDATOR_CPU", "")
+	t.Setenv("MSC_ALLOW_HIGH_NODE_CPU", "")
+	t.Setenv("MSC_DISABLE_RUNTIME_CPU_HARD_LIMIT", "")
+
+	configureRuntimeCPUGuard("validator")
+
+	want := 2
+	if runtime.NumCPU() > 0 && runtime.NumCPU() < want {
+		want = runtime.NumCPU()
+	}
+	if got := runtime.GOMAXPROCS(0); got != want {
+		t.Fatalf("validator GOMAXPROCS = %d, want hard cap %d", got, want)
+	}
+}
+
 func TestRuntimeCPUSyncProfileCapsValidatorWorkers(t *testing.T) {
 	oldMaxProcs := runtime.GOMAXPROCS(2)
 	oldDelta := SyncDeltaReplayVerifyWorkers
@@ -114,6 +137,45 @@ func TestRuntimeCPUSyncProfileCapsFullNodeWorkers(t *testing.T) {
 			SyncEd25519BatchVerifyWorkers,
 			SyncSnapshotParallelChunks,
 		)
+	}
+}
+
+func TestRuntimeWorkerHelpersFollowBudget(t *testing.T) {
+	oldMaxProcs := runtime.GOMAXPROCS(2)
+	oldDelta := SyncDeltaReplayVerifyWorkers
+	oldEd25519 := SyncEd25519BatchVerifyWorkers
+	oldSnapshot := SyncSnapshotParallelChunks
+	oldBlockReplication := SyncBlockRangeReplicationFactor
+	oldSnapshotReplication := SyncSnapshotChunkReplicationFactor
+	t.Cleanup(func() {
+		runtime.GOMAXPROCS(oldMaxProcs)
+		SyncDeltaReplayVerifyWorkers = oldDelta
+		SyncEd25519BatchVerifyWorkers = oldEd25519
+		SyncSnapshotParallelChunks = oldSnapshot
+		SyncBlockRangeReplicationFactor = oldBlockReplication
+		SyncSnapshotChunkReplicationFactor = oldSnapshotReplication
+	})
+
+	SyncDeltaReplayVerifyWorkers = 8
+	SyncEd25519BatchVerifyWorkers = 8
+	SyncSnapshotParallelChunks = 8
+	SyncBlockRangeReplicationFactor = 3
+	SyncSnapshotChunkReplicationFactor = 3
+
+	if got := syncDeltaReplayVerifyWorkers(); got != 2 {
+		t.Fatalf("delta replay workers = %d, want 2", got)
+	}
+	if got := syncEd25519BatchVerifyWorkers(); got != 2 {
+		t.Fatalf("ed25519 workers = %d, want 2", got)
+	}
+	if got := syncSnapshotParallelChunks(); got != 2 {
+		t.Fatalf("snapshot parallel chunks = %d, want 2", got)
+	}
+	if got := syncBlockRangeReplicationFactor(); got != 1 {
+		t.Fatalf("block range replication factor = %d, want 1 under 2-core budget", got)
+	}
+	if got := syncSnapshotChunkReplicationFactor(); got != 1 {
+		t.Fatalf("snapshot chunk replication factor = %d, want 1 under 2-core budget", got)
 	}
 }
 

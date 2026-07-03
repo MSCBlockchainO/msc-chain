@@ -13,6 +13,7 @@ import (
 const (
 	turboSyncQueueCapacity     = 10000
 	turboSyncLoopInterval      = 300 * time.Millisecond
+	turboSyncStableLoopDelay   = 1 * time.Second
 	turboSyncStallTimeout      = 30 * time.Second
 	turboSyncApplyFailBudget   = 5
 	turboSyncPeerFailBudget    = 3
@@ -69,6 +70,20 @@ func NewTurboSync(node *Node, peers []peer.ID) *TurboSync {
 	}
 }
 
+func (ts *TurboSync) workerCap() int {
+	if ts == nil || ts.node == nil {
+		return runtimeWorkerBudget()
+	}
+	return runtimeSyncWorkerCap(ts.node.Role)
+}
+
+func (ts *TurboSync) loopInterval() time.Duration {
+	if truthyEnv("MSC_TURBO_SYNC_FAST") {
+		return turboSyncLoopInterval
+	}
+	return turboSyncStableLoopDelay
+}
+
 func (ts *TurboSync) Start() {
 	if ts == nil || ts.node == nil || ts.chain == nil {
 		return
@@ -77,7 +92,7 @@ func (ts *TurboSync) Start() {
 		go ts.applyWorker()
 	})
 
-	ticker := time.NewTicker(turboSyncLoopInterval)
+	ticker := time.NewTicker(ts.loopInterval())
 	defer ticker.Stop()
 
 	for {
@@ -184,6 +199,9 @@ func (ts *TurboSync) selectPeers() {
 	if len(active) == 0 {
 		active = peers
 	}
+	if cap := ts.workerCap(); cap > 0 && len(active) > cap {
+		active = active[:cap]
+	}
 
 	ts.mu.Lock()
 	ts.activePeers = append([]peer.ID{}, active...)
@@ -211,6 +229,9 @@ func (ts *TurboSync) parallelDownload(start uint64, end uint64) {
 	assignments := planTurboAssignments(start, end, ts.currentActivePeers())
 	if len(assignments) == 0 {
 		return
+	}
+	if cap := ts.workerCap(); cap > 0 && len(assignments) > cap {
+		assignments = assignments[:cap]
 	}
 
 	var wg sync.WaitGroup
@@ -563,6 +584,9 @@ func (ts *TurboSync) computeTurboWindow(lag uint64) uint64 {
 		window = syncBlockRequestMaxBlocks(0)
 	}
 	activeCount := uint64(len(ts.currentActivePeers()))
+	if cap := ts.workerCap(); cap > 0 && activeCount > uint64(cap) {
+		activeCount = uint64(cap)
+	}
 	if activeCount > 1 {
 		minParallel := activeCount * syncBlockRequestMaxBlocks(0)
 		if window < minParallel {
