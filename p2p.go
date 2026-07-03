@@ -3507,15 +3507,29 @@ func shouldThrottleExecutionVoteDrop(reason string) bool {
 	}
 }
 
+func executionVoteDropUsesCoarseLogKey(reason string) bool {
+	reason = strings.TrimSpace(reason)
+	if strings.HasPrefix(reason, "queued_") {
+		return true
+	}
+	switch reason {
+	case "duplicate_exec_vote", "duplicate_signer_proposal", "rate_limited", "replay_cache", "stale_committed_height", "sync_future_overflow", "future_epoch_overflow":
+		return true
+	default:
+		return false
+	}
+}
+
 func (n *Node) shouldLogExecutionVoteDrop(reason string, res ExecutionResultMsg, proposalSnap execProposalSnapshot) bool {
 	if n == nil || !shouldThrottleExecutionVoteDrop(reason) {
 		return true
 	}
 	key := fmt.Sprintf("exec_vote_drop:%s:%s", reason, normalizeValidatorID(res.Signer))
-	// Queue-state drops can arrive once per signer for every future height while
-	// catching up. Keep their key coarse even in debug/file logging mode, or the
-	// per-vote key defeats throttling and creates a sync-amplifying log storm.
-	if !strings.HasPrefix(strings.TrimSpace(reason), "queued_") &&
+	// Hot drop reasons can arrive once per signer for every height while
+	// catching up or replaying gossip. Keep their key coarse even in
+	// debug/file logging mode, or the per-vote key defeats throttling and
+	// creates a sync-amplifying log storm.
+	if !executionVoteDropUsesCoarseLogKey(reason) &&
 		(DebugConsensus || DebugSync || log.Writer() != os.Stderr) {
 		key = fmt.Sprintf("exec_vote_drop:%s:%d:%d:%s:%s:%s:%s",
 			reason,
@@ -3528,10 +3542,7 @@ func (n *Node) shouldLogExecutionVoteDrop(reason string, res ExecutionResultMsg,
 		)
 	}
 	cooldown := livenessReasonLogCooldown
-	if strings.HasPrefix(strings.TrimSpace(reason), "queued_") ||
-		reason == "stale_committed_height" ||
-		reason == "sync_future_overflow" ||
-		reason == "future_epoch_overflow" {
+	if executionVoteDropUsesCoarseLogKey(reason) {
 		cooldown = execVoteSyncDropLogCooldown
 	}
 	return n.shouldLogLivenessReason(key, cooldown)

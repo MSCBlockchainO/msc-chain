@@ -896,14 +896,22 @@ func TestQueuedExecutionVoteDropThrottleStaysCoarseInDebugMode(t *testing.T) {
 		DebugSync = oldDebugSync
 	})
 
-	node := &Node{}
-	first := ExecutionResultMsg{HeightHint: 100, RoundHint: 1, Signer: "A", ExecHash: "root-a"}
-	second := ExecutionResultMsg{HeightHint: 101, RoundHint: 4, Signer: "A", ExecHash: "root-b"}
-	if !node.shouldLogExecutionVoteDrop("queued_syncing", first, execProposalSnapshot{}) {
-		t.Fatal("expected first queued drop to be logged")
-	}
-	if node.shouldLogExecutionVoteDrop("queued_syncing", second, execProposalSnapshot{}) {
-		t.Fatal("queued drop throttle must not be bypassed by per-vote debug keys")
+	for _, reason := range []string{
+		"queued_syncing",
+		"replay_cache",
+		"stale_committed_height",
+		"future_epoch_overflow",
+		"sync_future_overflow",
+	} {
+		node := &Node{}
+		first := ExecutionResultMsg{HeightHint: 100, RoundHint: 1, Signer: "A", ExecHash: "root-a"}
+		second := ExecutionResultMsg{HeightHint: 101, RoundHint: 4, Signer: "A", ExecHash: "root-b"}
+		if !node.shouldLogExecutionVoteDrop(reason, first, execProposalSnapshot{}) {
+			t.Fatalf("expected first %s drop to be logged", reason)
+		}
+		if node.shouldLogExecutionVoteDrop(reason, second, execProposalSnapshot{}) {
+			t.Fatalf("%s drop throttle must not be bypassed by per-vote debug keys", reason)
+		}
 	}
 }
 

@@ -2505,11 +2505,11 @@ func (n *Node) resolveCommittedValidatorRegistrySnapshot(height uint64) (map[str
 				}
 			}
 		}
-		key := fmt.Sprintf("registry_repair_success:%d", height)
+		key := "registry_repair_success:committed_carry_forward_fast"
 		if !persistRepair {
 			key = "registry_repair_success:committed_carry_forward_fast_skip_store"
 		}
-		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+		if n.shouldLogLivenessReason(key, registryRepairLogCooldown) {
 			if persistRepair {
 				log.Printf("[REGISTRY-REPAIR] height=%d source=committed_carry_forward_fast from=%d validators=%d",
 					height,
@@ -2585,11 +2585,11 @@ func (n *Node) resolveCommittedValidatorRegistrySnapshot(height uint64) (map[str
 				}
 			}
 		}
-		key := fmt.Sprintf("registry_repair_success:%d", height)
+		key := "registry_repair_success:committed_carry_forward"
 		if !persistRepair {
 			key = "registry_repair_success:committed_carry_forward_skip_store"
 		}
-		if n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
+		if n.shouldLogLivenessReason(key, registryRepairLogCooldown) {
 			if persistRepair {
 				log.Printf("[REGISTRY-REPAIR] height=%d source=committed_carry_forward from=%d validators=%d",
 					height,
@@ -27533,6 +27533,7 @@ func (n *Node) committeeLivenessSnapshotForValidators(height uint64, committee [
 }
 
 const livenessReasonLogCooldown = 5 * time.Second
+const registryRepairLogCooldown = 30 * time.Second
 
 func formatLivenessReasonCounts(counts map[string]int) string {
 	if len(counts) == 0 {
@@ -37708,6 +37709,10 @@ func (s *Server) handleStatus(
 			"host_cpu_count":                                         homeNodeStatusFields(s.Node.Role)["host_cpu_count"],
 			"cpu_guard_auto_max_procs":                               homeNodeStatusFields(s.Node.Role)["cpu_guard_auto_max_procs"],
 			"cpu_guard_disabled":                                     homeNodeStatusFields(s.Node.Role)["cpu_guard_disabled"],
+			"sync_worker_cpu_cap":                                    homeNodeStatusFields(s.Node.Role)["sync_worker_cpu_cap"],
+			"sync_delta_replay_verify_workers":                       homeNodeStatusFields(s.Node.Role)["sync_delta_replay_verify_workers"],
+			"sync_ed25519_batch_verify_workers":                      homeNodeStatusFields(s.Node.Role)["sync_ed25519_batch_verify_workers"],
+			"sync_snapshot_parallel_chunks":                          homeNodeStatusFields(s.Node.Role)["sync_snapshot_parallel_chunks"],
 			"home_validator_supported":                               homeNodeStatusFields(s.Node.Role)["home_validator_supported"],
 			"validator_min_recommended_ram_gb":                       homeNodeStatusFields(s.Node.Role)["validator_min_recommended_ram_gb"],
 			"gossip_quiet":                                           runtime.GossipQuiet,
@@ -38126,14 +38131,18 @@ func (s *Server) handleStatus(
 
 		"ready": runtime.Ready,
 
-		"runtime_pressure_mode":    runtime.RuntimePressureMode,
-		"goroutine_count":          runtime.GoroutineCount,
-		"goroutine_warn_threshold": runtime.GoroutineWarnThreshold,
-		"gomaxprocs":               homeNodeStatusFields(s.Node.Role)["gomaxprocs"],
-		"host_cpu_count":           homeNodeStatusFields(s.Node.Role)["host_cpu_count"],
-		"cpu_guard_auto_max_procs": homeNodeStatusFields(s.Node.Role)["cpu_guard_auto_max_procs"],
-		"cpu_guard_disabled":       homeNodeStatusFields(s.Node.Role)["cpu_guard_disabled"],
-		"gossip_quiet":             runtime.GossipQuiet,
+		"runtime_pressure_mode":             runtime.RuntimePressureMode,
+		"goroutine_count":                   runtime.GoroutineCount,
+		"goroutine_warn_threshold":          runtime.GoroutineWarnThreshold,
+		"gomaxprocs":                        homeNodeStatusFields(s.Node.Role)["gomaxprocs"],
+		"host_cpu_count":                    homeNodeStatusFields(s.Node.Role)["host_cpu_count"],
+		"cpu_guard_auto_max_procs":          homeNodeStatusFields(s.Node.Role)["cpu_guard_auto_max_procs"],
+		"cpu_guard_disabled":                homeNodeStatusFields(s.Node.Role)["cpu_guard_disabled"],
+		"sync_worker_cpu_cap":               homeNodeStatusFields(s.Node.Role)["sync_worker_cpu_cap"],
+		"sync_delta_replay_verify_workers":  homeNodeStatusFields(s.Node.Role)["sync_delta_replay_verify_workers"],
+		"sync_ed25519_batch_verify_workers": homeNodeStatusFields(s.Node.Role)["sync_ed25519_batch_verify_workers"],
+		"sync_snapshot_parallel_chunks":     homeNodeStatusFields(s.Node.Role)["sync_snapshot_parallel_chunks"],
+		"gossip_quiet":                      runtime.GossipQuiet,
 
 		"live_validators": runtime.LiveValidators,
 
@@ -43100,6 +43109,10 @@ func (s *Server) handleV1Status(w http.ResponseWriter, r *http.Request) {
 		"host_cpu_count":                                         homeNodeStatusFields(s.Node.Role)["host_cpu_count"],
 		"cpu_guard_auto_max_procs":                               homeNodeStatusFields(s.Node.Role)["cpu_guard_auto_max_procs"],
 		"cpu_guard_disabled":                                     homeNodeStatusFields(s.Node.Role)["cpu_guard_disabled"],
+		"sync_worker_cpu_cap":                                    homeNodeStatusFields(s.Node.Role)["sync_worker_cpu_cap"],
+		"sync_delta_replay_verify_workers":                       homeNodeStatusFields(s.Node.Role)["sync_delta_replay_verify_workers"],
+		"sync_ed25519_batch_verify_workers":                      homeNodeStatusFields(s.Node.Role)["sync_ed25519_batch_verify_workers"],
+		"sync_snapshot_parallel_chunks":                          homeNodeStatusFields(s.Node.Role)["sync_snapshot_parallel_chunks"],
 		"home_validator_supported":                               homeNodeStatusFields(s.Node.Role)["home_validator_supported"],
 		"validator_min_recommended_ram_gb":                       homeNodeStatusFields(s.Node.Role)["validator_min_recommended_ram_gb"],
 		"gossip_quiet":                                           runtime.GossipQuiet,
