@@ -9415,8 +9415,17 @@ func (n *Node) startSelfHeal(ctx context.Context) {
 			peers := len(n.Host.Network().Peers())
 			stalled := false
 			if SelfHealStallSeconds > 0 {
-				observedHeight, _ := n.bestObservedSyncHeight()
-				lagging := observedHeight > height && observedHeight > 0
+				quorumHeight, _, required, quorumOK := n.majorityHeartbeatHeight()
+				observedHeight, observedVotes := n.bestObservedSyncHeight()
+				target := selectSyncTargetHeight(
+					height,
+					quorumHeight,
+					quorumOK,
+					observedHeight,
+					observedVotes,
+					required,
+				)
+				lagging := target > height
 				if lagging && time.Since(lastProgress) >= time.Duration(SelfHealStallSeconds)*time.Second {
 					stalled = true
 				}

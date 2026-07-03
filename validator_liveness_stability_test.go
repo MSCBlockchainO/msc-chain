@@ -246,6 +246,64 @@ func TestRuntimeStatusLiteUsesObservedNetworkHeight(t *testing.T) {
 	}
 }
 
+func TestRuntimeStatusLiteDoesNotChaseMinorityTipWithQuorumAtLocalHeight(t *testing.T) {
+	withLivenessSettings(t, 25, 10, 8)
+
+	wasStarted := consensusStarted.Load()
+	consensusStarted.Store(true)
+	t.Cleanup(func() {
+		consensusStarted.Store(wasStarted)
+	})
+
+	validators := []string{"A", "B", "C", "D"}
+	setHash := ValidatorSetHash(validators)
+	bc := &Blockchain{Blocks: []Block{{
+		ID:                     100,
+		Signatures:             validators,
+		ValidatorSetHash:       setHash,
+		NextValidatorSetHash:   setHash,
+		NextValidatorSetHeight: 101,
+	}}}
+	n := &Node{
+		ID:                    "D",
+		Role:                  "validator",
+		Blockchain:            bc,
+		Consensus:             &ConsensusState{Syncing: true, SyncTarget: 100},
+		GenesisValidators:     validators,
+		validatorStatus:       make(map[string]*ValidatorStatus),
+		validatorOfflineSince: make(map[string]time.Time),
+	}
+	now := time.Now()
+	for _, sample := range []struct {
+		id     string
+		height uint64
+	}{
+		{id: "A", height: 100},
+		{id: "B", height: 100},
+		{id: "C", height: 101},
+	} {
+		n.validatorStatus[sample.id] = &ValidatorStatus{
+			LastSeen:        now,
+			Active:          true,
+			Enabled:         true,
+			ReportedHeight:  sample.height,
+			FinalizedHeight: sample.height,
+		}
+	}
+
+	status := n.runtimeStatusSnapshotLite()
+	if status.Syncing {
+		t.Fatalf("minority tip must not keep validator in sync mode, status=%+v", status)
+	}
+	if status.SyncTarget != 100 {
+		t.Fatalf("minority tip must not extend validator sync target, got=%d", status.SyncTarget)
+	}
+	if status.NetworkBestHeight != 101 || status.NetworkBestHeightVotes != 1 {
+		t.Fatalf("minority tip should remain visible as telemetry, best=%d votes=%d",
+			status.NetworkBestHeight, status.NetworkBestHeightVotes)
+	}
+}
+
 func TestRuntimeStatusLiteDoesNotMarkInactiveValidatorReady(t *testing.T) {
 	withLivenessSettings(t, 25, 10, 8)
 

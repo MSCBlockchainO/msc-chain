@@ -169,6 +169,51 @@ func TestSelectSyncTargetRejectsSingleMinorityObservedVote(t *testing.T) {
 	}
 }
 
+func TestExtendSyncTargetRejectsMinorityTipWhenQuorumIsAvailable(t *testing.T) {
+	got := extendSyncTargetHeight(
+		100,
+		100,
+		100,
+		true,
+		101,
+		1,
+		3,
+	)
+	if got != 100 {
+		t.Fatalf("expected minority tip not to extend current target, got=%d", got)
+	}
+}
+
+func TestExtendSyncTargetAcceptsCatchupTipWithRequiredMinusOneVotes(t *testing.T) {
+	got := extendSyncTargetHeight(
+		100,
+		100,
+		100,
+		true,
+		101,
+		2,
+		3,
+	)
+	if got != 101 {
+		t.Fatalf("expected required-1 catchup tip to extend current target, got=%d", got)
+	}
+}
+
+func TestExtendSyncTargetUsesSinglePeerOnlyWithoutQuorum(t *testing.T) {
+	got := extendSyncTargetHeight(
+		100,
+		0,
+		0,
+		false,
+		116,
+		1,
+		3,
+	)
+	if got != 116 {
+		t.Fatalf("expected verified bootstrap catchup target without heartbeat quorum, got=%d", got)
+	}
+}
+
 func TestStatusNearTipSyncCompleteDoesNotMaskValidatorTailLag(t *testing.T) {
 	oldStarted := consensusStarted.Load()
 	consensusStarted.Store(true)

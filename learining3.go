@@ -11135,6 +11135,29 @@ func selectSyncTargetHeight(
 	return target
 }
 
+func extendSyncTargetHeight(
+	localHeight uint64,
+	currentTarget uint64,
+	quorumHeight uint64,
+	quorumOK bool,
+	observedHeight uint64,
+	observedVotes int,
+	required int,
+) uint64 {
+	candidate := selectSyncTargetHeight(
+		localHeight,
+		quorumHeight,
+		quorumOK,
+		observedHeight,
+		observedVotes,
+		required,
+	)
+	if candidate > currentTarget {
+		return candidate
+	}
+	return currentTarget
+}
+
 func (n *Node) bestObservedValidatorSetHash() (string, int, uint64, bool) {
 	if n == nil {
 		return "", 0, 0, false
@@ -12404,12 +12427,17 @@ func (n *Node) maybeForceNearTipValidatorSetResync(localHeight uint64, mismatchH
 	}
 
 	target := mismatchHeight + 1
-	if quorumHeight, _, _, ok := n.majorityHeartbeatHeight(); ok && quorumHeight > target {
-		target = quorumHeight
-	}
-	if observedHeight, _ := n.bestObservedSyncHeight(); observedHeight > target {
-		target = observedHeight
-	}
+	quorumHeight, _, required, quorumOK := n.majorityHeartbeatHeight()
+	observedHeight, observedVotes := n.bestObservedSyncHeight()
+	target = extendSyncTargetHeight(
+		localHeight,
+		target,
+		quorumHeight,
+		quorumOK,
+		observedHeight,
+		observedVotes,
+		required,
+	)
 	if target <= localHeight {
 		target = localHeight + 2
 	}
@@ -13038,12 +13066,17 @@ func (n *Node) startSyncStallWatchdog(ctx context.Context) {
 					}
 				}
 			}
-			if quorumHeight, _, _, ok := n.majorityHeartbeatHeight(); ok && quorumHeight > target {
-				target = quorumHeight
-			}
-			if observedHeight, observedVotes := n.bestObservedSyncHeight(); observedVotes > 0 && observedHeight > target {
-				target = observedHeight
-			}
+			quorumHeight, _, required, quorumOK := n.majorityHeartbeatHeight()
+			observedHeight, observedVotes := n.bestObservedSyncHeight()
+			target = extendSyncTargetHeight(
+				local,
+				target,
+				quorumHeight,
+				quorumOK,
+				observedHeight,
+				observedVotes,
+				required,
+			)
 			if n.Consensus != nil && target > 0 {
 				n.Consensus.mu.Lock()
 				if target > n.Consensus.SyncTarget {
@@ -36597,7 +36630,7 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 	networkBestHeight := out.SyncTarget
 	networkBestVotes := 0
 	if n.Blockchain != nil {
-		quorumHeight, quorumVotes, _, quorumOK := n.majorityHeartbeatHeight()
+		quorumHeight, quorumVotes, quorumRequired, quorumOK := n.majorityHeartbeatHeight()
 		if quorumOK && quorumHeight > networkBestHeight {
 			networkBestHeight = quorumHeight
 			networkBestVotes = quorumVotes
@@ -36607,9 +36640,15 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 			networkBestHeight = observedHeight
 			networkBestVotes = observedVotes
 		}
-	}
-	if networkBestHeight > out.SyncTarget {
-		out.SyncTarget = networkBestHeight
+		out.SyncTarget = extendSyncTargetHeight(
+			out.Height,
+			out.SyncTarget,
+			quorumHeight,
+			quorumOK,
+			observedHeight,
+			observedVotes,
+			quorumRequired,
+		)
 	}
 	nearTipComplete := statusNearTipSyncCompleteAllowedForRole(out.Height, out.SyncTarget, snapshotSessionActive, role)
 	if out.SyncTarget > out.Height && !nearTipComplete {
@@ -36618,6 +36657,8 @@ func (n *Node) runtimeStatusSnapshotLite() RuntimeStatusSnapshot {
 	} else if nearTipComplete {
 		out.Syncing = false
 		out.SyncLagBlocks = out.SyncTarget - out.Height
+	} else if !snapshotSessionActive && (out.SyncTarget == 0 || out.SyncTarget <= out.Height) {
+		out.Syncing = false
 	}
 	out.SyncComplete = !out.Syncing && (out.SyncTarget == 0 || out.Height >= out.SyncTarget || nearTipComplete)
 	if out.Syncing {
@@ -36988,9 +37029,17 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 		out.Peers = len(n.Host.Network().Peers())
 	}
 	preliminarySyncTarget := out.SyncTarget
-	if observedHeight, observedVotes := n.bestObservedSyncHeight(); observedVotes > 0 && observedHeight > preliminarySyncTarget {
-		preliminarySyncTarget = observedHeight
-	}
+	preliminaryQuorumHeight, _, preliminaryQuorumRequired, preliminaryQuorumOK := n.majorityHeartbeatHeight()
+	preliminaryObservedHeight, preliminaryObservedVotes := n.bestObservedSyncHeight()
+	preliminarySyncTarget = extendSyncTargetHeight(
+		out.Height,
+		preliminarySyncTarget,
+		preliminaryQuorumHeight,
+		preliminaryQuorumOK,
+		preliminaryObservedHeight,
+		preliminaryObservedVotes,
+		preliminaryQuorumRequired,
+	)
 	if preliminarySyncTarget > out.SyncTarget {
 		out.SyncTarget = preliminarySyncTarget
 	}
@@ -37118,17 +37167,18 @@ func (n *Node) runtimeStatusSnapshot() RuntimeStatusSnapshot {
 	}
 
 	bestTarget := out.SyncTarget
-	if out.Peers > 0 && !statusFastPath {
+	if out.Peers > 0 {
 		quorumHeight, _, quorumRequired, quorumOK := n.majorityHeartbeatHeight()
 		observedHeight, observedVotes := n.bestObservedSyncHeight()
-		candidateTarget := selectSyncTargetHeight(out.Height, quorumHeight, quorumOK, observedHeight, observedVotes, quorumRequired)
-		if candidateTarget > bestTarget {
-			bestTarget = candidateTarget
-		}
-	} else if statusFastPath {
-		if observedHeight, observedVotes := n.bestObservedSyncHeight(); observedVotes > 0 && observedHeight > bestTarget {
-			bestTarget = observedHeight
-		}
+		bestTarget = extendSyncTargetHeight(
+			out.Height,
+			bestTarget,
+			quorumHeight,
+			quorumOK,
+			observedHeight,
+			observedVotes,
+			quorumRequired,
+		)
 	}
 	if snapshotSessionActive && snapshotSession.FreezeHeight > 0 {
 		bestTarget = snapshotSession.FreezeHeight
@@ -49030,12 +49080,17 @@ func (n *Node) tryRepairValidatorSetHash(height uint64, gotHash string) bool {
 				target = localHeight + 1
 			}
 			if n.Blockchain != nil {
-				if quorumHeight, _, _, ok := n.majorityHeartbeatHeight(); ok && quorumHeight > target {
-					target = quorumHeight
-				}
-				if observedHeight, _ := n.bestObservedSyncHeight(); observedHeight > target {
-					target = observedHeight
-				}
+				quorumHeight, _, required, quorumOK := n.majorityHeartbeatHeight()
+				observedHeight, observedVotes := n.bestObservedSyncHeight()
+				target = extendSyncTargetHeight(
+					localHeight,
+					target,
+					quorumHeight,
+					quorumOK,
+					observedHeight,
+					observedVotes,
+					required,
+				)
 			}
 			if !n.shouldTriggerValidatorSetSyncOverride(height, expected, gotHash) {
 				return false
