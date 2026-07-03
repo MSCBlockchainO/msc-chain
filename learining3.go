@@ -22440,18 +22440,21 @@ queued:
 	if n.Blockchain != nil {
 		localHeight = n.Blockchain.Height()
 	}
-	fmt.Printf("[SYNC-QUEUE-ADD] stage=%s provider=%s local=%d next=%d queued_height=%d queued_at_height=%d queue_tip=%d proposer=%s hash=%s prev=%s\n",
-		stage,
-		ShortID(provider),
-		localHeight,
-		localHeight+1,
-		block.ID,
-		len(n.ForkBlocks[block.ID]),
-		queueTip,
-		ShortID(block.Proposer),
-		ShortHash(block.BlockHash),
-		ShortHash(block.PrevHash),
-	)
+	logKey := fmt.Sprintf("sync_queue_add:%s:%s", stage, ShortID(provider))
+	if n.shouldLogLivenessReason(logKey, syncHotPathLogCooldown) {
+		fmt.Printf("[SYNC-QUEUE-ADD] stage=%s provider=%s local=%d next=%d queued_height=%d queued_at_height=%d queue_tip=%d proposer=%s hash=%s prev=%s\n",
+			stage,
+			ShortID(provider),
+			localHeight,
+			localHeight+1,
+			block.ID,
+			len(n.ForkBlocks[block.ID]),
+			queueTip,
+			ShortID(block.Proposer),
+			ShortHash(block.BlockHash),
+			ShortHash(block.PrevHash),
+		)
+	}
 
 	return true
 
@@ -27533,7 +27536,8 @@ func (n *Node) committeeLivenessSnapshotForValidators(height uint64, committee [
 }
 
 const livenessReasonLogCooldown = 5 * time.Second
-const registryRepairLogCooldown = 30 * time.Second
+const syncHotPathLogCooldown = 30 * time.Second
+const registryRepairLogCooldown = syncHotPathLogCooldown
 
 func formatLivenessReasonCounts(counts map[string]int) string {
 	if len(counts) == 0 {
