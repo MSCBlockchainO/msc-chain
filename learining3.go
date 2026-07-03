@@ -18298,6 +18298,20 @@ func (n *Node) pickSyncPeers(targetHeight uint64, exclude map[peer.ID]struct{}, 
 		if candidates[i].Priority != candidates[j].Priority {
 			return candidates[i].Priority < candidates[j].Priority
 		}
+		iReady := targetHeight > 0 && candidates[i].Height >= targetHeight
+		jReady := targetHeight > 0 && candidates[j].Height >= targetHeight
+		if iReady && jReady {
+			if candidates[i].Reputation != candidates[j].Reputation {
+				return candidates[i].Reputation > candidates[j].Reputation
+			}
+			if candidates[i].Score != candidates[j].Score {
+				return candidates[i].Score > candidates[j].Score
+			}
+			if candidates[i].Height != candidates[j].Height {
+				return candidates[i].Height > candidates[j].Height
+			}
+			return candidates[i].PID.String() < candidates[j].PID.String()
+		}
 		if candidates[i].Height != candidates[j].Height {
 			return candidates[i].Height > candidates[j].Height
 		}
