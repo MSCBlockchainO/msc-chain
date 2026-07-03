@@ -127,6 +127,31 @@ func TestStartNextRoundImmediatelyRoutesToConsensusThread(t *testing.T) {
 	waitForThreadExecuted(t, node.ConsensusThread, consensusBase)
 }
 
+func TestStartNextRoundHonorsMinimumBlockIntervalAfterCommit(t *testing.T) {
+	oldResultGossipOnly := ResultGossipOnly
+	oldMinBlockInterval := ConsensusMinBlockInterval
+	ResultGossipOnly = true
+	ConsensusMinBlockInterval = 150 * time.Millisecond
+	t.Cleanup(func() {
+		ResultGossipOnly = oldResultGossipOnly
+		ConsensusMinBlockInterval = oldMinBlockInterval
+	})
+
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A"})
+	node.commitMu.Lock()
+	node.lastCommitHeight = 0
+	node.lastCommitAt = time.Now()
+	node.commitMu.Unlock()
+
+	consensusBase := node.ConsensusThread.ExecutedCount()
+	node.startNextRoundImmediately(1, NewLedger())
+	time.Sleep(50 * time.Millisecond)
+	if got := node.ConsensusThread.ExecutedCount(); got != consensusBase {
+		t.Fatalf("next round executed before minimum block interval: got=%d base=%d", got, consensusBase)
+	}
+	waitForThreadExecuted(t, node.ConsensusThread, consensusBase)
+}
+
 func TestStartNextRoundImmediatelyDedupesSameHeightWhileQueued(t *testing.T) {
 	oldResultGossipOnly := ResultGossipOnly
 	t.Cleanup(func() {

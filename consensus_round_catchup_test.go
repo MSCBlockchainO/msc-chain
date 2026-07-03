@@ -1592,6 +1592,48 @@ func TestEffectiveProposerRoundTimeoutUsesProposalWindowFloor(t *testing.T) {
 	}
 }
 
+func TestMinimumBlockProposalDelayEnforcesRemainingInterval(t *testing.T) {
+	now := time.Unix(100, 0)
+	got := minimumBlockProposalDelay(
+		11,
+		10,
+		now.Add(-time.Second),
+		now,
+		4*time.Second,
+	)
+	if got != 3*time.Second {
+		t.Fatalf("expected three seconds remaining, got=%s", got)
+	}
+}
+
+func TestMinimumBlockProposalDelayAllowsElapsedInterval(t *testing.T) {
+	now := time.Unix(100, 0)
+	got := minimumBlockProposalDelay(
+		11,
+		10,
+		now.Add(-4*time.Second),
+		now,
+		4*time.Second,
+	)
+	if got != 0 {
+		t.Fatalf("expected elapsed interval to allow proposal, got=%s", got)
+	}
+}
+
+func TestMinimumBlockProposalDelayIgnoresUnrelatedCommitHeight(t *testing.T) {
+	now := time.Unix(100, 0)
+	got := minimumBlockProposalDelay(
+		12,
+		10,
+		now,
+		now,
+		4*time.Second,
+	)
+	if got != 0 {
+		t.Fatalf("expected unrelated committed height not to delay proposal, got=%s", got)
+	}
+}
+
 func TestEffectiveProposerRoundTimeoutFastFailoverHonorsConfiguredTimeout(t *testing.T) {
 	oldFast := ConsensusFastProposerFailoverEnabled
 	oldMin := ConsensusFastProposerFailoverMin
@@ -1609,6 +1651,12 @@ func TestEffectiveProposerRoundTimeoutFastFailoverHonorsConfiguredTimeout(t *tes
 }
 
 func TestComputeConsensusRoundStartsAtZeroWhenProposalWindowOpens(t *testing.T) {
+	oldFast := ConsensusFastProposerFailoverEnabled
+	ConsensusFastProposerFailoverEnabled = false
+	t.Cleanup(func() {
+		ConsensusFastProposerFailoverEnabled = oldFast
+	})
+
 	epochStartedAt := time.Unix(100, 0)
 	now := epochStartedAt.Add(4 * time.Second)
 	got := computeConsensusRound(now, epochStartedAt, 0, time.Time{}, 4*time.Second, 1*time.Second, 500*time.Millisecond)

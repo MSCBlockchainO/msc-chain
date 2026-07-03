@@ -1697,6 +1697,43 @@ func (n *Node) startNextRoundImmediately(nextHeight uint64, parentLedger Ledger)
 	n.startNextRoundImmediatelyWithReason(nextHeight, parentLedger, "direct")
 }
 
+func minimumBlockProposalDelay(
+	nextHeight uint64,
+	lastCommitHeight uint64,
+	lastCommitAt time.Time,
+	now time.Time,
+	minInterval time.Duration,
+) time.Duration {
+	if nextHeight == 0 || lastCommitHeight != nextHeight-1 || lastCommitAt.IsZero() || minInterval <= 0 {
+		return 0
+	}
+	elapsed := now.Sub(lastCommitAt)
+	if elapsed >= minInterval {
+		return 0
+	}
+	if elapsed < 0 {
+		return minInterval
+	}
+	return minInterval - elapsed
+}
+
+func (n *Node) minimumBlockProposalDelay(nextHeight uint64) time.Duration {
+	if n == nil {
+		return 0
+	}
+	n.commitMu.Lock()
+	lastCommitHeight := n.lastCommitHeight
+	lastCommitAt := n.lastCommitAt
+	n.commitMu.Unlock()
+	return minimumBlockProposalDelay(
+		nextHeight,
+		lastCommitHeight,
+		lastCommitAt,
+		time.Now(),
+		ConsensusMinBlockInterval,
+	)
+}
+
 func (n *Node) startNextRoundImmediatelyWithReason(nextHeight uint64, parentLedger Ledger, reason string) {
 	if n == nil || nextHeight == 0 || !ResultGossipOnly {
 		return
@@ -1705,13 +1742,30 @@ func (n *Node) startNextRoundImmediatelyWithReason(nextHeight uint64, parentLedg
 		return
 	}
 	queuedLedger := parentLedger.Clone()
-	if !n.scheduleConsensusPriorityTask(func() {
+	startRound := func() {
 		started := n.startNextRoundImmediatelyNow(nextHeight, queuedLedger, reason)
 		n.finishImmediateRoundStart(nextHeight, started)
-	}) {
-		n.clearImmediateRoundStart(nextHeight)
+	}
+	delay := n.minimumBlockProposalDelay(nextHeight)
+	if delay <= 0 {
+		if !n.scheduleConsensusPriorityTask(startRound) {
+			n.clearImmediateRoundStart(nextHeight)
+		}
 		return
 	}
+	n.SafeGo(fmt.Sprintf("minimum_block_interval_%d", nextHeight), func() {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-n.RootContext().Done():
+			n.clearImmediateRoundStart(nextHeight)
+			return
+		case <-timer.C:
+		}
+		if n.isShuttingDown() || !n.scheduleConsensusPriorityTask(startRound) {
+			n.clearImmediateRoundStart(nextHeight)
+		}
+	})
 }
 
 func (n *Node) startNextRoundImmediatelyNow(nextHeight uint64, parentLedger Ledger, reason string) bool {
@@ -1898,13 +1952,8 @@ func (n *Node) ActivateConsensus(ctx context.Context) error {
 					lastStartupGateReason = ""
 					lastRoundGateEpoch = 0
 					lastRoundGateAt = time.Time{}
-					epochStartHeight := epoch
 					epochStartLedger := n.currentExecutionLedgerClone()
-					_ = n.scheduleConsensusPriorityTask(func() {
-						n.startConsensusRound(epochStartHeight, 0)
-						_ = n.forceRoundProposal(epochStartHeight, 0, epochStartLedger, "consensus_epoch_start")
-					})
-					n.scheduleProposalDeadlineGuard(epochStartHeight, 0, epochStartLedger)
+					n.startNextRoundImmediatelyWithReason(epoch, epochStartLedger, "consensus_epoch_start")
 				}
 				if !lastEpochAt.IsZero() && time.Since(lastEpochAt) < minBlockInterval {
 					continue
