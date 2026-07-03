@@ -27,6 +27,41 @@ func TestRuntimeAutoMemoryLimitMiB(t *testing.T) {
 	}
 }
 
+func TestRuntimeAutoMaxProcs(t *testing.T) {
+	tests := []struct {
+		name     string
+		cpuCount int
+		role     string
+		want     int
+	}{
+		{name: "validator capped at two", cpuCount: 8, role: "validator", want: 2},
+		{name: "auto capped at two", cpuCount: 16, role: "auto", want: 2},
+		{name: "full capped at two", cpuCount: 4, role: "full", want: 2},
+		{name: "light capped at one", cpuCount: 4, role: "light", want: 1},
+		{name: "archive capped at four", cpuCount: 16, role: "archive", want: 4},
+		{name: "small host keeps available cpu", cpuCount: 1, role: "validator", want: 1},
+		{name: "invalid cpu disabled", cpuCount: 0, role: "validator", want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := runtimeAutoMaxProcs(tt.cpuCount, tt.role); got != tt.want {
+				t.Fatalf("runtimeAutoMaxProcs(%d, %q) = %d, want %d", tt.cpuCount, tt.role, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRuntimeRequestedMaxProcsHonorsEnv(t *testing.T) {
+	t.Setenv("MSC_RUNTIME_MAX_PROCS", "3")
+	t.Setenv("MSC_VALIDATOR_MAX_PROCS", "1")
+	t.Setenv("GOMAXPROCS", "")
+
+	got, source := runtimeRequestedMaxProcs("validator")
+	if got != 3 || source != "MSC_RUNTIME_MAX_PROCS" {
+		t.Fatalf("runtime max procs = %d/%s, want 3/MSC_RUNTIME_MAX_PROCS", got, source)
+	}
+}
+
 func TestRuntimePressureModeFor(t *testing.T) {
 	tests := []struct {
 		name       string

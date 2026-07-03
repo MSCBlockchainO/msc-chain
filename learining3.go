@@ -34596,6 +34596,7 @@ func main() {
 			*role = "auto"
 		}
 	}
+	configureRuntimeCPUGuard(*role)
 	configureRuntimeMemoryGuard(*role)
 	*role = normalizeRequestedNodeRole(*role)
 
@@ -37654,6 +37655,10 @@ func (s *Server) handleStatus(
 			"node_profile":                                           homeNodeStatusFields(s.Node.Role)["node_profile"],
 			"low_ram_mode":                                           homeNodeStatusFields(s.Node.Role)["low_ram_mode"],
 			"memory_limit_bytes":                                     homeNodeStatusFields(s.Node.Role)["memory_limit_bytes"],
+			"gomaxprocs":                                             homeNodeStatusFields(s.Node.Role)["gomaxprocs"],
+			"host_cpu_count":                                         homeNodeStatusFields(s.Node.Role)["host_cpu_count"],
+			"cpu_guard_auto_max_procs":                               homeNodeStatusFields(s.Node.Role)["cpu_guard_auto_max_procs"],
+			"cpu_guard_disabled":                                     homeNodeStatusFields(s.Node.Role)["cpu_guard_disabled"],
 			"home_validator_supported":                               homeNodeStatusFields(s.Node.Role)["home_validator_supported"],
 			"validator_min_recommended_ram_gb":                       homeNodeStatusFields(s.Node.Role)["validator_min_recommended_ram_gb"],
 			"gossip_quiet":                                           runtime.GossipQuiet,
@@ -38075,6 +38080,10 @@ func (s *Server) handleStatus(
 		"runtime_pressure_mode":    runtime.RuntimePressureMode,
 		"goroutine_count":          runtime.GoroutineCount,
 		"goroutine_warn_threshold": runtime.GoroutineWarnThreshold,
+		"gomaxprocs":               homeNodeStatusFields(s.Node.Role)["gomaxprocs"],
+		"host_cpu_count":           homeNodeStatusFields(s.Node.Role)["host_cpu_count"],
+		"cpu_guard_auto_max_procs": homeNodeStatusFields(s.Node.Role)["cpu_guard_auto_max_procs"],
+		"cpu_guard_disabled":       homeNodeStatusFields(s.Node.Role)["cpu_guard_disabled"],
 		"gossip_quiet":             runtime.GossipQuiet,
 
 		"live_validators": runtime.LiveValidators,
@@ -43038,6 +43047,10 @@ func (s *Server) handleV1Status(w http.ResponseWriter, r *http.Request) {
 		"node_profile":                                           homeNodeStatusFields(s.Node.Role)["node_profile"],
 		"low_ram_mode":                                           homeNodeStatusFields(s.Node.Role)["low_ram_mode"],
 		"memory_limit_bytes":                                     homeNodeStatusFields(s.Node.Role)["memory_limit_bytes"],
+		"gomaxprocs":                                             homeNodeStatusFields(s.Node.Role)["gomaxprocs"],
+		"host_cpu_count":                                         homeNodeStatusFields(s.Node.Role)["host_cpu_count"],
+		"cpu_guard_auto_max_procs":                               homeNodeStatusFields(s.Node.Role)["cpu_guard_auto_max_procs"],
+		"cpu_guard_disabled":                                     homeNodeStatusFields(s.Node.Role)["cpu_guard_disabled"],
 		"home_validator_supported":                               homeNodeStatusFields(s.Node.Role)["home_validator_supported"],
 		"validator_min_recommended_ram_gb":                       homeNodeStatusFields(s.Node.Role)["validator_min_recommended_ram_gb"],
 		"gossip_quiet":                                           runtime.GossipQuiet,

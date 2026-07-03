@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -62,12 +63,86 @@ func runtimeMemoryLimitBytes() int64 {
 	return current
 }
 
+func runtimeAutoMaxProcs(cpuCount int, role string) int {
+	if cpuCount <= 0 {
+		return 0
+	}
+	role = strings.ToLower(strings.TrimSpace(role))
+	maxProcs := 2
+	switch role {
+	case "light":
+		maxProcs = 1
+	case "archive":
+		maxProcs = 4
+	case "validator", "auto", "full", "":
+		maxProcs = 2
+	default:
+		maxProcs = 2
+	}
+	if cpuCount < maxProcs {
+		return cpuCount
+	}
+	return maxProcs
+}
+
+func parsePositiveIntEnv(name string) (int, bool) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return 0, false
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return 0, false
+	}
+	return value, true
+}
+
+func runtimeRequestedMaxProcs(role string) (int, string) {
+	if value, ok := parsePositiveIntEnv("MSC_RUNTIME_MAX_PROCS"); ok {
+		return value, "MSC_RUNTIME_MAX_PROCS"
+	}
+	role = strings.ToLower(strings.TrimSpace(role))
+	if role == "validator" || role == "auto" {
+		if value, ok := parsePositiveIntEnv("MSC_VALIDATOR_MAX_PROCS"); ok {
+			return value, "MSC_VALIDATOR_MAX_PROCS"
+		}
+	}
+	if strings.TrimSpace(os.Getenv("GOMAXPROCS")) != "" {
+		return runtime.GOMAXPROCS(0), "GOMAXPROCS"
+	}
+	return runtimeAutoMaxProcs(runtime.NumCPU(), role), "auto"
+}
+
+func configureRuntimeCPUGuard(role string) {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("MSC_DISABLE_RUNTIME_CPU_GUARD")), "1") {
+		return
+	}
+	target, source := runtimeRequestedMaxProcs(role)
+	if target <= 0 {
+		return
+	}
+	if cpuCount := runtime.NumCPU(); cpuCount > 0 && target > cpuCount {
+		target = cpuCount
+	}
+	current := runtime.GOMAXPROCS(0)
+	if target != current {
+		runtime.GOMAXPROCS(target)
+		log.Printf("[RUNTIME-GUARD] gomaxprocs=%d role=%s source=%s previous=%d cpus=%d", target, role, source, current, runtime.NumCPU())
+		return
+	}
+	log.Printf("[RUNTIME-GUARD] gomaxprocs_existing=%d role=%s source=%s cpus=%d", current, role, source, runtime.NumCPU())
+}
+
 func homeNodeStatusFields(role string) map[string]any {
 	totalMiB := hostMemoryTotalMiB()
 	return map[string]any{
 		"node_profile":                       currentNodeProfile(role),
 		"low_ram_mode":                       homeLowRAMModeEnabled(role),
 		"memory_limit_bytes":                 runtimeMemoryLimitBytes(),
+		"gomaxprocs":                         runtime.GOMAXPROCS(0),
+		"host_cpu_count":                     runtime.NumCPU(),
+		"cpu_guard_auto_max_procs":           runtimeAutoMaxProcs(runtime.NumCPU(), role),
+		"cpu_guard_disabled":                 truthyEnv("MSC_DISABLE_RUNTIME_CPU_GUARD"),
 		"host_memory_total_mib":              totalMiB,
 		"home_validator_supported":           homeValidatorSupported(role, totalMiB),
 		"validator_min_recommended_ram_gb":   homeValidatorRecommendedRAMMiB / 1024,
