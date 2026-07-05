@@ -25042,6 +25042,7 @@ func StartNode(
 
 		execMismatch: make(map[string]ExecMismatchTracker),
 
+		execProposalAutohealAt:    make(map[uint64]time.Time),
 		leaderBlocks:              make(map[uint64]Block),
 		lastProposedRoundByHeight: make(map[uint64]uint32),
 

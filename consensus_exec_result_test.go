@@ -73,6 +73,12 @@ func newTestNodeForResultGossip(t *testing.T, dataDir string, validators []strin
 		acceptedProposalBlocks:     make(map[string]Block),
 		embeddedProposalSeen:       make(map[uint64]map[string]struct{}),
 		quorumLockedProposal:       make(map[string]string),
+		execVoteIngressSeen:        make(map[string]time.Time),
+		execVoteStaleIngressSeen:   make(map[string]time.Time),
+		execVoteSeen:               make(map[string]time.Time),
+		execProposalAutohealAt:     make(map[uint64]time.Time),
+		execRebroadcastAt:          make(map[uint64]time.Time),
+		execRebroadcastState:       make(map[uint64]execVoteRebroadcastState),
 		leaderBlocks:               make(map[uint64]Block),
 		committed:                  make(map[uint64]string),
 		commitVotes:                make(map[uint64]map[string]map[string]struct{}),
@@ -2058,6 +2064,87 @@ func TestProcessExecutionResultMsgQueuesCurrentRoundUnresolvedVoteAsStaleAccept(
 	if strings.Contains(out, "[VOTE-DROP] reason=queued_proposal_unresolved") {
 		t.Fatalf("expected unresolved current-round vote to avoid hard drop log, got: %s", out)
 	}
+}
+
+func TestClearTransientExecutionVoteGuardsForEpochKeepsQueuedVotes(t *testing.T) {
+	node := newTestNodeForResultGossip(t, t.TempDir(), []string{"A", "B", "C", "D"})
+	epoch := node.currentEpoch()
+	otherEpoch := epoch + 1
+
+	node.execResultsMu.Lock()
+	node.execBroadcasted[epoch] = map[string]bool{"vote": true}
+	node.execBroadcasted[otherEpoch] = map[string]bool{"vote": true}
+	node.execBroadcastedByValidator[epoch] = map[string]map[string]bool{"proposal": {"A": true}}
+	node.execSignerSeen[epoch] = map[string]map[string]bool{"proposal": {"B": true}}
+	node.localExecVoteByRound[epoch] = map[uint32]string{0: "proposal"}
+	node.queuedExecVotes[fmt.Sprintf("%d", epoch)] = []ExecutionResultMsg{{
+		HeightHint: epoch,
+		Signer:     "B",
+		ExecHash:   "exec",
+	}}
+	node.execResultsMu.Unlock()
+
+	node.execVoteGuardMu.Lock()
+	node.execVoteSeen[fmt.Sprintf("%d:proposal:B:exec:", epoch)] = time.Now()
+	node.execVoteIngressSeen[fmt.Sprintf("%d:0:B:block", epoch)] = time.Now()
+	node.execVoteStaleIngressSeen[fmt.Sprintf("%d:0:B:block", epoch)] = time.Now()
+	node.execVoteSeen[fmt.Sprintf("%d:proposal:B:exec:", otherEpoch)] = time.Now()
+	node.execVoteGuardMu.Unlock()
+
+	node.execRebroadcastMu.Lock()
+	node.execRebroadcastAt[epoch] = time.Now()
+	node.execRebroadcastState[epoch] = execVoteRebroadcastState{ProposalKey: "proposal", VoteCount: 1}
+	node.execRebroadcastAt[otherEpoch] = time.Now()
+	node.execRebroadcastMu.Unlock()
+
+	node.clearTransientExecutionVoteGuardsForEpoch(epoch)
+
+	node.execResultsMu.Lock()
+	if _, ok := node.execBroadcasted[epoch]; ok {
+		t.Fatalf("expected execBroadcasted for epoch %d to be cleared", epoch)
+	}
+	if _, ok := node.execBroadcasted[otherEpoch]; !ok {
+		t.Fatalf("expected unrelated execBroadcasted epoch to remain")
+	}
+	if _, ok := node.execBroadcastedByValidator[epoch]; ok {
+		t.Fatalf("expected execBroadcastedByValidator for epoch %d to be cleared", epoch)
+	}
+	if _, ok := node.execSignerSeen[epoch]; ok {
+		t.Fatalf("expected execSignerSeen for epoch %d to be cleared", epoch)
+	}
+	if _, ok := node.localExecVoteByRound[epoch]; ok {
+		t.Fatalf("expected localExecVoteByRound for epoch %d to be cleared", epoch)
+	}
+	if got := len(node.queuedExecVotes[fmt.Sprintf("%d", epoch)]); got != 1 {
+		t.Fatalf("expected queued votes to remain, got=%d", got)
+	}
+	node.execResultsMu.Unlock()
+
+	node.execVoteGuardMu.Lock()
+	for key := range node.execVoteSeen {
+		if strings.HasPrefix(key, fmt.Sprintf("%d:", epoch)) {
+			t.Fatalf("expected exec vote replay key %s to be cleared", key)
+		}
+	}
+	if len(node.execVoteIngressSeen) != 0 || len(node.execVoteStaleIngressSeen) != 0 {
+		t.Fatalf("expected ingress replay keys for epoch %d to be cleared", epoch)
+	}
+	if _, ok := node.execVoteSeen[fmt.Sprintf("%d:proposal:B:exec:", otherEpoch)]; !ok {
+		t.Fatalf("expected unrelated exec vote replay key to remain")
+	}
+	node.execVoteGuardMu.Unlock()
+
+	node.execRebroadcastMu.Lock()
+	if _, ok := node.execRebroadcastAt[epoch]; ok {
+		t.Fatalf("expected execRebroadcastAt for epoch %d to be cleared", epoch)
+	}
+	if _, ok := node.execRebroadcastAt[otherEpoch]; !ok {
+		t.Fatalf("expected unrelated execRebroadcastAt epoch to remain")
+	}
+	if _, ok := node.execRebroadcastState[epoch]; ok {
+		t.Fatalf("expected execRebroadcastState for epoch %d to be cleared", epoch)
+	}
+	node.execRebroadcastMu.Unlock()
 }
 
 func TestHandleLeaderBlockCachesRejectedProposalForQueuedVoteReplay(t *testing.T) {

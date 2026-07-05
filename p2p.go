@@ -860,6 +860,16 @@ type execVoteRebroadcastState struct {
 	LastForcedAt   time.Time
 }
 
+type unresolvedExecutionVoteEvidence struct {
+	Epoch         uint64
+	Round         uint32
+	BlockHash     string
+	ExecHash      string
+	TxMerkle      string
+	UniqueSigners int
+	TotalVotes    int
+}
+
 // Local execution vote markers must survive short retry churn, but once the
 // proposal switch gap is reached a non-quorum marker is stale enough to release
 // so validators can join the higher-round failover proposal.
@@ -5718,6 +5728,236 @@ func (n *Node) shouldTreatUnresolvedExecutionVoteAsStaleAccept(res ExecutionResu
 	return res.RoundHint == currentRound
 }
 
+func executionProposalAutohealWindow() time.Duration {
+	window := time.Duration(SelfHealStallSeconds) * time.Second
+	if window <= 0 {
+		window = 45 * time.Second
+	}
+	if emergency := emergencyQuorumGraceWindow(); emergency > window {
+		window = emergency
+	}
+	if window < 30*time.Second {
+		window = 30 * time.Second
+	}
+	return window
+}
+
+func executionProposalAutohealCooldown() time.Duration {
+	cooldown := SelfHealInterval * 2
+	if cooldown < 30*time.Second {
+		cooldown = 30 * time.Second
+	}
+	return cooldown
+}
+
+func unresolvedExecutionVoteMinSigners(required int) int {
+	if required <= 2 {
+		return 1
+	}
+	return 2
+}
+
+func (e unresolvedExecutionVoteEvidence) matchesBlock(block Block) bool {
+	if e.Epoch == 0 || block.ID != e.Epoch {
+		return false
+	}
+	if e.BlockHash != "" && !strings.EqualFold(strings.TrimSpace(block.BlockHash), e.BlockHash) {
+		return false
+	}
+	if e.Round != 0 && block.Round != e.Round {
+		return false
+	}
+	if e.TxMerkle != "" && strings.TrimSpace(block.MempoolRoot) != "" && e.TxMerkle != strings.TrimSpace(block.MempoolRoot) {
+		return false
+	}
+	return true
+}
+
+func (n *Node) bestQueuedUnresolvedExecutionVoteEvidence(epoch uint64) unresolvedExecutionVoteEvidence {
+	if n == nil || epoch == 0 {
+		return unresolvedExecutionVoteEvidence{}
+	}
+	key := fmt.Sprintf("%d", epoch)
+	n.execResultsMu.Lock()
+	msgs := append([]ExecutionResultMsg(nil), n.queuedExecVotes[key]...)
+	n.execResultsMu.Unlock()
+	if len(msgs) == 0 {
+		return unresolvedExecutionVoteEvidence{}
+	}
+	type bucket struct {
+		evidence unresolvedExecutionVoteEvidence
+		signers  map[string]struct{}
+	}
+	buckets := make(map[string]*bucket)
+	for _, msg := range msgs {
+		msg.Signer = normalizeValidatorID(msg.Signer)
+		if msg.HeightHint != epoch || msg.Signer == "" || strings.TrimSpace(msg.ExecHash) == "" {
+			continue
+		}
+		blockHash := strings.TrimSpace(msg.BlockHashHint)
+		execHash := strings.TrimSpace(msg.ExecHash)
+		txMerkle := strings.TrimSpace(msg.TxMerkle)
+		bucketKey := fmt.Sprintf("%d|%s|%s|%s", msg.RoundHint, blockHash, execHash, txMerkle)
+		b := buckets[bucketKey]
+		if b == nil {
+			b = &bucket{
+				evidence: unresolvedExecutionVoteEvidence{
+					Epoch:     epoch,
+					Round:     msg.RoundHint,
+					BlockHash: blockHash,
+					ExecHash:  execHash,
+					TxMerkle:  txMerkle,
+				},
+				signers: make(map[string]struct{}),
+			}
+			buckets[bucketKey] = b
+		}
+		b.signers[msg.Signer] = struct{}{}
+		b.evidence.TotalVotes++
+	}
+	best := unresolvedExecutionVoteEvidence{}
+	for _, b := range buckets {
+		b.evidence.UniqueSigners = len(b.signers)
+		if b.evidence.UniqueSigners > best.UniqueSigners ||
+			(b.evidence.UniqueSigners == best.UniqueSigners && b.evidence.TotalVotes > best.TotalVotes) ||
+			(b.evidence.UniqueSigners == best.UniqueSigners && b.evidence.TotalVotes == best.TotalVotes && b.evidence.Round > best.Round) {
+			best = b.evidence
+		}
+	}
+	return best
+}
+
+func (n *Node) shouldRunExecutionProposalAutoheal(epoch uint64) bool {
+	if n == nil || epoch == 0 {
+		return false
+	}
+	now := time.Now()
+	cooldown := executionProposalAutohealCooldown()
+	n.execProposalAutohealMu.Lock()
+	defer n.execProposalAutohealMu.Unlock()
+	if n.execProposalAutohealAt == nil {
+		n.execProposalAutohealAt = make(map[uint64]time.Time)
+	}
+	if last := n.execProposalAutohealAt[epoch]; !last.IsZero() && now.Sub(last) < cooldown {
+		return false
+	}
+	n.execProposalAutohealAt[epoch] = now
+	for h, seenAt := range n.execProposalAutohealAt {
+		if h+4 < epoch || now.Sub(seenAt) > 10*time.Minute {
+			delete(n.execProposalAutohealAt, h)
+		}
+	}
+	return true
+}
+
+func (n *Node) clearTransientExecutionVoteGuardsForEpoch(epoch uint64) {
+	if n == nil || epoch == 0 {
+		return
+	}
+	n.execResultsMu.Lock()
+	delete(n.execBroadcasted, epoch)
+	delete(n.execBroadcastedByValidator, epoch)
+	delete(n.execSignerSeen, epoch)
+	delete(n.localExecVoteByRound, epoch)
+	n.execResultsMu.Unlock()
+
+	prefix := fmt.Sprintf("%d:", epoch)
+	n.execVoteGuardMu.Lock()
+	for key := range n.execVoteSeen {
+		if strings.HasPrefix(key, prefix) {
+			delete(n.execVoteSeen, key)
+		}
+	}
+	for key := range n.execVoteIngressSeen {
+		if strings.HasPrefix(key, prefix) {
+			delete(n.execVoteIngressSeen, key)
+		}
+	}
+	for key := range n.execVoteStaleIngressSeen {
+		if strings.HasPrefix(key, prefix) {
+			delete(n.execVoteStaleIngressSeen, key)
+		}
+	}
+	n.execVoteGuardMu.Unlock()
+
+	n.execRebroadcastMu.Lock()
+	delete(n.execRebroadcastAt, epoch)
+	delete(n.execRebroadcastState, epoch)
+	n.execRebroadcastMu.Unlock()
+}
+
+func (n *Node) maybeHealUnresolvedExecutionProposal(epoch uint64, trigger string) bool {
+	if n == nil || epoch == 0 || !SelfHealEnabled || n.isShuttingDown() {
+		return false
+	}
+	if n.Blockchain == nil || n.isCommittedReplayHeight(epoch) || epoch != n.currentEpoch() {
+		return false
+	}
+	if !n.canParticipateInConsensusNow() {
+		return false
+	}
+	stall := n.commitStallDuration()
+	if stall < executionProposalAutohealWindow() {
+		return false
+	}
+	evidence := n.bestQueuedUnresolvedExecutionVoteEvidence(epoch)
+	required := n.executionQuorumRequiredForEpoch(epoch)
+	if evidence.UniqueSigners < unresolvedExecutionVoteMinSigners(required) {
+		return false
+	}
+	if !n.shouldRunExecutionProposalAutoheal(epoch) {
+		return false
+	}
+
+	if lockedBlock, _, locked, _ := n.quorumLockedProposalLockState(epoch); locked {
+		n.clearTransientExecutionVoteGuardsForEpoch(epoch)
+		n.processQueuedExecutionVotesForProposal(lockedBlock)
+		n.maybeRebroadcastExecutionVoteForBlock(lockedBlock, "proposal_autoheal_locked_"+trigger)
+		n.tryFinalizeProposalIfQuorum(lockedBlock, "proposal_autoheal_locked_"+trigger)
+		log.Printf("[EXEC-PROPOSAL-AUTOHEAL] height=%d action=locked_replay trigger=%s stall=%s queued_signers=%d block=%s round=%d",
+			epoch, strings.TrimSpace(trigger), stall.Round(time.Second), evidence.UniqueSigners, ShortHash(lockedBlock.BlockHash), lockedBlock.Round)
+		return true
+	}
+
+	targetBlock, targetOK := n.executionVoteTargetBlock(epoch)
+	if targetOK && targetBlock.ID == epoch {
+		_, _, committed := n.proposalHasSignedCommitQuorum(targetBlock)
+		if committed || evidence.matchesBlock(targetBlock) {
+			n.clearTransientExecutionVoteGuardsForEpoch(epoch)
+			n.processQueuedExecutionVotesForProposal(targetBlock)
+			n.maybeRebroadcastExecutionVoteForBlock(targetBlock, "proposal_autoheal_replay_"+trigger)
+			n.tryFinalizeProposalIfQuorum(targetBlock, "proposal_autoheal_replay_"+trigger)
+			log.Printf("[EXEC-PROPOSAL-AUTOHEAL] height=%d action=replay trigger=%s stall=%s queued_signers=%d block=%s round=%d committed_lock=%t",
+				epoch, strings.TrimSpace(trigger), stall.Round(time.Second), evidence.UniqueSigners, ShortHash(targetBlock.BlockHash), targetBlock.Round, committed)
+			return true
+		}
+		snap := proposalSnapshotFromBlock(targetBlock)
+		clearedProposal := n.clearAcceptedProposalIfBlock(epoch, targetBlock, "proposal_autoheal_conflict")
+		clearedLeader := n.clearLeaderBlockIfBlock(epoch, targetBlock)
+		if snap.ProposalKey != "" {
+			n.clearLocalExecutionVoteMarkerForProposal(epoch, snap.ProposalKey)
+			clearExecPoolProposal(epoch, snap.ProposalKey)
+		}
+		log.Printf("[EXEC-PROPOSAL-AUTOHEAL] height=%d action=clear_conflict trigger=%s stall=%s queued_signers=%d queued_block=%s local_block=%s local_round=%d cleared_proposal=%t cleared_leader=%t",
+			epoch, strings.TrimSpace(trigger), stall.Round(time.Second), evidence.UniqueSigners, ShortHash(evidence.BlockHash), ShortHash(targetBlock.BlockHash), targetBlock.Round, clearedProposal, clearedLeader)
+	}
+
+	n.clearTransientExecutionVoteGuardsForEpoch(epoch)
+	n.replayQueuedLeaderBlocksForCurrentEpoch()
+	if block, ok := n.executionVoteTargetBlock(epoch); ok && block.ID == epoch {
+		n.processQueuedExecutionVotesForProposal(block)
+		n.maybeRebroadcastExecutionVoteForBlock(block, "proposal_autoheal_after_replay_"+trigger)
+		n.tryFinalizeProposalIfQuorum(block, "proposal_autoheal_after_replay_"+trigger)
+	} else {
+		n.replayQueuedExecutionVotesForEpoch(epoch)
+		n.maybeBroadcastCurrentLeaderExecutionVote("proposal_autoheal_missing_proposal_" + trigger)
+		n.maybeRecoverMissingBlock(epoch, "proposal_autoheal_"+trigger)
+	}
+	log.Printf("[EXEC-PROPOSAL-AUTOHEAL] height=%d action=recover_missing trigger=%s stall=%s queued_signers=%d queued_block=%s round=%d",
+		epoch, strings.TrimSpace(trigger), stall.Round(time.Second), evidence.UniqueSigners, ShortHash(evidence.BlockHash), evidence.Round)
+	return true
+}
+
 func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool) {
 	res.Signer = normalizeValidatorID(res.Signer)
 	_ = allowQueue
@@ -5857,6 +6097,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 			} else {
 				n.logExecutionVoteDrop("queued_proposal_unresolved", res, execProposalSnapshot{})
 			}
+			n.maybeHealUnresolvedExecutionProposal(targetEpoch, "queued_proposal_unresolved")
 		}
 		return
 	}
@@ -9456,6 +9697,9 @@ func (n *Node) startSelfHeal(ctx context.Context) {
 				if lagging && time.Since(lastProgress) >= time.Duration(SelfHealStallSeconds)*time.Second {
 					stalled = true
 				}
+			}
+			if stalled || n.commitStallDuration() >= executionProposalAutohealWindow() {
+				n.maybeHealUnresolvedExecutionProposal(n.currentEpoch(), "self_heal_stall")
 			}
 			if peers < minPeers || stalled {
 				if n.Role == "validator" {

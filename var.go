@@ -2032,6 +2032,8 @@ type Node struct {
 	execRebroadcastMu          sync.Mutex
 	execRebroadcastAt          map[uint64]time.Time // epoch -> last execution-vote broadcast activity
 	execRebroadcastState       map[uint64]execVoteRebroadcastState
+	execProposalAutohealMu     sync.Mutex
+	execProposalAutohealAt     map[uint64]time.Time
 
 	syncMu                           sync.Mutex
 	lastSyncAttempt                  time.Time

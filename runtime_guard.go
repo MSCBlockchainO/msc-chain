@@ -75,7 +75,9 @@ func runtimeAutoMaxProcs(cpuCount int, role string) int {
 		maxProcs = 1
 	case "archive":
 		maxProcs = 4
-	case "validator", "auto", "full", "":
+	case "validator", "auto", "":
+		maxProcs = 1
+	case "full":
 		maxProcs = 2
 	default:
 		maxProcs = 2
@@ -113,7 +115,7 @@ func runtimeCPUHardLimit(role string) int {
 		if value, ok := parsePositiveIntEnv("MSC_VALIDATOR_CPU_HARD_LIMIT"); ok {
 			return value
 		}
-		return 2
+		return 1
 	case "full":
 		if value, ok := parsePositiveIntEnv("MSC_FULLNODE_CPU_HARD_LIMIT"); ok {
 			return value

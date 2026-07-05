@@ -37,8 +37,8 @@ func TestRuntimeAutoMaxProcs(t *testing.T) {
 		role     string
 		want     int
 	}{
-		{name: "validator capped at two", cpuCount: 8, role: "validator", want: 2},
-		{name: "auto capped at two", cpuCount: 16, role: "auto", want: 2},
+		{name: "validator capped at one", cpuCount: 8, role: "validator", want: 1},
+		{name: "auto capped at one", cpuCount: 16, role: "auto", want: 1},
 		{name: "full capped at two", cpuCount: 4, role: "full", want: 2},
 		{name: "light capped at one", cpuCount: 4, role: "light", want: 1},
 		{name: "archive capped at four", cpuCount: 16, role: "archive", want: 4},
@@ -79,7 +79,7 @@ func TestRuntimeCPUGuardHardCapsValidatorEnv(t *testing.T) {
 
 	configureRuntimeCPUGuard("validator")
 
-	want := 2
+	want := 1
 	if runtime.NumCPU() > 0 && runtime.NumCPU() < want {
 		want = runtime.NumCPU()
 	}
@@ -105,8 +105,8 @@ func TestRuntimeCPUSyncProfileCapsValidatorWorkers(t *testing.T) {
 	SyncSnapshotParallelChunks = 8
 	applyRuntimeCPUSyncProfile("validator")
 
-	if SyncDeltaReplayVerifyWorkers != 2 || SyncEd25519BatchVerifyWorkers != 2 || SyncSnapshotParallelChunks != 2 {
-		t.Fatalf("validator CPU profile workers = delta:%d ed25519:%d snapshot:%d, want all 2",
+	if SyncDeltaReplayVerifyWorkers != 1 || SyncEd25519BatchVerifyWorkers != 1 || SyncSnapshotParallelChunks != 1 {
+		t.Fatalf("validator CPU profile workers = delta:%d ed25519:%d snapshot:%d, want all 1",
 			SyncDeltaReplayVerifyWorkers,
 			SyncEd25519BatchVerifyWorkers,
 			SyncSnapshotParallelChunks,
@@ -162,14 +162,14 @@ func TestRuntimeWorkerHelpersFollowBudget(t *testing.T) {
 	SyncBlockRangeReplicationFactor = 3
 	SyncSnapshotChunkReplicationFactor = 3
 
-	if got := syncDeltaReplayVerifyWorkers(); got != 2 {
-		t.Fatalf("delta replay workers = %d, want 2", got)
+	if got := syncDeltaReplayVerifyWorkers(); got != 1 {
+		t.Fatalf("delta replay workers = %d, want 1", got)
 	}
-	if got := syncEd25519BatchVerifyWorkers(); got != 2 {
-		t.Fatalf("ed25519 workers = %d, want 2", got)
+	if got := syncEd25519BatchVerifyWorkers(); got != 1 {
+		t.Fatalf("ed25519 workers = %d, want 1", got)
 	}
-	if got := syncSnapshotParallelChunks(); got != 2 {
-		t.Fatalf("snapshot parallel chunks = %d, want 2", got)
+	if got := syncSnapshotParallelChunks(); got != 1 {
+		t.Fatalf("snapshot parallel chunks = %d, want 1", got)
 	}
 	if got := syncBlockRangeReplicationFactor(); got != 1 {
 		t.Fatalf("block range replication factor = %d, want 1 under 2-core budget", got)
