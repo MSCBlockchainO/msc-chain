@@ -1000,6 +1000,54 @@ Setup source modes:
 --source release   download release artifact, verify checksum, and verify Ed25519 signature when --release-public-key is supplied
 ```
 
+### Production Public Installer Flow
+
+The public installer flow is:
+
+1. Download the MSC release artifact.
+2. Verify the operator-supplied SHA-256 checksum.
+3. Choose the node type: `full`, `public-rpc`, `candidate-validator`, `private-validator`, or `archive`.
+4. Auto-write `config.toml` for the selected storage/RPC profile.
+5. Auto-add bootnodes and `persistent_peers`.
+6. Start the node service.
+7. Print the local status and health URLs.
+
+Linux:
+
+```bash
+./scripts/install_msc_node.sh \
+  --node-type full \
+  --id FULL1 \
+  --release-url https://releases.mscchain.io/msc-node-linux-amd64.tgz \
+  --release-sha256 <sha256> \
+  --bootnodes "/ip4/BOOTNODE_IP/tcp/7001/p2p/PEER_ID" \
+  --auto-start
+```
+
+Windows:
+
+```powershell
+.\scripts\install_msc_node.ps1 `
+  -NodeType public-rpc `
+  -NodeId RPC1 `
+  -ReleaseUrl https://releases.mscchain.io/msc-node-windows-amd64.zip `
+  -ReleaseSha256 <sha256> `
+  -Bootnodes "/ip4/BOOTNODE_IP/tcp/7001/p2p/PEER_ID" `
+  -AutoStart
+```
+
+Node type policy:
+
+```text
+full                 full-node runtime, pruned full-node storage
+public-rpc           full-node runtime, public-gateway hints; expose only through TLS/rate-limited gateway
+candidate-validator  full-node runtime until synced and staked
+private-validator    validator runtime, validator storage profile, localhost/VPN RPC only
+archive              full-node runtime, archive storage profile, pruning disabled
+```
+
+Validators should keep RPC bound to `127.0.0.1` or private networks. Public wallet and explorer traffic should terminate at full/public-RPC/archive gateway nodes, never directly at validator RPC.
+
 ### Idempotent Install, Repair, And Recovery
 
 Rerunning setup is recovery-safe by default. If MSC finds an existing install manifest, validator key, database, config, or service, it preserves them and treats the run as a repair/update path. A fresh destructive install is refused unless the operator explicitly confirms the node ID and has already removed or quarantined old data.
@@ -1088,7 +1136,7 @@ Validator key commands:
 ```powershell
 .\msc-node.exe validator-keygen --id F --datadir data/F
 .\msc-node.exe validator-pubkey --id F --datadir data/F
-.\msc-node.exe validator create --wallet .\.msc\secure_wallet.json --validator F --validator-pubkey <32-byte-ed25519-pubkey-hex> --amount 100 --rpc https://mscblockexplorer.in
+.\msc-node.exe validator create --wallet .\.msc\secure_wallet.json --validator F --validator-pubkey <32-byte-ed25519-pubkey-hex> --amount 100 --rpc https://wallet.mscblockexplorer.in
 ```
 
 MPC validator key ceremony commands:
@@ -1103,7 +1151,7 @@ Use this only for a new validator whose consensus public key is not already regi
 $env:MSC_MPC_SHARE_PASSWORD = "<strong-share-password>"
 .\msc-node.exe validator mpc-keygen --validator F --threshold 2 --participants 3 --outdir data/F/mpc
 .\msc-node.exe validator mpc-pubkey --pub data/F/mpc/validator.pub
-.\msc-node.exe validator create-mpc --wallet .\.msc\secure_wallet.json --validator F --mpc-pub data/F/mpc/validator.pub --amount 100 --rpc https://mscblockexplorer.in
+.\msc-node.exe validator create-mpc --wallet .\.msc\secure_wallet.json --validator F --mpc-pub data/F/mpc/validator.pub --amount 100 --rpc https://wallet.mscblockexplorer.in
 ```
 
 This creates a fresh validator public key and three encrypted MPC shares:
@@ -1283,33 +1331,33 @@ Invoke-WebRequest -UseBasicParsing http://127.0.0.1:26657/metrics | Select-Strin
 Transaction and staking commands:
 
 ```powershell
-.\msc-node.exe balance --address MSC... --rpc https://mscblockexplorer.in
-.\msc-node.exe send --wallet .\.msc\secure_wallet.json --to MSC... --amount 10 --rpc https://mscblockexplorer.in
-.\msc-node.exe stake --wallet .\.msc\secure_wallet.json --validator F --validator-pubkey <32-byte-ed25519-pubkey-hex> --amount 100 --rpc https://mscblockexplorer.in
-.\msc-node.exe unstake --wallet .\.msc\secure_wallet.json --validator F --amount 100 --rpc https://mscblockexplorer.in
-.\msc-node.exe claim-rewards --wallet .\.msc\secure_wallet.json --rpc https://mscblockexplorer.in
+.\msc-node.exe balance --address MSC... --rpc https://wallet.mscblockexplorer.in
+.\msc-node.exe send --wallet .\.msc\secure_wallet.json --to MSC... --amount 10 --rpc https://wallet.mscblockexplorer.in
+.\msc-node.exe stake --wallet .\.msc\secure_wallet.json --validator F --validator-pubkey <32-byte-ed25519-pubkey-hex> --amount 100 --rpc https://wallet.mscblockexplorer.in
+.\msc-node.exe unstake --wallet .\.msc\secure_wallet.json --validator F --amount 100 --rpc https://wallet.mscblockexplorer.in
+.\msc-node.exe claim-rewards --wallet .\.msc\secure_wallet.json --rpc https://wallet.mscblockexplorer.in
 ```
 
 Node status commands:
 
 ```powershell
-.\msc-node.exe status --rpc https://mscblockexplorer.in
-.\msc-node.exe peers --rpc https://mscblockexplorer.in
-.\msc-node.exe sync-status --rpc https://mscblockexplorer.in
+.\msc-node.exe status --rpc https://explorer.mscblockexplorer.in
+.\msc-node.exe peers --rpc https://explorer.mscblockexplorer.in
+.\msc-node.exe sync-status --rpc https://explorer.mscblockexplorer.in
 ```
 
 ### RPC And Metrics Checks
 
 ```powershell
-Invoke-RestMethod https://mscblockexplorer.in/status
-Invoke-RestMethod https://mscblockexplorer.in/v1/public/status
-Invoke-RestMethod https://mscblockexplorer.in/consensus/mode
-Invoke-RestMethod https://mscblockexplorer.in/formal/verification
-Invoke-RestMethod https://mscblockexplorer.in/storage/policy
-Invoke-RestMethod https://mscblockexplorer.in/bridge/status
-Invoke-RestMethod https://mscblockexplorer.in/v1/validators/diversity
-Invoke-RestMethod https://mscblockexplorer.in/v1/peers
-Invoke-WebRequest -UseBasicParsing https://mscblockexplorer.in/metrics
+Invoke-RestMethod https://explorer.mscblockexplorer.in/status
+Invoke-RestMethod https://explorer.mscblockexplorer.in/v1/public/status
+Invoke-RestMethod https://explorer.mscblockexplorer.in/consensus/mode
+Invoke-RestMethod https://explorer.mscblockexplorer.in/formal/verification
+Invoke-RestMethod https://explorer.mscblockexplorer.in/storage/policy
+Invoke-RestMethod https://explorer.mscblockexplorer.in/bridge/status
+Invoke-RestMethod https://explorer.mscblockexplorer.in/v1/validators/diversity
+Invoke-RestMethod https://explorer.mscblockexplorer.in/v1/peers
+Invoke-WebRequest -UseBasicParsing https://wallet.mscblockexplorer.in/metrics
 ```
 
 Bridge proof dry-run example, verification only:
@@ -1331,17 +1379,17 @@ $proof = @{
     @{ signer = "oracle-c"; signature = "sig-c" }
   )
 } | ConvertTo-Json -Depth 8
-Invoke-RestMethod https://mscblockexplorer.in/bridge/verify -Method POST -Body $proof -ContentType "application/json"
+Invoke-RestMethod https://explorer.mscblockexplorer.in/bridge/verify -Method POST -Body $proof -ContentType "application/json"
 ```
 
 Validator RPC should stay private or bound to localhost. Public traffic should use the full-node gateway only:
 
 ```text
-Explorer: https://mscblockexplorer.in/explorer.html
-Wallet:   https://mscblockexplorer.in/msc_wallet.html
-Status:   https://mscblockexplorer.in/status.html
-DTL IDE:  https://mscblockexplorer.in/dtl_ide.html
-RPC:      https://mscblockexplorer.in
+Explorer: https://explorer.mscblockexplorer.in/explorer.html
+Wallet:   https://wallet.mscblockexplorer.in/msc_wallet.html
+Status:   https://explorer.mscblockexplorer.in/portal/status.html
+DTL IDE:  https://explorer.mscblockexplorer.in/dtl_ide.html
+RPC:      https://wallet.mscblockexplorer.in
 ```
 
 Prepare new validators `H/I/J/K` as synced full nodes first. Activate them one at a time only after sync completes and finality remains stable:
@@ -1379,7 +1427,7 @@ Fresh EC2 restore test:
 .\scripts\mainnet_chaos_network.ps1 -Tier1Survival -DurationMinutes 60 -NodeCount 10 -ValidatorNodeCount 4 -AutoLocalPeers -NetworkChaos -PacketLoss -TxFlood
 .\scripts\mainnet_sync_gap_test.ps1
 .\scripts\mainnet_soak_churn.ps1
-.\scripts\mainnet_ddos_spam_test.ps1 -TargetBase https://mscblockexplorer.in -DurationSeconds 300
+.\scripts\mainnet_ddos_spam_test.ps1 -TargetBase https://wallet.mscblockexplorer.in -DurationSeconds 300
 .\scripts\multi_arch_determinism.ps1
 ```
 
