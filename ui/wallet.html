@@ -3,24 +3,39 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MSC Wallet</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="wallet_pages.css?v=20260602h" />
+  <title>MSC Wallet Account - Balance and Self-Custody Tools</title>
+  <meta name="description" content="Manage an unlocked MSC Chain wallet account, balance, transfers, security, staking, and activity." />
+  <meta name="robots" content="noindex,follow" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/wallet.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Wallet Account - Balance and Self-Custody Tools" />
+  <meta property="og:description" content="Manage an unlocked MSC Chain wallet account, balance, transfers, security, staking, and activity." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/wallet.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Wallet Account - Balance and Self-Custody Tools" />
+  <meta name="twitter:description" content="Manage an unlocked MSC Chain wallet account, balance, transfers, security, staking, and activity." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
 </head>
 <body data-page="wallet">
   <main class="content">
     <section class="page-hero">
-      <div class="eyebrow">Account</div>
-      <h1>Wallet</h1>
-      <p class="muted">Address, balance, assets, copy tools, QR, and key export controls.</p>
+      <div class="eyebrow">Assets</div>
+      <h1>Your account</h1>
+      <p class="muted">View your address, MSC balance, and quick account actions.</p>
     </section>
     <section class="two-col">
       <div class="card">
-        <div class="label">Wallet Address</div>
+        <div class="label">Wallet address</div>
         <div id="walletAddress" class="value mono">-</div>
-        <div class="label">Public Key</div>
+        <div class="label">Public key</div>
         <div id="walletPublicKey" class="mono">-</div>
         <div class="row">
           <button id="copyAddress" type="button">Copy Address</button>
@@ -31,21 +46,27 @@
       <div class="card">
         <div class="label">Balance</div>
         <div id="walletBalance" class="value">- MSC</div>
-        <div id="balanceVerification" class="pill">SPV pending</div>
+        <div id="balanceVerification" class="pill">Checking</div>
         <div class="label">Assets</div>
         <div class="list">
           <div class="list-item"><strong>MSC</strong><span id="assetMSC">- MSC</span></div>
         </div>
       </div>
     </section>
-    <section class="card">
-      <div class="label">Private Key Export</div>
-      <button id="exportPrivateKey" type="button">Export Private Key</button>
+    <section class="card danger-zone">
+      <div class="label">Advanced backup</div>
+      <p class="muted">Prefer an encrypted recovery kit or seed backup. Only reveal your private key if you know how to store it offline safely.</p>
+      <div class="action-row">
+        <button id="downloadRecoveryKit" class="primary" type="button"><i data-lucide="download"></i>Download Recovery Kit</button>
+        <a class="button" href="security.html"><i data-lucide="shield-check"></i>Recovery Center</a>
+        <button id="exportPrivateKey" type="button">Show Private Key</button>
+      </div>
+      <div id="recoveryKitStatus" class="safe-note">Recovery kit keeps private material encrypted with your wallet password.</div>
       <div id="privateKeyOutput" class="result mono">Unlock wallet first.</div>
     </section>
   </main>
   <script src="vendor/nacl.min.js"></script>
   <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
-  <script src="wallet_pages.js?v=20260603a"></script>
+  <script src="wallet_pages.js?v=20260714-vmremoved"></script>
 </body>
 </html>

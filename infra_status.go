@@ -9,28 +9,49 @@ import (
 )
 
 type infraServiceStatus struct {
+	// `ID` stores the current position in the related collection.
 	ID              string `json:"id"`
+	// `URL` stores the value associated with this record.
 	URL             string `json:"url,omitempty"`
+	// `Role` stores the value associated with this record.
 	Role            string `json:"role"`
+	// `Healthy` stores the value associated with this record.
 	Healthy         bool   `json:"healthy"`
+	// `State` stores the value associated with this record.
 	State           string `json:"state"`
+	// `Reason` stores the value associated with this record.
 	Reason          string `json:"reason,omitempty"`
+	// `LatencyMS` stores the value associated with this record.
 	LatencyMS       int64  `json:"latency_ms,omitempty"`
+	// `LastChecked` stores the value associated with this record.
 	LastChecked     int64  `json:"last_checked"`
+	// `Height` stores the value associated with this record.
 	Height          uint64 `json:"height,omitempty"`
+	// `FinalizedHeight` stores the value associated with this record.
 	FinalizedHeight uint64 `json:"finalized_height,omitempty"`
+	// `FinalityLag` stores the value associated with this record.
 	FinalityLag     uint64 `json:"finality_lag,omitempty"`
+	// `ArchiveMode` stores the value associated with this record.
 	ArchiveMode     bool   `json:"archive_mode,omitempty"`
+	// `IndexedHeight` stores the current position in the related collection.
 	IndexedHeight   uint64 `json:"indexed_height,omitempty"`
+	// `ArchiveHeight` stores the value associated with this record.
 	ArchiveHeight   uint64 `json:"archive_height,omitempty"`
+	// `IndexLag` stores the current position in the related collection.
 	IndexLag        uint64 `json:"index_lag,omitempty"`
+	// `SourceRPC` stores the value associated with this record.
 	SourceRPC       string `json:"source_rpc,omitempty"`
+	// `ChainID` stores the value associated with this record.
 	ChainID         string `json:"chain_id,omitempty"`
+	// `GenesisHash` stores the digest used to identify or verify the related data.
 	GenesisHash     string `json:"genesis_hash,omitempty"`
 }
 
+// splitInfraEndpoints implements the split infra endpoints helper.
 func splitInfraEndpoints(raw string) []string {
+	// `out` stores the result produced by this operation.
 	out := make([]string, 0)
+	// `part` tracks the current values while iterating.
 	for _, part := range strings.FieldsFunc(raw, func(r rune) bool {
 		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
 	}) {
@@ -42,7 +63,9 @@ func splitInfraEndpoints(raw string) []string {
 	return out
 }
 
+// probeInfraService implements the probe infra service helper.
 func probeInfraService(id, rawURL, role string) infraServiceStatus {
+	// `status` stores the value produced by this operation.
 	status := infraServiceStatus{
 		ID:          strings.TrimSpace(id),
 		URL:         strings.TrimRight(strings.TrimSpace(rawURL), "/"),
@@ -57,7 +80,9 @@ func probeInfraService(id, rawURL, role string) infraServiceStatus {
 	if status.URL == "" {
 		return status
 	}
+	// `client` stores the value produced by this operation.
 	client := &http.Client{Timeout: 1500 * time.Millisecond}
+	// `started` stores the value produced by this operation.
 	started := time.Now()
 	if strings.EqualFold(status.Role, "archive") {
 		probeArchiveInfraService(client, &status)
@@ -69,7 +94,9 @@ func probeInfraService(id, rawURL, role string) infraServiceStatus {
 		status.LatencyMS = time.Since(started).Milliseconds()
 		return status
 	}
+	// `target` stores the value produced by this operation.
 	target := status.URL + "/healthz"
+	// `resp` and `err` store the error produced by this operation.
 	resp, err := client.Get(target)
 	status.LatencyMS = time.Since(started).Milliseconds()
 	if err != nil {
@@ -94,20 +121,26 @@ func probeInfraService(id, rawURL, role string) infraServiceStatus {
 	return status
 }
 
+// probeInfraJSON implements the probe infra json helper.
 func probeInfraJSON(client *http.Client, target string) (map[string]any, int, error) {
+	// `resp` and `err` store the error produced by this operation.
 	resp, err := client.Get(target)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
+	// `raw` stores the value used by this operation.
 	var raw map[string]any
+	// `err` stores the error produced by this operation.
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, resp.StatusCode, err
 	}
+	// `ok` and `has` store whether the related condition is satisfied.
 	if ok, has := raw["success"].(bool); has {
 		if !ok {
 			return raw, resp.StatusCode, nil
 		}
+		// `data` and `ok` store whether the related condition is satisfied.
 		if data, ok := raw["data"].(map[string]any); ok {
 			raw = data
 		}
@@ -115,7 +148,9 @@ func probeInfraJSON(client *http.Client, target string) (map[string]any, int, er
 	return raw, resp.StatusCode, nil
 }
 
+// probeArchiveInfraService implements the probe archive infra service helper.
 func probeArchiveInfraService(client *http.Client, status *infraServiceStatus) {
+	// `runtime`, `code`, and `err` store the error produced by this operation.
 	runtime, code, err := probeInfraJSON(client, status.URL+"/status")
 	if err != nil {
 		status.State = "unhealthy"
@@ -127,6 +162,7 @@ func probeArchiveInfraService(client *http.Client, status *infraServiceStatus) {
 		status.Reason = http.StatusText(code)
 		return
 	}
+	// `policy` stores the value produced by this operation.
 	policy, _, _ := probeInfraJSON(client, status.URL+"/storage/policy")
 	status.Height = mapUint(runtime, "height")
 	status.FinalizedHeight = mapUint(runtime, "finalized_height")
@@ -154,7 +190,9 @@ func probeArchiveInfraService(client *http.Client, status *infraServiceStatus) {
 	status.Reason = "archive_synced"
 }
 
+// probeIndexerInfraService implements the probe indexer infra service helper.
 func probeIndexerInfraService(client *http.Client, status *infraServiceStatus) {
+	// `data`, `code`, and `err` store the error produced by this operation.
 	data, code, err := probeInfraJSON(client, status.URL+"/indexer/status")
 	if err != nil {
 		status.State = "unhealthy"
@@ -188,10 +226,15 @@ func probeIndexerInfraService(client *http.Client, status *infraServiceStatus) {
 	}
 }
 
+// configuredInfraServiceStatuses implements the configured infra service statuses helper.
 func configuredInfraServiceStatuses(envName, role string) []infraServiceStatus {
+	// `endpoints` stores the value produced by this operation.
 	endpoints := splitInfraEndpoints(os.Getenv(envName))
+	// `out` stores the result produced by this operation.
 	out := make([]infraServiceStatus, 0, len(endpoints))
+	// `i` and `endpoint` track the current position in the related collection.
 	for i, endpoint := range endpoints {
+		// `id` stores the current position in the related collection.
 		id := strings.ToUpper(role)
 		if len(endpoints) > 1 {
 			id = id + "-" + strconvItoa(i+1)
@@ -211,13 +254,18 @@ func configuredInfraServiceStatuses(envName, role string) []infraServiceStatus {
 	return out
 }
 
+// strconvItoa implements the strconv itoa helper.
 func strconvItoa(v int) string {
 	if v == 0 {
 		return "0"
 	}
+	// `digits` defines the constant value used by this package.
 	const digits = "0123456789"
+	// `buf` stores the value produced by this operation.
 	buf := [20]byte{}
+	// `i` stores the current position in the related collection.
 	i := len(buf)
+	// `n` stores the value produced by this operation.
 	n := v
 	for n > 0 {
 		i--
@@ -227,18 +275,23 @@ func strconvItoa(v int) string {
 	return string(buf[i:])
 }
 
+// lightProofCapabilityStatus implements the light proof capability status helper.
 func lightProofCapabilityStatus(n *Node) map[string]any {
+	// `height` stores the value produced by this operation.
 	height := uint64(0)
+	// `finalized` stores the value produced by this operation.
 	finalized := uint64(0)
 	if n != nil && n.Blockchain != nil {
 		height = n.Blockchain.Height()
 		finalized = n.Blockchain.FinalizedHeight()
 	}
 	if n != nil {
+		// `fh` stores the value produced by this operation.
 		if fh := n.getFinalizedHeight(); fh > finalized {
 			finalized = fh
 		}
 	}
+	// `ready` stores the value produced by this operation.
 	ready := height > 0 && finalized > 0
 	return map[string]any{
 		"status":             map[bool]string{true: "ready", false: "warming"}[ready],
@@ -255,7 +308,9 @@ func lightProofCapabilityStatus(n *Node) map[string]any {
 	}
 }
 
+// publicInfraStatusSnapshot implements the public infra status snapshot helper.
 func (s *Server) publicInfraStatusSnapshot() map[string]any {
+	// `runtime` stores the value produced by this operation.
 	runtime := RuntimeStatusSnapshot{}
 	if s != nil && s.Node != nil {
 		if s.Node.Blockchain != nil {
@@ -269,15 +324,19 @@ func (s *Server) publicInfraStatusSnapshot() map[string]any {
 			}
 		}
 	}
+	// `publicNodes` stores the value produced by this operation.
 	publicNodes := publicNodesSnapshot(nil, true)
 	if s != nil {
 		publicNodes = publicNodesSnapshot(s.Node, true)
 	}
+	// `storage` stores the value produced by this operation.
 	storage := map[string]any{}
 	if s != nil && s.Node != nil {
 		storage = s.Node.storagePolicySnapshot()
 	}
+	// `archiveServices` stores the value produced by this operation.
 	archiveServices := make([]infraServiceStatus, 0)
+	// `node` tracks the current values while iterating.
 	for _, node := range publicNodes.Nodes {
 		if strings.EqualFold(strings.TrimSpace(node.Role), "archive") {
 			archiveServices = append(archiveServices, infraServiceStatus{
@@ -295,11 +354,12 @@ func (s *Server) publicInfraStatusSnapshot() map[string]any {
 	if len(archiveServices) == 0 {
 		archiveServices = configuredInfraServiceStatuses("MSC_ARCHIVE_ENDPOINTS", "archive")
 	}
+	// `indexerServices` stores the current position in the related collection.
 	indexerServices := configuredInfraServiceStatuses("MSC_INDEXER_ENDPOINTS", "indexer")
 	return map[string]any{
 		"status": "ok",
 		"chain": map[string]any{
-			"chain_id":               ChainID,
+			"chain_id":               protocolChainID(),
 			"genesis_hash":           expectedGenesisHash(),
 			"height":                 runtime.Height,
 			"finalized_height":       runtime.FinalizedHeight,
@@ -350,7 +410,9 @@ func (s *Server) publicInfraStatusSnapshot() map[string]any {
 	}
 }
 
+// firstNonEmpty implements the first non empty helper.
 func firstNonEmpty(values ...string) string {
+	// `value` tracks the value currently being processed.
 	for _, value := range values {
 		value = strings.TrimSpace(value)
 		if value != "" {
@@ -360,6 +422,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+// safeHeightLag implements the safe height lag helper.
 func safeHeightLag(height, finalized uint64) uint64 {
 	if height > finalized {
 		return height - finalized
@@ -367,13 +430,16 @@ func safeHeightLag(height, finalized uint64) uint64 {
 	return 0
 }
 
+// expectedGenesisHash implements the expected genesis hash helper.
 func expectedGenesisHash() string {
+	// `hash` stores the digest used to identify or verify the related data.
 	if hash := strings.TrimSpace(ConfigGenesisHash); hash != "" {
 		return hash
 	}
 	return strings.TrimSpace(GenesisHashExpected)
 }
 
+// handlePublicInfraStatus handles public infra status.
 func (s *Server) handlePublicInfraStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -391,6 +457,7 @@ func (s *Server) handlePublicInfraStatus(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// handleV1PublicInfraStatus handles v1 public infra status.
 func (s *Server) handleV1PublicInfraStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		writeV1Error(w, http.StatusMethodNotAllowed, "", "method not allowed")

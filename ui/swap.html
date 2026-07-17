@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSC Swap - Token Route Readiness</title>
+  <meta name="description" content="Review token swap route availability, input and output assets, network status, and transaction readiness on MSC Chain." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/swap.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Swap - Token Route Readiness" />
+  <meta property="og:description" content="Review token swap route availability, input and output assets, network status, and transaction readiness on MSC Chain." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/swap.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Swap - Token Route Readiness" />
+  <meta name="twitter:description" content="Review token swap route availability, input and output assets, network status, and transaction readiness on MSC Chain." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
+</head>
+<body data-page="swap">
+  <main class="content">
+    <section class="page-hero">
+      <div class="eyebrow">Swap</div>
+      <h1>Swap MSC assets</h1>
+      <p class="muted">Token swap routing will open after governance enables supported pools. Use bridge status to check readiness.</p>
+    </section>
+    <section class="two-col">
+      <div class="card">
+        <div class="label">Swap Status</div>
+        <div class="value">Preparing</div>
+        <div class="safe-note">Swap transactions are disabled until liquidity pools and route verification are active on MSC Mainnet.</div>
+        <a class="button primary" href="bridge.html"><i data-lucide="repeat-2"></i>Check Buy / Bridge</a>
+      </div>
+      <div class="card">
+        <div class="label">Wallet</div>
+        <div id="walletAddress" class="mono">-</div>
+        <div class="row">
+          <a class="button" href="send.html"><i data-lucide="send"></i>Send</a>
+          <a class="button" href="receive.html"><i data-lucide="qr-code"></i>Receive</a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="vendor/nacl.min.js"></script>
+  <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
+  <script src="wallet_pages.js?v=20260714-vmremoved"></script>
+</body>
+</html>

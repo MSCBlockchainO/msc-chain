@@ -6,22 +6,37 @@ import (
 )
 
 type SnapshotManager struct {
+	// `Node` stores the value associated with this record.
 	Node             *Node
+	// `TargetHeight` stores the value associated with this record.
 	TargetHeight     uint64
+	// `MinHeight` stores the value associated with this record.
 	MinHeight        uint64
+	// `StrictCoreQuorum` stores the value associated with this record.
 	StrictCoreQuorum bool
+	// `CheckpointHeight` stores the value associated with this record.
 	CheckpointHeight uint64
+	// `Retries` stores the value associated with this record.
 	Retries          int
+	// `RequiredProofs` stores the request data being processed.
 	RequiredProofs   int
+	// `Proofs` stores the value associated with this record.
 	Proofs           map[string]SnapshotProof
+	// `Candidate` stores the value associated with this record.
 	Candidate        *strictSnapshotMetaCandidate
+	// `Snapshot` stores the value associated with this record.
 	Snapshot         *StateSnapshot
+	// `ExecPool` stores the value associated with this record.
 	ExecPool         *ExecPoolSnapshot
+	// `Meta` stores the value associated with this record.
 	Meta             *SnapshotMetaRecord
+	// `Source` stores the value associated with this record.
 	Source           string
+	// `Stored` stores the value associated with this record.
 	Stored           bool
 }
 
+// NewSnapshotManager creates a new snapshot manager.
 func NewSnapshotManager(n *Node, targetHeight uint64, minHeight uint64, strictCoreQuorum bool) *SnapshotManager {
 	return &SnapshotManager{
 		Node:             n,
@@ -32,6 +47,7 @@ func NewSnapshotManager(n *Node, targetHeight uint64, minHeight uint64, strictCo
 	}
 }
 
+// DiscoverCheckpoint implements the discover checkpoint helper.
 func (m *SnapshotManager) DiscoverCheckpoint() error {
 	if m == nil || m.Node == nil {
 		return fmt.Errorf("snapshot manager unavailable")
@@ -39,11 +55,13 @@ func (m *SnapshotManager) DiscoverCheckpoint() error {
 	if m.TargetHeight == 0 {
 		return fmt.Errorf("snapshot target unavailable")
 	}
+	// `session` stores the value produced by this operation.
 	session := m.Node.snapshotSessionSnapshot()
 	if !session.Active || session.FreezeHeight == 0 {
 		session = m.Node.startSnapshotSession(m.TargetHeight, "snapshot_manager")
 	}
 	m.CheckpointHeight = session.CheckpointHeight
+	// `cache` and `ok` store whether the related condition is satisfied.
 	if cache, ok := m.Node.cachedSnapshotAnchor(m.TargetHeight, m.MinHeight); ok {
 		if cache.Height > 0 && cache.Height <= m.TargetHeight {
 			m.TargetHeight = cache.Height
@@ -59,10 +77,12 @@ func (m *SnapshotManager) DiscoverCheckpoint() error {
 	return nil
 }
 
+// CollectProofs implements the collect proofs helper.
 func (m *SnapshotManager) CollectProofs() error {
 	if m == nil || m.Node == nil {
 		return fmt.Errorf("snapshot manager unavailable")
 	}
+	// `collector` stores the value produced by this operation.
 	collector := SnapshotProofCollector{
 		Node:             m.Node,
 		TargetHeight:     m.TargetHeight,
@@ -70,6 +90,7 @@ func (m *SnapshotManager) CollectProofs() error {
 		CheckpointHeight: m.CheckpointHeight,
 		StrictCoreQuorum: m.StrictCoreQuorum,
 	}
+	// `quorum` and `err` store the error produced by this operation.
 	quorum, err := collector.Collect()
 	if err != nil {
 		return err
@@ -85,10 +106,12 @@ func (m *SnapshotManager) CollectProofs() error {
 	return nil
 }
 
+// DownloadSnapshot implements the download snapshot helper.
 func (m *SnapshotManager) DownloadSnapshot() error {
 	if m == nil || m.Node == nil {
 		return fmt.Errorf("snapshot manager unavailable")
 	}
+	// `snapshot`, `execPool`, and `err` store the error produced by this operation.
 	snapshot, execPool, err := m.Node.fetchTrustedSnapshot(m.TargetHeight, m.MinHeight, m.StrictCoreQuorum)
 	if err != nil {
 		m.Retries = SnapshotRetryController{Node: m.Node}.RetryCount()
@@ -102,6 +125,7 @@ func (m *SnapshotManager) DownloadSnapshot() error {
 	return nil
 }
 
+// VerifySnapshot verifies snapshot.
 func (m *SnapshotManager) VerifySnapshot() error {
 	if m == nil {
 		return fmt.Errorf("snapshot manager unavailable")
@@ -109,6 +133,7 @@ func (m *SnapshotManager) VerifySnapshot() error {
 	return (SnapshotVerifier{Node: m.Node}).Verify(m.Snapshot)
 }
 
+// PersistSnapshot persists snapshot.
 func (m *SnapshotManager) PersistSnapshot(source string) error {
 	if m == nil || m.Node == nil {
 		return fmt.Errorf("snapshot manager unavailable")
@@ -120,6 +145,7 @@ func (m *SnapshotManager) PersistSnapshot(source string) error {
 		source = "trusted_snapshot_download"
 	}
 	if m.Node.committedStateSnapshotRecordExists(m.Snapshot.Height) {
+		// `meta` and `err` store the error produced by this operation.
 		meta, err := m.Node.loadSnapshotMetaRecord(m.Snapshot.Height)
 		if err != nil || meta == nil {
 			_ = m.Node.ensureSnapshotMetaRecord(m.Snapshot, source)
@@ -133,9 +159,11 @@ func (m *SnapshotManager) PersistSnapshot(source string) error {
 		m.Stored = true
 		return nil
 	}
+	// `err` stores the error produced by this operation.
 	if err := m.Node.storeCommittedStateSnapshotRecord(m.Snapshot, source); err != nil {
 		return err
 	}
+	// `meta` and `err` store the error produced by this operation.
 	meta, err := m.Node.loadSnapshotMetaRecord(m.Snapshot.Height)
 	if err != nil || meta == nil {
 		_ = m.Node.ensureSnapshotMetaRecord(m.Snapshot, source)
@@ -152,6 +180,7 @@ func (m *SnapshotManager) PersistSnapshot(source string) error {
 	return nil
 }
 
+// ApplySnapshot applies snapshot.
 func (m *SnapshotManager) ApplySnapshot(allowReapply bool) error {
 	if m == nil || m.Node == nil {
 		return fmt.Errorf("snapshot manager unavailable")
@@ -159,11 +188,13 @@ func (m *SnapshotManager) ApplySnapshot(allowReapply bool) error {
 	if m.Snapshot == nil || m.Snapshot.Height == 0 {
 		return fmt.Errorf("snapshot unavailable")
 	}
+	// `reason` stores the value produced by this operation.
 	if reason := m.Node.snapshotLocalFinalityRejectReason(m.Snapshot); reason != "" {
 		m.Node.recordSnapshotSessionStrictResult("", reason)
 		m.Node.snapshotSessionMarkFailure(reason)
 		return fmt.Errorf("snapshot finality guard rejected: %s", reason)
 	}
+	// `localHeight` stores the value produced by this operation.
 	localHeight := uint64(0)
 	if m.Node.Blockchain != nil {
 		localHeight = m.Node.Blockchain.Height()
@@ -171,6 +202,7 @@ func (m *SnapshotManager) ApplySnapshot(allowReapply bool) error {
 	if !m.Node.snapshotSessionApplyAttemptAllowed(strings.TrimSpace(m.Snapshot.SnapshotHash), localHeight, m.TargetHeight) {
 		m.Node.recordSnapshotSessionStrictResult("", "same_snapshot_reapply")
 		m.Node.snapshotSessionMarkFailure("same_snapshot_reapply")
+		// `next` stores the value produced by this operation.
 		next := m.Node.rotateSnapshotProvider()
 		m.Node.persistSnapshotSessionState("same_snapshot_reapply_manager")
 		return fmt.Errorf("snapshot reapply loop detected; rotated provider=%s", strings.TrimSpace(next))
@@ -180,6 +212,7 @@ func (m *SnapshotManager) ApplySnapshot(allowReapply bool) error {
 		m.Node.snapshotSessionMarkFailure("snapshot_height_regression")
 		return fmt.Errorf("snapshot height regression rejected: local=%d snapshot=%d target=%d", localHeight, m.Snapshot.Height, m.TargetHeight)
 	}
+	// `applied` stores the value produced by this operation.
 	applied := false
 	if allowReapply && m.Snapshot.Height == localHeight {
 		applied = m.Node.ApplySnapshotForRecovery(*m.Snapshot)
@@ -199,20 +232,26 @@ func (m *SnapshotManager) ApplySnapshot(allowReapply bool) error {
 	return nil
 }
 
+// StartSession starts session.
 func (m *SnapshotManager) StartSession(allowReapply bool) (*StateSnapshot, *ExecPoolSnapshot, error) {
+	// `err` stores the error produced by this operation.
 	if err := m.DiscoverCheckpoint(); err != nil {
 		return nil, nil, err
 	}
 	_ = m.CollectProofs()
+	// `err` stores the error produced by this operation.
 	if err := m.DownloadSnapshot(); err != nil {
 		return nil, nil, err
 	}
+	// `err` stores the error produced by this operation.
 	if err := m.VerifySnapshot(); err != nil {
 		return nil, nil, err
 	}
+	// `err` stores the error produced by this operation.
 	if err := m.PersistSnapshot("trusted_snapshot_download"); err != nil {
 		return nil, nil, err
 	}
+	// `err` stores the error produced by this operation.
 	if err := m.ApplySnapshot(allowReapply); err != nil {
 		return nil, nil, err
 	}

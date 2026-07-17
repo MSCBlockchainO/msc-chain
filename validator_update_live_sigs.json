@@ -1,0 +1,42 @@
+{
+    "A":  {
+              "target":  "A",
+              "nonce":  1781160305046065,
+              "expiry":  93348,
+              "payload":  "MSC_VALIDATOR_UPDATE_V1|91938|add|A|d465685d67eaed52238474cf6de30172a7028038d38a35b3de5c9871ddc336e9|1781160305046065|93348",
+              "signatures":  [
+                                 {
+                                     "signer_id":  "B",
+                                     "sig_hex":  "ad0f9f4dd20eab62e8ed0af45d11c04c01dc7ce47e4dbc09f778a80715c5e90482552009be1e189ed0a9c766497bf1f610cfdada6b2bee6941da149ef6f9d50d"
+                                 },
+                                 {
+                                     "signer_id":  "C",
+                                     "sig_hex":  "2af72bfbe5b5d163e58f281b996683c202d4e860b73743bcf67528d9fe77e7c90458b7d30fc5b6e2c19173ef058fd48fc43b5831ea1b5de7b40d142639b18c0a"
+                                 },
+                                 {
+                                     "signer_id":  "D",
+                                     "sig_hex":  "280545e3494e82ec8cd6f2661885c2fbfe7e76a8ebdb71d9420b5a7f3772bc60015b0d69726d556a9147a2c07f8e0ef011a3299294236654e12d720617f3150f"
+                                 }
+                             ]
+          },
+    "F":  {
+              "target":  "F",
+              "nonce":  1781160324341070,
+              "expiry":  93348,
+              "payload":  "MSC_VALIDATOR_UPDATE_V1|91938|add|F|d465685d67eaed52238474cf6de30172a7028038d38a35b3de5c9871ddc336e9|1781160324341070|93348",
+              "signatures":  [
+                                 {
+                                     "signer_id":  "B",
+                                     "sig_hex":  "9ba0daa944d1552fedd093b8bfce358654d4503615e6ba5b8f77f8d1aba815241c86363ac6e70fbe702793934963e800408b99e427d2791076aa81bebcba190d"
+                                 },
+                                 {
+                                     "signer_id":  "C",
+                                     "sig_hex":  "d06a2c28e84c7573e17ddbb2a2088b6d84f8dce4b80e8047f26902b7653f82cf631d99db1084fc88f9428e1445a65d1c652f30feddebbd71082e8050c93a9609"
+                                 },
+                                 {
+                                     "signer_id":  "D",
+                                     "sig_hex":  "5cda9ea990d2ae0a29c94a60b6d0568c8f82d323a5a2a27ebe0b8e7451f68b236be78a12c56cacc3036b6719974b7b99632dddd2fd8f9be913446005424a6200"
+                                 }
+                             ]
+          }
+}

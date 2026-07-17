@@ -7,13 +7,19 @@ import (
 )
 
 type SnapshotChunkDownloader struct {
+	// `Node` stores the value associated with this record.
 	Node      *Node
+	// `Manifest` stores the value associated with this record.
 	Manifest  *SnapshotManifest
+	// `Primary` stores the value associated with this record.
 	Primary   peer.ID
+	// `Providers` stores the value associated with this record.
 	Providers []peer.ID
+	// `MinHeight` stores the value associated with this record.
 	MinHeight uint64
 }
 
+// NewSnapshotChunkDownloader creates a new snapshot chunk downloader.
 func (n *Node) NewSnapshotChunkDownloader(manifest *SnapshotManifest, primary peer.ID, minHeight uint64) *SnapshotChunkDownloader {
 	return &SnapshotChunkDownloader{
 		Node:      n,
@@ -23,6 +29,7 @@ func (n *Node) NewSnapshotChunkDownloader(manifest *SnapshotManifest, primary pe
 	}
 }
 
+// Download implements the download helper.
 func (d *SnapshotChunkDownloader) Download() (*StateSnapshot, error) {
 	if d == nil || d.Node == nil {
 		return nil, fmt.Errorf("snapshot chunk downloader unavailable")
@@ -30,8 +37,10 @@ func (d *SnapshotChunkDownloader) Download() (*StateSnapshot, error) {
 	if d.Manifest == nil {
 		return nil, fmt.Errorf("snapshot manifest unavailable")
 	}
+	// `providers` stores the value produced by this operation.
 	providers := d.Providers
 	if len(providers) == 0 {
+		// `peers` stores the value produced by this operation.
 		peers := []peer.ID(nil)
 		if d.Node.Host != nil {
 			peers = d.Node.Host.Network().Peers()

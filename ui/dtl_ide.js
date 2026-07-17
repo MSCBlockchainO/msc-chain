@@ -31,7 +31,6 @@
     connState: $("connState"),
     wsConn: $("wsConn"),
     wsType: $("wsType"),
-    wsContractId: $("wsContractId"),
     wsTxId: $("wsTxId"),
     chainMeta: $("chainMeta"),
     walletMeta: $("walletMeta"),
@@ -69,10 +68,6 @@
     txObject: $("txObject"),
     txOut: $("txOut"),
     statusTxId: $("statusTxId"),
-    statusContractId: $("statusContractId"),
-    statusLogicHash: $("statusLogicHash"),
-    statusUseContractBtn: $("statusUseContractBtn"),
-    statusCopyContractBtn: $("statusCopyContractBtn"),
     statusOut: $("statusOut"),
     signerState: $("signerState"),
     signerAddress: $("signerAddress"),
@@ -90,8 +85,7 @@
     quickPayloadBox: $("quickPayloadBox"),
     quickPayloadFields: $("quickPayloadFields"),
     beginnerMode: $("beginnerMode"),
-    contractDslGuidedBox: $("contractDslGuidedBox"),
-    txPayloadWrap: $("txPayloadWrap"),
+		txPayloadWrap: $("txPayloadWrap"),
     txGovCertWrap: $("txGovCertWrap"),
     tcName: $("tcName"),
     tcSymbol: $("tcSymbol"),
@@ -126,31 +120,7 @@
     tmSignatures: $("tmSignatures"),
     tbTokenId: $("tbTokenId"),
     tbAmount: $("tbAmount"),
-    contractDslLang: $("contractDslLang"),
-    contractDslName: $("contractDslName"),
-    contractDslSource: $("contractDslSource"),
-    contractDslOutputMode: $("contractDslOutputMode"),
-    customCodeLang: $("customCodeLang"),
-    customCodeName: $("customCodeName"),
-    customCodeEditor: $("customCodeEditor"),
-    customCodeOutputMode: $("customCodeOutputMode"),
-    customCodeOut: $("customCodeOut"),
-    customCodeAnalyzeBtn: $("customCodeAnalyzeBtn"),
-    customCodeUseBtn: $("customCodeUseBtn"),
-    customCodeCopyPayloadBtn: $("customCodeCopyPayloadBtn"),
-    customCodeSampleBtn: $("customCodeSampleBtn"),
-    customTplMsc20Btn: $("customTplMsc20Btn"),
-    customTplNft721Btn: $("customTplNft721Btn"),
-    customTplMsc1155Btn: $("customTplMsc1155Btn"),
-    presetAmmPoolBtn: $("presetAmmPoolBtn"),
-    presetLendingBtn: $("presetLendingBtn"),
-    presetDuelBtn: $("presetDuelBtn"),
-    presetTournamentBtn: $("presetTournamentBtn"),
-    logicSimMethod: $("logicSimMethod"),
-    logicSimArgs: $("logicSimArgs"),
-    logicSimOut: $("logicSimOut"),
-    copyLastContractBtn: $("copyLastContractBtn"),
-    copyLastTxBtn: $("copyLastTxBtn"),
+		copyLastTxBtn: $("copyLastTxBtn"),
     clearDraftBtn: $("clearDraftBtn"),
   };
 
@@ -159,7 +129,6 @@
     apiToken: normalizeToken(localStorage.getItem("msc_dtl_token") || ""),
     chainId: localStorage.getItem("msc_dtl_chain") || "91938",
     walletAccount: String(localStorage.getItem("msc_dtl_wallet_account") || "").trim(),
-    lastContractDeployID: String(localStorage.getItem("msc_dtl_last_contract_id") || "").trim().toLowerCase(),
     lastTxID: String(localStorage.getItem("msc_dtl_last_tx_id") || "").trim().toLowerCase(),
     lastBuiltTx: null,
     wallet: null,
@@ -169,12 +138,7 @@
     bridgeFrameLoadedURL: "",
     bridgeOrigin: "",
     bridgeSeq: 0,
-    customCodeLastPayload: null,
-    compatSubset: null,
-    bytecodeRuntimeEnabled: null,
-    bytecodeRuntimeActive: null,
-    bytecodeActivationHeight: null,
-    contractRuntimeRemoved: true,
+		contractRuntimeRemoved: true,
     refSuggestions: {
       tokens: [],
       pools: [],
@@ -244,16 +208,6 @@
     "tmSignatures",
     "tbTokenId",
     "tbAmount",
-    "contractDslLang",
-    "contractDslName",
-    "contractDslSource",
-    "contractDslOutputMode",
-    "customCodeLang",
-    "customCodeName",
-    "customCodeEditor",
-    "customCodeOutputMode",
-    "logicSimMethod",
-    "logicSimArgs",
   ];
   let draftSaveTimer = 0;
 
@@ -271,46 +225,11 @@
 
   function renderCompatMode() {
     if (!els.compatMeta) return;
-    const toPillState = (value) => {
-      if (value === true) return { text: "ON", klass: "runtime-pill-on" };
-      if (value === false) return { text: "OFF", klass: "runtime-pill-off" };
-      return { text: "UNKNOWN", klass: "runtime-pill-unknown" };
-    };
-    const toActivePillState = (value) => {
-      if (value === true) return { text: "ACTIVE", klass: "runtime-pill-on" };
-      if (value === false) return { text: "INACTIVE", klass: "runtime-pill-off" };
-      return { text: "UNKNOWN", klass: "runtime-pill-unknown" };
-    };
-    const activationHeight =
-      Number.isFinite(Number(state.bytecodeActivationHeight)) && Number(state.bytecodeActivationHeight) >= 0
-        ? String(state.bytecodeActivationHeight)
-        : "UNKNOWN";
-    const activationClass = activationHeight === "UNKNOWN" ? "runtime-pill-unknown" : "runtime-pill-info";
-
-    els.compatMeta.textContent = "";
+    els.compatMeta.textContent = "Native DTL: ON · Programmable VM: PERMANENTLY REMOVED";
     els.compatMeta.classList.add("runtime-meta");
-    const title = document.createElement("span");
-    title.className = "runtime-meta-title";
-    title.textContent = "DTL Runtime";
-    els.compatMeta.appendChild(title);
-
-    const pills = document.createElement("span");
-    pills.className = "runtime-pills";
-    const entries = [
-      { label: "MSC Compat", state: toPillState(state.compatSubset) },
-      { label: "Contract Runtime Removed", state: toPillState(state.contractRuntimeRemoved) },
-      { label: "Bytecode Runtime", state: toPillState(state.bytecodeRuntimeEnabled) },
-      { label: "Bytecode Active", state: toActivePillState(state.bytecodeRuntimeActive) },
-      { label: "Activation Height", state: { text: activationHeight, klass: activationClass } },
-    ];
-    for (const entry of entries) {
-      const pill = document.createElement("span");
-      pill.className = `runtime-pill ${entry.state.klass}`;
-      pill.textContent = `${entry.label}: ${entry.state.text}`;
-      pills.appendChild(pill);
-    }
-    els.compatMeta.appendChild(pills);
   }
+
+
 
   function normalizeBridgeOrigin(raw) {
     try {
@@ -932,10 +851,6 @@
     if (els.wsType) {
       els.wsType.textContent = String(els.dtlType && els.dtlType.value ? els.dtlType.value : "TOKEN_CREATE").trim();
     }
-    if (els.wsContractId) {
-      els.wsContractId.textContent = shortValue(state.lastContractDeployID || "-", 14, 12);
-      els.wsContractId.title = state.lastContractDeployID || "";
-    }
     if (els.wsTxId) {
       els.wsTxId.textContent = shortValue(state.lastTxID || "-", 14, 12);
       els.wsTxId.title = state.lastTxID || "";
@@ -1028,41 +943,8 @@
     return out;
   }
 
-  function encodeU16BE(value) {
-    const out = new Uint8Array(2);
-    const v = Number(value >>> 0) & 0xffff;
-    out[0] = (v >>> 8) & 0xff;
-    out[1] = v & 0xff;
-    return out;
-  }
 
-  function encodeU32BE(value) {
-    const out = new Uint8Array(4);
-    const v = Number(value >>> 0) >>> 0;
-    out[0] = (v >>> 24) & 0xff;
-    out[1] = (v >>> 16) & 0xff;
-    out[2] = (v >>> 8) & 0xff;
-    out[3] = v & 0xff;
-    return out;
-  }
-
-  function decodeU16BE(bytes, offset) {
-    return ((bytes[offset] << 8) | bytes[offset + 1]) >>> 0;
-  }
-
-  function decodeU32BE(bytes, offset) {
-    return (
-      ((bytes[offset] << 24) >>> 0) |
-      ((bytes[offset + 1] << 16) >>> 0) |
-      ((bytes[offset + 2] << 8) >>> 0) |
-      (bytes[offset + 3] >>> 0)
-    ) >>> 0;
-  }
-
-  const DTL_BYTECODE_MAGIC = "DTLBC1";
-  const DTL_BYTECODE_VERSION = 1;
-  const DTL_BYTECODE_FORMAT = "dtl-bc-v1";
-  const UNSUPPORTED_CONTRACT_TYPES = new Set(["CONTRACT_DEPLOY", "CONTRACT_CALL"]);
+	const UNSUPPORTED_CONTRACT_TYPES = new Set(["CONTRACT_DEPLOY", "CONTRACT_CALL"]);
   const DTL_CONTRACT_RUNTIME_REMOVED_REASON = "DTL contract runtime removed in this build";
 
   function isContractTxType(kind) {
@@ -1077,279 +959,12 @@
     return normalized;
   }
 
-  let crc32Table = null;
-  function getCRC32Table() {
-    if (crc32Table) return crc32Table;
-    const table = new Uint32Array(256);
-    for (let i = 0; i < 256; i++) {
-      let c = i;
-      for (let j = 0; j < 8; j++) {
-        if ((c & 1) !== 0) {
-          c = (0xedb88320 ^ (c >>> 1)) >>> 0;
-        } else {
-          c = (c >>> 1) >>> 0;
-        }
-      }
-      table[i] = c >>> 0;
-    }
-    crc32Table = table;
-    return crc32Table;
-  }
-
-  function crc32IEEE(bytes) {
-    const table = getCRC32Table();
-    let crc = 0xffffffff;
-    for (let i = 0; i < bytes.length; i++) {
-      const idx = (crc ^ bytes[i]) & 0xff;
-      crc = (table[idx] ^ (crc >>> 8)) >>> 0;
-    }
-    return (crc ^ 0xffffffff) >>> 0;
-  }
-
-  function normalizeContractOutputMode(raw) {
-    const v = String(raw || "").trim().toLowerCase();
-    if (v === "logic_pack" || v === "logic-pack") return "logic_pack";
-    return "dtl-bc-v1";
-  }
-
-  function logicPackFromBytecodeProgram(program) {
-    if (!program || typeof program !== "object") return null;
-    const methods = Array.isArray(program.methods)
-      ? program.methods.map((m) => ({
-          name: String((m && m.name) || "").trim(),
-          max_steps: Number.parseInt(String((m && m.max_steps) || "0"), 10) || 0,
-          ops: Array.isArray(m && m.code) ? m.code : [],
-        }))
-      : [];
-    if (!methods.length) return null;
-    return {
-      version: 1,
-      name: String(program.name || "").trim(),
-      abi: Array.isArray(program.abi) ? program.abi : [],
-      storage: Array.isArray(program.storage) ? program.storage : [],
-      methods,
-      limits: (program.limits && typeof program.limits === "object") ? program.limits : {},
-    };
-  }
-
-  function bytecodeProgramFromLogicPack(pack) {
-    if (!pack || typeof pack !== "object") return null;
-    return {
-      version: DTL_BYTECODE_VERSION,
-      name: String(pack.name || "").trim(),
-      abi: Array.isArray(pack.abi) ? pack.abi : [],
-      storage: Array.isArray(pack.storage) ? pack.storage : [],
-      methods: Array.isArray(pack.methods)
-        ? pack.methods.map((m) => ({
-            name: String((m && m.name) || "").trim(),
-            max_steps: Number.parseInt(String((m && m.max_steps) || "0"), 10) || 0,
-            code: Array.isArray(m && m.ops) ? m.ops : [],
-          }))
-        : [],
-      limits: (pack.limits && typeof pack.limits === "object") ? pack.limits : {},
-    };
-  }
-
-  function encodeDTLBytecodeProgramHex(program) {
-    if (!program || typeof program !== "object") {
-      throw new Error("Invalid bytecode program");
-    }
-    const normalized = {
-      ...program,
-      version: DTL_BYTECODE_VERSION,
-    };
-    const payloadBytes = enc.encode(JSON.stringify(normalized));
-    const checksum = crc32IEEE(payloadBytes);
-    const headerBytes = concatBytes([
-      enc.encode(DTL_BYTECODE_MAGIC),
-      encodeU16BE(DTL_BYTECODE_VERSION),
-      encodeU32BE(payloadBytes.length >>> 0),
-      encodeU32BE(checksum),
-    ]);
-    return bytesToHex(concatBytes([headerBytes, payloadBytes]));
-  }
-
-  function decodeDTLBytecodeProgramHex(rawHex) {
-    const bytes = hexToBytes(rawHex);
-    if (bytes.length < 16) {
-      throw new Error("Bytecode too short");
-    }
-    const magic = new TextDecoder().decode(bytes.slice(0, 6));
-    if (magic !== DTL_BYTECODE_MAGIC) {
-      throw new Error("Invalid bytecode magic");
-    }
-    const version = decodeU16BE(bytes, 6);
-    if (version !== DTL_BYTECODE_VERSION) {
-      throw new Error("Unsupported bytecode version");
-    }
-    const payloadSize = decodeU32BE(bytes, 8);
-    const checksum = decodeU32BE(bytes, 12);
-    const payload = bytes.slice(16);
-    if (payload.length !== payloadSize) {
-      throw new Error("Invalid bytecode payload size");
-    }
-    const computed = crc32IEEE(payload);
-    if (computed !== checksum) {
-      throw new Error("Bytecode checksum mismatch");
-    }
-    const decodedText = new TextDecoder().decode(payload);
-    const program = JSON.parse(decodedText);
-    if (!program || typeof program !== "object") {
-      throw new Error("Invalid bytecode payload");
-    }
-    return program;
-  }
 
   async function sha256(bytes) {
     const out = await crypto.subtle.digest("SHA-256", bytes);
     return new Uint8Array(out);
   }
 
-  function rememberLastContractDeployID(contractID) {
-    const normalized = String(contractID || "").trim().toLowerCase();
-    if (!normalized) return;
-    state.lastContractDeployID = normalized;
-    localStorage.setItem("msc_dtl_last_contract_id", normalized);
-    refreshWorkspaceMeta();
-  }
-
-  function setStatusDeployMeta(contractID, logicHash) {
-    const normalizedID = String(contractID || "").trim().toLowerCase();
-    const normalizedLogic = String(logicHash || "").trim().toLowerCase();
-    if (els.statusContractId) {
-      els.statusContractId.value = normalizedID;
-      els.statusContractId.title = normalizedID;
-    }
-    if (els.statusLogicHash) {
-      els.statusLogicHash.value = normalizedLogic;
-      els.statusLogicHash.title = normalizedLogic;
-    }
-  }
-
-  function firstNonEmptyString(...values) {
-    for (const value of values) {
-      const normalized = String(value || "").trim();
-      if (normalized) return normalized;
-    }
-    return "";
-  }
-
-  function unwrapSuccessEnvelope(payload) {
-    if (!payload || typeof payload !== "object") return payload;
-    if (payload.success === true && payload.data && typeof payload.data === "object") {
-      return payload.data;
-    }
-    return payload;
-  }
-
-  function extractDeployMetadata(payload) {
-    const queue = [unwrapSuccessEnvelope(payload)];
-    const seen = new Set();
-    let contractID = "";
-    let logicHash = "";
-    let txType = "";
-
-    while (queue.length > 0) {
-      const current = queue.shift();
-      if (!current || typeof current !== "object") continue;
-      if (seen.has(current)) continue;
-      seen.add(current);
-
-      contractID = contractID || firstNonEmptyString(current.contract_id, current.contractId);
-      logicHash = logicHash || firstNonEmptyString(
-        current.logic_hash,
-        current.logic_pack_hash,
-        current.logicHash,
-        current.logicPackHash
-      );
-      txType = txType || firstNonEmptyString(
-        current.dtl_tx_type,
-        current.dtlTxType,
-        current.tx_type,
-        current.txType
-      );
-
-      if (current.data && typeof current.data === "object") queue.push(current.data);
-      if (current.result && typeof current.result === "object") queue.push(current.result);
-      if (current.tx && typeof current.tx === "object") queue.push(current.tx);
-      if (current.payload && typeof current.payload === "object") queue.push(current.payload);
-    }
-
-    return {
-      contractID: String(contractID || "").trim().toLowerCase(),
-      logicHash: String(logicHash || "").trim().toLowerCase(),
-      txType: String(txType || "").trim().toUpperCase(),
-    };
-  }
-
-  function applyDeployMetadata(meta, allowWorkspaceUpdate) {
-    const details = meta && typeof meta === "object" ? meta : {};
-    const contractID = String(details.contractID || "").trim().toLowerCase();
-    const logicHash = String(details.logicHash || "").trim().toLowerCase();
-    const txType = String(details.txType || "").trim().toUpperCase();
-    const deployTypeOK = !txType || txType === "CONTRACT_DEPLOY";
-
-    if (allowWorkspaceUpdate && contractID && deployTypeOK) {
-      rememberLastContractDeployID(contractID);
-      prefillContractCallPayloadFromLastDeploy();
-    }
-    setStatusDeployMeta(contractID, logicHash);
-    return { contractID, logicHash, txType };
-  }
-
-  async function resolveDeployMetadataForTx(tx, txID, seedPayload) {
-    const seedMeta = extractDeployMetadata(seedPayload);
-    if (seedMeta.contractID || seedMeta.logicHash) return seedMeta;
-
-    const resolvedTxID = String(txID || (tx && tx.id) || "").trim();
-    if (resolvedTxID) {
-      try {
-        const statusPayload = await getJSON(`/tx/status?tx_id=${encodeURIComponent(resolvedTxID)}`);
-        const statusMeta = extractDeployMetadata(statusPayload);
-        if (statusMeta.contractID || statusMeta.logicHash) {
-          return statusMeta;
-        }
-      } catch (_) {
-        // status endpoint can fail transiently right after submit; fallback below.
-      }
-    }
-
-    const derivedID = await deriveContractIDFromDeployTx(tx);
-    if (derivedID) {
-      return {
-        contractID: derivedID,
-        logicHash: "",
-        txType: "CONTRACT_DEPLOY",
-      };
-    }
-    return {
-      contractID: "",
-      logicHash: "",
-      txType: "CONTRACT_DEPLOY",
-    };
-  }
-
-  async function deriveContractIDFromDeployTx(tx) {
-    if (!tx || String(tx.dtl_tx_type || "").trim() !== "CONTRACT_DEPLOY") return "";
-    let payloadObj = null;
-    try {
-      payloadObj = JSON.parse(String(tx.dtl_payload || "{}"));
-    } catch (_) {
-      return "";
-    }
-    if (!payloadObj || typeof payloadObj !== "object") return "";
-    const chainID = String(tx.ChainID || tx.chainID || state.chainId || els.txChainId.value || "").trim();
-    const creator = String(payloadObj.creator || tx.from || "").trim().toLowerCase();
-    const name = String(payloadObj.name || "").trim();
-    const lang = String(payloadObj.lang || "").trim().toLowerCase();
-    const nonceRaw = Number.parseInt(String(tx.nonce || "0"), 10);
-    const versionRaw = Number.parseInt(String(payloadObj.version ?? "0"), 10);
-    const nonce = Number.isInteger(nonceRaw) && nonceRaw >= 0 ? nonceRaw : 0;
-    const version = Number.isInteger(versionRaw) && versionRaw >= 0 ? versionRaw : 0;
-    if (!chainID || !creator || !name || !lang) return "";
-    const material = `${chainID}|${creator}|${name}|${lang}|${version}|${nonce}`;
-    return bytesToHex(await sha256(enc.encode(material)));
-  }
 
   async function deriveKey(password, salt, iterations) {
     const keyMaterial = await crypto.subtle.importKey(
@@ -1434,11 +1049,13 @@
     if (txType === 2 && isFixedHex(normalizedValidatorPubKey, 32)) {
       pushString(normalizedValidatorPubKey);
     }
-    pushInt64(Number.parseInt(tx.evm_gas_limit || tx.evmGasLimit || 0, 10) || 0);
-    pushString(stripHexPrefix(tx.evm_code || tx.evmCode || ""));
-    pushString(stripHexPrefix(tx.evm_input || tx.evmInput || ""));
-    pushString(stripHexPrefix(tx.evm_raw_tx || tx.evmRawTx || ""));
-    pushString(stripHexPrefix(tx.evm_tx_hash || tx.evmTxHash || ""));
+		// Preserve historical wire slots as constants; DTL signing never carries
+		// programmable VM payloads.
+		pushInt64(0);
+		pushString("");
+		pushString("");
+		pushString("");
+		pushString("");
 
     if (txType === 8) {
       pushString(String(tx.dtl_tx_type || "").trim());
@@ -1800,30 +1417,6 @@
     els.txPayloadPreview.value = asPretty(payloadObj);
   }
 
-  function prefillContractCallPayloadFromLastDeploy() {
-    if (state.contractRuntimeRemoved !== false) return false;
-    const lastContractID = String(state.lastContractDeployID || "").trim();
-    if (!lastContractID) return false;
-    const kind = String(els.dtlType && els.dtlType.value ? els.dtlType.value : "").trim();
-    if (kind !== "CONTRACT_CALL") return false;
-    let payload = defaultPayload("CONTRACT_CALL");
-    try {
-      payload = parseJSONField(els.txPayload.value, payload);
-    } catch (_) {
-      // Fallback to CONTRACT_CALL template.
-    }
-    if (String(payload.contract_id || "").trim()) return false;
-    payload.contract_id = lastContractID;
-    if (!String(payload.caller || "").trim()) {
-      payload.caller = String(els.txFrom.value || "").trim();
-    }
-    els.txPayload.value = asPretty(payload);
-    renderQuickPayloadFields(payload);
-    setPayloadPreview(payload);
-    prefillLogicSimulatorFromPayload(payload);
-    scheduleDraftSave();
-    return true;
-  }
 
   const DTL_DEDICATED_GUIDED_TYPES = new Set([
     "TOKEN_CREATE",
@@ -2037,1594 +1630,17 @@
     if (els.tokenBurnGuidedBox) {
       els.tokenBurnGuidedBox.classList.toggle("hidden", !isBurn);
     }
-    if (els.contractDslGuidedBox) {
-      els.contractDslGuidedBox.classList.add("hidden");
-    }
     applyBeginnerModeVisibility(isMint);
     updateTransferFromSpenderHint();
   }
 
-  function sanitizeContractDslName(raw, fallback) {
-    const base = String(raw || "").trim();
-    const safe = base.replace(/[^A-Za-z0-9_]/g, "_").replace(/^_+/, "").slice(0, 64);
-    if (safe) return safe;
-    const alt = String(fallback || "").trim().replace(/[^A-Za-z0-9_]/g, "_").replace(/^_+/, "").slice(0, 64);
-    return alt || "GeneratedContract";
-  }
 
-  function detectContractDslLang(source, preferred) {
-    const pref = String(preferred || "").trim().toLowerCase();
-    if (pref === "solidity-like" || pref === "vyper-like") return pref;
-    const src = String(source || "");
-    if (/\bdef\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(src) || /\bself\.[A-Za-z_][A-Za-z0-9_]*\b/.test(src)) {
-      return "vyper-like";
-    }
-    return "solidity-like";
-  }
 
-  function contractDslSample(lang) {
-    if (lang === "vyper-like") {
-      return [
-        "count: uint64",
-        "label: String[64]",
-        "",
-        "@external",
-        "def inc(delta: uint64):",
-        "    self.count += delta",
-        "",
-        "@external",
-        "def dec(delta: uint64):",
-        "    self.count -= delta",
-        "",
-        "@external",
-        "def set_label(value: String[64]):",
-        "    self.label = value",
-        "",
-        "@external",
-        "def reward(to: address, amount: uint64):",
-        "    token_transfer_from_contract(\"MYTS\", to, amount)",
-        "",
-        "@external",
-        "def mint_rewards(token: String[64], to: address, amount: uint64):",
-        "    token_mint_from_contract(token, to, amount)",
-        "",
-        "@external",
-        "def burn_user(token: String[64], amount: uint64):",
-        "    token_burn(token, amount)",
-      ].join("\n");
-    }
-    return [
-      "contract Counter {",
-      "  uint64 count;",
-      "  string label;",
-      "",
-      "  function inc(uint64 delta) external { count += delta; }",
-      "  function dec(uint64 delta) external { count -= delta; }",
-      "  function setLabel(string value) external { label = value; }",
-      "  function reward(address to, uint64 amount) external { token_transfer_from_contract(\"MYTS\", to, amount); }",
-      "  function mintRewards(string token, address to, uint64 amount) external { token_mint_from_contract(token, to, amount); }",
-      "  function burnUser(string token, uint64 amount) external { token_burn(token, amount); }",
-      "}",
-    ].join("\n");
-  }
 
-  function contractDslMsc20Template(lang) {
-    if (lang === "vyper-like") {
-      return [
-        "# @title MSC20Controller",
-        "",
-        "@external",
-        "def create_token(name: String[64], symbol: String[16], decimals: uint64, max_supply: uint64, initial_supply: uint64, owner: address):",
-        "    token_create_from_contract(name, symbol, decimals, max_supply, initial_supply, owner)",
-        "",
-        "@external",
-        "def mint(token: String[64], to: address, amount: uint64):",
-        "    token_mint_from_contract(token, to, amount)",
-        "",
-        "@external",
-        "def burn(token: String[64], amount: uint64):",
-        "    token_burn(token, amount)",
-        "",
-        "@external",
-        "def transfer(token: String[64], to: address, amount: uint64):",
-        "    token_transfer(token, to, amount)",
-        "",
-        "@external",
-        "def approve(token: String[64], spender: address, amount: uint64):",
-        "    token_approve(token, spender, amount)",
-        "",
-        "@external",
-        "def transfer_from(token: String[64], from_addr: address, to: address, amount: uint64):",
-        "    token_transfer_from(token, from_addr, to, amount)",
-      ].join("\n");
-    }
-    return [
-      "contract MSC20Controller {",
-      "  function createToken(string name, string symbol, uint64 decimals, uint64 maxSupply, uint64 initialSupply, address owner) external {",
-      "    token_create_from_contract(name, symbol, decimals, maxSupply, initialSupply, owner);",
-      "  }",
-      "",
-      "  function mint(string token, address to, uint64 amount) external { token_mint_from_contract(token, to, amount); }",
-      "  function burn(string token, uint64 amount) external { token_burn(token, amount); }",
-      "  function transfer(string token, address to, uint64 amount) external { token_transfer(token, to, amount); }",
-      "  function approve(string token, address spender, uint64 amount) external { token_approve(token, spender, amount); }",
-      "  function transferFrom(string token, address fromAddr, address to, uint64 amount) external { token_transfer_from(token, fromAddr, to, amount); }",
-      "}",
-    ].join("\n");
-  }
 
-  function stripContractComments(raw) {
-    return String(raw || "")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/\/\/.*$/gm, "")
-      .replace(/#[^\n]*$/gm, "");
-  }
 
-  function parseContractParamNames(raw, mode) {
-    const text = String(raw || "").trim();
-    if (!text) return [];
-    const out = [];
-    text.split(",").forEach((part) => {
-      const p = String(part || "").trim();
-      if (!p) return;
-      if (mode === "vyper-like") {
-        const m = p.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:/);
-        if (m) {
-          out.push(m[1]);
-        }
-        return;
-      }
-      const tokens = p.split(/\s+/).filter(Boolean);
-      if (!tokens.length) return;
-      const name = String(tokens[tokens.length - 1] || "").replace(/[,)]/g, "");
-      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
-        out.push(name);
-      }
-    });
-    return out;
-  }
 
-  function parseContractStorageDeclarations(source, lang) {
-    const src = stripContractComments(source);
-    const storageTypes = {};
-    const init = {};
-    if (lang === "vyper-like") {
-      const re = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(uint(?:8|16|32|64|128|256)?|int(?:8|16|32|64|128|256)?|String(?:\[[0-9]+\])?)\s*$/gim;
-      let m;
-      while ((m = re.exec(src)) !== null) {
-        const name = String(m[1] || "").trim();
-        const t = String(m[2] || "").trim().toLowerCase();
-        if (!name) continue;
-        if (t.startsWith("string")) {
-          storageTypes[name] = "string";
-          init[name] = "";
-        } else {
-          storageTypes[name] = "u64";
-          init[name] = "0";
-        }
-      }
-      return { storageTypes, init };
-    }
 
-    const re = /^\s*(uint(?:8|16|32|64|128|256)?|int(?:8|16|32|64|128|256)?|string)\s+(?:public\s+|private\s+|internal\s+|external\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*(?:=\s*([^;]+))?\s*;/gim;
-    let m;
-    while ((m = re.exec(src)) !== null) {
-      const t = String(m[1] || "").trim().toLowerCase();
-      const name = String(m[2] || "").trim();
-      const assigned = String(m[3] || "").trim();
-      if (!name) continue;
-      if (t === "string") {
-        storageTypes[name] = "string";
-        if (/^".*"$/.test(assigned) || /^'.*'$/.test(assigned)) {
-          init[name] = assigned.slice(1, -1);
-        } else {
-          init[name] = "";
-        }
-      } else {
-        storageTypes[name] = "u64";
-        if (/^[0-9]+$/.test(assigned)) {
-          init[name] = assigned;
-        } else {
-          init[name] = "0";
-        }
-      }
-    }
-    return { storageTypes, init };
-  }
-
-  function parseSolidityFunctions(source) {
-    const src = stripContractComments(source);
-    const out = [];
-    const re = /function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*[^{;]*\{([\s\S]*?)\}/gim;
-    let m;
-    while ((m = re.exec(src)) !== null) {
-      out.push({
-        name: String(m[1] || "").trim(),
-        params: parseContractParamNames(m[2], "solidity-like"),
-        body: String(m[3] || ""),
-      });
-    }
-    return out;
-  }
-
-  function parseVyperFunctions(source) {
-    const lines = String(source || "").replace(/\r/g, "").split("\n");
-    const out = [];
-    for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i];
-      const match = line.match(/^\s*def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*:/);
-      if (!match) continue;
-      const indent = (line.match(/^\s*/) || [""])[0].length;
-      const body = [];
-      for (i += 1; i < lines.length; i += 1) {
-        const next = lines[i];
-        const nextIndent = (next.match(/^\s*/) || [""])[0].length;
-        const trimmed = next.trim();
-        if (!trimmed) continue;
-        if (nextIndent <= indent) {
-          i -= 1;
-          break;
-        }
-        body.push(trimmed);
-      }
-      out.push({
-        name: String(match[1] || "").trim(),
-        params: parseContractParamNames(match[2], "vyper-like"),
-        body: body.join("\n"),
-      });
-    }
-    return out;
-  }
-
-  function splitCSVArgs(raw) {
-    const s = String(raw || "");
-    const out = [];
-    let buf = "";
-    let quote = "";
-    for (let i = 0; i < s.length; i += 1) {
-      const ch = s[i];
-      if ((ch === '"' || ch === "'") && s[i - 1] !== "\\") {
-        if (!quote) {
-          quote = ch;
-        } else if (quote === ch) {
-          quote = "";
-        }
-        buf += ch;
-        continue;
-      }
-      if (ch === "," && !quote) {
-        out.push(buf.trim());
-        buf = "";
-        continue;
-      }
-      buf += ch;
-    }
-    if (buf.trim()) out.push(buf.trim());
-    return out;
-  }
-
-  function extractContractStatements(body) {
-    const normalized = stripContractComments(body).replace(/[{}]/g, "\n");
-    return normalized
-      .split(/[;\n]/)
-      .map((line) => String(line || "").trim())
-      .filter((line) => line && line !== "pass" && !/^return\b/i.test(line));
-  }
-
-  function parseContractStatement(statement, storageTypes) {
-    const s = String(statement || "").trim();
-    if (!s) return null;
-
-    const normalizeArgName = (raw, field) => {
-      const value = String(raw || "").trim().replace(/^self\./i, "");
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
-        throw new Error(`Invalid ${field} in: ${s}`);
-      }
-      return value;
-    };
-    const parseTokenRef = (raw) => {
-      const tokenRaw = String(raw || "").trim();
-      if (!tokenRaw) throw new Error(`Missing token reference in: ${s}`);
-      const tokenLiteral = tokenRaw.replace(/^['"]|['"]$/g, "").trim();
-      if (tokenLiteral !== tokenRaw && tokenLiteral) {
-        return { token_id: tokenLiteral };
-      }
-      const tokenArg = normalizeArgName(tokenRaw, "token arg");
-      return { token_arg: tokenArg };
-    };
-    const withTokenRef = (out, tokenRef) => {
-      if (tokenRef.token_id) out.token_id = tokenRef.token_id;
-      if (tokenRef.token_arg) out.token_arg = tokenRef.token_arg;
-      return out;
-    };
-
-    const callMatch = s.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)$/i);
-    if (callMatch) {
-      const fn = String(callMatch[1] || "").toLowerCase();
-      const args = splitCSVArgs(callMatch[2]);
-
-      if ((fn === "token_transfer" || fn === "token_transfer_from_contract") && args.length === 3) {
-        const tokenRef = parseTokenRef(args[0]);
-        const toArg = normalizeArgName(args[1], "to arg");
-        const amountArg = normalizeArgName(args[2], "amount arg");
-        return withTokenRef(
-          {
-            op: "TOKEN_TRANSFER",
-            from: fn === "token_transfer_from_contract" ? "contract" : "caller",
-            arg: amountArg,
-            to_arg: toArg,
-          },
-          tokenRef
-        );
-      }
-
-      if ((fn === "token_approve" || fn === "token_approve_from_contract") && args.length === 3) {
-        const tokenRef = parseTokenRef(args[0]);
-        const spenderArg = normalizeArgName(args[1], "spender arg");
-        const amountArg = normalizeArgName(args[2], "amount arg");
-        return withTokenRef(
-          {
-            op: "TOKEN_APPROVE",
-            from: fn === "token_approve_from_contract" ? "contract" : "caller",
-            spender_arg: spenderArg,
-            arg: amountArg,
-          },
-          tokenRef
-        );
-      }
-
-      if ((fn === "token_transfer_from" || fn === "token_transfer_from_contract") && args.length === 4) {
-        const tokenRef = parseTokenRef(args[0]);
-        const fromArg = normalizeArgName(args[1], "from arg");
-        const toArg = normalizeArgName(args[2], "to arg");
-        const amountArg = normalizeArgName(args[3], "amount arg");
-        return withTokenRef(
-          {
-            op: "TOKEN_TRANSFER_FROM",
-            from: fn === "token_transfer_from_contract" ? "contract" : "caller",
-            from_arg: fromArg,
-            to_arg: toArg,
-            arg: amountArg,
-          },
-          tokenRef
-        );
-      }
-
-      if ((fn === "token_mint" || fn === "token_mint_from_contract") && args.length === 3) {
-        const tokenRef = parseTokenRef(args[0]);
-        const toArg = normalizeArgName(args[1], "to arg");
-        const amountArg = normalizeArgName(args[2], "amount arg");
-        return withTokenRef(
-          {
-            op: "TOKEN_MINT",
-            from: fn === "token_mint_from_contract" ? "contract" : "caller",
-            to_arg: toArg,
-            arg: amountArg,
-          },
-          tokenRef
-        );
-      }
-
-      if ((fn === "token_burn" || fn === "token_burn_from_contract") && args.length === 2) {
-        const tokenRef = parseTokenRef(args[0]);
-        const amountArg = normalizeArgName(args[1], "amount arg");
-        return withTokenRef(
-          {
-            op: "TOKEN_BURN",
-            from: fn === "token_burn_from_contract" ? "contract" : "caller",
-            arg: amountArg,
-          },
-          tokenRef
-        );
-      }
-
-      if ((fn === "token_create" || fn === "token_create_from_contract") && args.length === 6) {
-        const nameArg = normalizeArgName(args[0], "name arg");
-        const symbolArg = normalizeArgName(args[1], "symbol arg");
-        const decimalsArg = normalizeArgName(args[2], "decimals arg");
-        const maxSupplyArg = normalizeArgName(args[3], "max_supply arg");
-        const initialSupplyArg = normalizeArgName(args[4], "initial_supply arg");
-        const toArg = normalizeArgName(args[5], "to arg");
-        return {
-          op: "TOKEN_CREATE",
-          from: fn === "token_create_from_contract" ? "contract" : "caller",
-          name_arg: nameArg,
-          symbol_arg: symbolArg,
-          decimals_arg: decimalsArg,
-          max_supply_arg: maxSupplyArg,
-          initial_supply_arg: initialSupplyArg,
-          to_arg: toArg,
-        };
-      }
-    }
-
-    const assignMatch = s.match(/^(?:self\.)?([A-Za-z_][A-Za-z0-9_]*)\s*(\+=|-=|=)\s*([A-Za-z_][A-Za-z0-9_]*)$/);
-    if (!assignMatch) return null;
-    const key = String(assignMatch[1] || "").trim();
-    const operator = String(assignMatch[2] || "").trim();
-    const arg = String(assignMatch[3] || "").trim();
-    if (operator === "+=") {
-      return { op: "ADD_U64", key, arg };
-    }
-    if (operator === "-=") {
-      return { op: "SUB_U64", key, arg };
-    }
-    const declaredType = storageTypes[key] || "u64";
-    if (declaredType === "string") {
-      return { op: "SET_STR", key, arg };
-    }
-    return { op: "SET_U64", key, arg };
-  }
-
-  function compileContractMethod(fn, storageTypes) {
-    const methodName = String(fn && fn.name ? fn.name : "").trim();
-    if (!methodName) {
-      throw new Error("Method name missing");
-    }
-    if (!Array.isArray(fn.params) || fn.params.length === 0) {
-      throw new Error(`Method ${methodName} requires at least 1 argument`);
-    }
-    const statements = extractContractStatements(fn.body);
-    let compiled = null;
-    for (const stmt of statements) {
-      const parsed = parseContractStatement(stmt, storageTypes);
-      if (!parsed) continue;
-      if (compiled) {
-        throw new Error(`Method ${methodName} has multiple state operations (only 1 supported)`);
-      }
-      compiled = parsed;
-    }
-    if (!compiled) {
-      throw new Error(`Method ${methodName} has no supported deterministic operation`);
-    }
-    return Object.assign({ name: methodName, params: Array.isArray(fn.params) ? fn.params : [] }, compiled);
-  }
-
-  function legacyCompiledMethodToLogicOps(compiled) {
-    const op = String(compiled && compiled.op ? compiled.op : "").trim().toUpperCase();
-    const tokenRef = {};
-    if (String(compiled && compiled.token_arg ? compiled.token_arg : "").trim()) {
-      tokenRef.token_arg = String(compiled.token_arg).trim();
-    } else if (String(compiled && compiled.token_id ? compiled.token_id : "").trim()) {
-      tokenRef.token_id = String(compiled.token_id).trim();
-    }
-    if (op === "TOKEN_TRANSFER") {
-      return {
-        max_steps: 4,
-        ops: [
-          Object.assign(
-            {
-              op: "TOKEN_TRANSFER",
-              from: String(compiled.from || "caller").trim().toLowerCase(),
-              to_arg: String(compiled.to_arg || "").trim(),
-              amount_arg: String(compiled.arg || "").trim(),
-            },
-            tokenRef
-          ),
-          { op: "RET_OK" },
-        ],
-      };
-    }
-    if (op === "TOKEN_APPROVE") {
-      return {
-        max_steps: 4,
-        ops: [
-          Object.assign(
-            {
-              op: "TOKEN_APPROVE",
-              from: String(compiled.from || "caller").trim().toLowerCase(),
-              spender_arg: String(compiled.spender_arg || "").trim(),
-              amount_arg: String(compiled.arg || "").trim(),
-            },
-            tokenRef
-          ),
-          { op: "RET_OK" },
-        ],
-      };
-    }
-    if (op === "TOKEN_TRANSFER_FROM") {
-      return {
-        max_steps: 4,
-        ops: [
-          Object.assign(
-            {
-              op: "TOKEN_TRANSFER_FROM",
-              from: String(compiled.from || "caller").trim().toLowerCase(),
-              from_arg: String(compiled.from_arg || "").trim(),
-              to_arg: String(compiled.to_arg || "").trim(),
-              amount_arg: String(compiled.arg || "").trim(),
-            },
-            tokenRef
-          ),
-          { op: "RET_OK" },
-        ],
-      };
-    }
-    if (op === "TOKEN_MINT") {
-      return {
-        max_steps: 4,
-        ops: [
-          Object.assign(
-            {
-              op: "TOKEN_MINT",
-              from: String(compiled.from || "caller").trim().toLowerCase(),
-              to_arg: String(compiled.to_arg || "").trim(),
-              amount_arg: String(compiled.arg || "").trim(),
-            },
-            tokenRef
-          ),
-          { op: "RET_OK" },
-        ],
-      };
-    }
-    if (op === "TOKEN_BURN") {
-      return {
-        max_steps: 4,
-        ops: [
-          Object.assign(
-            {
-              op: "TOKEN_BURN",
-              from: String(compiled.from || "caller").trim().toLowerCase(),
-              amount_arg: String(compiled.arg || "").trim(),
-            },
-            tokenRef
-          ),
-          { op: "RET_OK" },
-        ],
-      };
-    }
-    if (op === "TOKEN_CREATE") {
-      return {
-        max_steps: 4,
-        ops: [
-          {
-            op: "TOKEN_CREATE",
-            from: String(compiled.from || "caller").trim().toLowerCase(),
-            name_arg: String(compiled.name_arg || "").trim(),
-            symbol_arg: String(compiled.symbol_arg || "").trim(),
-            decimals_arg: String(compiled.decimals_arg || "").trim(),
-            max_supply_arg: String(compiled.max_supply_arg || "").trim(),
-            initial_supply_arg: String(compiled.initial_supply_arg || "").trim(),
-            to_arg: String(compiled.to_arg || "").trim(),
-          },
-          { op: "RET_OK" },
-        ],
-      };
-    }
-    if (op === "SET_STR") {
-      return {
-        max_steps: 4,
-        ops: [
-          { op: "ARG_STR", dest: "r0", arg: String(compiled.arg || "").trim() },
-          { op: "STORE_STR", key: String(compiled.key || "").trim(), src: "r0" },
-          { op: "RET_OK" },
-        ],
-      };
-    }
-    if (op === "SET_U64") {
-      return {
-        max_steps: 4,
-        ops: [
-          { op: "ARG_U64", dest: "r0", arg: String(compiled.arg || "").trim() },
-          { op: "STORE_U64", key: String(compiled.key || "").trim(), src: "r0" },
-          { op: "RET_OK" },
-        ],
-      };
-    }
-    if (op === "ADD_U64") {
-      return {
-        max_steps: 8,
-        ops: [
-          { op: "LOAD_U64", dest: "r0", key: String(compiled.key || "").trim() },
-          { op: "ARG_U64", dest: "r1", arg: String(compiled.arg || "").trim() },
-          { op: "ADD_U64", dest: "r2", a: "r0", b: "r1" },
-          { op: "STORE_U64", key: String(compiled.key || "").trim(), src: "r2" },
-          { op: "RET_OK" },
-        ],
-      };
-    }
-    if (op === "SUB_U64") {
-      return {
-        max_steps: 8,
-        ops: [
-          { op: "LOAD_U64", dest: "r0", key: String(compiled.key || "").trim() },
-          { op: "ARG_U64", dest: "r1", arg: String(compiled.arg || "").trim() },
-          { op: "SUB_U64", dest: "r2", a: "r0", b: "r1" },
-          { op: "STORE_U64", key: String(compiled.key || "").trim(), src: "r2" },
-          { op: "RET_OK" },
-        ],
-      };
-    }
-    return null;
-  }
-
-  function deriveContractNameFromSource(source, lang) {
-    if (lang === "solidity-like") {
-      const m = String(source || "").match(/\bcontract\s+([A-Za-z_][A-Za-z0-9_]*)\b/);
-      if (m && m[1]) return m[1];
-    }
-    const title = String(source || "").match(/^\s*#\s*@title\s+([A-Za-z_][A-Za-z0-9_]*)/im);
-    if (title && title[1]) return title[1];
-    return "";
-  }
-
-  function transpileContractSource(source, preferredLang, creator, nameOverride, outputModeRaw) {
-    const src = String(source || "").trim();
-    if (!src) throw new Error("Contract source required");
-
-    const outputMode = normalizeContractOutputMode(outputModeRaw);
-    const lang = detectContractDslLang(src, preferredLang);
-    const parsed = parseContractStorageDeclarations(src, lang);
-    const fnList = lang === "vyper-like" ? parseVyperFunctions(src) : parseSolidityFunctions(src);
-    if (!fnList.length) {
-      throw new Error("No functions found in source");
-    }
-
-    const methods = [];
-    const abi = [];
-    const warnings = [];
-    const seen = new Set();
-    fnList.forEach((fn) => {
-      try {
-        const compiled = compileContractMethod(fn, parsed.storageTypes);
-        const methodKey = String(compiled.name || "").toLowerCase();
-        if (seen.has(methodKey)) {
-          warnings.push(`Duplicate method ignored: ${compiled.name}`);
-          return;
-        }
-        seen.add(methodKey);
-        methods.push(compiled);
-        const typeHints = {};
-        const setTypeHint = (rawName, typeName) => {
-          const name = String(rawName || "").trim().toLowerCase();
-          if (!name) return;
-          typeHints[name] = String(typeName || "").trim().toLowerCase();
-        };
-        if (compiled.op === "SET_STR" && compiled.arg) {
-          setTypeHint(compiled.arg, "string");
-        } else {
-          if (compiled.op === "TOKEN_CREATE") {
-            setTypeHint(compiled.name_arg, "string");
-            setTypeHint(compiled.symbol_arg, "string");
-            setTypeHint(compiled.decimals_arg, "u64");
-            setTypeHint(compiled.max_supply_arg, "u64");
-            setTypeHint(compiled.initial_supply_arg, "u64");
-            setTypeHint(compiled.to_arg, "address");
-          }
-          if (compiled.token_arg) {
-            setTypeHint(compiled.token_arg, "string");
-          }
-          if (compiled.to_arg) {
-            setTypeHint(compiled.to_arg, "address");
-          }
-          if (compiled.from_arg) {
-            setTypeHint(compiled.from_arg, "address");
-          }
-          if (compiled.spender_arg) {
-            setTypeHint(compiled.spender_arg, "address");
-          }
-          if (compiled.arg) {
-            setTypeHint(compiled.arg, "u64");
-          }
-        }
-        const args = (Array.isArray(compiled.params) ? compiled.params : []).map((p) => {
-          const name = String(p || "").trim();
-          const hinted = typeHints[name.toLowerCase()];
-          if (hinted) {
-            return { name, type: hinted };
-          }
-          const lower = name.toLowerCase();
-          const isAddress = lower.includes("address") || lower === "to" || lower === "recipient" || lower === "from" || lower === "owner" || lower === "spender";
-          const isString = lower.includes("string") || lower.includes("label") || lower.includes("name");
-          return {
-            name,
-            type: isAddress ? "address" : (isString ? "string" : "u64"),
-          };
-        });
-        abi.push({ name: compiled.name, args, returns: [] });
-      } catch (err) {
-        warnings.push(err instanceof Error ? err.message : String(err));
-      }
-    });
-
-    if (!methods.length) {
-      throw new Error("No supported methods transpiled (check function bodies)");
-    }
-
-    const derivedName = deriveContractNameFromSource(src, lang);
-    const contractName = sanitizeContractDslName(nameOverride, derivedName);
-    const creatorAddr = String(creator || "").trim();
-    if (!creatorAddr) {
-      throw new Error("Creator/from address required for CONTRACT_DEPLOY");
-    }
-
-    const storage = Object.entries(parsed.storageTypes || {}).map(([key, type]) => ({
-      key,
-      type: String(type || "").trim().toLowerCase() === "string" ? "string" : "u64",
-      init: String((parsed.init && parsed.init[key]) || (String(type || "").trim().toLowerCase() === "string" ? "" : "0")),
-    }));
-    const logicMethods = methods.map((method) => {
-      const compiled = legacyCompiledMethodToLogicOps(method);
-      if (!compiled) {
-        throw new Error(`Unsupported compiled op for method ${method.name}`);
-      }
-      return {
-        name: method.name,
-        max_steps: compiled.max_steps,
-        ops: compiled.ops,
-      };
-    });
-    const logicPack = {
-      version: 1,
-      name: contractName,
-      abi,
-      storage,
-      methods: logicMethods,
-      limits: {
-        max_reads: 16,
-        max_writes: 16,
-        max_token_transfers: 4,
-      },
-    };
-
-    if (outputMode === "logic_pack") {
-      const payload = {
-        creator: creatorAddr,
-        name: contractName,
-        lang: "dtl-script-v1",
-        version: 2,
-        logic_pack: logicPack,
-      };
-      return { payload, warnings, lang: "dtl-script-v1", contractName, outputMode };
-    }
-
-    const program = bytecodeProgramFromLogicPack(logicPack);
-    const bytecodeHex = encodeDTLBytecodeProgramHex(program);
-    const payload = {
-      creator: creatorAddr,
-      name: contractName,
-      lang: "dtl-bytecode-v1",
-      version: 2,
-      bytecode: bytecodeHex,
-      bytecode_format: DTL_BYTECODE_FORMAT,
-      compiler: "dtl-solc-frontend/0.1",
-      abi,
-    };
-    return { payload, warnings, lang: "dtl-bytecode-v1", contractName, outputMode: "dtl-bc-v1" };
-  }
-
-  function loadContractDslSample() {
-    const selected = String((els.contractDslLang && els.contractDslLang.value) || "auto").trim().toLowerCase();
-    const lang = selected === "vyper-like" ? "vyper-like" : "solidity-like";
-    if (els.contractDslSource) {
-      els.contractDslSource.value = contractDslSample(lang);
-    }
-    if (els.contractDslName && !String(els.contractDslName.value || "").trim()) {
-      els.contractDslName.value = lang === "vyper-like" ? "VaultBook" : "Counter";
-    }
-    if (els.customCodeLang) els.customCodeLang.value = selected || "auto";
-    if (els.customCodeEditor) els.customCodeEditor.value = String((els.contractDslSource && els.contractDslSource.value) || "");
-    if (els.customCodeName && !String(els.customCodeName.value || "").trim()) {
-      els.customCodeName.value = String((els.contractDslName && els.contractDslName.value) || "");
-    }
-    if (els.customCodeOutputMode && els.contractDslOutputMode) {
-      els.customCodeOutputMode.value = String(els.contractDslOutputMode.value || "dtl-bc-v1");
-    }
-    scheduleDraftSave();
-  }
-
-  function setCustomCodeOutput(value) {
-    if (!els.customCodeOut) return;
-    if (typeof value === "string") {
-      els.customCodeOut.textContent = value;
-      return;
-    }
-    els.customCodeOut.textContent = asPretty(value);
-  }
-
-  function readCustomCodeTranspileInput() {
-    const source = String((els.customCodeEditor && els.customCodeEditor.value) || "").trim();
-    if (!source) throw new Error("Custom code required");
-    const preferredLang = String((els.customCodeLang && els.customCodeLang.value) || "auto").trim();
-    const nameOverride = String((els.customCodeName && els.customCodeName.value) || "").trim();
-    const outputMode = normalizeContractOutputMode(String((els.customCodeOutputMode && els.customCodeOutputMode.value) || "dtl-bc-v1"));
-    const creator = String(els.txFrom.value || (state.wallet && state.wallet.address) || "").trim();
-    if (!creator) throw new Error("Set From address first (creator required)");
-    return { source, preferredLang, nameOverride, creator, outputMode };
-  }
-
-  function payloadMethodNames(payloadObj) {
-    const pack = extractLogicPackFromPayload(payloadObj);
-    if (!pack || !Array.isArray(pack.methods)) return [];
-    return pack.methods
-      .map((m) => String(m && m.name ? m.name : "").trim())
-      .filter(Boolean);
-  }
-
-  function payloadStorageKeys(payloadObj) {
-    const pack = extractLogicPackFromPayload(payloadObj);
-    if (!pack || !Array.isArray(pack.storage)) return [];
-    return pack.storage
-      .map((f) => String(f && f.key ? f.key : "").trim())
-      .filter(Boolean);
-  }
-
-  function analyzeCustomCode() {
-    const input = readCustomCodeTranspileInput();
-    const out = transpileContractSource(
-      input.source,
-      input.preferredLang,
-      input.creator,
-      input.nameOverride,
-      input.outputMode
-    );
-    state.customCodeLastPayload = out.payload;
-    const methods = payloadMethodNames(out.payload);
-    const storageKeys = payloadStorageKeys(out.payload);
-    const summary = {
-      status: "analyzed",
-      lang: out.lang,
-      output_mode: out.outputMode,
-      contract: out.contractName,
-      method_count: methods.length,
-      methods,
-      storage_keys: storageKeys,
-      warnings: out.warnings,
-    };
-    setCustomCodeOutput(summary);
-    scheduleDraftSave();
-    return out;
-  }
-
-  function applyCustomCodeAsDeployPayload() {
-    const out = analyzeCustomCode();
-    if (els.dtlType) {
-      els.dtlType.value = "CONTRACT_DEPLOY";
-    }
-    syncGuidedVisibility();
-    els.txPayload.value = asPretty(out.payload);
-    setPayloadPreview(out.payload);
-    prefillLogicSimulatorFromPayload(out.payload);
-    if (els.contractDslLang) els.contractDslLang.value = String((els.customCodeLang && els.customCodeLang.value) || "auto");
-    if (els.contractDslName) els.contractDslName.value = String((els.customCodeName && els.customCodeName.value) || "");
-    if (els.contractDslOutputMode) els.contractDslOutputMode.value = String((els.customCodeOutputMode && els.customCodeOutputMode.value) || "dtl-bc-v1");
-    if (els.contractDslSource) els.contractDslSource.value = String((els.customCodeEditor && els.customCodeEditor.value) || "");
-    els.txOut.textContent = asPretty({
-      status: "custom_code_payload_ready",
-      contract: out.contractName,
-      output_mode: out.outputMode,
-      methods: payloadMethodNames(out.payload).length,
-      warnings: out.warnings,
-    });
-    refreshWorkspaceMeta();
-    scheduleDraftSave();
-  }
-
-  function copyCustomCodePayload() {
-    if (!state.customCodeLastPayload) {
-      analyzeCustomCode();
-    }
-    copyValueToClipboard(asPretty(state.customCodeLastPayload || {}), "Custom deploy payload copied.");
-  }
-
-  function loadCustomCodeSample() {
-    const selected = String((els.customCodeLang && els.customCodeLang.value) || "auto").trim().toLowerCase();
-    const lang = selected === "vyper-like" ? "vyper-like" : "solidity-like";
-    if (els.customCodeEditor) {
-      els.customCodeEditor.value = contractDslSample(lang);
-    }
-    if (els.customCodeName && !String(els.customCodeName.value || "").trim()) {
-      els.customCodeName.value = lang === "vyper-like" ? "VaultBook" : "Counter";
-    }
-    if (els.contractDslOutputMode && els.customCodeOutputMode) {
-      els.contractDslOutputMode.value = String(els.customCodeOutputMode.value || "dtl-bc-v1");
-    }
-    setCustomCodeOutput("Sample loaded. Click Analyze Code.");
-    scheduleDraftSave();
-  }
-
-  function loadMSC20ContractTemplate() {
-    const selected = String((els.customCodeLang && els.customCodeLang.value) || "auto").trim().toLowerCase();
-    const lang = selected === "vyper-like" ? "vyper-like" : "solidity-like";
-    const source = contractDslMsc20Template(lang);
-    if (els.customCodeLang) els.customCodeLang.value = lang;
-    if (els.customCodeName) els.customCodeName.value = "MSC20Controller";
-    if (els.customCodeEditor) els.customCodeEditor.value = source;
-    if (els.contractDslLang) els.contractDslLang.value = lang;
-    if (els.contractDslName) els.contractDslName.value = "MSC20Controller";
-    if (els.customCodeOutputMode) els.customCodeOutputMode.value = normalizeContractOutputMode(String((els.customCodeOutputMode && els.customCodeOutputMode.value) || "dtl-bc-v1"));
-    if (els.contractDslOutputMode) els.contractDslOutputMode.value = normalizeContractOutputMode(String((els.customCodeOutputMode && els.customCodeOutputMode.value) || "dtl-bc-v1"));
-    if (els.contractDslSource) els.contractDslSource.value = source;
-    if (els.dtlType) els.dtlType.value = "CONTRACT_DEPLOY";
-    syncGuidedVisibility();
-    setCustomCodeOutput({
-      status: "template_loaded",
-      template: "MSC20 contract",
-      note: "Edit function args as needed, then click Analyze Code -> Use as Deploy Payload.",
-    });
-    scheduleDraftSave();
-  }
-
-  async function loadNFTPayloadTemplate(kind, label) {
-    if (els.dtlType) els.dtlType.value = kind;
-    syncGuidedVisibility();
-    await loadPayloadTemplate();
-    setCustomCodeOutput({
-      status: "template_loaded",
-      template: label,
-      mode: "DTL transaction payload",
-      note: "NFT templates are payload-based in current DTL (not Solidity-like contract transpile).",
-    });
-    scheduleDraftSave();
-  }
-
-  function transpileContractDslToPayload() {
-    const source = String((els.contractDslSource && els.contractDslSource.value) || "").trim();
-    if (!source) throw new Error("Paste Solidity/Vyper-like source first");
-    const preferredLang = String((els.contractDslLang && els.contractDslLang.value) || "auto").trim();
-    const creator = String(els.txFrom.value || (state.wallet && state.wallet.address) || "").trim();
-    if (!creator) throw new Error("Set From address first (creator required)");
-    const nameOverride = String((els.contractDslName && els.contractDslName.value) || "").trim();
-    const outputMode = normalizeContractOutputMode(String((els.contractDslOutputMode && els.contractDslOutputMode.value) || "dtl-bc-v1"));
-
-    const out = transpileContractSource(source, preferredLang, creator, nameOverride, outputMode);
-    if (els.dtlType) {
-      els.dtlType.value = "CONTRACT_DEPLOY";
-    }
-    syncGuidedVisibility();
-    els.txPayload.value = asPretty(out.payload);
-    setPayloadPreview(out.payload);
-    els.txOut.textContent = asPretty({
-      status: "transpiled",
-      lang: out.lang,
-      output_mode: out.outputMode,
-      contract: out.contractName,
-      methods: payloadMethodNames(out.payload).length,
-      warnings: out.warnings,
-    });
-    if (els.customCodeLang) els.customCodeLang.value = String((els.contractDslLang && els.contractDslLang.value) || "auto");
-    if (els.customCodeName) els.customCodeName.value = String((els.contractDslName && els.contractDslName.value) || "");
-    if (els.customCodeOutputMode) els.customCodeOutputMode.value = String((els.contractDslOutputMode && els.contractDslOutputMode.value) || "dtl-bc-v1");
-    if (els.customCodeEditor) els.customCodeEditor.value = source;
-    state.customCodeLastPayload = out.payload;
-    setCustomCodeOutput({
-      status: "analyzed",
-      lang: out.lang,
-      output_mode: out.outputMode,
-      contract: out.contractName,
-      method_count: payloadMethodNames(out.payload).length,
-      warnings: out.warnings,
-    });
-    prefillLogicSimulatorFromPayload(out.payload);
-    scheduleDraftSave();
-  }
-
-  function normalizeLogicMethodName(raw) {
-    return String(raw || "").trim().toLowerCase();
-  }
-
-  function extractLogicPackFromPayload(payloadObj) {
-    if (!payloadObj || typeof payloadObj !== "object") return null;
-    const pack = payloadObj.logic_pack;
-    if (pack && typeof pack === "object" && Array.isArray(pack.methods) && pack.methods.length) {
-      return pack;
-    }
-    const bytecode = String(payloadObj.bytecode || "").trim();
-    const format = String(payloadObj.bytecode_format || "").trim().toLowerCase();
-    if (!bytecode || format !== DTL_BYTECODE_FORMAT) return null;
-    try {
-      const program = decodeDTLBytecodeProgramHex(bytecode);
-      return logicPackFromBytecodeProgram(program);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function findLogicPackMethod(pack, methodName) {
-    const want = normalizeLogicMethodName(methodName);
-    if (!pack || !Array.isArray(pack.methods)) return null;
-    for (const method of pack.methods) {
-      const current = normalizeLogicMethodName(method && method.name);
-      if (current && current === want) return method;
-    }
-    return null;
-  }
-
-  function findLogicPackABIMethod(pack, methodName) {
-    const want = normalizeLogicMethodName(methodName);
-    if (!pack || !Array.isArray(pack.abi)) return null;
-    for (const method of pack.abi) {
-      const current = normalizeLogicMethodName(method && method.name);
-      if (current && current === want) return method;
-    }
-    return null;
-  }
-
-  function defaultArgsForLogicABI(abi, fallbackAddress) {
-    const args = {};
-    if (!abi || !Array.isArray(abi.args)) return args;
-    abi.args.forEach((arg) => {
-      const name = normalizeLogicMethodName(arg && arg.name);
-      if (!name) return;
-      const typ = normalizeLogicMethodName(arg && arg.type);
-      if (typ === "u64") {
-        args[name] = "1";
-      } else if (typ === "bool") {
-        args[name] = "false";
-      } else if (typ === "address") {
-        args[name] = String(fallbackAddress || "MSC0000000000000000000000000000000000000000").trim();
-      } else {
-        args[name] = "";
-      }
-    });
-    return args;
-  }
-
-  function setLogicSimOutput(value) {
-    if (!els.logicSimOut) return;
-    if (typeof value === "string") {
-      els.logicSimOut.textContent = value;
-      return;
-    }
-    els.logicSimOut.textContent = asPretty(value);
-  }
-
-  function prefillLogicSimulatorFromPayload(payloadObj) {
-    if (!els.logicSimMethod || !els.logicSimArgs) return;
-    const pack = extractLogicPackFromPayload(payloadObj);
-    if (!pack) {
-      els.logicSimMethod.innerHTML = "";
-      setLogicSimOutput("No executable runtime found in payload (logic_pack or dtl-bc-v1).");
-      return;
-    }
-    const previous = normalizeLogicMethodName(els.logicSimMethod.value);
-    const names = Array.isArray(pack.methods)
-      ? pack.methods
-          .map((m) => normalizeLogicMethodName(m && m.name))
-          .filter(Boolean)
-      : [];
-    names.sort();
-
-    els.logicSimMethod.innerHTML = "";
-    names.forEach((name) => {
-      const opt = document.createElement("option");
-      opt.value = name;
-      opt.textContent = name;
-      els.logicSimMethod.appendChild(opt);
-    });
-    if (!names.length) {
-      setLogicSimOutput("Runtime has no methods.");
-      return;
-    }
-    const chosen = names.includes(previous) ? previous : names[0];
-    els.logicSimMethod.value = chosen;
-
-    const fromFallback = String((els.txFrom && els.txFrom.value) || state.walletAccount || "").trim();
-    const abi = findLogicPackABIMethod(pack, chosen);
-    const sampleArgs = defaultArgsForLogicABI(abi, fromFallback);
-    els.logicSimArgs.value = asPretty(sampleArgs);
-    setLogicSimOutput({
-      status: "runtime_ready",
-      method: chosen,
-      method_count: names.length,
-    });
-  }
-
-  function refreshLogicSimulatorArgsForSelectedMethod() {
-    if (!els.logicSimMethod || !els.logicSimArgs) return;
-    const payload = parseJSONField(els.txPayload && els.txPayload.value, {});
-    const pack = extractLogicPackFromPayload(payload);
-    if (!pack) return;
-    const method = normalizeLogicMethodName(els.logicSimMethod.value);
-    if (!method) return;
-    const fromFallback = String((els.txFrom && els.txFrom.value) || state.walletAccount || "").trim();
-    const abi = findLogicPackABIMethod(pack, method);
-    const args = defaultArgsForLogicABI(abi, fromFallback);
-    els.logicSimArgs.value = asPretty(args);
-  }
-
-  function parseLogicSimArgs(raw) {
-    const argsRaw = String(raw || "").trim();
-    if (!argsRaw) return {};
-    const parsed = JSON.parse(argsRaw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("Simulator args must be JSON object");
-    }
-    const out = {};
-    Object.keys(parsed).forEach((k) => {
-      const key = normalizeLogicMethodName(k);
-      if (!key) return;
-      const value = parsed[k];
-      if (value === null || value === undefined) {
-        out[key] = "";
-      } else {
-        out[key] = String(value).trim();
-      }
-    });
-    return out;
-  }
-
-  function logicSimParseU64(raw, label) {
-    const text = String(raw || "").trim();
-    if (!/^[0-9]+$/.test(text)) {
-      throw new Error(`${label} must be uint64`);
-    }
-    const n = BigInt(text);
-    if (n < 0n || n > U64_MAX) {
-      throw new Error(`${label} out of uint64 range`);
-    }
-    return n;
-  }
-
-  function logicSimToString(v) {
-    if (!v || typeof v !== "object") return "";
-    if (v.kind === "u64") return String(v.u64);
-    if (v.kind === "bool") return v.b ? "true" : "false";
-    if (v.kind === "string") return String(v.str || "");
-    return "";
-  }
-
-  function logicSimCloneRegs(regs) {
-    const out = {};
-    Object.keys(regs)
-      .sort()
-      .forEach((key) => {
-        const value = regs[key];
-        out[key] = {
-          kind: value.kind,
-          value: logicSimToString(value),
-        };
-      });
-    return out;
-  }
-
-  function logicSimCloneStorage(storage) {
-    const out = {};
-    Object.keys(storage)
-      .sort()
-      .forEach((key) => {
-        out[key] = String(storage[key] || "");
-      });
-    return out;
-  }
-
-  function logicSimReadReg(regs, regName) {
-    const reg = normalizeLogicMethodName(regName);
-    if (!reg || !Object.prototype.hasOwnProperty.call(regs, reg)) {
-      throw new Error(`register not initialized: ${regName}`);
-    }
-    return regs[reg];
-  }
-
-  function logicSimReadRegAsU64(regs, regName) {
-    const v = logicSimReadReg(regs, regName);
-    if (v.kind !== "u64") throw new Error(`register ${regName} is not u64`);
-    return v.u64;
-  }
-
-  function logicSimReadRegAsStr(regs, regName) {
-    const v = logicSimReadReg(regs, regName);
-    if (v.kind !== "string") throw new Error(`register ${regName} is not string`);
-    return v.str;
-  }
-
-  function logicSimReadRegAsBool(regs, regName) {
-    const v = logicSimReadReg(regs, regName);
-    if (v.kind !== "bool") throw new Error(`register ${regName} is not bool`);
-    return v.b;
-  }
-
-  function logicSimExecute(pack, methodName, argsInput) {
-    const method = findLogicPackMethod(pack, methodName);
-    if (!method) throw new Error(`Unknown logic method: ${methodName}`);
-    const abi = findLogicPackABIMethod(pack, methodName);
-    if (!abi) throw new Error(`ABI missing for method: ${methodName}`);
-
-    const args = {};
-    Object.keys(argsInput || {}).forEach((k) => {
-      const key = normalizeLogicMethodName(k);
-      if (!key) return;
-      args[key] = String(argsInput[k] || "").trim();
-    });
-    (Array.isArray(abi.args) ? abi.args : []).forEach((arg) => {
-      const name = normalizeLogicMethodName(arg && arg.name);
-      const typ = normalizeLogicMethodName(arg && arg.type);
-      if (!name) return;
-      if (!Object.prototype.hasOwnProperty.call(args, name)) {
-        throw new Error(`missing arg: ${name}`);
-      }
-      if (typ === "u64") {
-        logicSimParseU64(args[name], `arg ${name}`);
-      } else if (typ === "bool") {
-        const low = args[name].toLowerCase();
-        if (low !== "true" && low !== "false") {
-          throw new Error(`arg ${name} must be bool`);
-        }
-      } else if (typ === "address" && !String(args[name] || "").trim()) {
-        throw new Error(`arg ${name} must be address/string`);
-      }
-    });
-
-    const storageTypes = {};
-    const storage = {};
-    (Array.isArray(pack.storage) ? pack.storage : []).forEach((field) => {
-      const key = normalizeLogicMethodName(field && field.key);
-      if (!key) return;
-      const typ = normalizeLogicMethodName(field && field.type);
-      const init = String((field && field.init) || "").trim();
-      storageTypes[key] = typ;
-      if (typ === "u64") {
-        storage[key] = String(logicSimParseU64(init || "0", `storage ${key}`));
-      } else if (typ === "bool") {
-        storage[key] = init.toLowerCase() === "true" ? "true" : "false";
-      } else {
-        storage[key] = init;
-      }
-    });
-
-    const regs = {};
-    const trace = [];
-    const transferIntents = [];
-    const limits = pack && pack.limits && typeof pack.limits === "object" ? pack.limits : {};
-    const maxReads = Math.max(1, Number.parseInt(String(limits.max_reads || "16"), 10) || 16);
-    const maxWrites = Math.max(1, Number.parseInt(String(limits.max_writes || "16"), 10) || 16);
-    const maxTransfers = Math.max(1, Number.parseInt(String(limits.max_token_transfers || "4"), 10) || 4);
-    const maxSteps = Math.max(
-      1,
-      Number.parseInt(String(method.max_steps || 0), 10) || ((Array.isArray(method.ops) ? method.ops.length : 0) + 1)
-    );
-    const resolveTokenRef = (opObj) => {
-      const tokenArg = normalizeLogicMethodName(opObj && opObj.token_arg);
-      const rawRef = tokenArg ? args[tokenArg] : String((opObj && opObj.token_id) || "");
-      const tokenRef = String(rawRef || "").trim().toLowerCase();
-      if (!tokenRef) throw new Error("token reference required");
-      return tokenRef;
-    };
-    const resolveAddressArg = (argName, label) => {
-      const key = normalizeLogicMethodName(argName);
-      const value = String(args[key] || "").trim();
-      if (!value) throw new Error(`invalid ${label}`);
-      return value;
-    };
-    const resolveU64Arg = (argName, label, allowZero) => {
-      const key = normalizeLogicMethodName(argName);
-      const value = logicSimParseU64(args[key], `${label} ${key}`);
-      if (!allowZero && value <= 0n) {
-        throw new Error(`invalid ${label}`);
-      }
-      return value;
-    };
-    const resolveFromMode = (raw) => {
-      const mode = String(raw || "caller").trim().toLowerCase() || "caller";
-      if (mode !== "caller" && mode !== "contract") {
-        throw new Error("invalid from mode");
-      }
-      return mode;
-    };
-
-    const ops = Array.isArray(method.ops) ? method.ops : [];
-    let reads = 0;
-    let writes = 0;
-    let transfers = 0;
-    let pc = 0;
-    let steps = 0;
-    while (pc >= 0 && pc < ops.length) {
-      steps += 1;
-      if (steps > maxSteps) {
-        throw new Error("logic method step limit exceeded");
-      }
-      const op = ops[pc] || {};
-      const opName = String(op.op || "").trim().toUpperCase();
-      const stepInfo = {
-        step: steps,
-        pc,
-        op: opName,
-        reads,
-        writes,
-        transfers,
-      };
-      switch (opName) {
-        case "ARG_U64": {
-          const argName = normalizeLogicMethodName(op.arg);
-          regs[normalizeLogicMethodName(op.dest)] = { kind: "u64", u64: logicSimParseU64(args[argName], `arg ${argName}`) };
-          pc += 1;
-          break;
-        }
-        case "ARG_STR": {
-          const argName = normalizeLogicMethodName(op.arg);
-          regs[normalizeLogicMethodName(op.dest)] = { kind: "string", str: String(args[argName] || "").trim() };
-          pc += 1;
-          break;
-        }
-        case "LOAD_U64": {
-          reads += 1;
-          if (reads > maxReads) throw new Error("logic read limit exceeded");
-          const key = normalizeLogicMethodName(op.key);
-          if (storageTypes[key] !== "u64") throw new Error(`storage key ${key} is not u64`);
-          regs[normalizeLogicMethodName(op.dest)] = { kind: "u64", u64: logicSimParseU64(storage[key] || "0", `storage ${key}`) };
-          pc += 1;
-          break;
-        }
-        case "LOAD_STR": {
-          reads += 1;
-          if (reads > maxReads) throw new Error("logic read limit exceeded");
-          const key = normalizeLogicMethodName(op.key);
-          if (storageTypes[key] !== "string") throw new Error(`storage key ${key} is not string`);
-          regs[normalizeLogicMethodName(op.dest)] = { kind: "string", str: String(storage[key] || "") };
-          pc += 1;
-          break;
-        }
-        case "STORE_U64": {
-          writes += 1;
-          if (writes > maxWrites) throw new Error("logic write limit exceeded");
-          const key = normalizeLogicMethodName(op.key);
-          if (storageTypes[key] !== "u64") throw new Error(`storage key ${key} is not u64`);
-          const n = logicSimReadRegAsU64(regs, op.src);
-          storage[key] = n.toString(10);
-          pc += 1;
-          break;
-        }
-        case "STORE_STR": {
-          writes += 1;
-          if (writes > maxWrites) throw new Error("logic write limit exceeded");
-          const key = normalizeLogicMethodName(op.key);
-          if (storageTypes[key] !== "string") throw new Error(`storage key ${key} is not string`);
-          storage[key] = logicSimReadRegAsStr(regs, op.src);
-          pc += 1;
-          break;
-        }
-        case "ADD_U64":
-        case "SUB_U64":
-        case "MUL_U64":
-        case "DIV_U64": {
-          const a = logicSimReadRegAsU64(regs, op.a);
-          const b = logicSimReadRegAsU64(regs, op.b);
-          let out = 0n;
-          if (opName === "ADD_U64") {
-            out = a + b;
-            if (out > U64_MAX) throw new Error("uint64 overflow");
-          } else if (opName === "SUB_U64") {
-            if (b > a) throw new Error("contract subtraction underflow");
-            out = a - b;
-          } else if (opName === "MUL_U64") {
-            out = a * b;
-            if (out > U64_MAX) throw new Error("uint64 overflow");
-          } else {
-            if (b === 0n) throw new Error("division by zero");
-            out = a / b;
-          }
-          regs[normalizeLogicMethodName(op.dest)] = { kind: "u64", u64: out };
-          pc += 1;
-          break;
-        }
-        case "CMP_EQ":
-        case "CMP_NEQ": {
-          const av = logicSimReadReg(regs, op.a);
-          const bv = logicSimReadReg(regs, op.b);
-          if (av.kind !== bv.kind) throw new Error(`compare type mismatch: ${av.kind} vs ${bv.kind}`);
-          let eq = false;
-          if (av.kind === "u64") eq = av.u64 === bv.u64;
-          if (av.kind === "string") eq = av.str === bv.str;
-          if (av.kind === "bool") eq = av.b === bv.b;
-          if (opName === "CMP_NEQ") eq = !eq;
-          regs[normalizeLogicMethodName(op.dest)] = { kind: "bool", b: eq };
-          pc += 1;
-          break;
-        }
-        case "CMP_GT":
-        case "CMP_GTE":
-        case "CMP_LT":
-        case "CMP_LTE": {
-          const a = logicSimReadRegAsU64(regs, op.a);
-          const b = logicSimReadRegAsU64(regs, op.b);
-          let result = false;
-          if (opName === "CMP_GT") result = a > b;
-          if (opName === "CMP_GTE") result = a >= b;
-          if (opName === "CMP_LT") result = a < b;
-          if (opName === "CMP_LTE") result = a <= b;
-          regs[normalizeLogicMethodName(op.dest)] = { kind: "bool", b: result };
-          pc += 1;
-          break;
-        }
-        case "JMP_IF": {
-          const cond = logicSimReadRegAsBool(regs, op.cond);
-          const target = Number.parseInt(String(op.target || 0), 10);
-          if (cond) {
-            if (!Number.isInteger(target) || target < 0 || target >= ops.length) {
-              throw new Error("jump target out of range");
-            }
-            pc = target;
-          } else {
-            pc += 1;
-          }
-          break;
-        }
-        case "JMP": {
-          const target = Number.parseInt(String(op.target || 0), 10);
-          if (!Number.isInteger(target) || target < 0 || target >= ops.length) {
-            throw new Error("jump target out of range");
-          }
-          pc = target;
-          break;
-        }
-        case "ASSERT": {
-          const cond = logicSimReadRegAsBool(regs, op.cond);
-          if (!cond) {
-            const msg = String(op.message || "").trim() || "logic assert failed";
-            throw new Error(msg);
-          }
-          pc += 1;
-          break;
-        }
-        case "TOKEN_TRANSFER": {
-          transfers += 1;
-          if (transfers > maxTransfers) throw new Error("logic transfer limit exceeded");
-          const tokenRef = resolveTokenRef(op);
-          const to = resolveAddressArg(op.to_arg, "transfer recipient");
-          const amount = resolveU64Arg(op.amount_arg || op.arg, "amount", false);
-          transferIntents.push({
-            op: "TOKEN_TRANSFER",
-            token_ref: tokenRef,
-            token_id: tokenRef,
-            from: resolveFromMode(op.from),
-            to,
-            amount: amount.toString(10),
-          });
-          pc += 1;
-          break;
-        }
-        case "TOKEN_APPROVE": {
-          transfers += 1;
-          if (transfers > maxTransfers) throw new Error("logic transfer limit exceeded");
-          const tokenRef = resolveTokenRef(op);
-          const spender = resolveAddressArg(op.spender_arg, "spender");
-          const amount = resolveU64Arg(op.amount_arg || op.arg, "amount", true);
-          transferIntents.push({
-            op: "TOKEN_APPROVE",
-            token_ref: tokenRef,
-            token_id: tokenRef,
-            owner: resolveFromMode(op.from),
-            spender,
-            amount: amount.toString(10),
-          });
-          pc += 1;
-          break;
-        }
-        case "TOKEN_TRANSFER_FROM": {
-          transfers += 1;
-          if (transfers > maxTransfers) throw new Error("logic transfer limit exceeded");
-          const tokenRef = resolveTokenRef(op);
-          const from = resolveAddressArg(op.from_arg, "from account");
-          const to = resolveAddressArg(op.to_arg, "to account");
-          const amount = resolveU64Arg(op.amount_arg || op.arg, "amount", false);
-          transferIntents.push({
-            op: "TOKEN_TRANSFER_FROM",
-            token_ref: tokenRef,
-            token_id: tokenRef,
-            spender: resolveFromMode(op.from),
-            from,
-            to,
-            amount: amount.toString(10),
-          });
-          pc += 1;
-          break;
-        }
-        case "TOKEN_MINT": {
-          transfers += 1;
-          if (transfers > maxTransfers) throw new Error("logic transfer limit exceeded");
-          const tokenRef = resolveTokenRef(op);
-          const to = resolveAddressArg(op.to_arg, "mint recipient");
-          const amount = resolveU64Arg(op.amount_arg || op.arg, "amount", false);
-          transferIntents.push({
-            op: "TOKEN_MINT",
-            token_ref: tokenRef,
-            token_id: tokenRef,
-            authority: resolveFromMode(op.from),
-            to,
-            amount: amount.toString(10),
-          });
-          pc += 1;
-          break;
-        }
-        case "TOKEN_BURN": {
-          transfers += 1;
-          if (transfers > maxTransfers) throw new Error("logic transfer limit exceeded");
-          const tokenRef = resolveTokenRef(op);
-          const amount = resolveU64Arg(op.amount_arg || op.arg, "amount", false);
-          transferIntents.push({
-            op: "TOKEN_BURN",
-            token_ref: tokenRef,
-            token_id: tokenRef,
-            from: resolveFromMode(op.from),
-            amount: amount.toString(10),
-          });
-          pc += 1;
-          break;
-        }
-        case "TOKEN_CREATE": {
-          transfers += 1;
-          if (transfers > maxTransfers) throw new Error("logic transfer limit exceeded");
-          const name = String(args[normalizeLogicMethodName(op.name_arg)] || "").trim();
-          const symbol = String(args[normalizeLogicMethodName(op.symbol_arg)] || "").trim();
-          const decimals = resolveU64Arg(op.decimals_arg, "decimals", true);
-          const maxSupply = resolveU64Arg(op.max_supply_arg, "max_supply", true);
-          const initialSupply = resolveU64Arg(op.initial_supply_arg || op.amount_arg, "initial_supply", true);
-          const owner = op.to_arg ? resolveAddressArg(op.to_arg, "owner") : resolveFromMode(op.from);
-          if (!name) throw new Error("invalid token name");
-          if (!symbol) throw new Error("invalid token symbol");
-          if (decimals > 18n) throw new Error("decimals out of range");
-          if (maxSupply > 0n && initialSupply > maxSupply) throw new Error("initial_supply exceeds max_supply");
-          transferIntents.push({
-            op: "TOKEN_CREATE",
-            creator: resolveFromMode(op.from),
-            owner,
-            name,
-            symbol,
-            decimals: decimals.toString(10),
-            max_supply: maxSupply.toString(10),
-            initial_supply: initialSupply.toString(10),
-          });
-          pc += 1;
-          break;
-        }
-        case "RET_OK":
-          trace.push({
-            ...stepInfo,
-            result: "ok",
-            registers: logicSimCloneRegs(regs),
-            storage: logicSimCloneStorage(storage),
-            transfer_intents: transferIntents.slice(),
-          });
-          return {
-            status: "ok",
-            method: normalizeLogicMethodName(method.name),
-            steps,
-            reads,
-            writes,
-            transfers,
-            limits: {
-              max_reads: maxReads,
-              max_writes: maxWrites,
-              max_token_transfers: maxTransfers,
-              max_steps: maxSteps,
-            },
-            registers: logicSimCloneRegs(regs),
-            storage: logicSimCloneStorage(storage),
-            transfer_intents: transferIntents,
-            trace,
-          };
-        case "RET_ERR": {
-          const errMsg = String(op.message || "").trim() || "contract method returned error";
-          throw new Error(errMsg);
-        }
-        default:
-          throw new Error(`unsupported logic opcode: ${opName || "unknown"}`);
-      }
-      trace.push({
-        ...stepInfo,
-        next_pc: pc,
-        registers: logicSimCloneRegs(regs),
-        storage: logicSimCloneStorage(storage),
-        transfer_intents: transferIntents.slice(),
-      });
-    }
-    throw new Error("logic method terminated without return");
-  }
-
-  function simulateLogicPackTrace() {
-    const payload = parseJSONField(els.txPayload && els.txPayload.value, {});
-    const pack = extractLogicPackFromPayload(payload);
-    if (!pack) {
-      throw new Error("Current payload has no executable runtime (logic_pack or dtl-bc-v1)");
-    }
-    const method = normalizeLogicMethodName(els.logicSimMethod && els.logicSimMethod.value);
-    if (!method) {
-      throw new Error("Select logic method for simulation");
-    }
-    const args = parseLogicSimArgs(els.logicSimArgs && els.logicSimArgs.value);
-    const out = logicSimExecute(pack, method, args);
-    setLogicSimOutput(out);
-  }
 
   function defaultPayload(kind) {
     const from = String(els.txFrom.value || "").trim();
@@ -4054,13 +2070,6 @@
       assertMSCAddress("payload.submitter", payloadObj.submitter || tx.from);
       return;
     }
-    if (dtlType === "CONTRACT_DEPLOY") {
-      assertMSCAddress("payload.creator", payloadObj.creator || tx.from);
-      return;
-    }
-    if (dtlType === "CONTRACT_CALL") {
-      assertMSCAddress("payload.caller", payloadObj.caller || tx.from);
-    }
   }
 
   function requireSignedDTLTx(tx) {
@@ -4258,18 +2267,7 @@
       }
       return payloadObj;
     }
-    if (dtlType === "CONTRACT_DEPLOY") {
-      if (isHexAddress(payloadObj.creator)) {
-        payloadObj.creator = from;
-      }
-      return payloadObj;
-    }
-    if (dtlType === "CONTRACT_CALL") {
-      if (isHexAddress(payloadObj.caller)) {
-        payloadObj.caller = from;
-      }
-    }
-    return payloadObj;
+		return payloadObj;
   }
 
   async function buildTxObject() {
@@ -4567,34 +2565,6 @@
         throw new Error("ORACLE_PRICE_SUBMIT price must be > 0");
       }
     }
-    if (dtlType === "CONTRACT_DEPLOY") {
-      if (!String(payloadObj.name || "").trim()) throw new Error("CONTRACT_DEPLOY requires name");
-      if (!String(payloadObj.lang || "").trim()) throw new Error("CONTRACT_DEPLOY requires lang");
-      const hasLegacyMethods = Array.isArray(payloadObj.methods) && payloadObj.methods.length > 0;
-      const hasLogicPackMethods = !!(
-        payloadObj.logic_pack &&
-        Array.isArray(payloadObj.logic_pack.methods) &&
-        payloadObj.logic_pack.methods.length > 0
-      );
-      const hasBytecode = !!(String(payloadObj.bytecode || "").trim());
-      const sourceCount = [hasLegacyMethods, hasLogicPackMethods, hasBytecode].filter(Boolean).length;
-      if (sourceCount !== 1) {
-        throw new Error("CONTRACT_DEPLOY requires exactly one executable source: methods or logic_pack.methods or bytecode");
-      }
-      if (hasBytecode) {
-        if (String(payloadObj.bytecode_format || "").trim().toLowerCase() !== DTL_BYTECODE_FORMAT) {
-          throw new Error("CONTRACT_DEPLOY bytecode requires bytecode_format=dtl-bc-v1");
-        }
-        if (state.bytecodeRuntimeActive === false && els.txOut) {
-          els.txOut.textContent =
-            "Warning: Bytecode runtime is inactive on this node. Submit is blocked for bytecode deploy; switch Output Mode to logic_pack or enable dtl.bytecode_runtime_enabled and activation height.";
-        }
-      }
-    }
-    if (dtlType === "CONTRACT_CALL") {
-      if (!String(payloadObj.contract_id || "").trim()) throw new Error("CONTRACT_CALL requires contract_id");
-      if (!String(payloadObj.method || "").trim()) throw new Error("CONTRACT_CALL requires method");
-    }
     const normalizedPayloadStr = JSON.stringify(payloadObj);
 
     const tx = {
@@ -4764,41 +2734,11 @@
   }
 
   async function refreshCompatMode() {
-    // compat subset exposes msc_* read methods; probe without mutating state.
-    try {
-      await rpc("msc_chainId", [], true);
-      state.compatSubset = true;
-    } catch (_) {
-      state.compatSubset = false;
-    }
-    state.bytecodeRuntimeEnabled = null;
-    state.bytecodeRuntimeActive = null;
-    state.bytecodeActivationHeight = null;
     state.contractRuntimeRemoved = true;
-    try {
-      const status = await getJSON("/status");
-      if (status && typeof status === "object") {
-        if (typeof status.dtl_contract_runtime_removed === "boolean") {
-          state.contractRuntimeRemoved = status.dtl_contract_runtime_removed;
-        }
-        if (typeof status.dtl_bytecode_runtime_enabled === "boolean") {
-          state.bytecodeRuntimeEnabled = status.dtl_bytecode_runtime_enabled;
-        }
-        if (typeof status.dtl_bytecode_runtime_active === "boolean") {
-          state.bytecodeRuntimeActive = status.dtl_bytecode_runtime_active;
-        }
-        if (status.dtl_bytecode_activation_height !== undefined && status.dtl_bytecode_activation_height !== null) {
-          const parsed = Number.parseInt(String(status.dtl_bytecode_activation_height), 10);
-          if (Number.isFinite(parsed) && parsed >= 0) {
-            state.bytecodeActivationHeight = parsed;
-          }
-        }
-      }
-    } catch (_) {
-      // /status may require auth; keep bytecode badge in unknown state when unavailable.
-    }
     renderCompatMode();
   }
+
+
 
   async function readTokenInfo() {
     const tokenRef = String(els.tokenRef.value || "").trim();
@@ -5011,10 +2951,9 @@
     } else {
       if (els.txGovCert) els.txGovCert.value = "";
     }
-    els.txPayload.value = asPretty(payload);
-    setPayloadPreview(payload);
-    prefillLogicSimulatorFromPayload(payload);
-    scheduleDraftSave();
+		els.txPayload.value = asPretty(payload);
+		setPayloadPreview(payload);
+		scheduleDraftSave();
   }
 
   async function loadTxPreset(kind, label) {
@@ -5121,29 +3060,12 @@
     return tx;
   }
 
-  function enforceBytecodeRuntimeForSubmit(tx) {
-    if (!tx || typeof tx !== "object") return;
-    if (String(tx.dtl_tx_type || "").trim() !== "CONTRACT_DEPLOY") return;
-    if (state.bytecodeRuntimeActive !== false) return;
-    let payloadObj = null;
-    try {
-      payloadObj = JSON.parse(String(tx.dtl_payload || "{}"));
-    } catch (_) {
-      payloadObj = null;
-    }
-    if (!payloadObj || typeof payloadObj !== "object") return;
-    const hasBytecode = String(payloadObj.bytecode || "").trim() !== "";
-    if (!hasBytecode) return;
-    throw new Error(
-      "Bytecode deploy blocked: node reports dtl_bytecode_runtime_active=false. Switch Output Mode to logic_pack or enable dtl.bytecode_runtime_enabled and activation height."
-    );
-  }
 
   async function submitDTL() {
     await submitWithNonceRetry(async (retried) => {
       const builtTx = await buildTxObject();
       const tx = await ensureSignedForSubmit(builtTx);
-      enforceBytecodeRuntimeForSubmit(tx);
+      assertSupportedDTLTxType(tx.dtl_tx_type);
       requireSignedDTLTx(tx);
       const txID = await rpc("dtl_submit", [tx], true);
       if (els.statusTxId) {
@@ -5154,46 +3076,35 @@
       if (acceptedTxID) {
         rememberLastTxID(acceptedTxID);
       }
-      const dtlType = String(tx.dtl_tx_type || "").trim();
-      const out = {
+      const result = {
         status: "accepted",
         via: "dtl_submit",
         tx_id: txID,
       };
-      if (dtlType === "CONTRACT_DEPLOY") {
-        const deployMeta = await resolveDeployMetadataForTx(tx, acceptedTxID, out);
-        const resolved = applyDeployMetadata(deployMeta, true);
-        if (resolved.contractID) {
-          out.contract_id = resolved.contractID;
-        }
-        if (resolved.logicHash) {
-          out.logic_hash = resolved.logicHash;
-          out.logic_pack_hash = resolved.logicHash;
-        }
-      }
       if (signedTxID && txID && signedTxID.toLowerCase() !== String(txID).toLowerCase()) {
-        out.signed_tx_id = signedTxID;
+        result.signed_tx_id = signedTxID;
       }
       if (retried) {
-        out.nonce_synced = true;
-        out.nonce = Number.parseInt(String(els.txNonce.value || "0"), 10) || null;
+        result.nonce_synced = true;
+        result.nonce = Number.parseInt(String(els.txNonce.value || "0"), 10) || null;
       }
-      els.txOut.textContent = asPretty(out);
+      els.txOut.textContent = asPretty(result);
       scheduleDraftSave();
-      return out;
+      return result;
     });
   }
+
+
 
   async function submitRaw() {
     await submitWithNonceRetry(async (retried) => {
       const builtTx = await buildTxObject();
       const tx = await ensureSignedForSubmit(builtTx);
-      enforceBytecodeRuntimeForSubmit(tx);
+      assertSupportedDTLTxType(tx.dtl_tx_type);
       requireSignedDTLTx(tx);
       if (tx && tx.id) {
         rememberLastTxID(String(tx.id || "").trim());
       }
-      const dtlType = String(tx.dtl_tx_type || "").trim();
       const res = await fetch(endpoint("/submitTx"), {
         method: "POST",
         headers: authHeaders(),
@@ -5201,51 +3112,30 @@
       });
       const text = await res.text();
       if (!res.ok) throw new Error(`HTTP ${res.status} ${text}`);
-      let out = text;
+      let result = text;
       try {
-        out = JSON.parse(text);
-        if (out && out.tx_id) {
-          els.statusTxId.value = out.tx_id;
-          rememberLastTxID(String(out.tx_id || "").trim());
+        result = JSON.parse(text);
+        if (result && result.tx_id) {
+          els.statusTxId.value = result.tx_id;
+          rememberLastTxID(String(result.tx_id || "").trim());
         }
-        if (dtlType === "CONTRACT_DEPLOY") {
-          const deployMeta = await resolveDeployMetadataForTx(tx, out && out.tx_id ? out.tx_id : tx.id, out);
-          const resolved = applyDeployMetadata(deployMeta, true);
-          if (out && typeof out === "object") {
-            if (resolved.contractID) {
-              out.contract_id = resolved.contractID;
-            }
-            if (resolved.logicHash) {
-              out.logic_hash = resolved.logicHash;
-              out.logic_pack_hash = resolved.logicHash;
-            }
-          }
-        }
-        if (retried && out && typeof out === "object") {
-          out.nonce_synced = true;
-          out.nonce = Number.parseInt(String(els.txNonce.value || "0"), 10) || null;
+        if (retried && result && typeof result === "object") {
+          result.nonce_synced = true;
+          result.nonce = Number.parseInt(String(els.txNonce.value || "0"), 10) || null;
         }
       } catch (_) {
-        // keep text
+        // Keep non-JSON response text.
       }
-      if (dtlType === "CONTRACT_DEPLOY" && typeof out === "string") {
-        const deployMeta = await resolveDeployMetadataForTx(tx, tx.id, null);
-        const resolved = applyDeployMetadata(deployMeta, true);
-        if (resolved.contractID) {
-          out = `${out}\ncontract_id=${resolved.contractID}`;
-          if (resolved.logicHash) {
-            out = `${out}\nlogic_hash=${resolved.logicHash}`;
-          }
-        }
+      if (retried && typeof result === "string") {
+        result = `${result}\n(nonce synced to ${String(els.txNonce.value || "").trim()} and retried)`;
       }
-      if (retried && typeof out === "string") {
-        out = `${out}\n(nonce synced to ${String(els.txNonce.value || "").trim()} and retried)`;
-      }
-      els.txOut.textContent = typeof out === "string" ? out : asPretty(out);
+      els.txOut.textContent = typeof result === "string" ? result : asPretty(result);
       scheduleDraftSave();
-      return out;
+      return result;
     });
   }
+
+
 
   function applyTokenDetailsToPayload() {
     const kind = String(els.dtlType.value || "").trim();
@@ -5439,19 +3329,11 @@
     const txID = String(els.statusTxId.value || "").trim();
     if (!txID) throw new Error("tx_id required");
     rememberLastTxID(txID);
-    const out = await getJSON(`/tx/status?tx_id=${encodeURIComponent(txID)}`);
-    const deployMeta = extractDeployMetadata(out);
-    if (deployMeta.contractID || deployMeta.logicHash) {
-      applyDeployMetadata(deployMeta, true);
-    } else {
-      setStatusDeployMeta("", "");
-    }
-    els.statusOut.textContent = asPretty(out);
+    const result = await getJSON(`/tx/status?tx_id=${encodeURIComponent(txID)}`);
+    els.statusOut.textContent = asPretty(result);
   }
 
-  function useStatusContractInCall() {
-    throw new Error(DTL_CONTRACT_RUNTIME_REMOVED_REASON);
-  }
+
 
   async function run(action) {
     try {
@@ -5508,26 +3390,10 @@
   $("nextNonceBtn").addEventListener("click", () => run(loadNextNonce));
   $("buildBtn").addEventListener("click", () => run(async () => buildTxObject()));
   $("copyBtn").addEventListener("click", copyTxJSON);
-  if (els.copyLastContractBtn) {
-    els.copyLastContractBtn.addEventListener("click", () =>
-      copyValueToClipboard(state.lastContractDeployID, "Last contract ID copied.")
-    );
-  }
   if (els.copyLastTxBtn) {
     els.copyLastTxBtn.addEventListener("click", () =>
       copyValueToClipboard(state.lastTxID, "Last tx ID copied.")
     );
-  }
-  if (els.statusCopyContractBtn) {
-    els.statusCopyContractBtn.addEventListener("click", () =>
-      copyValueToClipboard(
-        String((els.statusContractId && els.statusContractId.value) || state.lastContractDeployID || "").trim(),
-        "Contract ID copied."
-      )
-    );
-  }
-  if (els.statusUseContractBtn) {
-    els.statusUseContractBtn.addEventListener("click", () => run(async () => useStatusContractInCall()));
   }
   if (els.clearDraftBtn) {
     els.clearDraftBtn.addEventListener("click", () => run(async () => clearDraft()));
@@ -5573,58 +3439,6 @@
   }
   if ($("readBurnDetailsBtn")) {
     $("readBurnDetailsBtn").addEventListener("click", () => run(async () => readBurnDetailsFromPayload()));
-  }
-  if ($("loadContractDslSampleBtn")) {
-    $("loadContractDslSampleBtn").addEventListener("click", () => run(async () => loadContractDslSample()));
-  }
-  if ($("transpileContractDslBtn")) {
-    $("transpileContractDslBtn").addEventListener("click", () => run(async () => transpileContractDslToPayload()));
-  }
-  if (els.customCodeSampleBtn) {
-    els.customCodeSampleBtn.addEventListener("click", () => run(async () => loadCustomCodeSample()));
-  }
-  if (els.customTplMsc20Btn) {
-    els.customTplMsc20Btn.addEventListener("click", () => run(async () => loadMSC20ContractTemplate()));
-  }
-  if (els.customTplNft721Btn) {
-    els.customTplNft721Btn.addEventListener("click", () => run(async () => loadNFTPayloadTemplate("NFT721_CREATE", "NFT721_CREATE")));
-  }
-  if (els.customTplMsc1155Btn) {
-    els.customTplMsc1155Btn.addEventListener("click", () => run(async () => loadNFTPayloadTemplate("NFT1155_CREATE", "MSC1155_CREATE")));
-  }
-  if (els.presetAmmPoolBtn) {
-    els.presetAmmPoolBtn.addEventListener("click", () => run(async () => loadTxPreset("POOL_CREATE", "AMM Pool")));
-  }
-  if (els.presetLendingBtn) {
-    els.presetLendingBtn.addEventListener("click", () => run(async () => loadTxPreset("LEND_MARKET_CREATE", "Lending Market")));
-  }
-  if (els.presetDuelBtn) {
-    els.presetDuelBtn.addEventListener("click", () => run(async () => loadTxPreset("DUEL_CREATE", "Duel Game")));
-  }
-  if (els.presetTournamentBtn) {
-    els.presetTournamentBtn.addEventListener("click", () => run(async () => loadTxPreset("TOURNAMENT_CREATE", "Tournament Game")));
-  }
-  if (els.customCodeAnalyzeBtn) {
-    els.customCodeAnalyzeBtn.addEventListener("click", () => run(async () => analyzeCustomCode()));
-  }
-  if (els.customCodeUseBtn) {
-    els.customCodeUseBtn.addEventListener("click", () => run(async () => applyCustomCodeAsDeployPayload()));
-  }
-  if (els.customCodeCopyPayloadBtn) {
-    els.customCodeCopyPayloadBtn.addEventListener("click", () => run(async () => copyCustomCodePayload()));
-  }
-  if (els.customCodeOutputMode && els.contractDslOutputMode) {
-    els.customCodeOutputMode.addEventListener("change", () => {
-      els.contractDslOutputMode.value = normalizeContractOutputMode(els.customCodeOutputMode.value);
-      scheduleDraftSave();
-    });
-    els.contractDslOutputMode.addEventListener("change", () => {
-      els.customCodeOutputMode.value = normalizeContractOutputMode(els.contractDslOutputMode.value);
-      scheduleDraftSave();
-    });
-  }
-  if ($("simulateLogicPackBtn")) {
-    $("simulateLogicPackBtn").addEventListener("click", () => run(async () => simulateLogicPackTrace()));
   }
   $("submitDtlBtn").addEventListener("click", () => run(submitDTL));
   $("submitRawBtn").addEventListener("click", () => run(submitRaw));
@@ -5688,25 +3502,6 @@
       updateTransferFromSpenderHint();
     });
   }
-  if (els.logicSimMethod) {
-    els.logicSimMethod.addEventListener("change", () => {
-      try {
-        refreshLogicSimulatorArgsForSelectedMethod();
-      } catch (_) {
-        // Ignore simulator parse failures while editing payload manually.
-      }
-    });
-  }
-  if (els.txPayload) {
-    els.txPayload.addEventListener("blur", () => {
-      try {
-        const payload = parseJSONField(els.txPayload.value, {});
-        prefillLogicSimulatorFromPayload(payload);
-      } catch (_) {
-        // Ignore invalid JSON while user is editing.
-      }
-    });
-  }
   document.addEventListener("keydown", (event) => {
     const key = String(event.key || "").toLowerCase();
     const mod = !!(event.ctrlKey || event.metaKey);
@@ -5749,10 +3544,9 @@
     run(loadPayloadTemplate);
   } else {
     try {
-      const restoredPayload = parseJSONField(els.txPayload.value, {});
-      renderQuickPayloadFields(restoredPayload);
-      setPayloadPreview(restoredPayload);
-      prefillLogicSimulatorFromPayload(restoredPayload);
+		const restoredPayload = parseJSONField(els.txPayload.value, {});
+		renderQuickPayloadFields(restoredPayload);
+		setPayloadPreview(restoredPayload);
     } catch (_) {
       // Keep restored draft text as-is if JSON is incomplete.
     }
@@ -5764,42 +3558,8 @@
     if (restoredKind === "TOKEN_MINT") run(async () => readMintDetailsFromPayloadAndCert());
     if (restoredKind === "TOKEN_BURN") run(async () => readBurnDetailsFromPayload());
   }
-  if (els.customCodeEditor && !String(els.customCodeEditor.value || "").trim() && els.contractDslSource) {
-    const existingSource = String(els.contractDslSource.value || "").trim();
-    if (existingSource) {
-      els.customCodeEditor.value = existingSource;
-    }
-  }
-  if (els.customCodeName && !String(els.customCodeName.value || "").trim() && els.contractDslName) {
-    const existingName = String(els.contractDslName.value || "").trim();
-    if (existingName) {
-      els.customCodeName.value = existingName;
-    }
-  }
-  if (els.customCodeLang && els.contractDslLang && String(els.customCodeLang.value || "").trim() === "auto") {
-    const existingLang = String(els.contractDslLang.value || "").trim();
-    if (existingLang) {
-      els.customCodeLang.value = existingLang;
-    }
-  }
-  if (els.customCodeOutputMode && els.contractDslOutputMode) {
-    const customMode = normalizeContractOutputMode(els.customCodeOutputMode.value);
-    const guidedMode = normalizeContractOutputMode(els.contractDslOutputMode.value);
-    if (customMode) {
-      els.contractDslOutputMode.value = customMode;
-    } else if (guidedMode) {
-      els.customCodeOutputMode.value = guidedMode;
-    } else {
-      els.customCodeOutputMode.value = "dtl-bc-v1";
-      els.contractDslOutputMode.value = "dtl-bc-v1";
-    }
-  }
-  if (els.customCodeOut && String(els.customCodeOut.textContent || "").trim() === "") {
-    setCustomCodeOutput("No custom code analyzed yet.");
-  }
-  bindDraftPersistence();
-  refreshWorkspaceMeta();
-  setStatusDeployMeta(state.lastContractDeployID || "", "");
+	bindDraftPersistence();
+	refreshWorkspaceMeta();
   setConnState(String(els.connState.textContent || "Disconnected").trim() || "Disconnected", false);
   lockSigner();
   try {

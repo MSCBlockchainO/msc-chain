@@ -3,18 +3,33 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MSC Transactions</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="wallet_pages.css?v=20260602h" />
+  <title>MSC Wallet Transactions - Account History</title>
+  <meta name="description" content="Review transaction history, transfers, confirmations, and activity for the active MSC Chain wallet." />
+  <meta name="robots" content="noindex,follow" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/transactions.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Wallet Transactions - Account History" />
+  <meta property="og:description" content="Review transaction history, transfers, confirmations, and activity for the active MSC Chain wallet." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/transactions.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Wallet Transactions - Account History" />
+  <meta name="twitter:description" content="Review transaction history, transfers, confirmations, and activity for the active MSC Chain wallet." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
 </head>
 <body data-page="transactions">
   <main class="content">
     <section class="page-hero">
       <div class="eyebrow">Activity</div>
-      <h1>Transactions</h1>
-      <p class="muted">Wallet transaction history, status, block height, and fees.</p>
+      <h1>Activity</h1>
+      <p class="muted">Your recent sends, receives, status, and fees.</p>
     </section>
     <section class="grid">
       <div class="card"><div class="label">Status</div><div id="txStatusCard" class="value">Live</div></div>
@@ -22,12 +37,12 @@
       <div class="card"><div class="label">Fees</div><div id="txFees" class="value">Policy based</div></div>
     </section>
     <section class="card">
-      <div class="label">Tx History</div>
-      <div id="transactionsList" class="list"><div class="list-item">Load wallet to show transactions.</div></div>
+      <div class="label">Transaction history</div>
+      <div id="transactionsList" class="list"><div class="list-item">Unlock wallet to show transactions.</div></div>
     </section>
   </main>
   <script src="vendor/nacl.min.js"></script>
   <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
-  <script src="wallet_pages.js?v=20260603a"></script>
+  <script src="wallet_pages.js?v=20260714-vmremoved"></script>
 </body>
 </html>

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the MSC validator epoch activation verifier every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+RandomizedDelaySec=15
+Persistent=true
+Unit=msc-validator-epoch-watch.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Explore MSC Chain, a fast and secure Layer-1 blockchain with a live block explorer, self-custody wallet, validators, governance, tokenomics, and developer APIs." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <title>MSC Chain - Explorer, Wallet and Layer-1 Blockchain Network</title>
+  <link rel="canonical" href="https://mscblockexplorer.in/" />
+  <link rel="alternate" type="text/plain" href="https://mscblockexplorer.in/llms.txt" title="MSC Chain AI documentation index" />
+  <link rel="alternate" type="application/rss+xml" title="MSC Chain Blog RSS" href="https://mscblockexplorer.in/feed.xml" />
+  <link rel="alternate" type="application/feed+json" title="MSC Chain Blog JSON Feed" href="https://mscblockexplorer.in/feed.json" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Chain - Explorer, Wallet and Layer-1 Blockchain Network" />
+  <meta property="og:description" content="Use the official MSC Chain portal to explore blocks, manage MSC, review validators, and access developer documentation." />
+  <meta property="og:url" content="https://mscblockexplorer.in/" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Chain - Official Blockchain Portal" />
+  <meta name="twitter:description" content="Explorer, wallet, validators, governance, tokenomics, and developer documentation for MSC Chain." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="preload" href="assets/msc-logo-192.png" as="image" fetchpriority="high" />
+  <link rel="stylesheet" href="landing.css?v=20260618a" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://mscblockexplorer.in/#organization",
+        "name": "MSC Chain",
+        "alternateName": "MSC Network",
+        "url": "https://mscblockexplorer.in/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://mscblockexplorer.in/assets/msc-logo-512.png",
+          "width": 512,
+          "height": 512
+        },
+        "sameAs": [
+          "https://github.com/MSCBlockchainO/msc-chain"
+        ]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://mscblockexplorer.in/#website",
+        "url": "https://mscblockexplorer.in/",
+        "name": "MSC Chain",
+        "publisher": {"@id": "https://mscblockexplorer.in/#organization"},
+        "inLanguage": "en",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://explorer.mscblockexplorer.in/explorer-search.html?q={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://mscblockexplorer.in/#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is MSC Chain?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "MSC Chain is a Layer-1 blockchain network with its own consensus, validator set, native MSC coin, public explorer, wallet, governance tools, and developer APIs."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Where can I view MSC Chain transactions?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Use the official MSC Explorer at explorer.mscblockexplorer.in to inspect blocks, transactions, addresses, validators, network health, and governance activity."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How do I create an MSC wallet?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Open wallet.mscblockexplorer.in and choose Create Wallet. Store the recovery phrase offline and never share private keys or recovery words."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How can developers build on MSC Chain?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Developers can use the public RPC, REST endpoints, WebSocket events, explorer APIs, and operator documentation linked from the MSC Chain documentation hub."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <canvas id="networkCanvas" aria-hidden="true"></canvas>
+  <div class="site-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="MSC Network home">
+        <span class="brand-mark"><img src="assets/msc-logo-64.png" alt="MSC logo" /></span>
+        <span>
+          <strong>MSC Network</strong>
+          <small>Mainnet portal</small>
+        </span>
+      </a>
+      <nav class="desktop-nav" aria-label="Primary navigation">
+        <a href="https://explorer.mscblockexplorer.in/">Explorer</a>
+        <a href="https://wallet.mscblockexplorer.in/">Wallet</a>
+        <a href="https://explorer.mscblockexplorer.in/explorer-validators.html">Validators</a>
+        <a href="https://explorer.mscblockexplorer.in/explorer-governance.html">Governance</a>
+        <a href="https://explorer.mscblockexplorer.in/explorer-api.html">API</a>
+        <a href="/docs/">Docs</a>
+        <a href="/blog/">Blog</a>
+      </nav>
+      <div class="top-actions">
+        <span class="network-pill"><span id="statusDot"></span><span id="networkMode">Connecting</span></span>
+        <a class="icon-link" href="https://github.com/" aria-label="MSC GitHub"><i data-lucide="github"></i></a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-visual" aria-hidden="true">
+          <div class="chain-stage">
+            <div class="chain-grid">
+              <span></span><span></span><span></span><span></span>
+              <span></span><span></span><span></span><span></span>
+            </div>
+            <div class="chain-core">
+              <div class="cube-face face-front">MSC</div>
+              <div class="cube-face face-back"></div>
+              <div class="cube-face face-left"></div>
+              <div class="cube-face face-right"></div>
+              <div class="cube-face face-top"></div>
+              <div class="cube-face face-bottom"></div>
+            </div>
+            <div class="node node-a"></div>
+            <div class="node node-b"></div>
+            <div class="node node-c"></div>
+            <div class="node node-d"></div>
+          </div>
+        </div>
+        <div class="hero-content">
+          <p class="eyebrow">Official MSC Mainnet Portal</p>
+          <h1>Explore the MSC Blockchain</h1>
+          <p class="hero-copy">One clean entry point for blocks, transactions, validators, governance, tokenomics, wallet tools, and public API access.</p>
+          <form id="heroSearch" class="search-card" role="search">
+            <i data-lucide="search"></i>
+            <input id="heroSearchInput" type="search" autocomplete="off" placeholder="Search block height, hash, transaction, address, validator..." />
+            <button type="submit">Search</button>
+          </form>
+          <div class="quick-links" aria-label="Popular destinations">
+            <a href="https://explorer.mscblockexplorer.in/explorer-transactions.html">Transactions</a>
+            <a href="https://explorer.mscblockexplorer.in/explorer-addresses.html">Addresses</a>
+            <a href="https://explorer.mscblockexplorer.in/explorer-tokenomics.html">Tokenomics</a>
+            <a href="https://explorer.mscblockexplorer.in/explorer-security.html">Security</a>
+          </div>
+          <div class="hero-actions">
+            <a class="btn primary" href="https://explorer.mscblockexplorer.in/"><i data-lucide="scan-search"></i>Launch Explorer</a>
+            <a class="btn" href="https://wallet.mscblockexplorer.in/"><i data-lucide="wallet-cards"></i>Open Wallet</a>
+            <a class="btn" href="/docs/"><i data-lucide="book-open"></i>Read Docs</a>
+            <a class="btn" href="/blog/"><i data-lucide="newspaper"></i>Read Blog</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="live-strip" aria-label="Live network statistics">
+        <article>
+          <span>Latest block</span>
+          <strong id="latestHeight">-</strong>
+          <small id="lastBlockAge">Live data</small>
+        </article>
+        <article>
+          <span>Finalized</span>
+          <strong id="finalizedHeight">-</strong>
+          <small id="finalityLag">Finality lag</small>
+        </article>
+        <article>
+          <span>Validators</span>
+          <strong id="activeValidators">-</strong>
+          <small id="validatorFoot">Active set</small>
+        </article>
+        <article>
+          <span>Supply</span>
+          <strong id="totalSupply">-</strong>
+          <small>MSC fixed policy</small>
+        </article>
+        <article>
+          <span>Network</span>
+          <strong id="networkHealth">-</strong>
+          <small id="networkCmd">Consensus mode</small>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <div class="activity-panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Chain Activity</p>
+              <h2>Latest blocks</h2>
+            </div>
+            <a href="https://explorer.mscblockexplorer.in/explorer-blocks.html">View all</a>
+          </div>
+          <div id="latestBlocks" class="data-list"></div>
+        </div>
+
+        <div class="activity-panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Transfers</p>
+              <h2>Recent transactions</h2>
+            </div>
+            <a href="https://explorer.mscblockexplorer.in/explorer-transactions.html">View all</a>
+          </div>
+          <div id="latestTransactions" class="data-list"></div>
+        </div>
+
+        <aside class="side-stack">
+          <section class="summary-panel">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">Overview</p>
+                <h2>Mainnet</h2>
+              </div>
+              <a href="https://explorer.mscblockexplorer.in/explorer-network.html">Network</a>
+            </div>
+            <div id="networkSummary" class="summary-list"></div>
+          </section>
+          <section class="summary-panel">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">Validators</p>
+                <h2>Top performers</h2>
+              </div>
+              <a href="https://explorer.mscblockexplorer.in/explorer-validators.html">All</a>
+            </div>
+            <div id="topValidators" class="validator-list"></div>
+          </section>
+        </aside>
+      </section>
+
+      <section class="portal-grid" aria-label="MSC ecosystem links">
+        <a class="portal-card" href="https://explorer.mscblockexplorer.in/">
+          <img class="portal-card-icon" src="assets/msc-explorer-icon.png" alt="" />
+          <strong>Blockchain</strong>
+          <span>Blocks, transactions, addresses, and peer health.</span>
+        </a>
+        <a class="portal-card" href="https://wallet.mscblockexplorer.in/">
+          <img class="portal-card-icon" src="assets/msc-wallet-icon.png" alt="" />
+          <strong>Wallet</strong>
+          <span>Assets, send, receive, staking, and account security.</span>
+        </a>
+        <a class="portal-card" href="https://explorer.mscblockexplorer.in/explorer-governance.html">
+          <img class="portal-card-icon" src="assets/msc-governance-badge.png" alt="" />
+          <strong>Governance</strong>
+          <span>Proposals, treasury, council, and voting statistics.</span>
+        </a>
+        <a class="portal-card" href="https://explorer.mscblockexplorer.in/explorer-charts.html">
+          <img class="portal-card-icon" src="assets/msc-validator-badge.png" alt="" />
+          <strong>Validators</strong>
+          <span>Readiness, performance, quorum, and supply security.</span>
+        </a>
+        <a class="portal-card" href="https://explorer.mscblockexplorer.in/explorer-api.html">
+          <img class="portal-card-icon" src="assets/msc-bridge-badge.png" alt="" />
+          <strong>API Access</strong>
+          <span>REST, RPC endpoints, public nodes, and rate limits.</span>
+        </a>
+      </section>
+
+      <section class="seo-content" aria-labelledby="about-msc-chain">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">MSC Chain Overview</p>
+            <h2 id="about-msc-chain">A transparent Layer-1 network built for verifiable activity</h2>
+          </div>
+          <a href="/docs/what-is-msc-chain.html">What is MSC Chain?</a>
+        </div>
+        <div class="seo-copy-grid">
+          <article>
+            <h3>Explore on-chain data</h3>
+            <p>MSC Explorer provides a direct view of blocks, transactions, validator participation, finality, token supply, governance, and network health. Each explorer page reads public chain data and links related records so users can independently verify activity.</p>
+            <a href="https://explorer.mscblockexplorer.in/">Open MSC Explorer</a>
+          </article>
+          <article>
+            <h3>Use a self-custody wallet</h3>
+            <p>MSC Wallet supports account creation, receiving, sending, transaction history, staking workflows, and testnet faucet access. Wallet secrets remain under the user's control, and security guidance is available before sensitive actions.</p>
+            <a href="/docs/msc-wallet-guide.html">Read the wallet guide</a>
+          </article>
+          <article>
+            <h3>Run network infrastructure</h3>
+            <p>Operators can run full nodes, validator nodes, sentries, archives, and indexers. Documentation covers hardware planning, installation, peer connectivity, key protection, monitoring, upgrades, and recovery.</p>
+            <a href="/docs/run-msc-validator.html">Run an MSC validator</a>
+          </article>
+          <article>
+            <h3>Build with public APIs</h3>
+            <p>Developers can query chain status, balances, blocks, transactions, validators, governance, and public node health through REST and RPC interfaces. WebSocket events provide timely height and finality updates.</p>
+            <a href="/docs/msc-rpc-api.html">View RPC documentation</a>
+          </article>
+        </div>
+      </section>
+
+      <section class="guide-band" aria-labelledby="msc-guides">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Learn MSC</p>
+            <h2 id="msc-guides">Guides for users, validators, and developers</h2>
+          </div>
+          <a href="/docs/">All documentation</a>
+        </div>
+        <div class="guide-links">
+          <a href="/blog/"><strong>MSC Blog</strong><span>Research, explainers, and learning paths for the MSC ecosystem.</span></a>
+          <a href="/docs/msc-tokenomics.html"><strong>MSC Tokenomics</strong><span>Supply, fees, rewards, staking, and economic policy.</span></a>
+          <a href="/docs/msc-explorer-guide.html"><strong>Explorer Guide</strong><span>Verify blocks, transactions, addresses, and validators.</span></a>
+          <a href="/docs/run-msc-node.html"><strong>Run a Node</strong><span>Hardware, installation, sync, monitoring, and upgrades.</span></a>
+          <a href="/docs/build-dapps-on-msc.html"><strong>Build DApps</strong><span>RPC integration, transaction flow, testing, and security.</span></a>
+          <a href="/docs/msc-governance.html"><strong>Governance</strong><span>Proposals, voting, treasury visibility, and upgrades.</span></a>
+          <a href="/docs/msc-whitepaper.html"><strong>Whitepaper</strong><span>Architecture, consensus, economics, and roadmap.</span></a>
+        </div>
+      </section>
+
+      <section class="faq-section" aria-labelledby="msc-faq">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Frequently Asked Questions</p>
+            <h2 id="msc-faq">MSC Chain FAQ</h2>
+          </div>
+        </div>
+        <div class="faq-list">
+          <details><summary>What is MSC Chain?</summary><p>MSC Chain is a Layer-1 blockchain network with its own validator consensus, native MSC coin, explorer, wallet, governance system, and developer interfaces.</p></details>
+          <details><summary>Where can I verify MSC transactions?</summary><p>Open the official MSC Explorer and search by block height, transaction identifier, address, validator, or proposal. Explorer records link to related chain evidence and live network context.</p></details>
+          <details><summary>How do I create an MSC wallet?</summary><p>Use the official wallet, choose Create Wallet, and keep the recovery phrase offline. MSC support will never ask for your seed phrase or private key.</p></details>
+          <details><summary>Can I run an MSC node or validator?</summary><p>Yes. The documentation includes full-node and validator setup, hardware guidance, peer configuration, key security, monitoring, upgrades, and recovery procedures.</p></details>
+          <details><summary>How do developers access MSC Chain?</summary><p>Developers can use public REST and JSON-RPC endpoints, explorer APIs, and WebSocket events. Start with the RPC API and DApp development guides.</p></details>
+        </div>
+      </section>
+
+      <section class="brand-kit" aria-label="MSC brand assets">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Brand System</p>
+            <h2>MSC Logo Pack</h2>
+          </div>
+          <a href="assets/msc-wordmark.png">Wordmark</a>
+        </div>
+        <div class="brand-kit-grid">
+          <a class="brand-asset-card wide" href="assets/msc-wordmark.png"><img src="assets/msc-wordmark.png" alt="MSC Network wordmark" /><strong>Wordmark</strong></a>
+          <a class="brand-asset-card" href="assets/msc-logo.png"><img src="assets/msc-logo-192.png" alt="MSC logo" /><strong>Logo</strong></a>
+          <a class="brand-asset-card" href="assets/msc-app-icon.png"><img src="assets/msc-app-icon-192.png" alt="MSC app icon" /><strong>App Icon</strong></a>
+          <a class="brand-asset-card" href="assets/msc-wallet-icon.png"><img src="assets/msc-wallet-icon.png" alt="MSC wallet icon" /><strong>Wallet Icon</strong></a>
+          <a class="brand-asset-card" href="assets/msc-explorer-icon.png"><img src="assets/msc-explorer-icon.png" alt="MSC explorer icon" /><strong>Explorer Icon</strong></a>
+          <a class="brand-asset-card" href="assets/msc-validator-badge.png"><img src="assets/msc-validator-badge.png" alt="MSC validator badge" /><strong>Validator Badge</strong></a>
+          <a class="brand-asset-card" href="assets/msc-governance-badge.png"><img src="assets/msc-governance-badge.png" alt="MSC governance badge" /><strong>Governance Badge</strong></a>
+          <a class="brand-asset-card" href="assets/msc-nft-badge.png"><img src="assets/msc-nft-badge.png" alt="MSC NFT badge" /><strong>NFT Badge</strong></a>
+          <a class="brand-asset-card" href="assets/msc-bridge-badge.png"><img src="assets/msc-bridge-badge.png" alt="MSC bridge badge" /><strong>Bridge Badge</strong></a>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script defer src="vendor/lucide.min.js?v=20260618a"></script>
+  <script defer src="landing.js?v=20260618a"></script>
+</body>
+</html>

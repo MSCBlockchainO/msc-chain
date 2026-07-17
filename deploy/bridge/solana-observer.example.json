@@ -1,0 +1,16 @@
+{
+  "source_chain_id": "solana-mainnet",
+  "rpc_urls": [
+    "https://independent-provider-a.example/solana",
+    "https://independent-provider-b.example/solana",
+    "https://independent-provider-c.example/solana"
+  ],
+  "rpc_quorum": 2,
+  "confirmations": 32,
+  "bridge_program": "REPLACE_WITH_AUDITED_SOLANA_BRIDGE_PROGRAM",
+  "asset_denom": "USDT-SOLANA",
+  "origin_mint": "REPLACE_WITH_VERIFIED_USDT_MINT",
+  "asset_decimals": 6,
+  "request_timeout": "12s",
+  "allow_insecure_http": false
+}

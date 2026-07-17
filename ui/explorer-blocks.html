@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSC Blocks - Latest Heights, Proposers and Quorum</title>
+  <meta name="description" content="Browse recent MSC Chain blocks with height, proposer, type, transactions, execution results, quorum, and block hash." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://explorer.mscblockexplorer.in/explorer-blocks.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Blocks - Latest Heights, Proposers and Quorum" />
+  <meta property="og:description" content="Browse recent MSC Chain blocks with height, proposer, type, transactions, execution results, quorum, and block hash." />
+  <meta property="og:url" content="https://explorer.mscblockexplorer.in/explorer-blocks.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Blocks - Latest Heights, Proposers and Quorum" />
+  <meta name="twitter:description" content="Browse recent MSC Chain blocks with height, proposer, type, transactions, execution results, quorum, and block hash." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="explorer.css?v=20260713b" />
+</head>
+<body data-explorer-page="blocks">
+  <main class="explorer-content">
+    <section class="page-heading">
+      <div><div class="eyebrow">Ledger</div><h1>Blocks</h1><p>Inspect block production, proposer rotation, execution evidence, quorum, and state commitments.</p></div>
+      <div class="heading-actions"><span id="blocksRange" class="badge">-</span><span id="blocksCount" class="badge good">-</span></div>
+    </section>
+
+    <nav class="page-tabs" aria-label="Block sections"><a href="#latest-blocks">Latest blocks</a><a href="#block-details">Block details</a><a href="#block-search">Block search</a></nav>
+
+    <span id="block-search" class="anchor-target"></span>
+    <form id="blockLookupForm" class="search-panel">
+      <input id="blockQuery" type="search" placeholder="Enter block height or hash" autocomplete="off" />
+      <button class="button primary" type="submit"><i data-lucide="search"></i>Inspect block</button>
+    </form>
+
+    <section class="chart-grid compact">
+      <div id="blockProductionChart" class="chart-card wide"></div>
+      <div id="blockMixChart" class="chart-card"></div>
+    </section>
+
+    <section id="latest-blocks" class="panel">
+      <div class="panel-head"><h2>Recent blocks</h2><span class="table-meta">Click any row to inspect</span></div>
+      <div class="table-shell">
+        <table>
+          <thead><tr><th>Height</th><th>Kind</th><th>Proposer</th><th>Tx</th><th>Exec</th><th>Quorum</th><th>Hash</th></tr></thead>
+          <tbody id="blocksTable"><tr><td colspan="7">Loading blocks...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="block-details" class="panel">
+      <div class="panel-head"><h2>Block inspector</h2><span id="blockDetailMeta" class="table-meta">Select a block</span></div>
+      <div id="blockDetailGrid" class="detail-grid"><div class="empty-state">Search by height or hash to inspect a block.</div></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Raw block data</h2><span class="table-meta">Canonical API response</span></div>
+      <pre id="blockRaw" class="json-view">No block selected.</pre>
+    </section>
+  </main>
+  <script defer src="vendor/lucide.min.js?v=20260618a"></script>
+  <script defer src="explorer.js?v=20260716a"></script>
+</body>
+</html>

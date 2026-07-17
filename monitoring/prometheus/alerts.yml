@@ -1,4 +1,42 @@
 groups:
+  - name: msc-bridge-collateral
+    rules:
+      - alert: MSCBridgeReconcilerDown
+        expr: absent(msc_bridge_reconciler_up{job="msc_bridge_reconciler"}) or msc_bridge_reconciler_up{job="msc_bridge_reconciler"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC bridge reconciler unavailable"
+          description: "Escrow-versus-wrapped-supply monitoring is unavailable. Keep bridge routes paused until accounting is restored."
+
+      - alert: MSCBridgeCollateralDeficit
+        expr: msc_bridge_reconciliation_critical_deficit{job="msc_bridge_reconciler"} == 1
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC bridge collateral deficit"
+          description: "Quorum-verified tracked source escrow is below MSC wrapped supply. Preserve evidence and follow the bridge incident runbook."
+
+      - alert: MSCBridgeVaultBalanceDeficit
+        expr: msc_bridge_reconciliation_route_vault_balance_deficit_raw{job="msc_bridge_reconciler"} > 0
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "MSC bridge vault token balance deficit"
+          description: "Route {{ $labels.route_id }} token balance is below the vault's tracked escrow by {{ $value }} raw units."
+
+      - alert: MSCBridgeReconciliationUnknown
+        expr: msc_bridge_reconciliation_unknown{job="msc_bridge_reconciler"} == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MSC bridge reconciliation state unknown"
+          description: "Wrapped token {{ $labels.local_token_id }} cannot be reconciled because source or MSC evidence is incomplete or conflicting."
+
   - name: msc-mainnet-launch-gates
     rules:
       - alert: NoBlockFor60Seconds

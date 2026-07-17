@@ -11,54 +11,94 @@ import (
 )
 
 var (
+	// `ValidatorDiversityEnabled` stores whether the related condition is satisfied.
 	ValidatorDiversityEnabled       = true
+	// `ValidatorDiversityMode` stores whether the related condition is satisfied.
 	ValidatorDiversityMode          = "warn"
+	// `ValidatorDiversityMinCountries` stores whether the related condition is satisfied.
 	ValidatorDiversityMinCountries  = 2
+	// `ValidatorDiversityMinASNs` stores whether the related condition is satisfied.
 	ValidatorDiversityMinASNs       = 3
+	// `ValidatorDiversityMinClouds` stores whether the related condition is satisfied.
 	ValidatorDiversityMinClouds     = 2
+	// `ValidatorDiversityMaxCountryPct` stores whether the related condition is satisfied.
 	ValidatorDiversityMaxCountryPct = 67
+	// `ValidatorDiversityMaxASNPct` stores whether the related condition is satisfied.
 	ValidatorDiversityMaxASNPct     = 50
+	// `ValidatorDiversityMaxCloudPct` stores whether the related condition is satisfied.
 	ValidatorDiversityMaxCloudPct   = 67
 
+	// `validatorDiversityMu` stores whether the related condition is satisfied.
 	validatorDiversityMu       sync.RWMutex
+	// `validatorDiversityMetadata` stores whether the related condition is satisfied.
 	validatorDiversityMetadata = map[string]ValidatorDiversityInfo{}
 )
 
 type ValidatorDiversityInfo struct {
+	// `ValidatorID` stores whether the related condition is satisfied.
 	ValidatorID string `json:"validator_id"`
+	// `Country` stores the measured quantity used by this operation.
 	Country     string `json:"country,omitempty"`
+	// `ASN` stores the value associated with this record.
 	ASN         string `json:"asn,omitempty"`
+	// `Cloud` stores the value associated with this record.
 	Cloud       string `json:"cloud,omitempty"`
+	// `Region` stores the value associated with this record.
 	Region      string `json:"region,omitempty"`
+	// `OperatorID` stores the value associated with this record.
 	OperatorID  string `json:"operator_id,omitempty"`
+	// `HomePC` stores the value associated with this record.
 	HomePC      bool   `json:"home_pc,omitempty"`
+	// `Source` stores the value associated with this record.
 	Source      string `json:"source,omitempty"`
 }
 
 type ValidatorDiversityReport struct {
+	// `Enabled` stores whether the related condition is satisfied.
 	Enabled          bool                     `json:"enabled"`
+	// `Mode` stores the value associated with this record.
 	Mode             string                   `json:"mode"`
+	// `Healthy` stores the value associated with this record.
 	Healthy          bool                     `json:"healthy"`
+	// `Reason` stores the value associated with this record.
 	Reason           string                   `json:"reason,omitempty"`
+	// `ActiveValidators` stores the value associated with this record.
 	ActiveValidators int                      `json:"active_validators"`
+	// `MetadataKnown` stores the value associated with this record.
 	MetadataKnown    int                      `json:"metadata_known"`
+	// `MetadataMissing` stores the value associated with this record.
 	MetadataMissing  int                      `json:"metadata_missing"`
+	// `CountryBuckets` stores the measured quantity used by this operation.
 	CountryBuckets   int                      `json:"country_buckets"`
+	// `ASNBuckets` stores the value associated with this record.
 	ASNBuckets       int                      `json:"asn_buckets"`
+	// `CloudBuckets` stores the value associated with this record.
 	CloudBuckets     int                      `json:"cloud_buckets"`
+	// `RegionBuckets` stores the value associated with this record.
 	RegionBuckets    int                      `json:"region_buckets"`
+	// `MaxCountryPct` stores the value associated with this record.
 	MaxCountryPct    int                      `json:"max_country_pct"`
+	// `MaxASNPct` stores the value associated with this record.
 	MaxASNPct        int                      `json:"max_asn_pct"`
+	// `MaxCloudPct` stores the value associated with this record.
 	MaxCloudPct      int                      `json:"max_cloud_pct"`
+	// `Violations` stores the value associated with this record.
 	Violations       []string                 `json:"violations,omitempty"`
+	// `CountryCounts` stores the measured quantity used by this operation.
 	CountryCounts    map[string]int           `json:"country_counts,omitempty"`
+	// `ASNCounts` stores the value associated with this record.
 	ASNCounts        map[string]int           `json:"asn_counts,omitempty"`
+	// `CloudCounts` stores the value associated with this record.
 	CloudCounts      map[string]int           `json:"cloud_counts,omitempty"`
+	// `RegionCounts` stores the value associated with this record.
 	RegionCounts     map[string]int           `json:"region_counts,omitempty"`
+	// `Validators` stores whether the related condition is satisfied.
 	Validators       []ValidatorDiversityInfo `json:"validators,omitempty"`
+	// `Thresholds` stores the value associated with this record.
 	Thresholds       map[string]int           `json:"thresholds,omitempty"`
 }
 
+// normalizeValidatorDiversityMode normalizes validator diversity mode.
 func normalizeValidatorDiversityMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "", "warn", "warning":
@@ -72,6 +112,7 @@ func normalizeValidatorDiversityMode(mode string) string {
 	}
 }
 
+// normalizeValidatorDiversityCountry normalizes validator diversity country.
 func normalizeValidatorDiversityCountry(country string) string {
 	country = strings.ToUpper(strings.TrimSpace(country))
 	country = strings.ReplaceAll(country, " ", "")
@@ -81,6 +122,7 @@ func normalizeValidatorDiversityCountry(country string) string {
 	return country
 }
 
+// normalizeValidatorDiversityCloud normalizes validator diversity cloud.
 func normalizeValidatorDiversityCloud(cloud string) string {
 	cloud = strings.ToUpper(strings.TrimSpace(cloud))
 	cloud = strings.ReplaceAll(cloud, " ", "")
@@ -102,6 +144,7 @@ func normalizeValidatorDiversityCloud(cloud string) string {
 	}
 }
 
+// normalizeValidatorDiversityRegion normalizes validator diversity region.
 func normalizeValidatorDiversityRegion(region string) string {
 	region = strings.ToLower(strings.TrimSpace(region))
 	if region == "unknown" || region == "n/a" || region == "na" {
@@ -110,6 +153,7 @@ func normalizeValidatorDiversityRegion(region string) string {
 	return region
 }
 
+// normalizeValidatorDiversityOperator normalizes validator diversity operator.
 func normalizeValidatorDiversityOperator(operator string) string {
 	operator = strings.ToUpper(strings.TrimSpace(operator))
 	operator = strings.ReplaceAll(operator, " ", "")
@@ -121,6 +165,7 @@ func normalizeValidatorDiversityOperator(operator string) string {
 	return operator
 }
 
+// parseValidatorDiversityBool parses validator diversity bool.
 func parseValidatorDiversityBool(raw string) bool {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "1", "true", "yes", "y", "home", "homepc", "home_pc", "residential", "consumer", "isp":
@@ -130,6 +175,7 @@ func parseValidatorDiversityBool(raw string) bool {
 	}
 }
 
+// validatorDiversityEntryParts implements the validator diversity entry parts helper.
 func validatorDiversityEntryParts(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -139,6 +185,7 @@ func validatorDiversityEntryParts(raw string) []string {
 		return splitAndTrim(raw, "|")
 	}
 	if strings.Contains(raw, "=") {
+		// `kv` stores the value produced by this operation.
 		kv := strings.SplitN(raw, "=", 2)
 		if len(kv) != 2 {
 			return nil
@@ -148,11 +195,14 @@ func validatorDiversityEntryParts(raw string) []string {
 	return strings.Fields(raw)
 }
 
+// parseValidatorDiversityEntry parses validator diversity entry.
 func parseValidatorDiversityEntry(raw string) (ValidatorDiversityInfo, bool) {
+	// `parts` stores the value produced by this operation.
 	parts := validatorDiversityEntryParts(raw)
 	if len(parts) == 0 {
 		return ValidatorDiversityInfo{}, false
 	}
+	// `info` stores the current position in the related collection.
 	info := ValidatorDiversityInfo{
 		ValidatorID: normalizeValidatorID(parts[0]),
 		Source:      "config",
@@ -160,20 +210,27 @@ func parseValidatorDiversityEntry(raw string) (ValidatorDiversityInfo, bool) {
 	if info.ValidatorID == "" {
 		return ValidatorDiversityInfo{}, false
 	}
+	// `positional` stores the value produced by this operation.
 	positional := 0
+	// `rawPart` tracks the current values while iterating.
 	for _, rawPart := range parts[1:] {
+		// `part` stores the value produced by this operation.
 		part := strings.TrimSpace(rawPart)
 		if part == "" {
 			continue
 		}
+		// `key` stores the key used to access the related value.
 		key := ""
+		// `value` stores the value currently being processed.
 		value := part
 		if strings.Contains(part, ":") {
+			// `kv` stores the value produced by this operation.
 			kv := strings.SplitN(part, ":", 2)
 			key = strings.ToLower(strings.TrimSpace(kv[0]))
 			value = strings.TrimSpace(kv[1])
 		}
 		if strings.Contains(part, "=") {
+			// `kv` stores the value produced by this operation.
 			kv := strings.SplitN(part, "=", 2)
 			key = strings.ToLower(strings.TrimSpace(kv[0]))
 			value = strings.TrimSpace(kv[1])
@@ -212,9 +269,13 @@ func parseValidatorDiversityEntry(raw string) (ValidatorDiversityInfo, bool) {
 	return info, true
 }
 
+// splitAndTrim implements the split and trim helper.
 func splitAndTrim(raw string, sep string) []string {
+	// `pieces` stores the value produced by this operation.
 	pieces := strings.Split(raw, sep)
+	// `out` stores the result produced by this operation.
 	out := make([]string, 0, len(pieces))
+	// `piece` tracks the current values while iterating.
 	for _, piece := range pieces {
 		piece = strings.TrimSpace(piece)
 		if piece != "" {
@@ -224,9 +285,13 @@ func splitAndTrim(raw string, sep string) []string {
 	return out
 }
 
+// SetValidatorDiversityMetadata sets validator diversity metadata.
 func SetValidatorDiversityMetadata(entries []string) {
+	// `next` stores the value produced by this operation.
 	next := make(map[string]ValidatorDiversityInfo)
+	// `raw` tracks the current values while iterating.
 	for _, raw := range entries {
+		// `info` and `ok` store whether the related condition is satisfied.
 		info, ok := parseValidatorDiversityEntry(raw)
 		if !ok {
 			continue
@@ -238,7 +303,9 @@ func SetValidatorDiversityMetadata(entries []string) {
 	validatorDiversityMu.Unlock()
 }
 
+// validatorDiversityCanonicalInfo implements the validator diversity canonical info helper.
 func validatorDiversityCanonicalInfo(info ValidatorDiversityInfo) string {
+	// `homePC` stores the value produced by this operation.
 	homePC := "0"
 	if info.HomePC {
 		homePC = "1"
@@ -254,23 +321,31 @@ func validatorDiversityCanonicalInfo(info ValidatorDiversityInfo) string {
 	}, "|")
 }
 
+// ValidatorDiversityMetadataHash implements the validator diversity metadata hash helper.
 func ValidatorDiversityMetadataHash() string {
+	// `effective` stores the value produced by this operation.
 	effective := make(map[string]ValidatorDiversityInfo)
 	validatorDiversityMu.RLock()
+	// `id` and `info` track the current position in the related collection.
 	for id, info := range validatorDiversityMetadata {
 		effective[id] = info
 	}
 	validatorDiversityMu.RUnlock()
+	// `envName` tracks the current values while iterating.
 	for _, envName := range []string{"MSC_VALIDATOR_DIVERSITY_MAP", "MSC_VALIDATOR_DIVERSITY"} {
+		// `raw` stores the value produced by this operation.
 		raw := strings.TrimSpace(os.Getenv(envName))
 		if raw == "" {
 			continue
 		}
+		// `entry` tracks the current values while iterating.
 		for _, entry := range splitValidatorDiversityEnv(raw) {
+			// `info` and `ok` store whether the related condition is satisfied.
 			info, ok := parseValidatorDiversityEntry(entry)
 			if !ok {
 				continue
 			}
+			// `exists` stores whether the related condition is satisfied.
 			if _, exists := effective[info.ValidatorID]; !exists {
 				effective[info.ValidatorID] = info
 			}
@@ -279,36 +354,46 @@ func ValidatorDiversityMetadataHash() string {
 	if len(effective) == 0 {
 		return ""
 	}
+	// `ids` stores the current position in the related collection.
 	ids := make([]string, 0, len(effective))
+	// `id` tracks the current position in the related collection.
 	for id := range effective {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	// `canonical` stores the value produced by this operation.
 	canonical := make([]string, 0, len(ids))
+	// `id` tracks the current position in the related collection.
 	for _, id := range ids {
 		canonical = append(canonical, validatorDiversityCanonicalInfo(effective[id]))
 	}
 	return HashStrings(canonical)
 }
 
+// validatorDiversityMetadataForID implements the validator diversity metadata for id helper.
 func validatorDiversityMetadataForID(id string) (ValidatorDiversityInfo, bool) {
 	id = normalizeValidatorID(id)
 	if id == "" {
 		return ValidatorDiversityInfo{}, false
 	}
 	validatorDiversityMu.RLock()
+	// `info` and `ok` store whether the related condition is satisfied.
 	info, ok := validatorDiversityMetadata[id]
 	validatorDiversityMu.RUnlock()
 	if ok {
 		info.Source = "config"
 		return info, true
 	}
+	// `envName` tracks the current values while iterating.
 	for _, envName := range []string{"MSC_VALIDATOR_DIVERSITY_MAP", "MSC_VALIDATOR_DIVERSITY"} {
+		// `raw` stores the value produced by this operation.
 		raw := strings.TrimSpace(os.Getenv(envName))
 		if raw == "" {
 			continue
 		}
+		// `entry` tracks the current values while iterating.
 		for _, entry := range splitValidatorDiversityEnv(raw) {
+			// `info` and `ok` store whether the related condition is satisfied.
 			info, ok := parseValidatorDiversityEntry(entry)
 			if !ok || info.ValidatorID != id {
 				continue
@@ -320,6 +405,7 @@ func validatorDiversityMetadataForID(id string) (ValidatorDiversityInfo, bool) {
 	return ValidatorDiversityInfo{ValidatorID: id}, false
 }
 
+// splitValidatorDiversityEnv implements the split validator diversity env helper.
 func splitValidatorDiversityEnv(raw string) []string {
 	raw = strings.ReplaceAll(raw, "\r\n", ";")
 	raw = strings.ReplaceAll(raw, "\n", ";")
@@ -327,14 +413,20 @@ func splitValidatorDiversityEnv(raw string) []string {
 	return splitAndTrim(raw, ";")
 }
 
+// uniqueValidatorDiversityIDs implements the unique validator diversity i ds helper.
 func uniqueValidatorDiversityIDs(validators []string) []string {
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]struct{}, len(validators))
+	// `out` stores the result produced by this operation.
 	out := make([]string, 0, len(validators))
+	// `raw` tracks the current values while iterating.
 	for _, raw := range validators {
+		// `id` stores the current position in the related collection.
 		id := normalizeValidatorID(raw)
 		if id == "" {
 			continue
 		}
+		// `ok` stores whether the related condition is satisfied.
 		if _, ok := seen[id]; ok {
 			continue
 		}
@@ -345,11 +437,14 @@ func uniqueValidatorDiversityIDs(validators []string) []string {
 	return out
 }
 
+// maxBucketPercent returns the maximum bucket percent.
 func maxBucketPercent(counts map[string]int, total int) int {
 	if total <= 0 {
 		return 0
 	}
+	// `maxCount` stores the measured quantity used by this operation.
 	maxCount := 0
+	// `count` tracks the measured quantity used by this operation.
 	for _, count := range counts {
 		if count > maxCount {
 			maxCount = count
@@ -361,21 +456,29 @@ func maxBucketPercent(counts map[string]int, total int) int {
 	return (maxCount*100 + total - 1) / total
 }
 
+// copyStringIntMap copies string int map.
 func copyStringIntMap(in map[string]int) map[string]int {
 	if len(in) == 0 {
 		return nil
 	}
+	// `out` stores the result produced by this operation.
 	out := make(map[string]int, len(in))
+	// `k` and `v` track the current values while iterating.
 	for k, v := range in {
 		out[k] = v
 	}
 	return out
 }
 
+// EvaluateValidatorGeographicDiversity implements the evaluate validator geographic diversity helper.
 func EvaluateValidatorGeographicDiversity(validators []string) ValidatorDiversityReport {
+	// `mode` stores the value produced by this operation.
 	mode := normalizeValidatorDiversityMode(ValidatorDiversityMode)
+	// `enabled` stores whether the related condition is satisfied.
 	enabled := ValidatorDiversityEnabled && mode != "off"
+	// `ids` stores the current position in the related collection.
 	ids := uniqueValidatorDiversityIDs(validators)
+	// `report` stores the value produced by this operation.
 	report := ValidatorDiversityReport{
 		Enabled:          enabled,
 		Mode:             mode,
@@ -402,7 +505,9 @@ func EvaluateValidatorGeographicDiversity(validators []string) ValidatorDiversit
 	if len(ids) == 0 {
 		report.Violations = append(report.Violations, "no_active_validators")
 	}
+	// `id` tracks the current position in the related collection.
 	for _, id := range ids {
+		// `info` and `ok` store whether the related condition is satisfied.
 		info, ok := validatorDiversityMetadataForID(id)
 		if !ok || info.Country == "" || info.ASN == "" || info.Cloud == "" {
 			report.MetadataMissing++
@@ -468,11 +573,15 @@ func EvaluateValidatorGeographicDiversity(validators []string) ValidatorDiversit
 	return report
 }
 
+// ValidatorDiversityAllowsCandidate implements the validator diversity allows candidate helper.
 func ValidatorDiversityAllowsCandidate(active []string, candidate string) (bool, ValidatorDiversityReport) {
 	candidate = normalizeValidatorID(candidate)
+	// `next` stores the value produced by this operation.
 	next := uniqueValidatorDiversityIDs(active)
 	if candidate != "" {
+		// `found` stores whether the related condition is satisfied.
 		found := false
+		// `id` tracks the current position in the related collection.
 		for _, id := range next {
 			if id == candidate {
 				found = true
@@ -484,6 +593,7 @@ func ValidatorDiversityAllowsCandidate(active []string, candidate string) (bool,
 			sort.Strings(next)
 		}
 	}
+	// `report` stores the value produced by this operation.
 	report := EvaluateValidatorGeographicDiversity(next)
 	if normalizeValidatorDiversityMode(ValidatorDiversityMode) != "enforce" {
 		return true, report
@@ -491,6 +601,7 @@ func ValidatorDiversityAllowsCandidate(active []string, candidate string) (bool,
 	return report.Healthy, report
 }
 
+// handleValidatorsDiversity handles validators diversity.
 func (s *Server) handleValidatorsDiversity(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -504,17 +615,23 @@ func (s *Server) handleValidatorsDiversity(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "node unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	// `height` stores the value produced by this operation.
 	height := s.defaultValidatorViewHeight()
+	// `hq` stores the value produced by this operation.
 	if hq := r.URL.Query().Get("height"); hq != "" {
+		// `parsed` and `err` store the error produced by this operation.
 		if parsed, err := strconv.Atoi(hq); err == nil && parsed > 0 {
 			height = parsed
 		}
 	}
+	// `validators` stores whether the related condition is satisfied.
 	validators := canonicalValidatorIDs(s.Node.GetConsensusValidators(height))
 	if len(validators) == 0 {
 		validators = canonicalValidatorIDs(s.Node.GenesisValidators)
 	}
+	// `report` stores the value produced by this operation.
 	report := EvaluateValidatorGeographicDiversity(validators)
+	// `payload` stores the value produced by this operation.
 	payload := map[string]any{
 		"height": height,
 		"report": report,

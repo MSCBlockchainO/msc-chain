@@ -3,39 +3,128 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MSC Bridge</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="wallet_pages.css?v=20260602h" />
+  <title>MSC Bridge - Cross-Chain USDT Routes</title>
+  <meta name="description" content="Review MSC Chain cross-chain USDT routes, create verified deposit intents, and track bridge transfers." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/bridge.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Bridge - Cross-Chain USDT Routes" />
+  <meta property="og:description" content="Review routes, create verified deposit intents, and track cross-chain transfers." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/bridge.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260715-observer1" />
 </head>
 <body data-page="bridge">
   <main class="content">
-    <section class="page-hero">
-      <div class="eyebrow">Cross Chain</div>
-      <h1>Bridge</h1>
-      <p class="muted">Current bridge state is disabled and verification-only until governance enables asset transfer.</p>
+    <section class="page-hero bridge-hero">
+      <div>
+        <div class="eyebrow">Cross Chain Gateway</div>
+        <h1>Bridge</h1>
+        <p class="muted">Move supported assets through proof-verified routes and track every stage from source finality to MSC credit.</p>
+      </div>
+      <a class="button" href="bridge-admin.html"><i data-lucide="shield-cog"></i>Bridge Admin</a>
     </section>
-    <section class="grid">
+
+    <section id="bridgeSafetyBanner" class="bridge-safety-banner warn">
+      <i data-lucide="shield-alert"></i>
+      <div><strong>Checking bridge readiness</strong><span id="bridgePauseReason">Routes stay unavailable until all security gates pass.</span></div>
+    </section>
+
+    <section class="grid bridge-metrics">
       <div class="card"><div class="label">Status</div><div id="bridgeStatus" class="value">-</div></div>
       <div class="card"><div class="label">Mode</div><div id="bridgeMode" class="value">-</div></div>
-      <div class="card"><div class="label">Registered Chains</div><div id="bridgeChains" class="value">-</div></div>
-      <div class="card"><div class="label">Registered Assets</div><div id="bridgeAssets" class="value">-</div></div>
+      <div class="card"><div class="label">Networks</div><div id="bridgeChains" class="value">-</div></div>
+      <div class="card"><div class="label">Assets</div><div id="bridgeAssets" class="value">-</div></div>
+      <div class="card"><div class="label">Ready Routes</div><div id="bridgeReadyRoutes" class="value">-</div></div>
+      <div class="card"><div class="label">Finality Anchors</div><div id="bridgeCheckpointChains" class="value">-</div></div>
     </section>
-    <section class="card">
-      <div class="label">Future Asset Transfer</div>
-      <div id="bridgeFuture" class="mono">Light-client verified transfer pending.</div>
-      <button id="refreshBridge" type="button">Refresh Bridge Status</button>
+
+    <section class="bridge-workspace">
+      <div class="panel bridge-transfer-panel">
+        <div class="bridge-segmented" role="tablist" aria-label="Bridge direction">
+          <button class="active" type="button" data-bridge-mode="deposit" role="tab" aria-selected="true"><i data-lucide="arrow-down-to-line"></i>Deposit</button>
+          <button type="button" data-bridge-mode="withdraw" role="tab" aria-selected="false"><i data-lucide="arrow-up-from-line"></i>Withdraw</button>
+        </div>
+
+        <form id="bridgeDepositForm" class="stack">
+          <div class="field">
+            <label for="bridgeRouteSelect">Source network and asset</label>
+            <select id="bridgeRouteSelect" required><option value="">Loading routes...</option></select>
+          </div>
+          <div id="bridgeRouteSummary" class="bridge-route-summary">
+            <span>Select a route to review finality, confirmations, and limits.</span>
+          </div>
+          <div class="field">
+            <label for="bridgeDepositAmount">Amount</label>
+            <div class="bridge-amount-input"><input id="bridgeDepositAmount" inputmode="decimal" autocomplete="off" placeholder="0.00" required /><strong id="bridgeAmountSymbol">USDT</strong></div>
+          </div>
+          <div class="field">
+            <label for="bridgeRecipient">Receive on MSC</label>
+            <input id="bridgeRecipient" class="mono" autocomplete="off" placeholder="MSC..." required />
+          </div>
+          <label class="check"><input id="bridgeRiskConfirm" type="checkbox" required /><span>I verified the source network and understand bridge transfers are irreversible after finality.</span></label>
+          <button id="createBridgeDeposit" class="primary" type="submit"><i data-lucide="qr-code"></i>Generate Deposit</button>
+          <div id="bridgeDepositStatus" class="result">Choose an active route to continue.</div>
+        </form>
+
+        <form id="bridgeWithdrawForm" class="stack" hidden>
+          <div class="field">
+            <label for="bridgeWithdrawRouteSelect">Destination network and asset</label>
+            <select id="bridgeWithdrawRouteSelect" required><option value="">Loading routes...</option></select>
+          </div>
+          <div id="bridgeWithdrawRouteSummary" class="bridge-route-summary">
+            <span>Select a route to review finality, limits, and the wrapped MSC asset.</span>
+          </div>
+          <div class="field">
+            <label for="bridgeWithdrawAmount">Amount to burn</label>
+            <div class="bridge-amount-input"><input id="bridgeWithdrawAmount" inputmode="decimal" autocomplete="off" placeholder="0.00" required /><strong id="bridgeWithdrawSymbol">USDT</strong></div>
+          </div>
+          <div class="field">
+            <label for="bridgeExternalRecipient">Receive on destination network</label>
+            <input id="bridgeExternalRecipient" class="mono" autocomplete="off" placeholder="External wallet address" required />
+          </div>
+          <label class="check"><input id="bridgeWithdrawRiskConfirm" type="checkbox" required /><span>I verified the destination network and understand the wrapped tokens are permanently burned before external release.</span></label>
+          <button id="createBridgeWithdrawal" class="primary" type="submit"><i data-lucide="flame"></i>Sign and Burn</button>
+          <div id="bridgeWithdrawStatus" class="result">Unlock your wallet and choose an active route.</div>
+        </form>
+      </div>
+
+      <div class="panel bridge-route-panel">
+        <div class="panel-heading"><div><div class="label">Supported Routes</div><strong>Network readiness</strong></div><button id="refreshBridge" type="button" title="Refresh bridge status"><i data-lucide="refresh-cw"></i></button></div>
+        <div id="bridgeRouteList" class="bridge-route-list"><div class="list-item">Loading route registry...</div></div>
+      </div>
     </section>
-    <section class="card">
-      <div class="label">Verification Test</div>
-      <textarea id="bridgeProof" rows="7" placeholder='{"source_chain":"ethereum","height":0,"proof":"..."}'></textarea>
-      <button id="verifyBridgeProof" class="primary" type="button">Verify Proof</button>
-      <div id="bridgeResult" class="result mono">Waiting for proof.</div>
+
+    <section class="panel bridge-history-panel">
+      <div class="panel-heading">
+        <div><div class="label">Transfer Activity</div><strong>Your bridge history</strong></div>
+        <div class="bridge-history-filters">
+          <button class="active" type="button" data-bridge-filter="all">All</button>
+          <button type="button" data-bridge-filter="pending">Pending</button>
+          <button type="button" data-bridge-filter="completed">Completed</button>
+        </div>
+      </div>
+      <div id="bridgeHistory" class="list"><div class="list-item">Create or load a wallet to view bridge activity.</div></div>
     </section>
+
+    <details class="panel bridge-advanced">
+      <summary><span><i data-lucide="file-check-2"></i>Proof verification console</span><i data-lucide="chevron-down"></i></summary>
+      <div class="stack">
+        <textarea id="bridgeProof" rows="8" spellcheck="false" placeholder='{"source_chain_id":"56","event_id":"0x...","asset_denom":"USDT-BSC"}'></textarea>
+        <button id="verifyBridgeProof" type="button"><i data-lucide="badge-check"></i>Verify Proof</button>
+        <div id="bridgeResult" class="result mono">Waiting for proof.</div>
+      </div>
+    </details>
+    <div id="bridgeFuture" class="mono" hidden>Light-client verified transfer pending.</div>
   </main>
   <script src="vendor/nacl.min.js"></script>
   <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
-  <script src="wallet_pages.js?v=20260603a"></script>
+  <script src="wallet_pages.js?v=20260715-bridge-checkpoints1"></script>
 </body>
 </html>

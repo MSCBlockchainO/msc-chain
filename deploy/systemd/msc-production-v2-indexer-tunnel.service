@@ -1,0 +1,15 @@
+[Unit]
+Description=MSC Production V2 Indexer Reverse Tunnel
+After=network-online.target msc-production-v2-indexer.service
+Wants=network-online.target
+Requires=msc-production-v2-indexer.service
+
+[Service]
+Type=simple
+User=ubuntu
+ExecStart=/usr/bin/ssh -i /home/ubuntu/.ssh/msc_indexer_to_gateway_ed25519 -N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes -R 127.0.0.1:26780:127.0.0.1:26780 ubuntu@50.19.167.221
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

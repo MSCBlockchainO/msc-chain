@@ -1,0 +1,38 @@
+{
+  "version": "msc-bridge-evm-deploy-config-v1",
+  "testnet": true,
+  "network": {
+    "label": "bnb-testnet",
+    "expected_chain_id": 97,
+    "explorer_url": "https://testnet.bscscan.com"
+  },
+  "rpc_url_env": "MSC_BRIDGE_EVM_RPC_URL",
+  "deployer_key_env": "MSC_BRIDGE_EVM_DEPLOYER_KEY",
+  "deployment_confirmations": 2,
+  "default_admin_delay_seconds": 0,
+  "governance": "REPLACE_WITH_GOVERNANCE_MULTISIG",
+  "guardian": "REPLACE_WITH_SEPARATE_GUARDIAN",
+  "msc_source_chain_id": "91938",
+  "committee": [
+    "REPLACE_WITH_COMMITTEE_MEMBER_1",
+    "REPLACE_WITH_COMMITTEE_MEMBER_2",
+    "REPLACE_WITH_COMMITTEE_MEMBER_3"
+  ],
+  "committee_threshold": 2,
+  "route": {
+    "route_id": "usdt-bnb-testnet",
+    "chain_name": "BNB Chain Testnet",
+    "native_symbol": "tBNB",
+    "asset_denom": "USDT-BSC",
+    "symbol": "USDT",
+    "token_address": "REPLACE_WITH_VERIFIED_TEST_TOKEN",
+    "local_denom": "mscUSDT",
+    "decimals": 6,
+    "min_confirmations": 15,
+    "min_amount_raw": "10000000",
+    "max_amount_raw": "1000000000",
+    "daily_lock_limit_raw": "10000000000",
+    "daily_unlock_limit_raw": "10000000000",
+    "audit_reference": ""
+  }
+}

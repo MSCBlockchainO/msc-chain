@@ -3,11 +3,26 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MSC Wallet Settings</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="wallet_pages.css?v=20260602h" />
+  <title>MSC Wallet Settings - Security and Network Preferences</title>
+  <meta name="description" content="Manage local MSC wallet security, network, display, and account preferences." />
+  <meta name="robots" content="noindex,follow" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/settings.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Wallet Settings - Security and Network Preferences" />
+  <meta property="og:description" content="Manage local MSC wallet security, network, display, and account preferences." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/settings.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Wallet Settings - Security and Network Preferences" />
+  <meta name="twitter:description" content="Manage local MSC wallet security, network, display, and account preferences." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
 </head>
 <body data-page="settings">
   <main class="content">
@@ -29,12 +44,12 @@
           </div>
           <div class="field">
             <label for="settingsRpc">Primary / Manual RPC</label>
-            <input id="settingsRpc" placeholder="https://mscblockexplorer.in" />
+            <input id="settingsRpc" placeholder="https://wallet.mscblockexplorer.in" />
           </div>
         </div>
         <div class="field">
           <label for="settingsRpcEndpoints">Public RPC Pool</label>
-          <textarea id="settingsRpcEndpoints" rows="5" placeholder="https://mscblockexplorer.in"></textarea>
+          <textarea id="settingsRpcEndpoints" rows="5" placeholder="https://wallet.mscblockexplorer.in"></textarea>
         </div>
         <div class="row">
           <div class="field"><label for="settingsTheme">Theme</label><select id="settingsTheme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
@@ -48,8 +63,8 @@
       <div class="label">Active RPC</div>
       <div id="settingsActiveRpc" class="value mono">-</div>
       <div class="row">
-        <div><div class="label">Read Verification</div><div id="settingsRpcVerification" class="mono">SPV pending</div></div>
-        <div><div class="label">Realtime</div><div id="settingsRealtimeStatus" class="mono">Fallback polling</div></div>
+        <div><div class="label">Read check</div><div id="settingsRpcVerification" class="mono">Checking</div></div>
+        <div><div class="label">Sync</div><div id="settingsRealtimeStatus" class="mono">Updating</div></div>
         <div><div class="label">Event Delay</div><div id="settingsEventDelay" class="mono">-</div></div>
         <div><div class="label">Selected Reason</div><div id="settingsRpcSelectedReason" class="mono">-</div></div>
         <div><div class="label">Policy</div><div class="mono">Public full nodes only by default</div></div>
@@ -77,6 +92,6 @@
   </main>
   <script src="vendor/nacl.min.js"></script>
   <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
-  <script src="wallet_pages.js?v=20260603a"></script>
+  <script src="wallet_pages.js?v=20260714-vmremoved"></script>
 </body>
 </html>

@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSC Validator Wallet - Node Operator Dashboard</title>
+  <meta name="description" content="Link an MSC validator node to a wallet, unlock validator-only tools, review node health, governance signing, rewards, reputation, and public validator profile." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/validator-wallet.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Validator Wallet - Node Operator Dashboard" />
+  <meta property="og:description" content="Link an MSC validator node to a wallet, unlock validator-only tools, review node health, governance signing, rewards, reputation, and public validator profile." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/validator-wallet.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-validator-badge.png" />
+  <meta property="og:image:alt" content="MSC validator badge" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Validator Wallet - Node Operator Dashboard" />
+  <meta name="twitter:description" content="Link an MSC validator node to a wallet, unlock validator-only tools, review node health, governance signing, rewards, reputation, and public validator profile." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-validator-badge.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
+</head>
+<body data-page="validator-wallet">
+  <main class="content">
+    <section class="page-hero validator-wallet-hero">
+      <div>
+        <div class="eyebrow">Validator Wallet</div>
+        <h1>Special wallet for node operators</h1>
+        <p class="muted">Normal users keep the simple wallet. Validators can link a running node proof to unlock governance signing, node health, delegator analytics, rewards, reputation, alerts, and public profile tools.</p>
+      </div>
+      <div id="validatorWalletHeroBadge" class="validator-wallet-badge locked">
+        <img src="assets/msc-validator-badge.png" alt="" />
+        <span>Validator tools locked</span>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="card"><div class="label">Wallet Mode</div><div id="validatorWalletMode" class="value">Normal</div></div>
+      <div class="card"><div class="label">Validator ID</div><div id="validatorWalletId" class="value">-</div></div>
+      <div class="card"><div class="label">Node Status</div><div id="validatorWalletNode" class="value">-</div></div>
+      <div class="card"><div class="label">Governance Signer</div><div id="validatorWalletSigner" class="value">-</div></div>
+    </section>
+
+    <section id="validatorWalletLocked" class="validator-wallet-layout">
+      <div class="card">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Locked Tools</div>
+            <h2>Run a validator node to unlock</h2>
+          </div>
+          <span class="pill warn">Normal wallet</span>
+        </div>
+        <div class="validator-flow">
+          <div><span>1</span><strong>Normal User Wallet</strong><em>Send, receive, stake, rewards, referrals, and governance view.</em></div>
+          <div><span>2</span><strong>Run Node</strong><em>Start validator software and generate validator ID plus consensus pubkey.</em></div>
+          <div><span>3</span><strong>Link Node Proof</strong><em>Node signs wallet ownership proof. Browser never needs validator private key.</em></div>
+          <div><span>4</span><strong>Validator Wallet Activated</strong><em>Special operator dashboard opens after proof verification.</em></div>
+        </div>
+        <div class="safe-note warn">Validator tools locked. Run a validator node or link validator proof to unlock.</div>
+        <button id="showValidatorLinkForm" type="button">I run a validator node</button>
+      </div>
+
+      <form id="validatorLinkForm" class="card" hidden>
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Link Validator Node</div>
+            <h2>Paste node-signed proof</h2>
+          </div>
+          <span id="validatorLinkStatus" class="pill">Waiting</span>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="validatorLinkId">Validator ID</label>
+            <input id="validatorLinkId" placeholder="VAL_..." />
+          </div>
+          <div class="field">
+            <label for="validatorLinkNode">Node URL</label>
+            <input id="validatorLinkNode" placeholder="https://your-node.example" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="validatorLinkPubkey">Consensus Pubkey</label>
+          <input id="validatorLinkPubkey" placeholder="32-byte ed25519 pubkey hex" />
+        </div>
+        <div class="field">
+          <label for="validatorLinkSignature">Node Signature</label>
+          <textarea id="validatorLinkSignature" placeholder="hex signature from validator node"></textarea>
+        </div>
+        <div class="field">
+          <label for="validatorLinkMessage">Message to sign</label>
+          <textarea id="validatorLinkMessage" readonly></textarea>
+        </div>
+        <div class="action-row">
+          <button id="buildValidatorLinkMessage" type="button">Build Message</button>
+          <button class="primary" type="submit">Link Validator Wallet</button>
+        </div>
+        <div class="result" id="validatorLinkResult">Use your validator node to sign the generated message. Do not paste validator private keys into the browser.</div>
+      </form>
+    </section>
+
+    <section id="validatorWalletPanel" class="validator-wallet-panel" hidden>
+      <section class="validator-wallet-layout">
+        <div class="card">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Verified Validator</div>
+              <h2 id="validatorDashboardTitle">Validator Wallet</h2>
+            </div>
+            <span id="validatorDashboardBadge" class="pill success">Verified</span>
+          </div>
+          <div class="validator-dashboard-grid">
+            <div><span>Consensus pubkey</span><strong id="validatorDashboardPubkey" class="mono">-</strong></div>
+            <div><span>Self stake</span><strong id="validatorSelfStake">- MSC</strong></div>
+            <div><span>Uptime / signed</span><strong id="validatorUptime">-</strong></div>
+            <div><span>Missed blocks</span><strong id="validatorMissedBlocks">-</strong></div>
+            <div><span>Reputation</span><strong id="validatorReputation">-</strong></div>
+            <div><span>Slashes</span><strong id="validatorSlashCount">-</strong></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Node Health Alerts</div>
+              <h2>Operator safety</h2>
+            </div>
+            <span id="validatorAlertTone" class="pill">Checking</span>
+          </div>
+          <div id="validatorAlerts" class="list"><div class="list-item">Validator data loading...</div></div>
+        </div>
+      </section>
+
+      <section class="validator-wallet-layout">
+        <form id="validatorVoteForm" class="card">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Governance Signer Panel</div>
+              <h2>Prepare proposal vote</h2>
+            </div>
+            <span id="validatorVoteStatus" class="pill">Node signing required</span>
+          </div>
+          <div class="row">
+            <div class="field"><label for="validatorVoteProposal">Proposal ID</label><input id="validatorVoteProposal" placeholder="25" /></div>
+            <div class="field"><label for="validatorVoteChoice">Vote</label><select id="validatorVoteChoice"><option>YES</option><option>NO</option><option>ABSTAIN</option></select></div>
+          </div>
+          <div class="action-row">
+            <button class="primary" type="submit">Prepare Node Vote</button>
+            <button id="validatorNodeSignVote" type="button">Sign with Node</button>
+          </div>
+          <div id="validatorVotePayload" class="result">Vote payload will appear here for node signing.</div>
+        </form>
+
+        <form id="validatorCommissionForm" class="card">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Commission Settings</div>
+              <h2>Prepare update</h2>
+            </div>
+            <span id="validatorCommissionStatus" class="pill">Locked by policy</span>
+          </div>
+          <div class="field"><label for="validatorCommissionRate">Commission percent</label><input id="validatorCommissionRate" type="number" min="0" max="20" step="0.1" placeholder="10" /></div>
+          <button type="submit">Prepare Commission Update</button>
+          <div class="result" id="validatorCommissionPayload">Commission changes require node/governance signed update.</div>
+        </form>
+      </section>
+
+      <section class="validator-wallet-layout secondary">
+        <div class="card">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Delegator Analytics</div>
+              <h2>Delegations and rewards</h2>
+            </div>
+            <span id="validatorDelegatorCount" class="pill">- delegators</span>
+          </div>
+          <div id="validatorDelegatorList" class="list"><div class="list-item">Delegator indexer data pending.</div></div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Reward History</div>
+              <h2>Operator rewards</h2>
+            </div>
+            <span class="pill">History</span>
+          </div>
+          <div id="validatorRewardHistory" class="list"><div class="list-item">Reward history loads when indexer data is available.</div></div>
+        </div>
+      </section>
+
+      <section class="validator-wallet-layout secondary">
+        <div class="card">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Vote History</div>
+              <h2>Governance participation</h2>
+            </div>
+            <span id="validatorVoteHistoryCount" class="pill">0 votes</span>
+          </div>
+          <div id="validatorVoteHistory" class="list"><div class="list-item">No validator votes prepared yet.</div></div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Node Signer</div>
+              <h2>One-click proposal vote</h2>
+            </div>
+            <span class="pill">Local node</span>
+          </div>
+          <div class="result">If your linked node exposes a trusted local signer endpoint, use Sign with Node. Otherwise copy the prepared vote payload and sign it from the validator host.</div>
+        </div>
+      </section>
+
+      <section class="validator-wallet-layout secondary">
+        <div class="card">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Validator Certificate</div>
+              <h2>Verified operator badge</h2>
+            </div>
+            <button id="copyValidatorCertificate" type="button">Copy Certificate</button>
+          </div>
+          <div id="validatorCertificate" class="result">Certificate unavailable until validator wallet is linked.</div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">Public Profile</div>
+              <h2>Validator page</h2>
+            </div>
+            <a id="validatorPublicProfileLink" class="button" href="validators.html">Open Profile</a>
+          </div>
+          <div id="validatorPublicProfile" class="list"><div class="list-item">Public profile will use validator ID, reputation, self stake, signed ratio, and uptime status.</div></div>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="vendor/nacl.min.js"></script>
+  <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
+  <script src="wallet_pages.js?v=20260714-vmremoved"></script>
+</body>
+</html>

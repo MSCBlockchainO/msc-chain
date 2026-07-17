@@ -3,51 +3,154 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MSC Staking</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="wallet_pages.css?v=20260602h" />
+  <title>MSC Staking - Validators, Delegation and Rewards</title>
+  <meta name="description" content="Explore MSC Chain staking, validator selection, delegation readiness, rewards, activation, and unstaking guidance." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/staking.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Staking - Validators, Delegation and Rewards" />
+  <meta property="og:description" content="Explore MSC Chain staking, validator selection, delegation readiness, rewards, activation, and unstaking guidance." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/staking.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Staking - Validators, Delegation and Rewards" />
+  <meta name="twitter:description" content="Explore MSC Chain staking, validator selection, delegation readiness, rewards, activation, and unstaking guidance." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
 </head>
 <body data-page="staking">
   <main class="content">
     <section class="page-hero">
       <div class="eyebrow">Validator Economics</div>
       <h1>Staking</h1>
-      <p class="muted">Delegations, rewards, stake, unstake, and claim controls.</p>
+      <p class="muted">Normal users can stake without running a node by delegating MSC to an active validator. Validators run the infrastructure; your wallet signs the delegation transaction locally.</p>
     </section>
     <section class="grid">
       <div class="card"><div class="label">Delegations</div><div id="delegations" class="value">-</div></div>
       <div class="card"><div class="label">Rewards</div><div id="rewardBalance" class="value">- MSC</div></div>
       <div class="card"><div class="label">Staked</div><div id="stakedBalance" class="value">- MSC</div></div>
+      <div class="card"><div class="label">Selected Validator</div><div id="selectedValidatorStat" class="value">-</div></div>
     </section>
-    <section class="two-col">
-      <div class="card">
-        <div id="stakeStatus" class="pill">Ready</div>
-        <form id="stakeForm">
-          <div class="field"><label for="stakeValidator">Validator ID</label><input id="stakeValidator" placeholder="F" /></div>
-          <div class="field"><label for="stakePubkey">Validator Consensus Pubkey</label><input id="stakePubkey" placeholder="32-byte ed25519 pubkey hex" /></div>
-          <div class="row">
-            <div class="field"><label for="stakeAmount">Amount</label><input id="stakeAmount" type="number" min="1" value="100" /></div>
-            <div class="field"><label for="stakeEpochs">Lock Epochs</label><input id="stakeEpochs" type="number" min="1" value="19872000" /></div>
-          </div>
-          <button class="primary" type="submit">Stake</button>
-        </form>
+    <section class="staking-note-grid">
+      <div class="staking-note">
+        <strong>No node required</strong>
+        <span>A recommended validator is selected automatically. Enter MSC amount, unlock your wallet, and sign. The validator produces blocks; you keep wallet ownership.</span>
       </div>
+      <div class="staking-note warn">
+        <strong>No guaranteed profit</strong>
+        <span>Rewards depend on network rules, validator performance, commission, lock period, and mainnet/testnet policy.</span>
+      </div>
+      <div class="staking-note">
+        <strong>Stay in control</strong>
+        <span>Delegation does not expose your seed phrase or private key. Only approve transactions inside your own wallet.</span>
+      </div>
+    </section>
+    <section class="wallet-chart-grid compact">
+      <div id="stakingPortfolioChart" class="chart-card"></div>
+      <div id="stakingValidatorChart" class="chart-card wide"></div>
+    </section>
+    <section class="staking-layout">
+      <form id="stakeForm" class="card delegation-card">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Delegate MSC</div>
+            <h2>Stake without running a node</h2>
+          </div>
+          <div id="stakeStatus" class="pill">Ready</div>
+        </div>
+        <div class="field">
+          <label for="stakeValidatorSelect">Recommended Validator</label>
+          <select id="stakeValidatorSelect">
+            <option value="">Loading validators...</option>
+          </select>
+          <span id="validatorRecommendationNote" class="field-help">Recommended Validator selected automatically. You can change it before staking.</span>
+        </div>
+        <input id="stakeValidator" type="hidden" />
+        <input id="stakePubkey" type="hidden" />
+        <div class="row">
+          <div class="field">
+            <label for="stakeAmount">Amount</label>
+            <input id="stakeAmount" type="number" min="1" step="1" value="100" />
+          </div>
+          <div class="field">
+            <label for="stakeEpochs">Lock Epochs</label>
+            <input id="stakeEpochs" type="number" min="1" step="1" value="19872000" />
+          </div>
+        </div>
+        <div class="quick-amount-row" aria-label="Quick stake amount">
+          <button type="button" data-stake-amount="100">100</button>
+          <button type="button" data-stake-amount="500">500</button>
+          <button type="button" data-stake-amount="1000">1K</button>
+          <button type="button" data-stake-amount="5000">5K</button>
+        </div>
+        <div class="quick-amount-row" aria-label="Lock duration presets">
+          <button type="button" data-stake-epoch-preset="2592000">Short</button>
+          <button type="button" data-stake-epoch-preset="7776000">Medium</button>
+          <button type="button" data-stake-epoch-preset="19872000">Default</button>
+        </div>
+        <div id="stakeEstimate" class="stake-estimate-grid"></div>
+        <label class="check-row" for="stakeRiskAgreement">
+          <input id="stakeRiskAgreement" type="checkbox" />
+          <span>I understand staking rewards are not guaranteed and validator performance can affect rewards.</span>
+        </label>
+        <button id="stakeSubmitButton" class="primary" type="submit">Confirm & Stake</button>
+      </form>
+      <aside class="card selected-validator-card" id="selectedValidatorCard">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Validator Profile</div>
+            <h2>No validator selected</h2>
+          </div>
+          <span class="validator-score-pill warn">Review</span>
+        </div>
+        <div class="stake-estimate-grid">
+          <div><span>Score</span><strong>-</strong></div>
+          <div><span>Stake</span><strong>- MSC</strong></div>
+          <div><span>Signed</span><strong>-</strong></div>
+          <div><span>Commission</span><strong>-</strong></div>
+        </div>
+        <p class="muted">Validator ID and consensus pubkey are filled automatically in the background before your wallet signs.</p>
+      </aside>
+    </section>
+    <section class="staking-layout secondary">
       <div class="card">
-        <div id="unstakeStatus" class="pill">Ready</div>
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Unstake</div>
+            <h2>Exit delegation</h2>
+          </div>
+          <div id="unstakeStatus" class="pill">Ready</div>
+        </div>
         <form id="unstakeForm">
-          <div class="field"><label for="unstakeValidator">Validator ID</label><input id="unstakeValidator" placeholder="F" /></div>
-          <div class="field"><label for="unstakeAmount">Amount</label><input id="unstakeAmount" type="number" min="1" value="100" /></div>
+          <div class="field"><label for="unstakeValidator">Validator ID</label><input id="unstakeValidator" placeholder="validator id" /></div>
+          <div class="field"><label for="unstakeAmount">Amount</label><input id="unstakeAmount" type="number" min="1" step="1" value="100" /></div>
           <button type="submit">Unstake</button>
         </form>
         <button id="claimRewards" type="button">Claim Rewards</button>
         <div id="claimStatus" class="pill">Idle</div>
       </div>
+      <div class="card">
+        <div class="section-head">
+          <div>
+            <div class="eyebrow">Active Set</div>
+            <h2>Change validator</h2>
+          </div>
+          <span class="pill">Live data</span>
+        </div>
+        <div id="delegationValidatorList" class="validator-choice-list">
+          <div class="list-item">Loading validators...</div>
+        </div>
+      </div>
     </section>
   </main>
   <script src="vendor/nacl.min.js"></script>
   <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
-  <script src="wallet_pages.js?v=20260603a"></script>
+  <script src="wallet_pages.js?v=20260714-vmremoved"></script>
 </body>
 </html>

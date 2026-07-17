@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSC Ambassador Promo Frames</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 1920px;
+      height: 1080px;
+      margin: 0;
+      overflow: hidden;
+      background: #05060c;
+      color: #f8f7ff;
+      font-family: "Segoe UI", Arial, sans-serif;
+    }
+
+    body {
+      letter-spacing: 0;
+    }
+
+    .stage {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      isolation: isolate;
+      background: #05060c;
+    }
+
+    .screen {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .screen-shade {
+      position: absolute;
+      inset: 0;
+      background: rgba(3, 5, 12, 0.14);
+    }
+
+    .top-line {
+      position: absolute;
+      z-index: 4;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 8px;
+      background: #9c2cff;
+      box-shadow: 0 0 30px rgba(156, 44, 255, 0.8);
+    }
+
+    .brand {
+      position: absolute;
+      z-index: 5;
+      top: 42px;
+      left: 64px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 12px 20px 12px 14px;
+      border: 1px solid rgba(177, 96, 255, 0.42);
+      background: rgba(5, 6, 12, 0.88);
+    }
+
+    .brand img {
+      width: 52px;
+      height: 52px;
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 22px;
+      line-height: 1.05;
+    }
+
+    .brand span {
+      display: block;
+      margin-top: 5px;
+      color: #b7afce;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .caption {
+      position: absolute;
+      z-index: 5;
+      left: 82px;
+      right: 82px;
+      bottom: 58px;
+      min-height: 236px;
+      padding: 38px 46px 36px;
+      border: 1px solid rgba(177, 96, 255, 0.46);
+      border-left: 8px solid #9c2cff;
+      background: rgba(5, 7, 16, 0.94);
+      box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
+    }
+
+    .eyebrow {
+      margin: 0 0 15px;
+      color: #c16cff;
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 1560px;
+      margin: 0;
+      font-size: 62px;
+      line-height: 1.04;
+      font-weight: 800;
+    }
+
+    .caption p {
+      margin: 17px 0 0;
+      color: #d4cfe4;
+      font-size: 27px;
+      font-weight: 500;
+      line-height: 1.25;
+    }
+
+    .accent {
+      color: #ffc632;
+    }
+
+    .center-card {
+      position: absolute;
+      z-index: 3;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      text-align: center;
+      background:
+        linear-gradient(rgba(156, 44, 255, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(156, 44, 255, 0.1) 1px, transparent 1px),
+        #05060c;
+      background-size: 90px 90px;
+    }
+
+    .center-card::before,
+    .center-card::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: rgba(156, 44, 255, 0.42);
+    }
+
+    .center-card::before {
+      top: 238px;
+    }
+
+    .center-card::after {
+      bottom: 238px;
+    }
+
+    .hero-logo {
+      position: relative;
+      z-index: 2;
+      width: 235px;
+      height: 235px;
+      margin-bottom: 30px;
+      filter: drop-shadow(0 0 34px rgba(156, 44, 255, 0.72));
+    }
+
+    .center-card .eyebrow {
+      font-size: 23px;
+    }
+
+    .center-card h1 {
+      max-width: 1500px;
+      font-size: 82px;
+    }
+
+    .center-card p {
+      margin: 22px 0 0;
+      color: #d5cee8;
+      font-size: 31px;
+      font-weight: 600;
+    }
+
+    .chips {
+      display: flex;
+      gap: 14px;
+      margin-top: 30px;
+    }
+
+    .chip {
+      padding: 11px 17px;
+      border: 1px solid rgba(177, 96, 255, 0.45);
+      color: #d8b5ff;
+      background: #11101c;
+      font-size: 18px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .chip.gold {
+      border-color: rgba(255, 198, 50, 0.5);
+      color: #ffc632;
+    }
+
+    .chip.cyan {
+      border-color: rgba(47, 224, 203, 0.5);
+      color: #2fe0cb;
+    }
+
+    .cta {
+      display: inline-block;
+      margin-top: 34px;
+      padding: 17px 30px;
+      background: #9c2cff;
+      color: white;
+      font-size: 24px;
+      font-weight: 800;
+      box-shadow: 0 0 35px rgba(156, 44, 255, 0.48);
+    }
+
+    .legal {
+      position: absolute;
+      z-index: 5;
+      right: 68px;
+      top: 48px;
+      color: #b5aec8;
+      font-size: 16px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main id="stage" class="stage"></main>
+  <script>
+    const scenes = {
+      intro: {
+        type: "center",
+        eyebrow: "MSC Chain",
+        title: "Ambassador & Influencer Program",
+        subtitle: "Create. Educate. Grow the network.",
+        chips: [
+          ["1K to 20K creators", "cyan"],
+          ["Locked rewards", "gold"],
+          ["Real community", ""]
+        ]
+      },
+      index: {
+        eyebrow: "Community Growth",
+        title: "Grow MSC Chain with trusted creators.",
+        subtitle: "A dedicated portal for crypto educators, gaming creators and technology communities."
+      },
+      program: {
+        eyebrow: "Three Ambassador Levels",
+        title: "Bronze <span class='accent'>|</span> Silver <span class='accent'>|</span> Gold",
+        subtitle: "Clear content requirements with 5,000, 15,000 and 50,000 MSC locked allocations."
+      },
+      rewards: {
+        eyebrow: "Transparent Rewards",
+        title: "Locked MSC. Founder NFT. Real access.",
+        subtitle: "25% after 6 months, 25% after 12 months and 50% after mainnet milestones."
+      },
+      referrals: {
+        eyebrow: "Referral System",
+        title: "Verified referrals. Measurable growth.",
+        subtitle: "Example rewards: 10 MSC for a new user and 5 MSC for the influencer, subject to review."
+      },
+      nft: {
+        eyebrow: "Recognition & Access",
+        title: "Founder NFT and future validator priority.",
+        subtitle: "Earn reputation, early product access and ecosystem opportunities through genuine contribution."
+      },
+      apply: {
+        eyebrow: "Applications Open",
+        title: "Real creators. Transparent rules.",
+        subtitle: "No fake followers, no bot traffic, no misleading claims and no guaranteed profit promises."
+      },
+      leaderboard: {
+        eyebrow: "Community Reputation",
+        title: "Build reputation. Rise to the top.",
+        subtitle: "Track verified referrals, monthly rankings and meaningful community impact."
+      },
+      outro: {
+        type: "center",
+        eyebrow: "MSC Ambassador Program",
+        title: "Educate. Engage. Build MSC.",
+        subtitle: "Join the creator community shaping the MSC ecosystem.",
+        cta: "Apply through the MSC Influencer Portal",
+        chips: [
+          ["Official title", ""],
+          ["Founder NFT", "gold"],
+          ["Validator access", "cyan"]
+        ]
+      }
+    };
+
+    const sceneName = new URLSearchParams(location.search).get("scene") || "intro";
+    const scene = scenes[sceneName] || scenes.intro;
+    const stage = document.getElementById("stage");
+    const logo = "../../ui/assets/msc-logo-512.png";
+
+    if (scene.type === "center") {
+      stage.innerHTML = `
+        <div class="top-line"></div>
+        <section class="center-card">
+          <img class="hero-logo" src="${logo}" alt="" />
+          <div class="eyebrow">${scene.eyebrow}</div>
+          <h1>${scene.title}</h1>
+          <p>${scene.subtitle}</p>
+          <div class="chips">
+            ${scene.chips.map(([text, tone]) => `<span class="chip ${tone}">${text}</span>`).join("")}
+          </div>
+          ${scene.cta ? `<div class="cta">${scene.cta}</div>` : ""}
+        </section>
+        <div class="legal">Community program. No guaranteed profit.</div>
+      `;
+    } else {
+      stage.innerHTML = `
+        <img class="screen" src="screens/${sceneName}.png" alt="" />
+        <div class="screen-shade"></div>
+        <div class="top-line"></div>
+        <div class="brand">
+          <img src="${logo}" alt="" />
+          <div><strong>MSC Ambassador</strong><span>Influencer Portal</span></div>
+        </div>
+        <section class="caption">
+          <div class="eyebrow">${scene.eyebrow}</div>
+          <h1>${scene.title}</h1>
+          <p>${scene.subtitle}</p>
+        </section>
+        <div class="legal">Community program. No guaranteed profit.</div>
+      `;
+    }
+  </script>
+</body>
+</html>

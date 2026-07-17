@@ -6,8 +6,11 @@ import (
 	"strings"
 )
 
+// storagePolicySnapshot implements the storage policy snapshot helper.
 func (n *Node) storagePolicySnapshot() map[string]any {
+	// `policy` stores the value produced by this operation.
 	policy := NewStorageManager(n).normalizePolicy()
+	// `finalized` stores the value produced by this operation.
 	finalized := uint64(0)
 	if n != nil {
 		finalized = n.getFinalizedHeight()
@@ -18,16 +21,20 @@ func (n *Node) storagePolicySnapshot() map[string]any {
 			finalized = n.Blockchain.Height()
 		}
 	}
+	// `retainFrom` stores the value produced by this operation.
 	retainFrom := uint64(0)
+	// `hotWindow` stores the value produced by this operation.
 	hotWindow := uint64(0)
 	if finalized > 0 && policy.PruningEnabled && policy.Profile != storageProfileArchive {
 		retainFrom = storageRetainFromHeight(finalized, policy)
 		hotWindow = storageHotWindowBlocks(finalized, retainFrom)
 	}
+	// `archiveMode` stores the value produced by this operation.
 	archiveMode := policy.Profile == storageProfileArchive
 	if n != nil && n.statePruningArchiveMode() {
 		archiveMode = true
 	}
+	// `resp` stores the response produced by this operation.
 	resp := map[string]any{
 		"profile":                          policy.Profile,
 		"configured_profile":               normalizeStorageHistoryProfile(StorageHistoryProfile),
@@ -54,6 +61,7 @@ func (n *Node) storagePolicySnapshot() map[string]any {
 		"retention_summary":                storagePolicyRetentionSummary(policy),
 	}
 	if n != nil {
+		// `marker` and `ok` store whether the related condition is satisfied.
 		if marker, ok := n.loadStatePruneMarker(); ok {
 			resp["prune_marker"] = marker
 			resp["pruned_through_height"] = marker.PrunedThroughHeight
@@ -65,6 +73,7 @@ func (n *Node) storagePolicySnapshot() map[string]any {
 	return resp
 }
 
+// storagePolicyRetentionSummary implements the storage policy retention summary helper.
 func storagePolicyRetentionSummary(policy StoragePolicy) string {
 	if policy.Profile == storageProfileArchive {
 		return "archive: retain full hot history; pruning disabled"
@@ -78,6 +87,7 @@ func storagePolicyRetentionSummary(policy StoragePolicy) string {
 	return "validator: retain current/finalized state, last validator epochs, rollback window, compacted snapshots, and cold block exports"
 }
 
+// storagePolicySnapshotResponse implements the storage policy snapshot response helper.
 func (s *Server) storagePolicySnapshotResponse() (map[string]any, int, string) {
 	if s == nil || s.Node == nil {
 		return nil, http.StatusServiceUnavailable, "node unavailable"
@@ -85,6 +95,7 @@ func (s *Server) storagePolicySnapshotResponse() (map[string]any, int, string) {
 	return s.Node.storagePolicySnapshot(), http.StatusOK, ""
 }
 
+// handleStoragePolicy handles storage policy.
 func (s *Server) handleStoragePolicy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -94,6 +105,7 @@ func (s *Server) handleStoragePolicy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	// `resp`, `status`, and `errMsg` store the error produced by this operation.
 	resp, status, errMsg := s.storagePolicySnapshotResponse()
 	if status != http.StatusOK {
 		http.Error(w, errMsg, status)
@@ -106,6 +118,7 @@ func (s *Server) handleStoragePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleV1StoragePolicy handles v1 storage policy.
 func (s *Server) handleV1StoragePolicy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		writeV1Error(w, http.StatusMethodNotAllowed, "", "method not allowed")
@@ -115,6 +128,7 @@ func (s *Server) handleV1StoragePolicy(w http.ResponseWriter, r *http.Request) {
 		writeV1Error(w, http.StatusUnauthorized, "", "unauthorized")
 		return
 	}
+	// `resp`, `status`, and `errMsg` store the error produced by this operation.
 	resp, status, errMsg := s.storagePolicySnapshotResponse()
 	if status != http.StatusOK {
 		writeV1Error(w, status, "", errMsg)

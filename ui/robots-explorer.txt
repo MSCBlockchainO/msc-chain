@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /dtl_ide.html
+Disallow: /explorer-settings.html
+
+Sitemap: https://explorer.mscblockexplorer.in/sitemap.xml

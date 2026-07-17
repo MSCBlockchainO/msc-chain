@@ -1,13 +1,18 @@
 param(
   [ValidateSet("full", "candidate", "validator")][string]$Role = "candidate",
-  [Parameter(Mandatory = $true)][string]$NodeId,
+  [string]$NodeType = "",
+  [string]$NodeId = "",
   [string]$Rpc = "127.0.0.1:26657",
   [string]$Peers = "",
+  [string]$Bootnodes = "",
+  [string]$PersistentPeers = "",
   [switch]$LowRam,
   [switch]$AutoStart,
   [switch]$PublicGateway,
   [switch]$Allow4GBValidator,
   [string]$PrebuiltBinary = "",
+  [string]$ReleaseUrl = "",
+  [string]$ReleaseSha256 = "",
   [string]$InstallDir = "",
   [int]$P2PPort = 7001
 )
@@ -26,6 +31,33 @@ function Set-OwnerOnlyAcl {
   if ($env:OS -notlike "*Windows*") { return }
   $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
   & icacls $Path /inheritance:r /grant:r "$user`:(OI)(CI)F" /remove:g "Users" "Authenticated Users" "Everyone" | Out-Null
+}
+
+function New-MSCNodeId {
+  $alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+  $bytes = New-Object byte[] 30
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+      $b = New-Object byte[] 1
+      do {
+        $rng.GetBytes($b)
+        $idx = [int]$b[0]
+      } while ($idx -ge ([math]::Floor(256 / $alphabet.Length) * $alphabet.Length))
+      $bytes[$i] = $idx % $alphabet.Length
+    }
+  } finally {
+    $rng.Dispose()
+  }
+  $chars = foreach ($idx in $bytes) { $alphabet[[int]$idx] }
+  "msc_" + (-join $chars)
+}
+
+function Normalize-MSCNodeId {
+  param([string]$Value)
+  $clean = ([regex]::Replace($Value.Trim(), '[^A-Za-z0-9_-]', ''))
+  if ($clean.ToLowerInvariant().StartsWith("msc_")) { return $clean }
+  return $clean.ToUpperInvariant()
 }
 
 function Get-HostMemoryMiB {
@@ -58,12 +90,63 @@ function Replace-Or-AppendToml {
   [System.IO.File]::WriteAllText($Path, $content, [System.Text.UTF8Encoding]::new($false))
 }
 
-if ($PrebuiltBinary -eq "") {
+function ConvertTo-TomlStringArray {
+  param([string]$Csv)
+  $items = @($Csv -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+  $encoded = @($items | ForEach-Object {
+    '"' + ($_.Replace('\', '\\').Replace('"', '\"')) + '"'
+  })
+  "[" + ($encoded -join ", ") + "]"
+}
+
+function Assert-FileSha256 {
+  param([string]$Path, [string]$Expected)
+  if (-not $Expected) { return }
+  $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
+  $want = $Expected.Trim().ToLowerInvariant()
+  if ($actual -ne $want) {
+    throw "checksum mismatch for $Path`: got=$actual want=$want"
+  }
+}
+
+if ($PrebuiltBinary -eq "" -and $ReleaseUrl -eq "") {
   Require-Command go
 }
 
 $repo = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repo
+
+if ($Bootnodes -and -not $Peers) {
+  $Peers = $Bootnodes
+}
+
+$validNodeTypes = @("full", "public-rpc", "candidate-validator", "private-validator", "archive")
+if ($NodeType) {
+  $NodeType = $NodeType.Trim().ToLowerInvariant()
+  if ($validNodeTypes -notcontains $NodeType) {
+    throw "-NodeType must be one of: $($validNodeTypes -join ', ')"
+  }
+  switch ($NodeType) {
+    "full" { $Role = "full" }
+    "public-rpc" { $Role = "full"; $PublicGateway = $true }
+    "candidate-validator" { $Role = "candidate" }
+    "private-validator" { $Role = "validator" }
+    "archive" { $Role = "full" }
+  }
+} else {
+  if ($Role -eq "validator") {
+    $NodeType = "private-validator"
+  } elseif ($Role -eq "candidate") {
+    $NodeType = "candidate-validator"
+  } elseif ($PublicGateway) {
+    $NodeType = "public-rpc"
+  } else {
+    $NodeType = "full"
+  }
+}
+if ($ReleaseUrl -and -not $ReleaseSha256) {
+  throw "-ReleaseSha256 is required with -ReleaseUrl"
+}
 
 if (-not (Test-Path "genesis.json")) { throw "genesis.json not found" }
 if (-not (Test-Path "config.toml")) { throw "config.toml not found" }
@@ -77,7 +160,11 @@ if ($configuredHash -and $configuredHash -ne $genesisHash) {
   throw "genesis hash mismatch: file=$genesisHash config=$configuredHash"
 }
 
-$id = $NodeId.Trim().ToUpperInvariant()
+if (-not $NodeId.Trim()) {
+  $NodeId = New-MSCNodeId
+  Write-Host "generated node id: $NodeId"
+}
+$id = Normalize-MSCNodeId $NodeId
 $hostMemMiB = Get-HostMemoryMiB
 if ($Role -eq "validator" -and $LowRam -and $hostMemMiB -gt 0 -and $hostMemMiB -lt 8192 -and -not $Allow4GBValidator) {
   throw "validator low-RAM mode requires at least 8GB RAM. This host has ${hostMemMiB}MiB. Use -Allow4GBValidator only for test/candidate rehearsal."
@@ -101,9 +188,32 @@ Set-OwnerOnlyAcl $InstallDir
 if (-not (Test-Path -LiteralPath $configPath)) {
   Copy-Item "config.toml" $configPath -Force
 }
+
+$historyProfile = "full"
+$statePruning = "true"
+switch ($NodeType) {
+  "private-validator" {
+    $historyProfile = "validator"
+    $statePruning = "true"
+  }
+  "archive" {
+    $historyProfile = "archive"
+    $statePruning = "false"
+  }
+}
+
 Replace-Or-AppendToml $configPath "rpc" "laddr" "`"$Rpc`""
-Replace-Or-AppendToml $configPath "storage" "history_profile" "`"full`""
-Replace-Or-AppendToml $configPath "storage" "state_pruning_enabled" "true"
+Replace-Or-AppendToml $configPath "storage" "history_profile" "`"$historyProfile`""
+Replace-Or-AppendToml $configPath "storage" "state_pruning_enabled" $statePruning
+if ($Peers) {
+  Replace-Or-AppendToml $configPath "p2p" "seeds" (ConvertTo-TomlStringArray $Peers)
+}
+if (-not $PersistentPeers) {
+  $PersistentPeers = $Peers
+}
+if ($PersistentPeers) {
+  Replace-Or-AppendToml $configPath "p2p" "persistent_peers" (ConvertTo-TomlStringArray $PersistentPeers)
+}
 if ($LowRam) {
   Replace-Or-AppendToml $configPath "sync" "delta_replay_verify_workers" "2"
   Replace-Or-AppendToml $configPath "sync" "snapshot_parallel_chunks" "2"
@@ -111,11 +221,45 @@ if ($LowRam) {
   Replace-Or-AppendToml $configPath "rpc" "max_concurrent_requests" "64"
 }
 
+$releaseTemp = $null
+if ($ReleaseUrl) {
+  $releaseTemp = Join-Path ([System.IO.Path]::GetTempPath()) ("msc-release-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Force -Path $releaseTemp | Out-Null
+  $artifact = Join-Path $releaseTemp "msc-release"
+  Write-Host "Downloading MSC release: $ReleaseUrl"
+  Invoke-WebRequest -Uri $ReleaseUrl -OutFile $artifact -UseBasicParsing
+  Assert-FileSha256 -Path $artifact -Expected $ReleaseSha256
+  $lowerUrl = $ReleaseUrl.ToLowerInvariant()
+  if ($lowerUrl.EndsWith(".zip")) {
+    Expand-Archive -LiteralPath $artifact -DestinationPath $releaseTemp -Force
+    $candidate = Get-ChildItem -LiteralPath $releaseTemp -Recurse -File |
+      Where-Object { $_.Name -in @("msc-node.exe", "msc.exe") -or $_.Name -like "msc-node*.exe" } |
+      Select-Object -First 1
+    if (-not $candidate) { throw "release archive verified, but no Windows msc-node binary was found" }
+    $PrebuiltBinary = $candidate.FullName
+  } elseif ($lowerUrl.EndsWith(".tgz") -or $lowerUrl.EndsWith(".tar.gz")) {
+    tar -xzf $artifact -C $releaseTemp
+    if ($LASTEXITCODE -ne 0) { throw "failed to extract release archive" }
+    $candidate = Get-ChildItem -LiteralPath $releaseTemp -Recurse -File |
+      Where-Object { $_.Name -in @("msc-node.exe", "msc.exe", "msc-node") -or $_.Name -like "msc-node*" } |
+      Select-Object -First 1
+    if (-not $candidate) { throw "release archive verified, but no msc-node binary was found" }
+    $PrebuiltBinary = $candidate.FullName
+  } else {
+    $PrebuiltBinary = $artifact
+  }
+} elseif ($PrebuiltBinary -ne "" -and $ReleaseSha256) {
+  Assert-FileSha256 -Path $PrebuiltBinary -Expected $ReleaseSha256
+}
+
 if ($PrebuiltBinary -ne "") {
   $resolvedPrebuilt = Resolve-Path -LiteralPath $PrebuiltBinary
   Copy-Item -LiteralPath $resolvedPrebuilt -Destination $binaryPath -Force
 } else {
   go build -o $binaryPath .
+}
+if ($releaseTemp) {
+  Remove-Item -LiteralPath $releaseTemp -Recurse -Force -ErrorAction SilentlyContinue
 }
 $aliasPath = Join-Path $InstallDir "msc.exe"
 Copy-Item -LiteralPath $binaryPath -Destination $aliasPath -Force
@@ -180,6 +324,7 @@ $manifest = [ordered]@{
   schema_version = 1
   node_id = $id
   role = $Role
+  node_type = $NodeType
   install_dir = $InstallDir
   data_dir = $dataDir
   node_path = $nodePath
@@ -199,9 +344,21 @@ $manifest | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 -LiteralPath $m
 
 Write-Host "MSC node installed."
 Write-Host "Node ID: $id"
-Write-Host "Role: $Role runtime=$runtimeRole profile=$profile"
+Write-Host "Node Type: $NodeType"
+Write-Host "Role: $Role runtime=$runtimeRole profile=$profile history=$historyProfile"
 Write-Host "Install: $InstallDir"
 Write-Host "Binary: $binaryPath"
 Write-Host "Alias: $aliasPath"
 Write-Host "Manifest: $manifestPath"
 Write-Host "Start: powershell -ExecutionPolicy Bypass -File `"$startPath`""
+Write-Host "Status URL: http://$Rpc/status"
+Write-Host "Health URL: http://$Rpc/healthz"
+if ($NodeType -eq "private-validator") {
+  Write-Host "Validator RPC is private by default. Keep $Rpc behind localhost/VPN."
+} elseif ($NodeType -eq "public-rpc") {
+  Write-Host "Public RPC node installed. Put nginx/TLS/rate limits in front of the local RPC before exposing it."
+} elseif ($NodeType -eq "candidate-validator") {
+  Write-Host "Candidate validator installed. Sync fully, then submit validator stake with the validator public key."
+} elseif ($NodeType -eq "archive") {
+  Write-Host "Archive node installed with pruning disabled."
+}

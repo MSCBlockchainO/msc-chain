@@ -7,10 +7,13 @@ import (
 )
 
 const (
+	// `peerSecurityFaultQuarantineAfter` defines the constant value used by this package.
 	peerSecurityFaultQuarantineAfter uint64 = 3
+	// `peerRateLimitDropQuarantineAfter` defines the constant value used by this package.
 	peerRateLimitDropQuarantineAfter uint64 = 3
 )
 
+// ensurePeerIsolationMaps implements the ensure peer isolation maps helper.
 func (n *Node) ensurePeerIsolationMaps() {
 	if n == nil {
 		return
@@ -103,6 +106,7 @@ func (n *Node) ensurePeerIsolationMaps() {
 	n.peerStateMu.Unlock()
 }
 
+// recordPeerSecurityFault implements the record peer security fault helper.
 func (n *Node) recordPeerSecurityFault(peerID string, reason string) uint64 {
 	peerID = strings.TrimSpace(peerID)
 	if n == nil || peerID == "" {
@@ -112,26 +116,36 @@ func (n *Node) recordPeerSecurityFault(peerID string, reason string) uint64 {
 	if reason == "" {
 		reason = "security_fault"
 	}
+	trustedPeer := n.isValidatorOrPersistentPeerID(peerID)
 
 	n.syncPeerScoreMu.Lock()
 	if n.syncPeerScores == nil {
 		n.syncPeerScores = make(map[string]*SyncPeerScore)
 	}
+	// `score` stores the value produced by this operation.
 	score := n.syncPeerScores[peerID]
 	if score == nil {
 		score = &SyncPeerScore{}
 		n.syncPeerScores[peerID] = score
 	}
-	score.SecurityFaultCount++
-	score.InvalidProofCount++
-	score.BlockBatchFail++
+	if trustedPeer {
+		score.TrustedSecurityFaultCount++
+	} else {
+		score.SecurityFaultCount++
+		score.InvalidProofCount++
+		score.BlockBatchFail++
+	}
 	score.UpdatedAt = time.Now()
+	// `count` stores the measured quantity used by this operation.
 	count := score.SecurityFaultCount
+	if trustedPeer {
+		count = score.TrustedSecurityFaultCount
+	}
 	n.syncPeerScoreMu.Unlock()
 	n.savePeerReputation()
 
 	if count >= peerSecurityFaultQuarantineAfter {
-		if n.isValidatorOrPersistentPeerID(peerID) {
+		if trustedPeer {
 			n.clearDialBackoffForPeerID(peerID)
 			log.Printf("[PEER-SECURITY-SOFT] peer=%s reason=%s count=%d action=keep_trusted_connection", ShortID(peerID), reason, count)
 			return count
@@ -142,6 +156,7 @@ func (n *Node) recordPeerSecurityFault(peerID string, reason string) uint64 {
 	return count
 }
 
+// recordPeerRateLimitDrop implements the record peer rate limit drop helper.
 func (n *Node) recordPeerRateLimitDrop(peerID string, msgType string) uint64 {
 	peerID = strings.TrimSpace(peerID)
 	if n == nil || peerID == "" {
@@ -151,24 +166,39 @@ func (n *Node) recordPeerRateLimitDrop(peerID string, msgType string) uint64 {
 	if msgType == "" {
 		msgType = "unknown"
 	}
+	trustedPeer := n.isValidatorOrPersistentPeerID(peerID)
 
 	n.syncPeerScoreMu.Lock()
 	if n.syncPeerScores == nil {
 		n.syncPeerScores = make(map[string]*SyncPeerScore)
 	}
+	// `score` stores the value produced by this operation.
 	score := n.syncPeerScores[peerID]
 	if score == nil {
 		score = &SyncPeerScore{}
 		n.syncPeerScores[peerID] = score
 	}
-	score.RateLimitDropCount++
-	score.BlockBatchFail++
+	if trustedPeer {
+		score.TrustedRateLimitDropCount++
+	} else {
+		score.RateLimitDropCount++
+		score.BlockBatchFail++
+	}
 	score.UpdatedAt = time.Now()
+	// `count` stores the measured quantity used by this operation.
 	count := score.RateLimitDropCount
+	if trustedPeer {
+		count = score.TrustedRateLimitDropCount
+	}
 	n.syncPeerScoreMu.Unlock()
 	n.savePeerReputation()
 
 	if count >= peerRateLimitDropQuarantineAfter {
+		if trustedPeer {
+			n.clearDialBackoffForPeerID(peerID)
+			log.Printf("[PEER-RATE-LIMIT-SOFT] peer=%s type=%s count=%d action=keep_trusted_connection", ShortID(peerID), msgType, count)
+			return count
+		}
 		n.ensurePeerIsolationMaps()
 		n.disconnectPeerID(peerID, "rate_limit_"+msgType)
 	}

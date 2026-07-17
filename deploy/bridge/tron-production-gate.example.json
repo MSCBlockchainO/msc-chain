@@ -1,0 +1,86 @@
+{
+  "version": "msc-bridge-tron-production-gate-v1",
+  "route_id": "usdt-tron-mainnet",
+  "created_at_unix": 0,
+  "expires_at_unix": 0,
+  "source_commit": "REPLACE_WITH_40_OR_64_HEX_GIT_OBJECT_ID",
+  "release_tag": "tron-mainnet-pilot-v1",
+  "max_observer_age_seconds": 300,
+  "max_reconciliation_age_seconds": 180,
+  "release_approval_path": "tron-release-approval.json",
+  "deployment": {
+    "path": "tron-mainnet-deployment.json",
+    "sha256": "REPLACE_WITH_SHA256"
+  },
+  "observer_config": {
+    "path": "tron-mainnet-observer.json",
+    "sha256": "REPLACE_WITH_SHA256"
+  },
+  "observer_artifact": {
+    "path": "tron-mainnet-observer-artifact.json",
+    "sha256": "REPLACE_WITH_SHA256"
+  },
+  "reconciler_config": {
+    "path": "tron-mainnet-reconciler.json",
+    "sha256": "REPLACE_WITH_SHA256"
+  },
+  "reconciliation_report": {
+    "path": "tron-mainnet-reconciliation.json",
+    "sha256": "REPLACE_WITH_SHA256"
+  },
+  "dtl_authority_snapshot": {
+    "path": "tron-dtl-authority-snapshot.json",
+    "sha256": "REPLACE_WITH_SHA256"
+  },
+  "audit_report": {
+    "path": "msc-tron-bridge-audit.pdf",
+    "sha256": "REPLACE_WITH_SHA256",
+    "url": "https://audit.example.invalid/msc-tron-bridge-audit.pdf",
+    "auditor": "REPLACE_WITH_INDEPENDENT_AUDITOR",
+    "published_at_unix": 0
+  },
+  "pause_drill": {
+    "path": "tron-pause-drill.json",
+    "sha256": "REPLACE_WITH_SHA256"
+  },
+  "soak_report": {
+    "path": "tron-soak-report.json",
+    "sha256": "REPLACE_WITH_SHA256"
+  },
+  "incident_runbook": {
+    "path": "tron-incident-runbook.md",
+    "sha256": "REPLACE_WITH_SHA256"
+  },
+  "source_observers": {
+    "threshold": 4,
+    "members": [
+      { "operator_id": "source-operator-1", "signer_id": "tron-observer-1", "public_key": "REPLACE_WITH_ED25519_PUBLIC_KEY_1" },
+      { "operator_id": "source-operator-2", "signer_id": "tron-observer-2", "public_key": "REPLACE_WITH_ED25519_PUBLIC_KEY_2" },
+      { "operator_id": "source-operator-3", "signer_id": "tron-observer-3", "public_key": "REPLACE_WITH_ED25519_PUBLIC_KEY_3" },
+      { "operator_id": "source-operator-4", "signer_id": "tron-observer-4", "public_key": "REPLACE_WITH_ED25519_PUBLIC_KEY_4" },
+      { "operator_id": "source-operator-5", "signer_id": "tron-observer-5", "public_key": "REPLACE_WITH_ED25519_PUBLIC_KEY_5" }
+    ]
+  },
+  "dtl_authorities": {
+    "threshold": 4,
+    "members": [
+      { "operator_id": "dtl-operator-1", "address": "REPLACE_WITH_MSC_ADDRESS_1", "public_key": "REPLACE_WITH_DISTINCT_DTL_ED25519_PUBLIC_KEY_1" },
+      { "operator_id": "dtl-operator-2", "address": "REPLACE_WITH_MSC_ADDRESS_2", "public_key": "REPLACE_WITH_DISTINCT_DTL_ED25519_PUBLIC_KEY_2" },
+      { "operator_id": "dtl-operator-3", "address": "REPLACE_WITH_MSC_ADDRESS_3", "public_key": "REPLACE_WITH_DISTINCT_DTL_ED25519_PUBLIC_KEY_3" },
+      { "operator_id": "dtl-operator-4", "address": "REPLACE_WITH_MSC_ADDRESS_4", "public_key": "REPLACE_WITH_DISTINCT_DTL_ED25519_PUBLIC_KEY_4" },
+      { "operator_id": "dtl-operator-5", "address": "REPLACE_WITH_MSC_ADDRESS_5", "public_key": "REPLACE_WITH_DISTINCT_DTL_ED25519_PUBLIC_KEY_5" }
+    ]
+  },
+  "roles": {
+    "governance": { "operator_id": "governance-operator", "address": "REPLACE_WITH_TRON_GOVERNANCE" },
+    "guardian": { "operator_id": "guardian-operator", "address": "REPLACE_WITH_TRON_GUARDIAN" },
+    "release_executor": { "operator_id": "executor-operator", "address": "REPLACE_WITH_TRON_EXECUTOR" },
+    "release_committee": [
+      { "operator_id": "release-operator-1", "address": "REPLACE_WITH_TRON_RELEASE_MEMBER_1" },
+      { "operator_id": "release-operator-2", "address": "REPLACE_WITH_TRON_RELEASE_MEMBER_2" },
+      { "operator_id": "release-operator-3", "address": "REPLACE_WITH_TRON_RELEASE_MEMBER_3" },
+      { "operator_id": "release-operator-4", "address": "REPLACE_WITH_TRON_RELEASE_MEMBER_4" },
+      { "operator_id": "release-operator-5", "address": "REPLACE_WITH_TRON_RELEASE_MEMBER_5" }
+    ]
+  }
+}

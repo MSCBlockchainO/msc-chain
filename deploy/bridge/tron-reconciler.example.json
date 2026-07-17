@@ -1,0 +1,40 @@
+{
+  "version": "msc-bridge-reconciler-config-v2",
+  "msc_accounting_url": "https://REPLACE_WITH_MSC_ORIGIN/bridge/accounting",
+  "request_timeout": "12s",
+  "max_accounting_age": "2m",
+  "poll_interval": "30s",
+  "failure_threshold": 3,
+  "auto_pause": false,
+	"admin_settings_url": "https://REPLACE_WITH_MSC_ORIGIN/bridge/admin/settings",
+	"admin_token_env": "MSC_BRIDGE_ADMIN_TOKEN",
+  "listen_address": "127.0.0.1:9477",
+  "routes": [
+    {
+      "chain_type": "tron",
+      "route_id": "usdt-tron-mainnet",
+      "source_chain_id": "tron-mainnet",
+      "expected_evm_chain_id": 0,
+      "expected_genesis_block_id": "00000000000000001ebf88508a03865c71d452e25f4d51194196a1d22b6653dc",
+      "expected_vault_runtime_code_hash": "REPLACE_FROM_AUDITED_DEPLOYMENT_RECORD",
+      "expected_token_runtime_code_hash": "REPLACE_FROM_AUDITED_DEPLOYMENT_RECORD",
+	  "expected_route_enabled": true,
+	  "expected_min_amount_raw": "10000000",
+	  "expected_max_amount_raw": "1000000000",
+	  "expected_daily_lock_limit_raw": "10000000000",
+	  "expected_daily_unlock_limit_raw": "10000000000",
+      "rpc_urls": [
+        "https://REPLACE_WITH_INDEPENDENT_TRON_MAINNET_API_1",
+        "https://REPLACE_WITH_INDEPENDENT_TRON_MAINNET_API_2",
+        "https://REPLACE_WITH_INDEPENDENT_TRON_MAINNET_API_3"
+      ],
+      "rpc_quorum": 2,
+      "confirmations": 64,
+      "vault_address": "REPLACE_FROM_AUDITED_DEPLOYMENT_RECORD",
+      "token_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+      "local_token_id": "REPLACE_WITH_MSC_WRAPPED_TOKEN_ID",
+      "source_decimals": 6,
+      "allow_insecure_rpc_http": false
+    }
+  ]
+}

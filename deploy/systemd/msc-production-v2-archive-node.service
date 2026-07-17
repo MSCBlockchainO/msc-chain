@@ -1,0 +1,21 @@
+[Unit]
+Description=MSC Production V2 Archive Full Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/.msc/production-v2/release
+Environment=MSC_ALLOW_VALIDATOR_KEY_CREATE=0
+Environment=MSC_AUTH_OPEN_BROWSER=0
+Environment=MSC_ALLOW_CONFIG_OVERRIDE=1
+Environment=GOGC=75
+ExecStart=/home/ubuntu/.msc/production-v2/release/msc-node --mode=full --role=full --port=7001 --datadir=/home/ubuntu/.msc/production-v2/data --rpcaddr=172.31.19.170:26666 --p2p-external=/ip4/54.89.222.13/tcp/7001 --config=config.archive.toml --peers=/ip4/54.80.4.133/tcp/7001/p2p/12D3KooWC3z8AMHZSEoP9WA7J1c5MDqNbfQuXCJv8kusMGGZeKt4,/ip4/3.109.153.171/tcp/7001/p2p/12D3KooWBz6EfQ2d39GoeQSmxxXC8bbZKZRX9kuE46A71xqndd93,/ip4/47.129.174.99/tcp/7001/p2p/12D3KooWRR1uHrvBh29BhhrfGRZzjLGHMJgU9nCY661GLQUuiCWw
+Restart=always
+RestartSec=4
+TimeoutStopSec=30
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

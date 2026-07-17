@@ -3,39 +3,105 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MSC Wallet Login</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="wallet_pages.css?v=20260602h" />
+  <title>Unlock or Recover MSC Wallet - Secure Local Access</title>
+  <meta name="description" content="Unlock an encrypted MSC wallet, recover with seed phrase, import a recovery kit, or restore from private key locally." />
+  <meta name="robots" content="noindex,follow" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/login.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="Unlock or Recover MSC Wallet - Secure Local Access" />
+  <meta property="og:description" content="Unlock an encrypted MSC wallet, recover with seed phrase, import a recovery kit, or restore from private key locally." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/login.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Unlock or Recover MSC Wallet - Secure Local Access" />
+  <meta name="twitter:description" content="Unlock an encrypted MSC wallet, recover with seed phrase, import a recovery kit, or restore from private key locally." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
 </head>
-<body data-page="wallet">
+<body data-page="login">
   <main class="content">
     <section class="page-hero">
-      <div class="eyebrow">Access</div>
-      <h1>Login</h1>
-      <p class="muted">Unlock an existing local wallet or import a private key.</p>
+      <div class="eyebrow">Welcome back</div>
+      <h1>Unlock or recover your wallet</h1>
+      <p class="muted">Use your password, seed phrase, encrypted recovery kit, or private key backup. Recovery happens locally in this browser.</p>
     </section>
-    <section class="two-col">
+    <section class="two-col recovery-layout">
       <div class="card">
         <div id="loginStatus" class="pill">Locked</div>
         <form id="unlockForm">
-          <div class="field"><label for="unlockPassword">Wallet Password</label><input id="unlockPassword" type="password" placeholder="Password" /></div>
-          <button class="primary" type="submit">Unlock Wallet</button>
+          <div class="field"><label for="unlockPassword">Password</label><input id="unlockPassword" type="password" autocomplete="current-password" placeholder="Wallet password" /></div>
+          <button class="primary" type="submit"><i data-lucide="unlock-keyhole"></i>Unlock Wallet</button>
         </form>
+        <div class="action-row"><a class="button" href="create-wallet.html">Create new wallet</a><a class="button" href="dashboard.html">Back to Home</a></div>
       </div>
-      <div class="card">
-        <div class="label">Import Wallet</div>
-        <form id="importKeyForm">
-          <div class="field"><label for="importPrivateKey">Private Key Hex</label><textarea id="importPrivateKey" rows="4" placeholder="64-byte ed25519 private key"></textarea></div>
-          <div class="field"><label for="importPassword">New Password</label><input id="importPassword" type="password" placeholder="Password" /></div>
-          <button type="submit">Import Private Key</button>
-        </form>
+      <div class="card recovery-method-card">
+        <div class="section-title">
+          <div>
+            <div class="label">Recovery Method</div>
+            <h2>Select one recovery option</h2>
+          </div>
+        </div>
+        <div id="recoveryMethodTabs" class="recovery-method-tabs" role="tablist" aria-label="Wallet recovery method">
+          <button type="button" class="active" data-recovery-method="seed" aria-pressed="true"><i data-lucide="key-round"></i>Seed Phrase</button>
+          <button type="button" data-recovery-method="kit" aria-pressed="false"><i data-lucide="file-key"></i>Recovery Kit</button>
+          <button type="button" data-recovery-method="private" aria-pressed="false"><i data-lucide="lock-keyhole"></i>Private Key</button>
+        </div>
+        <div id="recoveryAttemptStatus" class="safe-note">Recovery attempts are protected with a cooldown.</div>
+
+        <section class="recovery-method-panel" data-recovery-panel="seed">
+          <div class="label">Recover with seed phrase</div>
+          <p class="muted">Enter the 12 or 24 MSC seed words. The address is shown before anything is saved.</p>
+          <form id="seedRecoveryForm">
+            <div class="field">
+              <div class="field-head"><label for="recoverSeedPhrase">Seed phrase</label><span id="recoverSeedCounter" class="seed-counter">0/12 words</span></div>
+              <textarea id="recoverSeedPhrase" class="seed-entry-textarea" rows="4" autocomplete="off" spellcheck="false" placeholder="word one word two ..."></textarea>
+              <div id="recoverSeedWordChips" class="seed-word-preview"><em>No seed words entered.</em></div>
+            </div>
+            <div class="row">
+              <div class="field"><label for="recoverSeedPassword">New password</label><input id="recoverSeedPassword" type="password" autocomplete="new-password" /><div id="recoverSeedPasswordStrength" class="password-meter"></div></div>
+              <div class="field"><label for="recoverSeedPasswordConfirm">Confirm</label><input id="recoverSeedPasswordConfirm" type="password" autocomplete="new-password" /></div>
+            </div>
+            <div id="seedRecoveryPreview" class="recovery-preview" hidden></div>
+            <button id="seedRecoverySubmit" class="primary" type="submit"><i data-lucide="key-round"></i>Preview / Save Recovery</button>
+          </form>
+          <div id="seedRecoveryStatus" class="safe-note">MSC Team will never ask for these words.</div>
+        </section>
+
+        <section class="recovery-method-panel" data-recovery-panel="kit" hidden>
+          <div class="label">Import recovery kit</div>
+          <p class="muted">Use the encrypted JSON kit exported from Security. The kit fingerprint appears before import.</p>
+          <form id="recoveryKitImportForm">
+            <div class="field"><label for="recoveryKitFile">Recovery kit file</label><input id="recoveryKitFile" type="file" accept="application/json,.json" /></div>
+            <div id="recoveryKitFingerprint" class="simple-status-grid recovery-fingerprint"><em>Choose a recovery kit to show fingerprint.</em></div>
+            <div class="field"><label for="recoveryKitPassword">Wallet password</label><input id="recoveryKitPassword" type="password" autocomplete="current-password" /></div>
+            <div id="recoveryKitPreview" class="recovery-preview" hidden></div>
+            <button id="recoveryKitSubmit" type="submit"><i data-lucide="file-key"></i>Preview / Import Kit</button>
+          </form>
+          <div id="recoveryKitImportStatus" class="safe-note">The kit is verified before replacing the local wallet.</div>
+        </section>
+
+        <section class="recovery-method-panel" data-recovery-panel="private" hidden>
+          <div class="label">Recover with private key</div>
+          <p class="muted">Use this only if you already have an MSC private key backup. The derived address is shown before saving.</p>
+          <form id="importKeyForm">
+            <div class="field"><label for="importPrivateKey">Private key</label><textarea id="importPrivateKey" rows="4" placeholder="Paste private key hex"></textarea></div>
+            <div class="field"><label for="importPassword">New password</label><input id="importPassword" type="password" autocomplete="new-password" placeholder="Protect this imported wallet" /><div id="importPasswordStrength" class="password-meter"></div></div>
+            <div id="privateKeyRecoveryPreview" class="recovery-preview" hidden></div>
+            <button id="privateKeyRecoverySubmit" type="submit"><i data-lucide="lock-keyhole"></i>Preview / Import Wallet</button>
+          </form>
+          <div id="privateKeyRecoveryStatus" class="safe-note">Private key recovery is local-only.</div>
+        </section>
       </div>
     </section>
   </main>
   <script src="vendor/nacl.min.js"></script>
   <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
-  <script src="wallet_pages.js?v=20260603a"></script>
+  <script src="wallet_pages.js?v=20260714-vmremoved"></script>
 </body>
 </html>

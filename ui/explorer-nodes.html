@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSC Nodes - Public RPC and Infrastructure Health</title>
+  <meta name="description" content="Review MSC Chain public nodes, RPC health, latency, block height, consensus mode, and infrastructure availability." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://explorer.mscblockexplorer.in/explorer-nodes.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Nodes - Public RPC and Infrastructure Health" />
+  <meta property="og:description" content="Review MSC Chain public nodes, RPC health, latency, block height, consensus mode, and infrastructure availability." />
+  <meta property="og:url" content="https://explorer.mscblockexplorer.in/explorer-nodes.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Nodes - Public RPC and Infrastructure Health" />
+  <meta name="twitter:description" content="Review MSC Chain public nodes, RPC health, latency, block height, consensus mode, and infrastructure availability." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="explorer.css?v=20260713b" />
+</head>
+<body data-explorer-page="nodes">
+  <main class="explorer-content">
+    <section class="page-heading">
+      <div><div class="eyebrow">Infrastructure</div><h1>Nodes</h1><p>Public RPC health, active gateway selection, connected peers, reputation, and sync acknowledgement.</p></div>
+      <a class="button" href="portal/node-setup.html"><i data-lucide="download"></i>Node setup</a>
+    </section>
+
+    <nav class="page-tabs" aria-label="Node sections"><a href="#public-rpc-nodes">Public RPC nodes</a><a href="#archive-nodes">Archive nodes</a><a href="#full-nodes">Full nodes</a><a href="#node-health">Node health</a></nav>
+
+    <section class="metric-grid">
+      <article class="metric"><div class="metric-top"><span>Connected peers</span><span class="metric-icon"><i data-lucide="waypoints"></i></span></div><div id="peerTotal" class="metric-value">-</div><div class="metric-foot">Direct peer links</div></article>
+      <article id="archive-nodes" class="metric"><div class="metric-top"><span>Healthy public RPCs</span><span class="metric-icon"><i data-lucide="server"></i></span></div><div id="publicHealthy" class="metric-value">-</div><div class="metric-foot">Archive availability included</div></article>
+      <article id="full-nodes" class="metric"><div class="metric-top"><span>Registered public RPCs</span><span class="metric-icon"><i data-lucide="database"></i></span></div><div id="publicTotal" class="metric-value">-</div><div class="metric-foot">Full/archive nodes</div></article>
+      <article class="metric"><div class="metric-top"><span>Active gateway</span><span class="metric-icon"><i data-lucide="route"></i></span></div><div id="activeGateway" class="metric-value">-</div><div class="metric-foot">Current public traffic target</div></article>
+    </section>
+
+    <section id="node-health" class="chart-grid compact">
+      <div id="nodeHealthChart" class="chart-card"></div>
+      <div id="peerReputationChart" class="chart-card wide"></div>
+    </section>
+
+    <section id="public-rpc-nodes" class="panel">
+      <div class="panel-head"><h2>Public node registry</h2><span class="table-meta">Wallet-safe public full nodes</span></div>
+      <div id="publicNodeList" class="node-list"><div class="empty-state">Loading public nodes...</div></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Connected peers</h2><span class="table-meta">Direct peer observations</span></div>
+      <div class="table-shell">
+        <table>
+          <thead><tr><th>Peer ID</th><th>Status</th><th>Validator</th><th>Role</th><th>Reputation</th><th>Ack height</th><th>Identity</th></tr></thead>
+          <tbody id="peersTable"><tr><td colspan="7">Loading peers...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script defer src="vendor/lucide.min.js?v=20260618a"></script>
+  <script defer src="explorer.js?v=20260716a"></script>
+</body>
+</html>

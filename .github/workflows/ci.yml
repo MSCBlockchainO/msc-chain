@@ -20,5 +20,8 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Architecture guard
+        run: go run ./tools/archguard
+
       - name: Test
         run: go test ./...

@@ -1,0 +1,16 @@
+[Unit]
+Description=MSC public web gateway RPC tunnel
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=ubuntu
+EnvironmentFile=/etc/msc/web-gateway-tunnel.env
+ExecStart=/usr/bin/ssh -i /home/ubuntu/.ssh/msc_web_gateway_ed25519 -N -T -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new -R ${MSC_WEB_TUNNEL_SPEC} ${MSC_WEB_GATEWAY_TARGET}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

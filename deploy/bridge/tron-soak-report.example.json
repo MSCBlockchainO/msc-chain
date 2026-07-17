@@ -1,0 +1,29 @@
+{
+  "version": "msc-bridge-soak-report-v1",
+  "route_id": "usdt-tron-mainnet",
+  "started_at_unix": 0,
+  "completed_at_unix": 0,
+  "passed": false,
+  "observer_count": 5,
+  "reconciliation_checks": 0,
+  "completed_deposits": 0,
+  "completed_withdrawals": 0,
+  "critical_deficits": 0,
+  "unknown_reconciliations": 0,
+  "accounting_drift_events": 0,
+  "duplicate_execution_events": 0,
+  "reorg_drill_passed": false,
+  "replay_drill_passed": false,
+  "rotation_drill_passed": false,
+  "daily_limit_drill_passed": false,
+  "crash_recovery_drill_passed": false,
+  "evidence": [
+    { "kind": "reconciliation_log", "path": "evidence/soak-reconciliation.log", "sha256": "REPLACE_WITH_RECONCILIATION_LOG_SHA256" },
+    { "kind": "end_to_end_transfers", "path": "evidence/soak-transfers.json", "sha256": "REPLACE_WITH_TRANSFER_EVIDENCE_SHA256" },
+    { "kind": "reorg_drill", "path": "evidence/soak-reorg.log", "sha256": "REPLACE_WITH_REORG_DRILL_SHA256" },
+    { "kind": "replay_drill", "path": "evidence/soak-replay.log", "sha256": "REPLACE_WITH_REPLAY_DRILL_SHA256" },
+    { "kind": "rotation_drill", "path": "evidence/soak-rotation.log", "sha256": "REPLACE_WITH_ROTATION_DRILL_SHA256" },
+    { "kind": "daily_limit_drill", "path": "evidence/soak-daily-limit.log", "sha256": "REPLACE_WITH_DAILY_LIMIT_DRILL_SHA256" },
+    { "kind": "crash_recovery_drill", "path": "evidence/soak-crash-recovery.log", "sha256": "REPLACE_WITH_CRASH_RECOVERY_DRILL_SHA256" }
+  ]
+}

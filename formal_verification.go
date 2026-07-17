@@ -7,55 +7,92 @@ import (
 	"strings"
 )
 
+// `formalVerificationVersion` defines the constant value used by this package.
 const formalVerificationVersion = "msc-formal-v1"
 
 type FormalVerificationAssumption struct {
+	// `ID` stores the current position in the related collection.
 	ID        string `json:"id"`
+	// `Statement` stores the value associated with this record.
 	Statement string `json:"statement"`
+	// `Status` stores the value associated with this record.
 	Status    string `json:"status"`
+	// `Evidence` stores the value associated with this record.
 	Evidence  string `json:"evidence,omitempty"`
 }
 
 type FormalVerificationObligation struct {
+	// `ID` stores the current position in the related collection.
 	ID       string `json:"id"`
+	// `Kind` stores the value associated with this record.
 	Kind     string `json:"kind"`
+	// `Claim` stores the value associated with this record.
 	Claim    string `json:"claim"`
+	// `Status` stores the value associated with this record.
 	Status   string `json:"status"`
+	// `Evidence` stores the value associated with this record.
 	Evidence string `json:"evidence,omitempty"`
 }
 
 type FormalRuntimeInvariant struct {
+	// `ID` stores the current position in the related collection.
 	ID       string `json:"id"`
+	// `Severity` stores the value associated with this record.
 	Severity string `json:"severity"`
+	// `Passed` stores the value associated with this record.
 	Passed   bool   `json:"passed"`
+	// `Status` stores the value associated with this record.
 	Status   string `json:"status"`
+	// `Evidence` stores the value associated with this record.
 	Evidence string `json:"evidence,omitempty"`
 }
 
 type FormalVerificationReport struct {
+	// `Version` stores the value associated with this record.
 	Version              string                         `json:"version"`
+	// `Scope` stores the value associated with this record.
 	Scope                string                         `json:"scope"`
+	// `Healthy` stores the value associated with this record.
 	Healthy              bool                           `json:"healthy"`
+	// `Status` stores the value associated with this record.
 	Status               string                         `json:"status"`
+	// `MachineChecked` stores the value associated with this record.
 	MachineChecked       bool                           `json:"machine_checked"`
+	// `ExternalModelChecked` stores the value associated with this record.
 	ExternalModelChecked bool                           `json:"external_model_checked"`
+	// `ExternalProofStatus` stores the value associated with this record.
 	ExternalProofStatus  string                         `json:"external_proof_status"`
+	// `Height` stores the value associated with this record.
 	Height               uint64                         `json:"height"`
+	// `FinalizedHeight` stores the value associated with this record.
 	FinalizedHeight      uint64                         `json:"finalized_height"`
+	// `TotalValidators` stores the measured quantity used by this operation.
 	TotalValidators      int                            `json:"total_validators"`
+	// `ActiveValidators` stores the value associated with this record.
 	ActiveValidators     int                            `json:"active_validators"`
+	// `RequiredQuorum` stores the request data being processed.
 	RequiredQuorum       int                            `json:"required_quorum"`
+	// `StrictQuorum` stores the value associated with this record.
 	StrictQuorum         int                            `json:"strict_quorum"`
+	// `ConsensusMode` stores the value associated with this record.
 	ConsensusMode        string                         `json:"consensus_mode"`
+	// `DetectorMode` stores the value associated with this record.
 	DetectorMode         string                         `json:"detector_mode"`
+	// `InvariantsChecked` stores the current position in the related collection.
 	InvariantsChecked    int                            `json:"invariants_checked"`
+	// `InvariantsFailed` stores the current position in the related collection.
 	InvariantsFailed     int                            `json:"invariants_failed"`
+	// `Assumptions` stores the value associated with this record.
 	Assumptions          []FormalVerificationAssumption `json:"assumptions"`
+	// `Obligations` stores the value associated with this record.
 	Obligations          []FormalVerificationObligation `json:"obligations"`
+	// `RuntimeInvariants` stores the value associated with this record.
 	RuntimeInvariants    []FormalRuntimeInvariant       `json:"runtime_invariants"`
+	// `Limitations` stores the value associated with this record.
 	Limitations          []string                       `json:"limitations"`
 }
 
+// formalStrictQuorum implements the formal strict quorum helper.
 func formalStrictQuorum(total int) int {
 	if total <= 0 {
 		return 0
@@ -63,7 +100,9 @@ func formalStrictQuorum(total int) int {
 	return (2*total)/3 + 1
 }
 
+// formalInvariant implements the formal invariant helper.
 func formalInvariant(id, severity string, passed bool, evidence string) FormalRuntimeInvariant {
+	// `status` stores the value produced by this operation.
 	status := "pass"
 	if !passed {
 		status = "fail"
@@ -77,6 +116,7 @@ func formalInvariant(id, severity string, passed bool, evidence string) FormalRu
 	}
 }
 
+// formalVerificationStatus implements the formal verification status helper.
 func formalVerificationStatus(healthy bool, failed int) string {
 	if !healthy || failed > 0 {
 		return "runtime_invariant_failure"
@@ -84,9 +124,13 @@ func formalVerificationStatus(healthy bool, failed int) string {
 	return "runtime_invariants_pass"
 }
 
+// formalVerificationHealthy implements the formal verification healthy helper.
 func formalVerificationHealthy(invariants []FormalRuntimeInvariant) (bool, int) {
+	// `failed` stores the value produced by this operation.
 	failed := 0
+	// `healthy` stores the value produced by this operation.
 	healthy := true
+	// `invariant` tracks the current position in the related collection.
 	for _, invariant := range invariants {
 		if invariant.Passed {
 			continue
@@ -99,7 +143,9 @@ func formalVerificationHealthy(invariants []FormalRuntimeInvariant) (bool, int) 
 	return healthy, failed
 }
 
+// formalVerificationReportFromRuntime implements the formal verification report from runtime helper.
 func (n *Node) formalVerificationReportFromRuntime(runtime RuntimeStatusSnapshot) FormalVerificationReport {
+	// `total` stores the measured quantity used by this operation.
 	total := 0
 	if n != nil {
 		total = len(n.GetConsensusValidators(int(runtime.Height + 1)))
@@ -110,6 +156,7 @@ func (n *Node) formalVerificationReportFromRuntime(runtime RuntimeStatusSnapshot
 	if total == 0 && runtime.RequiredQuorum > 0 {
 		total = runtime.RequiredQuorum
 	}
+	// `required` stores the request data being processed.
 	required := runtime.RequiredQuorum
 	if required == 0 {
 		required = runtime.StrictQuorum
@@ -117,16 +164,20 @@ func (n *Node) formalVerificationReportFromRuntime(runtime RuntimeStatusSnapshot
 	if required == 0 {
 		required = runtime.NetworkQuorumRequired
 	}
+	// `strict` stores the value produced by this operation.
 	strict := formalStrictQuorum(total)
+	// `detector` stores the value produced by this operation.
 	detector := ConsensusDetectorResult{}
 	if n != nil {
 		detector = DetectConsensusMode(n.consensusDetectorMetricsFromRuntime(runtime))
 	}
+	// `detectorMode` stores the value produced by this operation.
 	detectorMode := runtime.ConsensusDetectorMode
 	if detectorMode == "" && detector.Mode != "" {
 		detectorMode = string(detector.Mode)
 	}
 
+	// `invariants` stores the current position in the related collection.
 	invariants := []FormalRuntimeInvariant{
 		formalInvariant(
 			"finalized_height_not_above_local_height",
@@ -171,8 +222,10 @@ func (n *Node) formalVerificationReportFromRuntime(runtime RuntimeStatusSnapshot
 			fmt.Sprintf("required_quorum=%d total_validators=%d", required, total),
 		),
 	}
+	// `healthy` and `failed` store the value produced by this operation.
 	healthy, failed := formalVerificationHealthy(invariants)
 
+	// `obligations` stores the value produced by this operation.
 	obligations := []FormalVerificationObligation{
 		{
 			ID:       "consensus_safety_no_two_finalized_hashes_per_height",
@@ -245,14 +298,17 @@ func (n *Node) formalVerificationReportFromRuntime(runtime RuntimeStatusSnapshot
 	}
 }
 
+// formalVerificationSnapshotResponse implements the formal verification snapshot response helper.
 func (s *Server) formalVerificationSnapshotResponse() (FormalVerificationReport, int, string) {
 	if s == nil || s.Node == nil {
 		return FormalVerificationReport{}, http.StatusServiceUnavailable, "node unavailable"
 	}
+	// `runtime` stores the value produced by this operation.
 	runtime := s.Node.runtimeStatusSnapshot()
 	return s.Node.formalVerificationReportFromRuntime(runtime), http.StatusOK, ""
 }
 
+// handleFormalVerification handles formal verification.
 func (s *Server) handleFormalVerification(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -262,6 +318,7 @@ func (s *Server) handleFormalVerification(w http.ResponseWriter, r *http.Request
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	// `resp`, `status`, and `errMsg` store the error produced by this operation.
 	resp, status, errMsg := s.formalVerificationSnapshotResponse()
 	if status != http.StatusOK {
 		http.Error(w, errMsg, status)
@@ -274,6 +331,7 @@ func (s *Server) handleFormalVerification(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// handleV1FormalVerification handles v1 formal verification.
 func (s *Server) handleV1FormalVerification(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		writeV1Error(w, http.StatusMethodNotAllowed, "", "method not allowed")
@@ -283,6 +341,7 @@ func (s *Server) handleV1FormalVerification(w http.ResponseWriter, r *http.Reque
 		writeV1Error(w, http.StatusUnauthorized, "", "unauthorized")
 		return
 	}
+	// `resp`, `status`, and `errMsg` store the error produced by this operation.
 	resp, status, errMsg := s.formalVerificationSnapshotResponse()
 	if status != http.StatusOK {
 		writeV1Error(w, status, "", errMsg)

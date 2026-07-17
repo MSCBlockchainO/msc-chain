@@ -1,0 +1,19 @@
+{
+  "source_chain_id": "tron-mainnet",
+  "genesis_block_id": "00000000000000001ebf88508a03865c71d452e25f4d51194196a1d22b6653dc",
+  "api_urls": [
+    "https://independent-solidity-node-a.example",
+    "https://independent-solidity-node-b.example",
+    "https://independent-solidity-node-c.example"
+  ],
+  "api_quorum": 2,
+  "confirmations": 64,
+  "bridge_contract": "REPLACE_WITH_TRON_BRIDGE_CONTRACT",
+  "asset_denom": "USDT-TRON",
+  "origin_asset": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+  "asset_decimals": 6,
+  "lock_event_signature": "Locked(address,address,bytes,uint256)",
+  "unlock_event_signature": "Unlocked(bytes32,address,address,uint256)",
+  "request_timeout": "12s",
+  "allow_insecure_http": false
+}

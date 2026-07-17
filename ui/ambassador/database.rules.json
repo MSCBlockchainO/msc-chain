@@ -1,0 +1,114 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "msc_ambassador_admins": {
+      "$uid": {
+        ".read": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password' && auth.uid === $uid",
+        ".write": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password' && auth.uid === $uid && newData.child('email').val() === 'admin@msc.com'"
+      }
+    },
+    "msc_ambassador_applications": {
+      ".read": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'",
+      "$applicationId": {
+        ".write": "(!data.exists() && newData.child('status').val() === 'pending' && newData.child('email').isString() && newData.child('fullName').isString() && newData.child('followers').isNumber() && newData.child('followers').val() >= 1000 && newData.child('followers').val() <= 20000) || (auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password')"
+      }
+    },
+    "msc_ambassador_ambassadors": {
+      ".read": true,
+      "$ambassadorCode": {
+        ".write": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'"
+      }
+    },
+    "msc_ambassador_influencers": {
+      ".read": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'",
+      "$influencerId": {
+        ".read": "auth != null && (auth.token.email === 'admin@msc.com' || auth.token.email === data.child('email').val())",
+        ".write": "(auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password') || (auth != null && auth.token.email === data.child('email').val() && data.child('status').val() !== 'banned' && newData.child('email').val() === data.child('email').val() && newData.child('status').val() === data.child('status').val() && newData.child('reputation').val() === data.child('reputation').val() && newData.child('referrals').val() === data.child('referrals').val())"
+      }
+    },
+    "msc_ambassador_referral_codes": {
+      "$code": {
+        ".read": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'",
+        ".write": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'"
+      }
+    },
+    "msc_ambassador_referrals": {
+      ".read": true,
+      "$referralId": {
+        ".write": "(!data.exists() && newData.child('emailHash').isString() && newData.child('code').isString() && newData.child('rewardUser').val() === 10 && newData.child('rewardAmbassador').val() === 5 && root.child('msc_ambassador_ambassadors').child(newData.child('code').val()).exists() && root.child('msc_ambassador_ambassadors').child(newData.child('code').val()).child('status').val() !== 'suspended' && root.child('msc_ambassador_ambassadors').child(newData.child('code').val()).child('status').val() !== 'banned') || (auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password')"
+      }
+    },
+    "msc_ambassador_referral_claims": {
+      ".read": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'",
+      "$referralId": {
+        ".write": "(!data.exists() && newData.child('email').isString() && newData.child('emailHash').isString() && newData.child('userName').isString() && newData.child('code').isString() && root.child('msc_ambassador_ambassadors').child(newData.child('code').val()).exists() && root.child('msc_ambassador_ambassadors').child(newData.child('code').val()).child('status').val() !== 'suspended' && root.child('msc_ambassador_ambassadors').child(newData.child('code').val()).child('status').val() !== 'banned') || (auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password')"
+      }
+    },
+    "msc_ambassador_influencer_referrals": {
+      "$code": {
+        ".read": "auth != null && (auth.token.email === 'admin@msc.com' || auth.token.email === root.child('msc_ambassador_influencers').child($code).child('email').val())",
+        "$referralId": {
+          ".write": "(!data.exists() && newData.child('emailHash').isString() && newData.child('code').val() === $code && root.child('msc_ambassador_ambassadors').child($code).exists() && root.child('msc_ambassador_ambassadors').child($code).child('status').val() !== 'suspended' && root.child('msc_ambassador_ambassadors').child($code).child('status').val() !== 'banned') || (auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password')"
+        }
+      }
+    },
+    "msc_ambassador_users": {
+      ".read": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'",
+      "$userId": {
+        ".write": "(!data.exists() && newData.child('name').isString() && newData.child('email').isString() && newData.child('emailHash').isString() && newData.child('referredBy').isString() && root.child('msc_ambassador_ambassadors').child(newData.child('referredBy').val()).exists() && root.child('msc_ambassador_ambassadors').child(newData.child('referredBy').val()).child('status').val() !== 'suspended' && root.child('msc_ambassador_ambassadors').child(newData.child('referredBy').val()).child('status').val() !== 'banned') || (auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password')"
+      }
+    },
+    "msc_ambassador_rewards": {
+      ".read": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'",
+      "$rewardId": {
+        ".read": "auth != null && (auth.token.email === 'admin@msc.com' || auth.token.email === data.child('influencerEmail').val())",
+        ".write": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'"
+      }
+    },
+    "msc_ambassador_influencer_rewards": {
+      "$code": {
+        ".read": "auth != null && (auth.token.email === 'admin@msc.com' || auth.token.email === root.child('msc_ambassador_influencers').child($code).child('email').val())",
+        "$rewardId": {
+          ".write": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password' && newData.child('code').val() === $code"
+        }
+      }
+    },
+    "msc_ambassador_campaigns": {
+      ".read": true,
+      "$campaignId": {
+        ".write": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'"
+      }
+    },
+    "msc_ambassador_campaign_members": {
+      "$campaignId": {
+        "$code": {
+          ".read": "auth != null && (auth.token.email === 'admin@msc.com' || auth.token.email === root.child('msc_ambassador_influencers').child($code).child('email').val())",
+          ".write": "(auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password') || (auth != null && auth.token.email === root.child('msc_ambassador_influencers').child($code).child('email').val() && root.child('msc_ambassador_influencers').child($code).child('status').val() === 'active')"
+        }
+      }
+    },
+    "msc_ambassador_settings": {
+      ".read": true,
+      ".write": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'"
+    },
+    "msc_ambassador_announcements": {
+      ".read": true,
+      "$announcementId": {
+        ".write": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'"
+      }
+    },
+    "msc_ambassador_contacts": {
+      ".read": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'",
+      "$contactId": {
+        ".write": "(!data.exists() && newData.child('email').isString() && newData.child('message').isString()) || (auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password')"
+      }
+    },
+    "msc_ambassador_bug_reports": {
+      ".read": "auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password'",
+      "$reportId": {
+        ".write": "(!data.exists() && newData.child('status').val() === 'submitted' && newData.child('reportTitle').isString() && newData.child('category').isString() && newData.child('severity').isString() && newData.child('description').isString() && newData.child('stepsToReproduce').isString() && newData.child('expectedResult').isString() && newData.child('actualResult').isString() && newData.child('reporterEmail').isString()) || (auth != null && auth.token.email === 'admin@msc.com' && auth.token.firebase.sign_in_provider === 'password')"
+      }
+    }
+  }
+}

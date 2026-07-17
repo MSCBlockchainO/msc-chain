@@ -372,8 +372,7 @@ const computeTxFee = (amount) => {
 };
 
 const buildTxPayload = (tx, chainId) => {
-  const parts = [];
-  const stripHexPrefix = (value) => String(value || "").trim().replace(/^0x/i, "");
+	const parts = [];
   const txType = Number.parseInt(tx.type ?? tx.Type ?? 0, 10) || 0;
   const normalizedValidatorPubKey = normalizeValidatorPubKeyHex(
     tx.validator_pubkey || tx.ValidatorPubKey || "",
@@ -401,11 +400,13 @@ const buildTxPayload = (tx, chainId) => {
   if (txType === 2 && normalizedValidatorPubKey) {
     pushString(normalizedValidatorPubKey);
   }
-  pushInt64(tx.evm_gas_limit || tx.evmGasLimit || 0);
-  pushString(stripHexPrefix(tx.evm_code || tx.evmCode || ""));
-  pushString(stripHexPrefix(tx.evm_input || tx.evmInput || ""));
-  pushString(stripHexPrefix(tx.evm_raw_tx || tx.evmRawTx || ""));
-  pushString(stripHexPrefix(tx.evm_tx_hash || tx.evmTxHash || ""));
+	// Historical wire slots stay fixed and empty. The removed VM has no wallet
+	// signing surface.
+	pushInt64(0);
+	pushString("");
+	pushString("");
+	pushString("");
+	pushString("");
   pushString(chainId);
   parts.push(new Uint8Array([txType & 0xff]));
 

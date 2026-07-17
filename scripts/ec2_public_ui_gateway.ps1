@@ -2,7 +2,11 @@ param(
     [string]$GatewayHost = "50.19.167.221",
     [string]$GatewayUser = "ubuntu",
     [string]$KeyPath = "C:\Users\Mohammad Talha\Downloads\msc-key.pem",
-    [string]$Domain = "mscblockexplorer.in",
+    [string]$Domain = "",
+    [string]$MainDomain = "mscblockexplorer.in",
+    [string]$ExplorerDomain = "explorer.mscblockexplorer.in",
+    [string]$WalletDomain = "wallet.mscblockexplorer.in",
+    [string]$DocsDomain = "docs.mscblockexplorer.in",
     [string]$LetsEncryptEmail = "admin@mscblockexplorer.in",
     [string]$IdeUser = "mscadmin",
     [string]$IdePassword = $env:MSC_IDE_PASSWORD,
@@ -11,6 +15,8 @@ param(
     [string[]]$ArchiveTargets = @(),
     [string[]]$IndexerTargets = @(),
     [string]$UiSource = (Join-Path (Split-Path -Parent $PSScriptRoot) "ui"),
+    [switch]$PreserveRemoteReleases,
+    [switch]$AllowValidatorRpcGateway,
     [switch]$AllowHttpOnlyUntilDNS
 )
 
@@ -20,8 +26,29 @@ $ErrorActionPreference = "Stop"
 if (-not (Test-Path -LiteralPath $UiSource -PathType Container)) {
     throw "UI source directory not found: $UiSource"
 }
-if ([string]::IsNullOrWhiteSpace($Domain)) {
-    throw "Domain is required for the production public gateway."
+if (-not [string]::IsNullOrWhiteSpace($Domain)) {
+    if (-not $PSBoundParameters.ContainsKey("ExplorerDomain")) {
+        $ExplorerDomain = $Domain
+    }
+    if (-not $PSBoundParameters.ContainsKey("WalletDomain")) {
+        $WalletDomain = $Domain
+    }
+    if (-not $PSBoundParameters.ContainsKey("MainDomain")) {
+        $MainDomain = $Domain
+    }
+}
+$MainDomain = $MainDomain.Trim().ToLowerInvariant()
+$ExplorerDomain = $ExplorerDomain.Trim().ToLowerInvariant()
+$WalletDomain = $WalletDomain.Trim().ToLowerInvariant()
+$DocsDomain = $DocsDomain.Trim().ToLowerInvariant()
+if ([string]::IsNullOrWhiteSpace($MainDomain)) {
+    throw "MainDomain is required for the production public gateway."
+}
+if ([string]::IsNullOrWhiteSpace($ExplorerDomain)) {
+    throw "ExplorerDomain is required for the production public gateway."
+}
+if ([string]::IsNullOrWhiteSpace($WalletDomain)) {
+    throw "WalletDomain is required for the production public gateway."
 }
 
 function Quote-Sh {
@@ -31,19 +58,73 @@ function Quote-Sh {
 
 function Resolve-DomainIPv4 {
     param([Parameter(Mandatory = $true)][string]$Name)
-    try {
-        return @(Resolve-DnsName $Name -Type A -ErrorAction Stop |
-            Where-Object { $_.IPAddress } |
-            ForEach-Object { [string]$_.IPAddress })
-    } catch {
-        return @()
+    foreach ($server in @("", "8.8.8.8", "1.1.1.1")) {
+        try {
+            $args = @{
+                Name        = $Name
+                Type        = "A"
+                ErrorAction = "Stop"
+            }
+            if ($server) {
+                $args.Server = $server
+            }
+            $addresses = @(Resolve-DnsName @args |
+                Where-Object { $_.IPAddress } |
+                ForEach-Object { [string]$_.IPAddress })
+            if ($addresses.Count -gt 0) {
+                return $addresses
+            }
+        } catch {
+            continue
+        }
+    }
+    return @()
+}
+
+$docsDomainEnabled = $false
+$docsDomainCanonicalReady = $false
+$docsDomainIPs = @()
+if (-not [string]::IsNullOrWhiteSpace($DocsDomain)) {
+    $docsIndexPath = Join-Path $UiSource "docs\index.html"
+    if (Test-Path -LiteralPath $docsIndexPath -PathType Leaf) {
+        $docsIndexBody = Get-Content -Raw -LiteralPath $docsIndexPath
+        $docsDomainCanonicalReady = $docsIndexBody.Contains("https://$DocsDomain/")
+    }
+    $docsDomainIPs = Resolve-DomainIPv4 -Name $DocsDomain
+    if ($docsDomainCanonicalReady -and ($AllowHttpOnlyUntilDNS -or ($docsDomainIPs -contains $GatewayHost))) {
+        $docsDomainEnabled = $true
+    } elseif ($docsDomainCanonicalReady) {
+        $current = if ($docsDomainIPs.Count -gt 0) { $docsDomainIPs -join ", " } else { "none" }
+        Write-Warning "DocsDomain skipped for HTTPS: $DocsDomain resolves to [$current], not gateway $GatewayHost. Add an A record before enabling the docs subdomain."
+    } elseif ($docsDomainIPs -contains $GatewayHost) {
+        Write-Warning "DocsDomain skipped: $DocsDomain points to $GatewayHost, but docs canonicals do not. Run scripts\generate_seo_docs.ps1 -DocsBaseUrl `"https://$DocsDomain/docs`" and regenerate sitemaps before deploying the docs subdomain."
+    } else {
+        Write-Warning "DocsDomain pending: $DocsDomain is not active because DNS is not pointed here and docs canonicals still use the current docs URL."
     }
 }
 
-$domainIPs = Resolve-DomainIPv4 -Name $Domain
-if (-not $AllowHttpOnlyUntilDNS -and ($domainIPs -notcontains $GatewayHost)) {
-    $current = if ($domainIPs.Count -gt 0) { $domainIPs -join ", " } else { "none" }
-    throw "DNS preflight failed: $Domain resolves to [$current], not gateway $GatewayHost. Point the A record to $GatewayHost before issuing HTTPS."
+$publicDomainItems = @($MainDomain, $ExplorerDomain, $WalletDomain)
+if ($docsDomainEnabled) {
+    $publicDomainItems += $DocsDomain
+}
+$publicDomains = @($publicDomainItems | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+$publicDomainsCsv = $publicDomains -join ","
+$publicDomainsNginx = $publicDomains -join " "
+$splitDomains = -not [string]::Equals($ExplorerDomain, $WalletDomain, [System.StringComparison]::OrdinalIgnoreCase)
+$mainHomeHost = $MainDomain
+$explorerHomeHost = $ExplorerDomain
+$walletHomeHost = if ($splitDomains) { $WalletDomain } else { "__no_wallet_home_host__" }
+$docsServeHost = if ($docsDomainEnabled) { $DocsDomain } else { "__no_docs_home_host__" }
+$docsCanonicalHost = if ($docsDomainEnabled) { $DocsDomain } else { $MainDomain }
+$walletRedirectSourceHost = if ($splitDomains) { $ExplorerDomain } else { "__no_wallet_redirect_source__" }
+$explorerRedirectSourceHost = if ($splitDomains) { $WalletDomain } else { "__no_explorer_redirect_source__" }
+
+foreach ($publicDomain in $publicDomains) {
+    $domainIPs = Resolve-DomainIPv4 -Name $publicDomain
+    if (-not $AllowHttpOnlyUntilDNS -and ($domainIPs -notcontains $GatewayHost)) {
+        $current = if ($domainIPs.Count -gt 0) { $domainIPs -join ", " } else { "none" }
+        throw "DNS preflight failed: $publicDomain resolves to [$current], not gateway $GatewayHost. Point the A record to $GatewayHost before issuing HTTPS."
+    }
 }
 
 $enableHttps = -not $AllowHttpOnlyUntilDNS
@@ -75,7 +156,11 @@ fi
 
 sudo mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/conf.d
 sudo mkdir -p /var/www/msc-ui /var/www/letsencrypt
-sudo find /var/www/msc-ui -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+if [ "${PRESERVE_REMOTE_RELEASES:-0}" = "1" ]; then
+  sudo find /var/www/msc-ui -mindepth 1 -maxdepth 1 ! -name releases -exec rm -rf {} +
+else
+  sudo find /var/www/msc-ui -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+fi
 sudo cp -a "$HOME/msc-ui-upload/." /var/www/msc-ui/
 sudo chown -R www-data:www-data /var/www/msc-ui 2>/dev/null || sudo chown -R nginx:nginx /var/www/msc-ui
 sudo find /var/www/msc-ui -type f -exec chmod 0644 {} \;
@@ -165,15 +250,34 @@ limit_req_zone $binary_remote_addr zone=msc_write:10m rate=60r/m;
 limit_req_zone $binary_remote_addr zone=msc_rpc:10m rate=120r/m;
 limit_conn_zone $binary_remote_addr zone=msc_conn:10m;
 NGINX
+sudo rm -f /etc/nginx/conf.d/zz_msc_main_landing.conf
 
 sudo tee /etc/nginx/sites-available/msc-ui >/dev/null <<'NGINX'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
-    server_name __DOMAIN__ __PUBLIC_HOST__;
+    server_name __PUBLIC_DOMAINS__ __PUBLIC_HOST__;
     root /var/www/msc-ui;
     absolute_redirect off;
     server_tokens off;
+    set $msc_home_path /landing.html;
+    set $msc_sitemap_path /sitemap-index.xml;
+    set $msc_robots_path /robots.txt;
+    if ($host = "__EXPLORER_HOME_HOST__") {
+        set $msc_home_path /explorer.html;
+        set $msc_sitemap_path /sitemap-explorer.xml;
+        set $msc_robots_path /robots-explorer.txt;
+    }
+    if ($host = "__WALLET_HOME_HOST__") {
+        set $msc_home_path /dashboard.html;
+        set $msc_sitemap_path /sitemap-wallet.xml;
+        set $msc_robots_path /robots-wallet.txt;
+    }
+    if ($host = "__DOCS_SERVE_HOST__") {
+        set $msc_home_path /docs/index.html;
+        set $msc_sitemap_path /sitemap-docs.xml;
+        set $msc_robots_path /robots-docs.txt;
+    }
 
     client_max_body_size 2m;
     proxy_read_timeout 60s;
@@ -182,6 +286,11 @@ server {
     limit_conn_status 429;
     error_page 429 = @msc_rate_limited;
     limit_conn msc_conn 20;
+    gzip on;
+    gzip_vary on;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/javascript application/json application/xml text/xml image/svg+xml;
 
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy no-referrer always;
@@ -194,48 +303,441 @@ server {
     }
 
     location = / {
-        return 302 /explorer.html;
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__DOCS_CANONICAL_HOST__/docs/;
+        }
+        try_files $msc_home_path =404;
     }
 
     location ~ /\. {
         return 404;
     }
 
+    location ~ ^/assets/(msc-(?:logo(?:-(?:512|192|64|32))?|app-icon(?:-(?:192|64))?|wordmark|wallet-icon|explorer-icon|validator-badge|governance-badge|nft-badge|bridge-badge)\.png)$ {
+        limit_req zone=msc_static burst=60 nodelay;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    location = /manifest.webmanifest {
+        limit_req zone=msc_static burst=60 nodelay;
+        default_type application/manifest+json;
+        add_header Cache-Control "public, max-age=3600" always;
+        try_files /manifest.webmanifest =404;
+    }
+
+    location = /sitemap.xml {
+        limit_req zone=msc_static burst=60 nodelay;
+        default_type application/xml;
+        add_header Cache-Control "public, max-age=3600" always;
+        try_files $msc_sitemap_path =404;
+    }
+
+    location ~ ^/sitemap-(?:index|main|docs|explorer|wallet)\.xml$ {
+        limit_req zone=msc_static burst=60 nodelay;
+        default_type application/xml;
+        add_header Cache-Control "public, max-age=3600" always;
+        try_files $uri =404;
+    }
+
+    location = /robots.txt {
+        limit_req zone=msc_static burst=60 nodelay;
+        default_type text/plain;
+        add_header Cache-Control "public, max-age=3600" always;
+        try_files $msc_robots_path =404;
+    }
+
+    location = /llms.txt {
+        if ($host = "__EXPLORER_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__/llms.txt;
+        }
+        if ($host = "__WALLET_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__/llms.txt;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__MAIN_DOMAIN__/llms.txt;
+        }
+        limit_req zone=msc_static burst=60 nodelay;
+        default_type text/plain;
+        add_header Cache-Control "public, max-age=3600" always;
+        try_files /llms.txt =404;
+    }
+
+    location = /install.sh {
+        if ($host != "__MAIN_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__/install.sh;
+        }
+        limit_req zone=msc_static burst=30 nodelay;
+        types { }
+        default_type text/x-shellscript;
+        add_header Cache-Control "public, max-age=300" always;
+        try_files /install.sh =404;
+    }
+
+    location = /releases/latest.json {
+        if ($host != "__MAIN_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__/releases/latest.json;
+        }
+        limit_req zone=msc_static burst=60 nodelay;
+        types { }
+        default_type application/json;
+        add_header Cache-Control "no-cache" always;
+        try_files /releases/latest.json =404;
+    }
+
+    location ^~ /releases/ {
+        if ($host != "__MAIN_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__$request_uri;
+        }
+        limit_req zone=msc_static burst=120 nodelay;
+        types { }
+        default_type application/octet-stream;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    location = /feed.xml {
+        if ($host != "__MAIN_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__/feed.xml;
+        }
+        limit_req zone=msc_static burst=60 nodelay;
+        types { }
+        default_type application/rss+xml;
+        add_header Cache-Control "public, max-age=3600" always;
+        try_files /feed.xml =404;
+    }
+
+    location = /feed.json {
+        if ($host != "__MAIN_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__/feed.json;
+        }
+        limit_req zone=msc_static burst=60 nodelay;
+        types { }
+        default_type application/feed+json;
+        add_header Cache-Control "public, max-age=3600" always;
+        try_files /feed.json =404;
+    }
+
+    location = /blog {
+        if ($host != "__MAIN_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__/blog/;
+        }
+        return 301 /blog/;
+    }
+
+    location = /blog/ {
+        if ($host != "__MAIN_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__/blog/;
+        }
+        limit_req zone=msc_static burst=120 nodelay;
+        add_header Cache-Control "public, max-age=3600" always;
+        try_files /blog/index.html =404;
+    }
+
+    location = /blog/index.html {
+        return 301 https://__MAIN_DOMAIN__/blog/;
+    }
+
+    location = /docs/docs.css {
+        if ($host != "__DOCS_CANONICAL_HOST__") {
+            return 301 https://__DOCS_CANONICAL_HOST__$request_uri;
+        }
+        limit_req zone=msc_static burst=60 nodelay;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files /docs/docs.css =404;
+    }
+
+    location ^~ /blog/ {
+        if ($host != "__MAIN_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__$request_uri;
+        }
+        limit_req zone=msc_static burst=120 nodelay;
+        add_header Cache-Control "public, max-age=3600" always;
+        try_files $uri =404;
+    }
+
+    location = /docs {
+        if ($host != "__DOCS_CANONICAL_HOST__") {
+            return 301 https://__DOCS_CANONICAL_HOST__/docs/;
+        }
+        return 301 /docs/;
+    }
+
+    location = /docs/ {
+        if ($host != "__DOCS_CANONICAL_HOST__") {
+            return 301 https://__DOCS_CANONICAL_HOST__$request_uri;
+        }
+        limit_req zone=msc_static burst=120 nodelay;
+        add_header Cache-Control "public, max-age=3600" always;
+        try_files /docs/index.html =404;
+    }
+
+    location = /docs/index.html {
+        return 301 https://__DOCS_CANONICAL_HOST__/docs/;
+    }
+
+    location ^~ /docs/ {
+        if ($host != "__DOCS_CANONICAL_HOST__") {
+            return 301 https://__DOCS_CANONICAL_HOST__$request_uri;
+        }
+        limit_req zone=msc_static burst=120 nodelay;
+        add_header Cache-Control "public, max-age=3600" always;
+        try_files $uri =404;
+    }
+
+    location = /landing.html {
+        if ($host != "__MAIN_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__/;
+        }
+        return 301 /;
+    }
+
+    location ~ ^/(landing\.js|landing\.css)$ {
+        if ($host = "__EXPLORER_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__$request_uri;
+        }
+        if ($host = "__WALLET_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__$request_uri;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__MAIN_DOMAIN__$request_uri;
+        }
+        limit_req zone=msc_static burst=60 nodelay;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
     location = /msc_wallet.html {
+        if ($host = "__WALLET_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
         limit_req zone=msc_static burst=60 nodelay;
         try_files /msc_wallet.html =404;
     }
 
     location = /wallet.html {
+        if ($host = "__WALLET_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
         limit_req zone=msc_static burst=60 nodelay;
         try_files /wallet.html =404;
     }
 
     location = /index.html {
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 /;
+        }
+        if ($host = "__WALLET_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__DOCS_CANONICAL_HOST__/docs/;
+        }
         limit_req zone=msc_static burst=60 nodelay;
         try_files /index.html =404;
     }
 
-    location ~ ^/(dashboard\.html|send\.html|receive\.html|transactions\.html|staking\.html|validators\.html|governance\.html|bridge\.html|security\.html|settings\.html|login\.html|create-wallet\.html|explorer\.html|explorer\.js|explorer\.css|wallet_pages\.js|wallet_pages\.css|msc_wallet\.js|msc_wallet\.css|app\.js|styles\.css)$ {
+    location ~ ^/(wallet_pages\.js|wallet_pages\.css|msc_wallet\.js|msc_wallet\.css|app\.js|styles\.css)$ {
+        if ($host = "__WALLET_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
+        limit_req zone=msc_static burst=60 nodelay;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    location = /dashboard.html {
+        if ($host = "__WALLET_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__WALLET_DOMAIN__/;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__WALLET_DOMAIN__/;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__WALLET_DOMAIN__/;
+        }
+        if ($host = "__WALLET_HOME_HOST__") {
+            return 301 /;
+        }
+        return 301 https://__WALLET_DOMAIN__/;
+    }
+
+    location ~ ^/(dashboard\.html|send\.html|receive\.html|transactions\.html|swap\.html|nfts\.html|address-book\.html|staking\.html|validators\.html|validator-wallet\.html|governance\.html|bridge\.html|faucet\.html|security\.html|settings\.html|status\.html|login\.html|create-wallet\.html)$ {
+        if ($host = "__WALLET_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__WALLET_DOMAIN__$request_uri;
+        }
+        limit_req zone=msc_static burst=60 nodelay;
+        try_files $uri =404;
+    }
+
+    # Includes explorer-blocks\.html and explorer-transactions\.html plus every explorer-* page.
+    location ~ ^/(explorer\.js|explorer\.css)$ {
+        if ($host = "__EXPLORER_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        limit_req zone=msc_static burst=60 nodelay;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    location = /explorer.html {
+        if ($host = "__EXPLORER_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__/;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__/;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__/;
+        }
+        if ($host = "__EXPLORER_HOME_HOST__") {
+            return 301 /;
+        }
+        return 301 https://__EXPLORER_DOMAIN__/;
+    }
+
+    location ~ ^/(explorer(?:-[a-z0-9-]+)?\.html)$ {
+        if ($host = "__EXPLORER_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
         limit_req zone=msc_static burst=60 nodelay;
         try_files $uri =404;
     }
 
     location = /portal {
+        if ($host = "__EXPLORER_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
         return 302 /portal/index.html;
     }
 
+    location = /portal/portal.css {
+        if ($host = "__EXPLORER_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        limit_req zone=msc_static burst=60 nodelay;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    location = /portal/portal.js {
+        if ($host = "__EXPLORER_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        limit_req zone=msc_static burst=60 nodelay;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
     location ^~ /portal/ {
+        if ($host = "__EXPLORER_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__DOCS_SERVE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
         limit_req zone=msc_static burst=120 nodelay;
         try_files $uri $uri/ =404;
     }
 
+    location = /ambassador {
+        if ($host != "__MAIN_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__/ambassador/;
+        }
+        return 302 /ambassador/index.html;
+    }
+
+    location ~ ^/ambassador/(ambassador\.js|ambassador\.css|firebase-config\.js)$ {
+        if ($host != "__MAIN_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__$request_uri;
+        }
+        limit_req zone=msc_static burst=60 nodelay;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    location ~ ^/ambassador/[^/]+\.html$ {
+        if ($host != "__MAIN_HOME_HOST__") {
+            return 301 https://__MAIN_DOMAIN__$request_uri;
+        }
+        limit_req zone=msc_static burst=120 nodelay;
+        try_files $uri =404;
+    }
+
+    location = /vendor/bip39_index.html {
+        return 404;
+    }
+
     location ^~ /vendor/ {
         limit_req zone=msc_static burst=60 nodelay;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
         try_files $uri =404;
     }
 
     location ~ ^/(dtl_ide\.html|dtl_ide\.js|dtl_ide\.css)$ {
+        if ($host = "__EXPLORER_REDIRECT_SOURCE_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
+        if ($host = "__MAIN_HOME_HOST__") {
+            return 301 https://__EXPLORER_DOMAIN__$request_uri;
+        }
         auth_basic "MSC DTL IDE";
         auth_basic_user_file /etc/nginx/msc_ide.htpasswd;
         limit_req zone=msc_read burst=20 nodelay;
@@ -255,6 +757,11 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 8s;
+        proxy_send_timeout 8s;
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_timeout 8s;
         add_header Cache-Control "no-store" always;
     }
 
@@ -266,6 +773,11 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 8s;
+        proxy_send_timeout 8s;
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_timeout 8s;
         add_header Cache-Control "no-store" always;
     }
 
@@ -370,7 +882,21 @@ server {
 }
 NGINX
 
-sudo sed -i "s#__DOMAIN__#$DOMAIN#g; s#__PUBLIC_HOST__#$PUBLIC_HOST#g" /etc/nginx/sites-available/msc-ui
+sudo sed -i \
+  -e "s#__PUBLIC_DOMAINS__#$PUBLIC_DOMAINS_NGINX#g" \
+  -e "s#__MAIN_DOMAIN__#$MAIN_DOMAIN#g" \
+  -e "s#__EXPLORER_DOMAIN__#$EXPLORER_DOMAIN#g" \
+  -e "s#__WALLET_DOMAIN__#$WALLET_DOMAIN#g" \
+  -e "s#__DOCS_DOMAIN__#$DOCS_DOMAIN#g" \
+  -e "s#__MAIN_HOME_HOST__#$MAIN_HOME_HOST#g" \
+  -e "s#__EXPLORER_HOME_HOST__#$EXPLORER_HOME_HOST#g" \
+  -e "s#__WALLET_HOME_HOST__#$WALLET_HOME_HOST#g" \
+  -e "s#__DOCS_SERVE_HOST__#$DOCS_SERVE_HOST#g" \
+  -e "s#__DOCS_CANONICAL_HOST__#$DOCS_CANONICAL_HOST#g" \
+  -e "s#__WALLET_REDIRECT_SOURCE_HOST__#$WALLET_REDIRECT_SOURCE_HOST#g" \
+  -e "s#__EXPLORER_REDIRECT_SOURCE_HOST__#$EXPLORER_REDIRECT_SOURCE_HOST#g" \
+  -e "s#__PUBLIC_HOST__#$PUBLIC_HOST#g" \
+  /etc/nginx/sites-available/msc-ui
 sudo ln -sf /etc/nginx/sites-available/msc-ui /etc/nginx/sites-enabled/msc-ui
 sudo rm -f /etc/nginx/sites-enabled/default
 
@@ -398,6 +924,9 @@ archive_targets = [item.strip() for item in sys.argv[2].split(",") if item.strip
 indexer_targets = [item.strip() for item in sys.argv[3].split(",") if item.strip()]
 out = sys.argv[4]
 domain = os.environ.get("DOMAIN", "").strip()
+explorer_domain = os.environ.get("EXPLORER_DOMAIN", "").strip()
+wallet_domain = os.environ.get("WALLET_DOMAIN", "").strip()
+allow_validator_rpc = os.environ.get("ALLOW_VALIDATOR_RPC", "").strip().lower() in ("1", "true", "yes", "on")
 state_path = "/tmp/msc-lb-health-state.json"
 try:
     with open(state_path, "r", encoding="utf-8") as fh:
@@ -474,7 +1003,7 @@ for index, target in enumerate(targets):
     syncing = bool(status_data.get("syncing") or False)
     sync_complete = bool(status_data.get("sync_complete") if "sync_complete" in status_data else (not syncing))
     suspicious = ""
-    if role == "validator":
+    if role == "validator" and not allow_validator_rpc:
         suspicious = "validator_rpc_not_allowed"
     score = 0
     if healthy and not suspicious:
@@ -839,6 +1368,8 @@ indexer_services = [probe_indexer(target, i) for i, target in enumerate(indexer_
 
 payload = {
     "status": "healthy" if healthy_count == len(backends) and backends else ("degraded" if healthy_count else "down"),
+    "explorer_domain": explorer_domain,
+    "wallet_domain": wallet_domain,
     "healthy": healthy_count,
     "total": len(backends),
     "failover_count": 0,
@@ -851,6 +1382,8 @@ payload = {
 }
 public_nodes = {
     "status": payload["status"],
+    "explorer_domain": explorer_domain,
+    "wallet_domain": wallet_domain,
     "chain_id": str(backends[0].get("chain_id") or "") if backends else "",
     "genesis_hash": str(backends[0].get("genesis_hash") or "") if backends else "",
     "healthy": healthy_count,
@@ -900,11 +1433,17 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-Environment=DOMAIN=$DOMAIN
+Environment=DOMAIN=$WALLET_DOMAIN
+Environment=MAIN_DOMAIN=$MAIN_DOMAIN
+Environment=EXPLORER_DOMAIN=$EXPLORER_DOMAIN
+Environment=WALLET_DOMAIN=$WALLET_DOMAIN
+Environment=DOCS_DOMAIN=$DOCS_DOMAIN
+Environment=PUBLIC_DOMAINS=$PUBLIC_DOMAINS
 Environment=RPC_TARGETS=$RPC_TARGETS
 Environment=RPC_TARGET=$RPC_TARGET
 Environment=ARCHIVE_TARGETS=$ARCHIVE_TARGETS
 Environment=INDEXER_TARGETS=$INDEXER_TARGETS
+Environment=ALLOW_VALIDATOR_RPC=$ALLOW_VALIDATOR_RPC
 ExecStart=/usr/local/bin/msc-lb-health.sh
 Restart=always
 RestartSec=2
@@ -912,8 +1451,12 @@ RestartSec=2
 [Install]
 WantedBy=multi-user.target
 SERVICE
+# Remove the legacy emergency validator-RPC override so this deployment's
+# full-node target list remains authoritative after service restarts.
+sudo rm -f /etc/systemd/system/msc-lb-health.service.d/20-live-validator-rpc.conf
 sudo systemctl daemon-reload
-sudo systemctl enable --now msc-lb-health.service
+sudo systemctl enable msc-lb-health.service
+sudo systemctl restart msc-lb-health.service
 for i in $(seq 1 12); do
   [ -s /var/www/msc-ui/gateway/lb-status.json ] && break
   sleep 1
@@ -922,40 +1465,152 @@ sudo nginx -t
 sudo systemctl enable --now nginx
 sudo systemctl reload nginx
 
+restore_existing_https_config() {
+  if [ "${DOCS_DOMAIN_ENABLED:-0}" = "1" ]; then
+    echo "Existing-cert HTTPS fallback skipped because docs domain is enabled and may need a new certificate." >&2
+    return 1
+  fi
+  cert_name="$EXPLORER_DOMAIN"
+  if [ ! -s "/etc/letsencrypt/live/$cert_name/fullchain.pem" ] || [ ! -s "/etc/letsencrypt/live/$cert_name/privkey.pem" ]; then
+    echo "Existing-cert HTTPS fallback unavailable: /etc/letsencrypt/live/$cert_name is missing." >&2
+    return 1
+  fi
+  sudo python3 - "$cert_name" <<'PY'
+from pathlib import Path
+import sys
+
+cert_name = sys.argv[1]
+path = Path("/etc/nginx/sites-available/msc-ui")
+body = path.read_text()
+if "listen 443 ssl" not in body:
+    ssl_body = body.replace("listen 80 default_server;", "listen 443 ssl;")
+    ssl_body = ssl_body.replace("listen [::]:80 default_server;", "listen [::]:443 ssl;")
+    marker = "    root /var/www/msc-ui;\n"
+    ssl_settings = (
+        "    ssl_certificate /etc/letsencrypt/live/{0}/fullchain.pem;\n"
+        "    ssl_certificate_key /etc/letsencrypt/live/{0}/privkey.pem;\n"
+        "    ssl_protocols TLSv1.2 TLSv1.3;\n"
+        "    ssl_prefer_server_ciphers off;\n"
+        "    http2 on;\n"
+        "    add_header Strict-Transport-Security \"max-age=31536000\" always;\n"
+    ).format(cert_name)
+    if marker not in ssl_body:
+        raise SystemExit("nginx root marker not found for SSL fallback")
+    ssl_body = ssl_body.replace(marker, marker + ssl_settings, 1)
+    path.write_text(body.rstrip() + "\n\n" + ssl_body)
+PY
+}
+
 if [ "$ENABLE_HTTPS" = "1" ]; then
-  sudo certbot --nginx \
+  cert_domain_args=()
+  IFS=',' read -r -a CERT_DOMAIN_ITEMS <<< "${PUBLIC_DOMAINS:-${DOMAIN:-}}"
+  for item in "${CERT_DOMAIN_ITEMS[@]}"; do
+    clean="$(echo "$item" | xargs)"
+    [ -z "$clean" ] && continue
+    cert_domain_args+=("-d" "$clean")
+  done
+  if [ "${#cert_domain_args[@]}" -eq 0 ]; then
+    echo "No public domains were provided for certbot" >&2
+    exit 1
+  fi
+  if ! sudo certbot --nginx \
     --non-interactive \
     --agree-tos \
+    --expand \
     --email "$LETSENCRYPT_EMAIL" \
     --redirect \
     --hsts \
-    -d "$DOMAIN"
+    "${cert_domain_args[@]}"; then
+    echo "WARN certbot failed; restoring HTTPS with existing certificate for $EXPLORER_DOMAIN." >&2
+    restore_existing_https_config
+  fi
   sudo nginx -t
   sudo systemctl reload nginx
 fi
 
 if [ "$ENABLE_HTTPS" = "1" ]; then
-  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/explorer.html" >/dev/null || echo "WARN explorer.html check failed"
-  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/msc_wallet.html" >/dev/null || echo "WARN msc_wallet.html check failed"
-  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/dashboard.html" >/dev/null || echo "WARN dashboard.html check failed"
-  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/wallet.html" >/dev/null || echo "WARN wallet.html check failed"
-  curl --resolve "$DOMAIN:443:127.0.0.1" -fsSI "https://$DOMAIN/portal/index.html" >/dev/null || echo "WARN portal/index.html check failed"
-  curl --resolve "$DOMAIN:443:127.0.0.1" -fsS "https://$DOMAIN/gateway/lb-status.json" >/dev/null || echo "WARN lb-status check failed"
-  status_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/status")
-  metrics_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/metrics")
-  rpc_code=$(curl --resolve "$DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/rpc")
+  curl --resolve "$MAIN_DOMAIN:443:127.0.0.1" -fsS "https://$MAIN_DOMAIN/" -o /tmp/msc-home-check.html && grep -q "$MAIN_DOMAIN/" /tmp/msc-home-check.html || echo "WARN homepage check failed"
+  main_landing_redirect_code=$(curl --resolve "$MAIN_DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$MAIN_DOMAIN/landing.html")
+  if [ "$main_landing_redirect_code" != "301" ]; then echo "WARN landing.html redirect returned $main_landing_redirect_code"; fi
+  curl --resolve "$MAIN_DOMAIN:443:127.0.0.1" -fsS "https://$MAIN_DOMAIN/sitemap.xml" -o /tmp/msc-main-sitemap-check.xml && grep -q "$MAIN_DOMAIN/sitemap-docs.xml" /tmp/msc-main-sitemap-check.xml || echo "WARN main sitemap check failed"
+  curl --resolve "$MAIN_DOMAIN:443:127.0.0.1" -fsS "https://$MAIN_DOMAIN/robots.txt" -o /tmp/msc-robots-check.txt && grep -q "$MAIN_DOMAIN/sitemap.xml" /tmp/msc-robots-check.txt || echo "WARN robots.txt check failed"
+  curl --resolve "$MAIN_DOMAIN:443:127.0.0.1" -fsS "https://$MAIN_DOMAIN/sitemap-main.xml" -o /tmp/msc-main-pages-sitemap-check.xml && grep -q "$MAIN_DOMAIN/blog/" /tmp/msc-main-pages-sitemap-check.xml || echo "WARN blog sitemap check failed"
+  curl --resolve "$MAIN_DOMAIN:443:127.0.0.1" -fsS "https://$MAIN_DOMAIN/blog/" -o /tmp/msc-blog-check.html && grep -q "MSC Chain Blog" /tmp/msc-blog-check.html || echo "WARN blog check failed"
+  curl --resolve "$MAIN_DOMAIN:443:127.0.0.1" -fsS "https://$MAIN_DOMAIN/feed.xml" -o /tmp/msc-feed-check.xml && grep -q "MSC Chain Blog" /tmp/msc-feed-check.xml || echo "WARN RSS feed check failed"
+  curl --resolve "$MAIN_DOMAIN:443:127.0.0.1" -fsS "https://$MAIN_DOMAIN/feed.json" -o /tmp/msc-feed-check.json && grep -q "jsonfeed.org" /tmp/msc-feed-check.json || echo "WARN JSON feed check failed"
+  curl --resolve "$MAIN_DOMAIN:443:127.0.0.1" -fsSLI "https://$MAIN_DOMAIN/docs/" >/dev/null || echo "WARN docs index check failed"
+  curl --resolve "$MAIN_DOMAIN:443:127.0.0.1" -fsSL "https://$MAIN_DOMAIN/docs/what-is-msc-chain.html" -o /tmp/msc-docs-article-check.html && grep -q "Article" /tmp/msc-docs-article-check.html || echo "WARN docs article check failed"
+  if [ "${DOCS_DOMAIN_ENABLED:-0}" = "1" ]; then
+    curl --resolve "$DOCS_DOMAIN:443:127.0.0.1" -fsSI "https://$DOCS_DOMAIN/docs/" >/dev/null || echo "WARN docs subdomain index check failed"
+    curl --resolve "$DOCS_DOMAIN:443:127.0.0.1" -fsS "https://$DOCS_DOMAIN/sitemap.xml" -o /tmp/msc-docs-sitemap-check.xml && grep -q "$DOCS_DOMAIN/docs/what-is-msc-chain.html" /tmp/msc-docs-sitemap-check.xml || echo "WARN docs subdomain sitemap check failed"
+  fi
+  curl --resolve "$MAIN_DOMAIN:443:127.0.0.1" -fsS "https://$MAIN_DOMAIN/llms.txt" -o /tmp/msc-llms-check.txt && grep -q "MSC Chain" /tmp/msc-llms-check.txt || echo "WARN llms.txt check failed"
+  curl --resolve "$EXPLORER_DOMAIN:443:127.0.0.1" -fsSI "https://$EXPLORER_DOMAIN/" >/dev/null || echo "WARN explorer root check failed"
+  explorer_home_redirect_code=$(curl --resolve "$EXPLORER_DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$EXPLORER_DOMAIN/explorer.html")
+  if [ "$explorer_home_redirect_code" != "301" ]; then echo "WARN explorer.html redirect returned $explorer_home_redirect_code"; fi
+  curl --resolve "$EXPLORER_DOMAIN:443:127.0.0.1" -fsS "https://$EXPLORER_DOMAIN/sitemap.xml" -o /tmp/msc-explorer-sitemap-check.xml && grep -q "explorer-validators.html" /tmp/msc-explorer-sitemap-check.xml || echo "WARN explorer sitemap check failed"
+  curl --resolve "$EXPLORER_DOMAIN:443:127.0.0.1" -fsSI "https://$EXPLORER_DOMAIN/portal/index.html" >/dev/null || echo "WARN portal/index.html check failed"
+  curl --resolve "$WALLET_DOMAIN:443:127.0.0.1" -fsSI "https://$WALLET_DOMAIN/msc_wallet.html" >/dev/null || echo "WARN msc_wallet.html check failed"
+  curl --resolve "$WALLET_DOMAIN:443:127.0.0.1" -fsSI "https://$WALLET_DOMAIN/" >/dev/null || echo "WARN wallet root check failed"
+  wallet_home_redirect_code=$(curl --resolve "$WALLET_DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$WALLET_DOMAIN/dashboard.html")
+  if [ "$wallet_home_redirect_code" != "301" ]; then echo "WARN dashboard.html redirect returned $wallet_home_redirect_code"; fi
+  curl --resolve "$WALLET_DOMAIN:443:127.0.0.1" -fsS "https://$WALLET_DOMAIN/sitemap.xml" -o /tmp/msc-wallet-sitemap-check.xml && grep -q "faucet.html" /tmp/msc-wallet-sitemap-check.xml || echo "WARN wallet sitemap check failed"
+  curl --resolve "$WALLET_DOMAIN:443:127.0.0.1" -fsSI "https://$WALLET_DOMAIN/wallet.html" >/dev/null || echo "WARN wallet.html check failed"
+  curl --resolve "$WALLET_DOMAIN:443:127.0.0.1" -fsSI "https://$WALLET_DOMAIN/validator-wallet.html" >/dev/null || echo "WARN validator-wallet.html check failed"
+  curl --resolve "$WALLET_DOMAIN:443:127.0.0.1" -fsS "https://$WALLET_DOMAIN/gateway/lb-status.json" >/dev/null || echo "WARN lb-status check failed"
+  if [ "$EXPLORER_DOMAIN" != "$WALLET_DOMAIN" ]; then
+    wallet_redirect_code=$(curl --resolve "$EXPLORER_DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$EXPLORER_DOMAIN/msc_wallet.html")
+    explorer_redirect_code=$(curl --resolve "$WALLET_DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$WALLET_DOMAIN/explorer.html")
+    if [ "$wallet_redirect_code" != "301" ]; then echo "WARN explorer host wallet redirect returned $wallet_redirect_code"; fi
+    if [ "$explorer_redirect_code" != "301" ]; then echo "WARN wallet host explorer redirect returned $explorer_redirect_code"; fi
+  fi
+  explorer_status_code=$(curl --resolve "$EXPLORER_DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$EXPLORER_DOMAIN/status")
+  wallet_status_code=$(curl --resolve "$WALLET_DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$WALLET_DOMAIN/status")
+  metrics_code=$(curl --resolve "$WALLET_DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$WALLET_DOMAIN/metrics")
+  rpc_code=$(curl --resolve "$WALLET_DOMAIN:443:127.0.0.1" --max-time 10 -s -o /dev/null -w "%{http_code}" "https://$WALLET_DOMAIN/rpc")
 else
-  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/explorer.html >/dev/null || echo "WARN explorer.html check failed"
-  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/msc_wallet.html >/dev/null || echo "WARN msc_wallet.html check failed"
-  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/dashboard.html >/dev/null || echo "WARN dashboard.html check failed"
-  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/wallet.html >/dev/null || echo "WARN wallet.html check failed"
-  curl -fsSI -H "Host: $DOMAIN" http://127.0.0.1/portal/index.html >/dev/null || echo "WARN portal/index.html check failed"
-  curl -fsS -H "Host: $DOMAIN" http://127.0.0.1/gateway/lb-status.json >/dev/null || echo "WARN lb-status check failed"
-  status_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/status)
-  metrics_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/metrics)
-  rpc_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $DOMAIN" http://127.0.0.1/rpc)
+  curl -fsS -H "Host: $MAIN_DOMAIN" http://127.0.0.1/ -o /tmp/msc-home-check.html && grep -q "$MAIN_DOMAIN/" /tmp/msc-home-check.html || echo "WARN homepage check failed"
+  main_landing_redirect_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $MAIN_DOMAIN" http://127.0.0.1/landing.html)
+  if [ "$main_landing_redirect_code" != "301" ]; then echo "WARN landing.html redirect returned $main_landing_redirect_code"; fi
+  curl -fsS -H "Host: $MAIN_DOMAIN" http://127.0.0.1/sitemap.xml -o /tmp/msc-main-sitemap-check.xml && grep -q "$MAIN_DOMAIN/sitemap-docs.xml" /tmp/msc-main-sitemap-check.xml || echo "WARN main sitemap check failed"
+  curl -fsS -H "Host: $MAIN_DOMAIN" http://127.0.0.1/robots.txt -o /tmp/msc-robots-check.txt && grep -q "$MAIN_DOMAIN/sitemap.xml" /tmp/msc-robots-check.txt || echo "WARN robots.txt check failed"
+  curl -fsS -H "Host: $MAIN_DOMAIN" http://127.0.0.1/sitemap-main.xml -o /tmp/msc-main-pages-sitemap-check.xml && grep -q "$MAIN_DOMAIN/blog/" /tmp/msc-main-pages-sitemap-check.xml || echo "WARN blog sitemap check failed"
+  curl -fsS -H "Host: $MAIN_DOMAIN" http://127.0.0.1/blog/ -o /tmp/msc-blog-check.html && grep -q "MSC Chain Blog" /tmp/msc-blog-check.html || echo "WARN blog check failed"
+  curl -fsS -H "Host: $MAIN_DOMAIN" http://127.0.0.1/feed.xml -o /tmp/msc-feed-check.xml && grep -q "MSC Chain Blog" /tmp/msc-feed-check.xml || echo "WARN RSS feed check failed"
+  curl -fsS -H "Host: $MAIN_DOMAIN" http://127.0.0.1/feed.json -o /tmp/msc-feed-check.json && grep -q "jsonfeed.org" /tmp/msc-feed-check.json || echo "WARN JSON feed check failed"
+  curl -fsSLI -H "Host: $MAIN_DOMAIN" http://127.0.0.1/docs/ >/dev/null || echo "WARN docs index check failed"
+  curl -fsSL -H "Host: $MAIN_DOMAIN" http://127.0.0.1/docs/what-is-msc-chain.html -o /tmp/msc-docs-article-check.html && grep -q "Article" /tmp/msc-docs-article-check.html || echo "WARN docs article check failed"
+  if [ "${DOCS_DOMAIN_ENABLED:-0}" = "1" ]; then
+    curl -fsSI -H "Host: $DOCS_DOMAIN" http://127.0.0.1/docs/ >/dev/null || echo "WARN docs subdomain index check failed"
+    curl -fsS -H "Host: $DOCS_DOMAIN" http://127.0.0.1/sitemap.xml -o /tmp/msc-docs-sitemap-check.xml && grep -q "$DOCS_DOMAIN/docs/what-is-msc-chain.html" /tmp/msc-docs-sitemap-check.xml || echo "WARN docs subdomain sitemap check failed"
+  fi
+  curl -fsS -H "Host: $MAIN_DOMAIN" http://127.0.0.1/llms.txt -o /tmp/msc-llms-check.txt && grep -q "MSC Chain" /tmp/msc-llms-check.txt || echo "WARN llms.txt check failed"
+  curl -fsSI -H "Host: $EXPLORER_DOMAIN" http://127.0.0.1/ >/dev/null || echo "WARN explorer root check failed"
+  explorer_home_redirect_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $EXPLORER_DOMAIN" http://127.0.0.1/explorer.html)
+  if [ "$explorer_home_redirect_code" != "301" ]; then echo "WARN explorer.html redirect returned $explorer_home_redirect_code"; fi
+  curl -fsS -H "Host: $EXPLORER_DOMAIN" http://127.0.0.1/sitemap.xml -o /tmp/msc-explorer-sitemap-check.xml && grep -q "explorer-validators.html" /tmp/msc-explorer-sitemap-check.xml || echo "WARN explorer sitemap check failed"
+  curl -fsSI -H "Host: $EXPLORER_DOMAIN" http://127.0.0.1/portal/index.html >/dev/null || echo "WARN portal/index.html check failed"
+  curl -fsSI -H "Host: $WALLET_DOMAIN" http://127.0.0.1/msc_wallet.html >/dev/null || echo "WARN msc_wallet.html check failed"
+  curl -fsSI -H "Host: $WALLET_DOMAIN" http://127.0.0.1/ >/dev/null || echo "WARN wallet root check failed"
+  wallet_home_redirect_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $WALLET_DOMAIN" http://127.0.0.1/dashboard.html)
+  if [ "$wallet_home_redirect_code" != "301" ]; then echo "WARN dashboard.html redirect returned $wallet_home_redirect_code"; fi
+  curl -fsS -H "Host: $WALLET_DOMAIN" http://127.0.0.1/sitemap.xml -o /tmp/msc-wallet-sitemap-check.xml && grep -q "faucet.html" /tmp/msc-wallet-sitemap-check.xml || echo "WARN wallet sitemap check failed"
+  curl -fsSI -H "Host: $WALLET_DOMAIN" http://127.0.0.1/wallet.html >/dev/null || echo "WARN wallet.html check failed"
+  curl -fsSI -H "Host: $WALLET_DOMAIN" http://127.0.0.1/validator-wallet.html >/dev/null || echo "WARN validator-wallet.html check failed"
+  curl -fsS -H "Host: $WALLET_DOMAIN" http://127.0.0.1/gateway/lb-status.json >/dev/null || echo "WARN lb-status check failed"
+  if [ "$EXPLORER_DOMAIN" != "$WALLET_DOMAIN" ]; then
+    wallet_redirect_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $EXPLORER_DOMAIN" http://127.0.0.1/msc_wallet.html)
+    explorer_redirect_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $WALLET_DOMAIN" http://127.0.0.1/explorer.html)
+    if [ "$wallet_redirect_code" != "301" ]; then echo "WARN explorer host wallet redirect returned $wallet_redirect_code"; fi
+    if [ "$explorer_redirect_code" != "301" ]; then echo "WARN wallet host explorer redirect returned $explorer_redirect_code"; fi
+  fi
+  explorer_status_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $EXPLORER_DOMAIN" http://127.0.0.1/status)
+  wallet_status_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $WALLET_DOMAIN" http://127.0.0.1/status)
+  metrics_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $WALLET_DOMAIN" http://127.0.0.1/metrics)
+  rpc_code=$(curl --max-time 10 -s -o /dev/null -w "%{http_code}" -H "Host: $WALLET_DOMAIN" http://127.0.0.1/rpc)
 fi
-if [ "$status_code" != "200" ]; then echo "WARN /status returned $status_code"; fi
+if [ "$explorer_status_code" != "200" ]; then echo "WARN explorer /status returned $explorer_status_code"; fi
+if [ "$wallet_status_code" != "200" ]; then echo "WARN wallet /status returned $wallet_status_code"; fi
 if [ "$metrics_code" != "404" ]; then echo "WARN /metrics returned $metrics_code"; fi
 if [ "$rpc_code" = "401" ]; then echo "WARN /rpc returned 401"; fi
 echo "MSC public gateway checks passed."
@@ -965,12 +1620,28 @@ $remote = ($remote -replace "`r`n", "`n") -replace "`r", ""
 
 $target = "$GatewayUser@$GatewayHost"
 $envPrefix = @(
-    "DOMAIN=$(Quote-Sh $Domain)",
+    "DOMAIN=$(Quote-Sh $WalletDomain)",
+    "MAIN_DOMAIN=$(Quote-Sh $MainDomain)",
+    "EXPLORER_DOMAIN=$(Quote-Sh $ExplorerDomain)",
+    "WALLET_DOMAIN=$(Quote-Sh $WalletDomain)",
+    "DOCS_DOMAIN=$(Quote-Sh $DocsDomain)",
+    "DOCS_DOMAIN_ENABLED=$(Quote-Sh ($(if ($docsDomainEnabled) { "1" } else { "0" })))",
+    "PUBLIC_DOMAINS=$(Quote-Sh $publicDomainsCsv)",
+    "PUBLIC_DOMAINS_NGINX=$(Quote-Sh $publicDomainsNginx)",
+    "MAIN_HOME_HOST=$(Quote-Sh $mainHomeHost)",
+    "EXPLORER_HOME_HOST=$(Quote-Sh $explorerHomeHost)",
+    "WALLET_HOME_HOST=$(Quote-Sh $walletHomeHost)",
+    "DOCS_SERVE_HOST=$(Quote-Sh $docsServeHost)",
+    "DOCS_CANONICAL_HOST=$(Quote-Sh $docsCanonicalHost)",
+    "WALLET_REDIRECT_SOURCE_HOST=$(Quote-Sh $walletRedirectSourceHost)",
+    "EXPLORER_REDIRECT_SOURCE_HOST=$(Quote-Sh $explorerRedirectSourceHost)",
     "PUBLIC_HOST=$(Quote-Sh $GatewayHost)",
     "RPC_TARGET=$(Quote-Sh $RpcTarget)",
     "RPC_TARGETS=$(Quote-Sh $rpcTargetsCsv)",
     "ARCHIVE_TARGETS=$(Quote-Sh $archiveTargetsCsv)",
     "INDEXER_TARGETS=$(Quote-Sh $indexerTargetsCsv)",
+    "PRESERVE_REMOTE_RELEASES=$(Quote-Sh ($(if ($PreserveRemoteReleases) { "1" } else { "0" })))",
+    "ALLOW_VALIDATOR_RPC=$(Quote-Sh ($(if ($AllowValidatorRpcGateway) { "1" } else { "0" })))",
     "ENABLE_HTTPS=$(Quote-Sh ($(if ($enableHttps) { "1" } else { "0" })))",
     "LETSENCRYPT_EMAIL=$(Quote-Sh $LetsEncryptEmail)",
     "IDE_USER=$(Quote-Sh $IdeUser)",
@@ -978,7 +1649,14 @@ $envPrefix = @(
 ) -join " "
 
 Write-Host "Deploying MSC public gateway on $target..."
-Write-Host "Domain: $Domain"
+Write-Host "Main domain: $MainDomain"
+Write-Host "Explorer domain: $ExplorerDomain"
+Write-Host "Wallet domain: $WalletDomain"
+if ($docsDomainEnabled) {
+    Write-Host "Docs domain: $DocsDomain"
+} else {
+    Write-Host "Docs domain: pending ($DocsDomain)"
+}
 Write-Host "RPC targets: $($resolvedRpcTargets -join ', ')"
 if ($resolvedArchiveTargets.Count -gt 0) {
     Write-Host "Archive targets: $($resolvedArchiveTargets -join ', ')"
@@ -987,12 +1665,18 @@ if ($resolvedIndexerTargets.Count -gt 0) {
     Write-Host "Indexer targets: $($resolvedIndexerTargets -join ', ')"
 }
 if (-not $enableHttps) {
-    Write-Warning "HTTP-only pre-DNS mode enabled. HTTPS is not complete until $Domain A record points to $GatewayHost."
+    Write-Warning "HTTP-only pre-DNS mode enabled. HTTPS is not complete until $($publicDomains -join ', ') A records point to $GatewayHost."
 }
 
 $uiArchive = Join-Path ([System.IO.Path]::GetTempPath()) ("msc-ui-upload-{0}.tar" -f ([System.Guid]::NewGuid().ToString("N")))
 try {
-    tar -cf $uiArchive -C $UiSource .
+    $tarArgs = @("-cf", $uiArchive)
+    if ($PreserveRemoteReleases) {
+        $tarArgs += "--exclude=./releases"
+    }
+    $tarArgs += @("-C", $UiSource, ".")
+    tar @tarArgs
+    if ($LASTEXITCODE -ne 0) { throw "failed to build UI archive" }
     ssh -i $KeyPath -o StrictHostKeyChecking=no $target 'sudo rm -rf "$HOME/msc-ui-upload" "$HOME/msc-ui-upload.tar" && mkdir -p "$HOME/msc-ui-upload" && sudo chown -R "$USER:$USER" "$HOME/msc-ui-upload"'
     if ($LASTEXITCODE -ne 0) { throw "failed to prepare remote UI upload directory" }
     scp -i $KeyPath -o StrictHostKeyChecking=no $uiArchive "${target}:msc-ui-upload.tar"
@@ -1010,15 +1694,26 @@ try {
 Write-Host ""
 Write-Host "Gateway checks passed."
 if ($enableHttps) {
-    Write-Host "  Explorer: https://$Domain/explorer.html"
-    Write-Host "  Wallet  : https://$Domain/msc_wallet.html"
-    Write-Host "  Dashboard: https://$Domain/dashboard.html"
-    Write-Host "  Portal  : https://$Domain/portal/index.html"
+    Write-Host "  Main     : https://$MainDomain/"
+    Write-Host "  Explorer : https://$ExplorerDomain/"
+    Write-Host "  Wallet   : https://$WalletDomain/"
+    if ($docsDomainEnabled) {
+        Write-Host "  Docs     : https://$DocsDomain/docs/"
+    } else {
+        Write-Host "  Docs     : https://$MainDomain/docs/"
+    }
+    Write-Host "  Portal   : https://$ExplorerDomain/portal/index.html"
 } else {
-    Write-Host "  Temporary Explorer: http://$GatewayHost/explorer.html"
-    Write-Host "  Temporary Wallet  : http://$GatewayHost/msc_wallet.html"
-    Write-Host "  Temporary Portal  : http://$GatewayHost/portal/index.html"
-    Write-Host "  Production URL pending DNS: https://$Domain/explorer.html"
+    Write-Host "  Temporary Main    : http://$GatewayHost/ with Host: $MainDomain"
+    Write-Host "  Temporary Explorer: http://$GatewayHost/ with Host: $ExplorerDomain"
+    Write-Host "  Temporary Wallet  : http://$GatewayHost/ with Host: $WalletDomain"
+    if ($docsDomainEnabled) {
+        Write-Host "  Temporary Docs    : http://$GatewayHost/docs/ with Host: $DocsDomain"
+    } else {
+        Write-Host "  Temporary Docs    : http://$GatewayHost/docs/ with Host: $MainDomain"
+    }
+    Write-Host "  Temporary Portal  : http://$GatewayHost/portal/index.html with Host: $ExplorerDomain"
+    Write-Host "  Production URLs pending DNS: https://$MainDomain/, https://$ExplorerDomain/, https://$WalletDomain/ and https://$DocsDomain/docs/"
 }
 Write-Host ""
 Write-Host "Security rules:"

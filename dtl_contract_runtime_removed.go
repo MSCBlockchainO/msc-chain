@@ -6,8 +6,12 @@ import (
 	"strings"
 )
 
+// ErrDTLContractRuntimeRemoved is returned by every historical contract/VM
+// entry point. Contract execution is not part of the MSC protocol.
 var ErrDTLContractRuntimeRemoved = errors.New("dtl: contract runtime removed")
 
+// dtlContractRuntimeRemoved is a deterministic consensus guard for removed
+// contract execution. It deliberately has no configuration override.
 func dtlContractRuntimeRemoved() bool {
 	return true
 }
@@ -37,6 +41,8 @@ func isDTLContractTransaction(tx Transaction) bool {
 	return tx.Type == TxDTL && isDTLContractTxTypeRaw(tx.DTLTxType)
 }
 
+// firstDTLContractTxInBlock is startup-only migration/history scan support.
+// It is not part of consensus block execution.
 func firstDTLContractTxInBlock(block Block) (Transaction, bool) {
 	for _, tx := range block.Transactions {
 		if isDTLContractTransaction(tx) {
@@ -46,30 +52,8 @@ func firstDTLContractTxInBlock(block Block) (Transaction, bool) {
 	return Transaction{}, false
 }
 
-func (n *Node) ensureNoDTLContractHistory() error {
-	if n == nil {
-		return nil
-	}
-	if n.Blockchain != nil {
-		n.Blockchain.mu.RLock()
-		blocks := append([]Block(nil), n.Blockchain.Blocks...)
-		n.Blockchain.mu.RUnlock()
-		for _, blk := range blocks {
-			if tx, ok := firstDTLContractTxInBlock(blk); ok {
-				return fmt.Errorf(
-					"dtl contract runtime removed: historical contract tx detected height=%d tx_id=%s dtl_tx_type=%s",
-					blk.ID,
-					strings.TrimSpace(tx.ID),
-					strings.TrimSpace(tx.DTLTxType),
-				)
-			}
-		}
-	}
-	if n.Ledger.DTL != nil && len(n.Ledger.DTL.Contracts) > 0 {
-		return fmt.Errorf(
-			"dtl contract runtime removed: historical contract state detected contracts=%d",
-			len(n.Ledger.DTL.Contracts),
-		)
-	}
-	return nil
+// normalizeDTLBytecodeFormat is retained only for canonical hashing of
+// historical state. It does not decode or execute bytecode.
+func normalizeDTLBytecodeFormat(raw string) string {
+	return strings.ToLower(strings.TrimSpace(raw))
 }

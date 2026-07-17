@@ -2,7 +2,7 @@
 chain_id = "91938"
 moniker = "Mainnet-Node-1"
 genesis_path = "genesis.json"
-genesis_hash = "d6d7d96ea1a70d2aca31389ce7ef7953794ce77b4c933828295269702768fa3c"
+genesis_hash = "f6230e42861022d676ca43c57d0f3b6c0984c3cd17bfcd932059c353ab46821c"
 
 [p2p]
 laddr = ""
@@ -76,10 +76,10 @@ idle_timeout_seconds = 120
 dynamic_selection = true
 deterministic_selection = true
 equal_chance_selection = true
-active_set_size = 5
-active_set_mode = "hybrid_score_rotation"
+active_set_size = 6
+active_set_mode = "adaptive_committee"
 max_active_committee = 512
-max_active_validators = 5
+max_active_validators = 6
 performance_slots = 3
 rotation_slots = 2
 effective_stake_cap = 5000000
@@ -185,36 +185,16 @@ diversity_metadata = [
   "G|US|AS14618|AWS|us-east-1",
 ]
 
-[evm]
-enabled = false
-default_gas_limit = 500000
-max_gas_limit = 10000000
-base_fee_min = 1
-base_fee_max = 50000000
-base_fee_update_divisor = 8
-target_tx_per_block = 0
-custom_vm_enabled = false
-only_custom_vm = false
-
 [dtl]
-# Rollout note:
-# 1) Enable contracts_v2/bytecode_runtime on testnet first with explicit activation heights.
-# 2) Verify deterministic replay and cross-node checksums.
-# 3) Promote same activation heights to mainnet after rehearsal sign-off.
-solidity_like_runtime_enabled = false
+# Native DTL protocol operations are deterministic consensus rules.
+# Programmable contract/VM execution is permanently removed.
 contracts_v2_enabled = false
-compat_rpc_subset_enabled = false
 v2_activation_height = 0
 logs_index_enabled = true
 oracle_min_signers = 3
 oracle_max_staleness_blocks = 120
 lending_accrual_interval_blocks = 1
 game_beacon_delay_blocks = 8
-max_contract_call_depth = 2
-bytecode_runtime_enabled = false
-bytecode_activation_height = 0
-bytecode_max_size = 65536
-bytecode_require_canonical = true
 router_enabled = true
 router_max_hops = 4
 router_deadline_max_blocks = 30
@@ -243,11 +223,20 @@ mode = "verification_only"
 ibc_style_enabled = false
 light_client_required = true
 required_confirmations = 64
-oracle_quorum = 3
-# Format: "chain_id|name|chain_type|trust_model|min_confirmations|light_client_endpoint"
-chains = []
-# Format: "denom|origin_chain|origin_asset|local_denom|decimals|escrow_policy"
-assets = []
+oracle_quorum = 4
+# First production target: TRON mainnet USDT only. The route remains
+# setup_required until an audited vault deployment and live finality evidence
+# are registered. Additional chains are added in later releases, one by one.
+# Format: "chain_id|name|chain_type|trust_model|min_confirmations|light_client|status|finality|native_symbol|explorer_url"
+chains = [
+  "tron-mainnet|TRON Mainnet|tron|hybrid|64||setup_required|unknown|TRX|https://tronscan.org"
+]
+# Official Tether TRC20 USDT identity from Tether's supported-protocol registry.
+# Custody remains disabled until the audited vault deployment is registered.
+# Format: "denom|origin_chain|origin_asset|local_denom|decimals|escrow_policy|symbol|status|min_deposit|daily_limit"
+assets = [
+  "USDT-TRON|tron-mainnet|TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t|mscUSDT|6|lock_and_mint|USDT|setup_required|10|10000"
+]
 
 [tokenomics]
 allow_treasury_ops = false
@@ -298,7 +287,7 @@ peer_diversity_ipv6_prefix = 64
 mdns = true
 self_heal_enabled = true
 self_heal_interval_seconds = 5
-self_heal_min_peers = 5
+self_heal_min_peers = 8
 self_heal_stall_seconds = 20
 
 [sync]
@@ -363,7 +352,14 @@ open_browser = true
 timeout_seconds = 600
 challenge_ttl_seconds = 180
 token_ttl_seconds = 86400
-core_validators = ["A","B","C","D","F"]
+core_validators = [
+  "VAL_6741169D69FD8782020C68F6667AF703",
+  "VAL_80BCBF5246B10BFD9A83C9AAB668F25B",
+  "VAL_247E8B0257337C830835C48EDD113C2A",
+  "VAL_36EDF7FFA87C6C5E0D0E53BF216F3F20",
+  "VAL_B84F325C74FCD2102493B7B778B4DF49",
+  "VAL_A8ECC6229EC1C475210D529C775AE7A6"
+]
 
 [core]
 registry_path = "core_validators.json"

@@ -3,27 +3,29 @@ package main
 import (
 	"crypto/ed25519"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 )
 
+// ValidateDTLCreateTx validates dtl create tx.
 func ValidateDTLCreateTx(state *DTLState, tx DTLCreateTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `name` stores the value produced by this operation.
 	name := strings.TrimSpace(tx.Name)
 	if name == "" || len(name) > DTLMaxNameLen {
 		return fmt.Errorf("dtl: invalid name length")
 	}
+	// `symbol` stores the value produced by this operation.
 	symbol := normalizeDTLSymbol(tx.Symbol)
 	if symbol == "" || len(symbol) > DTLMaxSymbolLen {
 		return fmt.Errorf("dtl: invalid symbol length")
 	}
+	// `exists` stores whether the related condition is satisfied.
 	if _, exists := state.SymbolIndex[symbol]; exists {
 		return fmt.Errorf("dtl: symbol already exists: %s", symbol)
 	}
@@ -43,12 +45,19 @@ func ValidateDTLCreateTx(state *DTLState, tx DTLCreateTx) error {
 		return fmt.Errorf("dtl: authority threshold must be > 0")
 	}
 
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]struct{})
+	// `signer` tracks the current values while iterating.
 	for _, signer := range tx.AuthoritySigners {
+		// `n` stores the value produced by this operation.
 		n := normalizeDTLAccount(signer)
 		if n == "" {
 			return fmt.Errorf("dtl: empty authority signer")
 		}
+		if !isMSCAddressLike(n) {
+			return fmt.Errorf("dtl: authority signer must be an MSC address: %s", n)
+		}
+		// `exists` stores whether the related condition is satisfied.
 		if _, exists := seen[n]; exists {
 			return fmt.Errorf("dtl: duplicate authority signer: %s", n)
 		}
@@ -63,13 +72,16 @@ func ValidateDTLCreateTx(state *DTLState, tx DTLCreateTx) error {
 	return nil
 }
 
+// ValidateDTLTransferTx validates dtl transfer tx.
 func ValidateDTLTransferTx(state *DTLState, tx DTLTransferTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `tokenID` stores the value produced by this operation.
 	tokenID := normalizeDTLTokenID(tx.TokenID)
+	// `token` and `exists` store whether the related condition is satisfied.
 	token, exists := state.Tokens[tokenID]
 	if !exists {
 		return ErrDTLUnknownToken
@@ -78,7 +90,9 @@ func ValidateDTLTransferTx(state *DTLState, tx DTLTransferTx) error {
 		return fmt.Errorf("dtl: transfer amount must be > 0")
 	}
 
+	// `from` stores the value produced by this operation.
 	from := normalizeDTLAccount(tx.From)
+	// `to` stores the value produced by this operation.
 	to := normalizeDTLAccount(tx.To)
 	if from == "" || to == "" {
 		return fmt.Errorf("dtl: invalid transfer account")
@@ -98,19 +112,24 @@ func ValidateDTLTransferTx(state *DTLState, tx DTLTransferTx) error {
 	return nil
 }
 
+// ValidateDTLApproveTx validates dtl approve tx.
 func ValidateDTLApproveTx(state *DTLState, tx DTLApproveTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `tokenID` stores the value produced by this operation.
 	tokenID := normalizeDTLTokenID(tx.TokenID)
+	// `token` and `exists` store whether the related condition is satisfied.
 	token, exists := state.Tokens[tokenID]
 	if !exists {
 		return ErrDTLUnknownToken
 	}
 
+	// `owner` stores the value produced by this operation.
 	owner := normalizeDTLAccount(tx.Owner)
+	// `spender` stores the value produced by this operation.
 	spender := normalizeDTLAccount(tx.Spender)
 	if owner == "" || spender == "" {
 		return fmt.Errorf("dtl: invalid approve account")
@@ -127,13 +146,16 @@ func ValidateDTLApproveTx(state *DTLState, tx DTLApproveTx) error {
 	return nil
 }
 
+// ValidateDTLTransferFromTx validates dtl transfer from tx.
 func ValidateDTLTransferFromTx(state *DTLState, tx DTLTransferFromTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `tokenID` stores the value produced by this operation.
 	tokenID := normalizeDTLTokenID(tx.TokenID)
+	// `token` and `exists` store whether the related condition is satisfied.
 	token, exists := state.Tokens[tokenID]
 	if !exists {
 		return ErrDTLUnknownToken
@@ -142,8 +164,11 @@ func ValidateDTLTransferFromTx(state *DTLState, tx DTLTransferFromTx) error {
 		return fmt.Errorf("dtl: transfer amount must be > 0")
 	}
 
+	// `spender` stores the value produced by this operation.
 	spender := normalizeDTLAccount(tx.Spender)
+	// `from` stores the value produced by this operation.
 	from := normalizeDTLAccount(tx.From)
+	// `to` stores the value produced by this operation.
 	to := normalizeDTLAccount(tx.To)
 	if spender == "" || from == "" || to == "" {
 		return fmt.Errorf("dtl: invalid transfer account")
@@ -166,13 +191,16 @@ func ValidateDTLTransferFromTx(state *DTLState, tx DTLTransferFromTx) error {
 	return nil
 }
 
+// ValidateDTLBurnTx validates dtl burn tx.
 func ValidateDTLBurnTx(state *DTLState, tx DTLBurnTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `tokenID` stores the value produced by this operation.
 	tokenID := normalizeDTLTokenID(tx.TokenID)
+	// `token` and `exists` store whether the related condition is satisfied.
 	token, exists := state.Tokens[tokenID]
 	if !exists {
 		return ErrDTLUnknownToken
@@ -180,6 +208,7 @@ func ValidateDTLBurnTx(state *DTLState, tx DTLBurnTx) error {
 	if tx.Amount == 0 {
 		return fmt.Errorf("dtl: burn amount must be > 0")
 	}
+	// `from` stores the value produced by this operation.
 	from := normalizeDTLAccount(tx.From)
 	if from == "" {
 		return fmt.Errorf("dtl: invalid burn account")
@@ -199,20 +228,27 @@ func ValidateDTLBurnTx(state *DTLState, tx DTLBurnTx) error {
 	return nil
 }
 
+// ValidateDTLMintTx validates dtl mint tx.
 func ValidateDTLMintTx(state *DTLState, tx DTLMintTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `tokenID` stores the value produced by this operation.
 	tokenID := normalizeDTLTokenID(tx.TokenID)
+	// `token` and `exists` store whether the related condition is satisfied.
 	token, exists := state.Tokens[tokenID]
 	if !exists {
 		return ErrDTLUnknownToken
 	}
+	if token.Paused {
+		return ErrDTLPaused
+	}
 	if tx.Amount == 0 {
 		return fmt.Errorf("dtl: mint amount must be > 0")
 	}
+	// `to` stores the value produced by this operation.
 	to := normalizeDTLAccount(tx.To)
 	if to == "" {
 		return fmt.Errorf("dtl: invalid mint receiver")
@@ -223,24 +259,29 @@ func ValidateDTLMintTx(state *DTLState, tx DTLMintTx) error {
 	return nil
 }
 
+// ValidateDTLNFT721CreateTx validates dtlnft721 create tx.
 func ValidateDTLNFT721CreateTx(state *DTLState, tx DTLNFT721CreateTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `creator` stores the value produced by this operation.
 	creator := normalizeDTLAccount(tx.Creator)
 	if creator == "" {
 		return fmt.Errorf("dtl: invalid nft721 creator")
 	}
+	// `name` stores the value produced by this operation.
 	name := strings.TrimSpace(tx.Name)
 	if name == "" || len(name) > DTLMaxNameLen {
 		return fmt.Errorf("dtl: invalid nft721 name length")
 	}
+	// `symbol` stores the value produced by this operation.
 	symbol := normalizeDTLSymbol(tx.Symbol)
 	if symbol == "" || len(symbol) > DTLMaxSymbolLen {
 		return fmt.Errorf("dtl: invalid nft721 symbol length")
 	}
+	// `exists` stores whether the related condition is satisfied.
 	if _, exists := state.NFT721SymbolIndex[symbol]; exists {
 		return fmt.Errorf("dtl: nft721 symbol already exists: %s", symbol)
 	}
@@ -250,13 +291,16 @@ func ValidateDTLNFT721CreateTx(state *DTLState, tx DTLNFT721CreateTx) error {
 	return nil
 }
 
+// ValidateDTLNFT721MintTx validates dtlnft721 mint tx.
 func ValidateDTLNFT721MintTx(state *DTLState, tx DTLNFT721MintTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `collectionID` stores the value produced by this operation.
 	collectionID := normalizeDTLCollectionID(tx.CollectionID)
+	// `collection` stores the value produced by this operation.
 	collection := state.NFT721Collections[collectionID]
 	if collection == nil {
 		return ErrDTLUnknownNFTCollection
@@ -264,10 +308,12 @@ func ValidateDTLNFT721MintTx(state *DTLState, tx DTLNFT721MintTx) error {
 	if collection.Paused {
 		return ErrDTLPaused
 	}
+	// `creator` stores the value produced by this operation.
 	creator := normalizeDTLAccount(tx.Creator)
 	if creator == "" || creator != normalizeDTLAccount(collection.Creator) {
 		return fmt.Errorf("dtl: nft721 mint creator mismatch")
 	}
+	// `to` stores the value produced by this operation.
 	to := normalizeDTLAccount(tx.To)
 	if to == "" {
 		return fmt.Errorf("dtl: invalid nft721 receiver")
@@ -278,13 +324,16 @@ func ValidateDTLNFT721MintTx(state *DTLState, tx DTLNFT721MintTx) error {
 	return nil
 }
 
+// ValidateDTLNFT721TransferTx validates dtlnft721 transfer tx.
 func ValidateDTLNFT721TransferTx(state *DTLState, tx DTLNFT721TransferTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `collectionID` stores the value produced by this operation.
 	collectionID := normalizeDTLCollectionID(tx.CollectionID)
+	// `collection` stores the value produced by this operation.
 	collection := state.NFT721Collections[collectionID]
 	if collection == nil {
 		return ErrDTLUnknownNFTCollection
@@ -292,7 +341,9 @@ func ValidateDTLNFT721TransferTx(state *DTLState, tx DTLNFT721TransferTx) error 
 	if collection.Paused {
 		return ErrDTLPaused
 	}
+	// `from` stores the value produced by this operation.
 	from := normalizeDTLAccount(tx.From)
+	// `to` stores the value produced by this operation.
 	to := normalizeDTLAccount(tx.To)
 	if from == "" || to == "" {
 		return fmt.Errorf("dtl: invalid nft721 account")
@@ -300,6 +351,7 @@ func ValidateDTLNFT721TransferTx(state *DTLState, tx DTLNFT721TransferTx) error 
 	if from == to {
 		return fmt.Errorf("dtl: nft721 self transfer not allowed")
 	}
+	// `owner` stores the value produced by this operation.
 	owner := state.NFT721OwnerOf(collectionID, tx.TokenID)
 	if owner == "" {
 		return ErrDTLUnknownNFTToken
@@ -310,24 +362,29 @@ func ValidateDTLNFT721TransferTx(state *DTLState, tx DTLNFT721TransferTx) error 
 	return nil
 }
 
+// ValidateDTLNFT1155CreateTx validates dtlnft1155 create tx.
 func ValidateDTLNFT1155CreateTx(state *DTLState, tx DTLNFT1155CreateTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `creator` stores the value produced by this operation.
 	creator := normalizeDTLAccount(tx.Creator)
 	if creator == "" {
 		return fmt.Errorf("dtl: invalid nft1155 creator")
 	}
+	// `name` stores the value produced by this operation.
 	name := strings.TrimSpace(tx.Name)
 	if name == "" || len(name) > DTLMaxNameLen {
 		return fmt.Errorf("dtl: invalid nft1155 name length")
 	}
+	// `symbol` stores the value produced by this operation.
 	symbol := normalizeDTLSymbol(tx.Symbol)
 	if symbol == "" || len(symbol) > DTLMaxSymbolLen {
 		return fmt.Errorf("dtl: invalid nft1155 symbol length")
 	}
+	// `exists` stores whether the related condition is satisfied.
 	if _, exists := state.NFT1155SymbolIndex[symbol]; exists {
 		return fmt.Errorf("dtl: nft1155 symbol already exists: %s", symbol)
 	}
@@ -337,13 +394,16 @@ func ValidateDTLNFT1155CreateTx(state *DTLState, tx DTLNFT1155CreateTx) error {
 	return nil
 }
 
+// ValidateDTLNFT1155MintTx validates dtlnft1155 mint tx.
 func ValidateDTLNFT1155MintTx(state *DTLState, tx DTLNFT1155MintTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `collectionID` stores the value produced by this operation.
 	collectionID := normalizeDTLCollectionID(tx.CollectionID)
+	// `collection` stores the value produced by this operation.
 	collection := state.NFT1155Collections[collectionID]
 	if collection == nil {
 		return ErrDTLUnknownNFTCollection
@@ -351,10 +411,12 @@ func ValidateDTLNFT1155MintTx(state *DTLState, tx DTLNFT1155MintTx) error {
 	if collection.Paused {
 		return ErrDTLPaused
 	}
+	// `creator` stores the value produced by this operation.
 	creator := normalizeDTLAccount(tx.Creator)
 	if creator == "" || creator != normalizeDTLAccount(collection.Creator) {
 		return fmt.Errorf("dtl: nft1155 mint creator mismatch")
 	}
+	// `to` stores the value produced by this operation.
 	to := normalizeDTLAccount(tx.To)
 	if to == "" {
 		return fmt.Errorf("dtl: invalid nft1155 receiver")
@@ -365,13 +427,16 @@ func ValidateDTLNFT1155MintTx(state *DTLState, tx DTLNFT1155MintTx) error {
 	return nil
 }
 
+// ValidateDTLNFT1155TransferTx validates dtlnft1155 transfer tx.
 func ValidateDTLNFT1155TransferTx(state *DTLState, tx DTLNFT1155TransferTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `collectionID` stores the value produced by this operation.
 	collectionID := normalizeDTLCollectionID(tx.CollectionID)
+	// `collection` stores the value produced by this operation.
 	collection := state.NFT1155Collections[collectionID]
 	if collection == nil {
 		return ErrDTLUnknownNFTCollection
@@ -379,7 +444,9 @@ func ValidateDTLNFT1155TransferTx(state *DTLState, tx DTLNFT1155TransferTx) erro
 	if collection.Paused {
 		return ErrDTLPaused
 	}
+	// `from` stores the value produced by this operation.
 	from := normalizeDTLAccount(tx.From)
+	// `to` stores the value produced by this operation.
 	to := normalizeDTLAccount(tx.To)
 	if from == "" || to == "" {
 		return fmt.Errorf("dtl: invalid nft1155 account")
@@ -396,6 +463,7 @@ func ValidateDTLNFT1155TransferTx(state *DTLState, tx DTLNFT1155TransferTx) erro
 	return nil
 }
 
+// validateDTLSpendable validates dtl spendable.
 func validateDTLSpendable(
 	state *DTLState,
 	tokenIDRaw string,
@@ -407,7 +475,9 @@ func validateDTLSpendable(
 	}
 	state.ensure()
 
+	// `tokenID` stores the value produced by this operation.
 	tokenID := normalizeDTLTokenID(tokenIDRaw)
+	// `token` stores the value produced by this operation.
 	token := state.Tokens[tokenID]
 	if token == nil {
 		return nil, "", "", ErrDTLUnknownToken
@@ -416,6 +486,7 @@ func validateDTLSpendable(
 		return nil, "", "", fmt.Errorf("dtl: amount must be > 0")
 	}
 
+	// `account` stores the measured quantity used by this operation.
 	account := normalizeDTLAccount(accountRaw)
 	if account == "" {
 		return nil, "", "", fmt.Errorf("dtl: invalid account")
@@ -432,7 +503,9 @@ func validateDTLSpendable(
 	return token, tokenID, account, nil
 }
 
+// validateDTLCommitHash validates dtl commit hash.
 func validateDTLCommitHash(raw string) (string, error) {
+	// `h` stores the value produced by this operation.
 	h := normalizeDTLHex(raw)
 	if h == "" {
 		return "", fmt.Errorf("dtl: commit hash is required")
@@ -440,23 +513,28 @@ func validateDTLCommitHash(raw string) (string, error) {
 	if len(h) != 64 {
 		return "", fmt.Errorf("dtl: commit hash must be 32-byte hex")
 	}
+	// `err` stores the error produced by this operation.
 	if _, err := hex.DecodeString(h); err != nil {
 		return "", fmt.Errorf("dtl: invalid commit hash")
 	}
 	return h, nil
 }
 
+// ValidateDTLPoolCreateTx validates dtl pool create tx.
 func ValidateDTLPoolCreateTx(state *DTLState, tx DTLPoolCreateTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `creator` stores the value produced by this operation.
 	creator := normalizeDTLAccount(tx.Creator)
 	if creator == "" {
 		return fmt.Errorf("dtl: invalid pool creator")
 	}
+	// `tokenA` stores the value produced by this operation.
 	tokenA := normalizeDTLTokenID(tx.TokenA)
+	// `tokenB` stores the value produced by this operation.
 	tokenB := normalizeDTLTokenID(tx.TokenB)
 	if tokenA == "" || tokenB == "" {
 		return fmt.Errorf("dtl: invalid pool token id")
@@ -470,14 +548,18 @@ func ValidateDTLPoolCreateTx(state *DTLState, tx DTLPoolCreateTx) error {
 	if tx.FeeBPS > DTLMaxPoolFeeBPS {
 		return fmt.Errorf("dtl: pool fee exceeds %d bps", DTLMaxPoolFeeBPS)
 	}
+	// `pairKey` stores the key used to access the related value.
 	pairKey := dtlPoolPairKey(tokenA, tokenB)
+	// `existing` stores the value produced by this operation.
 	if existing := normalizeDTLPoolID(state.PoolIndex[pairKey]); existing != "" {
 		return fmt.Errorf("dtl: pool already exists for pair: %s", existing)
 	}
+	// `tokenAState` and `err` store the error produced by this operation.
 	tokenAState, _, _, err := validateDTLSpendable(state, tokenA, creator, tx.AmountA)
 	if err != nil {
 		return err
 	}
+	// `tokenBState` and `err` store the error produced by this operation.
 	tokenBState, _, _, err := validateDTLSpendable(state, tokenB, creator, tx.AmountB)
 	if err != nil {
 		return err
@@ -485,6 +567,7 @@ func ValidateDTLPoolCreateTx(state *DTLState, tx DTLPoolCreateTx) error {
 	if tokenAState.TaxBPS > 0 || tokenBState.TaxBPS > 0 {
 		return fmt.Errorf("dtl: pool tokens with transfer tax are not supported")
 	}
+	// `share` and `err` store the error produced by this operation.
 	share, err := dtlInitialPoolShare(tx.AmountA, tx.AmountB)
 	if err != nil {
 		return err
@@ -495,17 +578,21 @@ func ValidateDTLPoolCreateTx(state *DTLState, tx DTLPoolCreateTx) error {
 	return nil
 }
 
+// ValidateDTLPoolAddLiquidityTx validates dtl pool add liquidity tx.
 func ValidateDTLPoolAddLiquidityTx(state *DTLState, tx DTLPoolAddLiquidityTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `poolID` stores the value produced by this operation.
 	poolID := normalizeDTLPoolID(tx.PoolID)
+	// `pool` stores the value produced by this operation.
 	pool := state.Pools[poolID]
 	if pool == nil {
 		return fmt.Errorf("dtl: unknown pool")
 	}
+	// `provider` stores the value produced by this operation.
 	provider := normalizeDTLAccount(tx.Provider)
 	if provider == "" {
 		return fmt.Errorf("dtl: invalid liquidity provider")
@@ -513,10 +600,12 @@ func ValidateDTLPoolAddLiquidityTx(state *DTLState, tx DTLPoolAddLiquidityTx) er
 	if tx.AmountA == 0 || tx.AmountB == 0 {
 		return fmt.Errorf("dtl: add liquidity amounts must be > 0")
 	}
+	// `tokenAState` and `err` store the error produced by this operation.
 	tokenAState, _, _, err := validateDTLSpendable(state, pool.TokenA, provider, tx.AmountA)
 	if err != nil {
 		return err
 	}
+	// `tokenBState` and `err` store the error produced by this operation.
 	tokenBState, _, _, err := validateDTLSpendable(state, pool.TokenB, provider, tx.AmountB)
 	if err != nil {
 		return err
@@ -530,6 +619,7 @@ func ValidateDTLPoolAddLiquidityTx(state *DTLState, tx DTLPoolAddLiquidityTx) er
 	if !dtlEqCrossMul(tx.AmountA, pool.ReserveB, tx.AmountB, pool.ReserveA) {
 		return fmt.Errorf("dtl: liquidity ratio mismatch")
 	}
+	// `share` and `err` store the error produced by this operation.
 	share, err := dtlLiquidityShareMint(pool, tx.AmountA, tx.AmountB)
 	if err != nil {
 		return err
@@ -543,17 +633,21 @@ func ValidateDTLPoolAddLiquidityTx(state *DTLState, tx DTLPoolAddLiquidityTx) er
 	return nil
 }
 
+// ValidateDTLPoolRemoveLiquidityTx validates dtl pool remove liquidity tx.
 func ValidateDTLPoolRemoveLiquidityTx(state *DTLState, tx DTLPoolRemoveLiquidityTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `poolID` stores the value produced by this operation.
 	poolID := normalizeDTLPoolID(tx.PoolID)
+	// `pool` stores the value produced by this operation.
 	pool := state.Pools[poolID]
 	if pool == nil {
 		return fmt.Errorf("dtl: unknown pool")
 	}
+	// `provider` stores the value produced by this operation.
 	provider := normalizeDTLAccount(tx.Provider)
 	if provider == "" {
 		return fmt.Errorf("dtl: invalid liquidity provider")
@@ -567,6 +661,7 @@ func ValidateDTLPoolRemoveLiquidityTx(state *DTLState, tx DTLPoolRemoveLiquidity
 	if state.LPBalanceOf(poolID, provider) < tx.LPShares {
 		return fmt.Errorf("dtl: insufficient LP balance")
 	}
+	// `outA`, `outB`, and `err` store the error produced by this operation.
 	outA, outB, err := dtlLiquidityShareBurn(pool, tx.LPShares)
 	if err != nil {
 		return err
@@ -583,17 +678,21 @@ func ValidateDTLPoolRemoveLiquidityTx(state *DTLState, tx DTLPoolRemoveLiquidity
 	return nil
 }
 
+// ValidateDTLPoolSwapTx validates dtl pool swap tx.
 func ValidateDTLPoolSwapTx(state *DTLState, tx DTLPoolSwapTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `poolID` stores the value produced by this operation.
 	poolID := normalizeDTLPoolID(tx.PoolID)
+	// `pool` stores the value produced by this operation.
 	pool := state.Pools[poolID]
 	if pool == nil {
 		return fmt.Errorf("dtl: unknown pool")
 	}
+	// `trader` stores the value produced by this operation.
 	trader := normalizeDTLAccount(tx.Trader)
 	if trader == "" {
 		return fmt.Errorf("dtl: invalid trader")
@@ -601,10 +700,12 @@ func ValidateDTLPoolSwapTx(state *DTLState, tx DTLPoolSwapTx) error {
 	if tx.AmountIn == 0 {
 		return fmt.Errorf("dtl: swap amount_in must be > 0")
 	}
+	// `tokenIn` stores the value produced by this operation.
 	tokenIn := normalizeDTLTokenID(tx.TokenIn)
 	if tokenIn != pool.TokenA && tokenIn != pool.TokenB {
 		return fmt.Errorf("dtl: token_in not in pool")
 	}
+	// `tokenState` and `err` store the error produced by this operation.
 	tokenState, _, _, err := validateDTLSpendable(state, tokenIn, trader, tx.AmountIn)
 	if err != nil {
 		return err
@@ -612,12 +713,15 @@ func ValidateDTLPoolSwapTx(state *DTLState, tx DTLPoolSwapTx) error {
 	if tokenState.TaxBPS > 0 {
 		return fmt.Errorf("dtl: pool tokens with transfer tax are not supported")
 	}
+	// `reserveIn` stores the result produced by this operation.
 	reserveIn := pool.ReserveA
+	// `reserveOut` stores the result produced by this operation.
 	reserveOut := pool.ReserveB
 	if tokenIn == pool.TokenB {
 		reserveIn = pool.ReserveB
 		reserveOut = pool.ReserveA
 	}
+	// `amountOut` and `err` store the error produced by this operation.
 	amountOut, err := dtlPoolSwapOutAmount(reserveIn, reserveOut, tx.AmountIn, pool.FeeBPS)
 	if err != nil {
 		return err
@@ -631,20 +735,23 @@ func ValidateDTLPoolSwapTx(state *DTLState, tx DTLPoolSwapTx) error {
 	return nil
 }
 
+// ValidateDTLPoolSwapRouteTx validates dtl pool swap route tx.
 func ValidateDTLPoolSwapRouteTx(state *DTLState, tx DTLPoolSwapRouteTx, currentHeight uint64) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
-	if !dtlRouterEnabled() {
+	if !dtlProtocolRouterEnabled() {
 		return fmt.Errorf("dtl: router is disabled")
 	}
 
+	// `trader` stores the value produced by this operation.
 	trader := normalizeDTLAccount(tx.Trader)
 	if trader == "" {
 		return fmt.Errorf("dtl: invalid trader")
 	}
 
+	// `tokenIn` stores the value produced by this operation.
 	tokenIn := normalizeDTLTokenID(tx.TokenIn)
 	if tokenIn == "" {
 		return fmt.Errorf("dtl: token_in is required")
@@ -653,11 +760,12 @@ func ValidateDTLPoolSwapRouteTx(state *DTLState, tx DTLPoolSwapRouteTx, currentH
 		return fmt.Errorf("dtl: swap amount_in must be > 0")
 	}
 
+	// `hops` stores the value produced by this operation.
 	hops := len(tx.Path)
 	if hops < 1 {
 		return fmt.Errorf("dtl: route path must contain at least 1 pool")
 	}
-	if hops > dtlRouterMaxHops() {
+	if hops > dtlProtocolRouterMaxHops() {
 		return fmt.Errorf("dtl: route path exceeds max hops")
 	}
 
@@ -667,17 +775,22 @@ func ValidateDTLPoolSwapRouteTx(state *DTLState, tx DTLPoolSwapRouteTx, currentH
 	if tx.DeadlineHeight < currentHeight {
 		return fmt.Errorf("dtl: route deadline expired")
 	}
-	maxDeadline := currentHeight + dtlRouterDeadlineMaxBlocks()
+	// `maxDeadline` stores the value produced by this operation.
+	maxDeadline := currentHeight + dtlProtocolRouterDeadlineMaxBlocks()
 	if maxDeadline < currentHeight || tx.DeadlineHeight > maxDeadline {
 		return fmt.Errorf("dtl: route deadline too far")
 	}
 
+	// `currentToken` stores the value produced by this operation.
 	currentToken := tokenIn
+	// `i` and `rawPoolID` track the current position in the related collection.
 	for i, rawPoolID := range tx.Path {
+		// `poolID` stores the value produced by this operation.
 		poolID := normalizeDTLPoolID(rawPoolID)
 		if poolID == "" {
 			return fmt.Errorf("dtl: route path has empty pool id at hop %d", i+1)
 		}
+		// `pool` stores the value produced by this operation.
 		pool := state.Pools[poolID]
 		if pool == nil {
 			return fmt.Errorf("dtl: unknown pool in route path: %s", poolID)
@@ -692,6 +805,7 @@ func ValidateDTLPoolSwapRouteTx(state *DTLState, tx DTLPoolSwapRouteTx, currentH
 		}
 	}
 
+	// `quote` and `err` store the error produced by this operation.
 	quote, err := dtlQuotePoolSwapRoute(state, tokenIn, tx.AmountIn, tx.Path)
 	if err != nil {
 		return err
@@ -700,18 +814,24 @@ func ValidateDTLPoolSwapRouteTx(state *DTLState, tx DTLPoolSwapRouteTx, currentH
 	if tx.MinAmountOut > 0 && quote.AmountOut < tx.MinAmountOut {
 		return fmt.Errorf("dtl: slippage: output below minimum")
 	}
-	if quote.PriceImpactBPS > dtlRouterMaxPriceImpactBPS() {
+	if quote.PriceImpactBPS > dtlProtocolRouterMaxPriceImpactBPS() {
 		return fmt.Errorf("dtl: route price impact exceeds max")
 	}
 
+	// `tradeShadow` stores the value produced by this operation.
 	tradeShadow := cloneDTLState(state)
 	if tradeShadow == nil {
 		return ErrDTLInvalidState
 	}
+	// `amountIn` stores the value produced by this operation.
 	amountIn := tx.AmountIn
+	// `routeToken` stores the value produced by this operation.
 	routeToken := tokenIn
+	// `rawPoolID` tracks the current values while iterating.
 	for _, rawPoolID := range tx.Path {
+		// `poolID` stores the value produced by this operation.
 		poolID := normalizeDTLPoolID(rawPoolID)
+		// `amountOut` and `err` store the error produced by this operation.
 		amountOut, err := ApplyDTLPoolSwapTx(tradeShadow, DTLPoolSwapTx{
 			Trader:       trader,
 			PoolID:       poolID,
@@ -722,6 +842,7 @@ func ValidateDTLPoolSwapRouteTx(state *DTLState, tx DTLPoolSwapRouteTx, currentH
 		if err != nil {
 			return err
 		}
+		// `pool` stores the value produced by this operation.
 		pool := tradeShadow.Pools[poolID]
 		if pool == nil {
 			return fmt.Errorf("dtl: unknown pool")
@@ -737,22 +858,26 @@ func ValidateDTLPoolSwapRouteTx(state *DTLState, tx DTLPoolSwapRouteTx, currentH
 	return nil
 }
 
+// ValidateDTLDuelCreateTx validates dtl duel create tx.
 func ValidateDTLDuelCreateTx(state *DTLState, tx DTLDuelCreateTx, currentHeight uint64) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `creator` stores the value produced by this operation.
 	creator := normalizeDTLAccount(tx.Creator)
 	if creator == "" {
 		return fmt.Errorf("dtl: invalid duel creator")
 	}
+	// `err` stores the error produced by this operation.
 	if _, err := validateDTLCommitHash(tx.CommitHash); err != nil {
 		return err
 	}
 	if tx.Stake == 0 {
 		return fmt.Errorf("dtl: duel stake must be > 0")
 	}
+	// `token` and `err` store the error produced by this operation.
 	token, _, _, err := validateDTLSpendable(state, tx.TokenID, creator, tx.Stake)
 	if err != nil {
 		return err
@@ -761,10 +886,12 @@ func ValidateDTLDuelCreateTx(state *DTLState, tx DTLDuelCreateTx, currentHeight 
 		return fmt.Errorf("dtl: duel token with transfer tax is not supported")
 	}
 
+	// `joinBlocks` stores the current position in the related collection.
 	joinBlocks := tx.JoinExpiryBlocks
 	if joinBlocks == 0 {
 		joinBlocks = DTLDefaultDuelJoinBlocks
 	}
+	// `revealBlocks` stores the value produced by this operation.
 	revealBlocks := tx.RevealExpiryBlocks
 	if revealBlocks == 0 {
 		revealBlocks = DTLDefaultDuelRevealBlocks
@@ -778,13 +905,16 @@ func ValidateDTLDuelCreateTx(state *DTLState, tx DTLDuelCreateTx, currentHeight 
 	return nil
 }
 
+// ValidateDTLDuelJoinTx validates dtl duel join tx.
 func ValidateDTLDuelJoinTx(state *DTLState, tx DTLDuelJoinTx, currentHeight uint64) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `duelID` stores the value produced by this operation.
 	duelID := normalizeDTLTokenID(tx.DuelID)
+	// `duel` stores the value produced by this operation.
 	duel := state.Duels[duelID]
 	if duel == nil {
 		return fmt.Errorf("dtl: unknown duel")
@@ -799,6 +929,7 @@ func ValidateDTLDuelJoinTx(state *DTLState, tx DTLDuelJoinTx, currentHeight uint
 		return fmt.Errorf("dtl: duel join deadline passed")
 	}
 
+	// `joiner` stores the current position in the related collection.
 	joiner := normalizeDTLAccount(tx.Joiner)
 	if joiner == "" {
 		return fmt.Errorf("dtl: invalid duel joiner")
@@ -806,20 +937,25 @@ func ValidateDTLDuelJoinTx(state *DTLState, tx DTLDuelJoinTx, currentHeight uint
 	if joiner == normalizeDTLAccount(duel.PlayerA) {
 		return fmt.Errorf("dtl: creator cannot join own duel")
 	}
+	// `err` stores the error produced by this operation.
 	if _, err := validateDTLCommitHash(tx.CommitHash); err != nil {
 		return err
 	}
+	// `err` stores the error produced by this operation.
 	_, _, _, err := validateDTLSpendable(state, duel.TokenID, joiner, duel.Stake)
 	return err
 }
 
+// ValidateDTLDuelRevealTx validates dtl duel reveal tx.
 func ValidateDTLDuelRevealTx(state *DTLState, tx DTLDuelRevealTx, currentHeight uint64) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `duelID` stores the value produced by this operation.
 	duelID := normalizeDTLTokenID(tx.DuelID)
+	// `duel` stores the value produced by this operation.
 	duel := state.Duels[duelID]
 	if duel == nil {
 		return fmt.Errorf("dtl: unknown duel")
@@ -833,10 +969,12 @@ func ValidateDTLDuelRevealTx(state *DTLState, tx DTLDuelRevealTx, currentHeight 
 	if currentHeight > duel.RevealDeadline {
 		return fmt.Errorf("dtl: duel reveal deadline passed")
 	}
+	// `player` stores the value produced by this operation.
 	player := normalizeDTLAccount(tx.Player)
 	if player == "" {
 		return fmt.Errorf("dtl: invalid reveal player")
 	}
+	// `secret` stores the value produced by this operation.
 	secret := strings.TrimSpace(tx.Secret)
 	if secret == "" {
 		return fmt.Errorf("dtl: reveal secret is required")
@@ -845,6 +983,7 @@ func ValidateDTLDuelRevealTx(state *DTLState, tx DTLDuelRevealTx, currentHeight 
 		return fmt.Errorf("dtl: reveal secret too long")
 	}
 
+	// `secretHash` stores the digest used to identify or verify the related data.
 	secretHash := DTLDuelCommitHash(secret)
 	switch player {
 	case normalizeDTLAccount(duel.PlayerA):
@@ -867,6 +1006,7 @@ func ValidateDTLDuelRevealTx(state *DTLState, tx DTLDuelRevealTx, currentHeight 
 	return nil
 }
 
+// ValidateDTLDuelFinalizeTx validates dtl duel finalize tx.
 func ValidateDTLDuelFinalizeTx(state *DTLState, tx DTLDuelFinalizeTx, currentHeight uint64) error {
 	if state == nil {
 		return ErrDTLInvalidState
@@ -876,7 +1016,9 @@ func ValidateDTLDuelFinalizeTx(state *DTLState, tx DTLDuelFinalizeTx, currentHei
 	if normalizeDTLAccount(tx.Caller) == "" {
 		return fmt.Errorf("dtl: invalid finalize caller")
 	}
+	// `duelID` stores the value produced by this operation.
 	duelID := normalizeDTLTokenID(tx.DuelID)
+	// `duel` stores the value produced by this operation.
 	duel := state.Duels[duelID]
 	if duel == nil {
 		return fmt.Errorf("dtl: unknown duel")
@@ -891,9 +1033,10 @@ func ValidateDTLDuelFinalizeTx(state *DTLState, tx DTLDuelFinalizeTx, currentHei
 		return nil
 	}
 	if duel.RevealA != "" && duel.RevealB != "" {
+		// `beaconHeight` stores the value produced by this operation.
 		beaconHeight := duel.BeaconHeight
 		if beaconHeight == 0 {
-			beaconHeight = duel.RevealDeadline + dtlBeaconDelayAtHeight(currentHeight)
+			beaconHeight = duel.RevealDeadline + dtlProtocolBeaconDelayAtHeight(currentHeight)
 		}
 		if currentHeight < beaconHeight {
 			return fmt.Errorf("dtl: duel waiting for beacon")
@@ -906,6 +1049,7 @@ func ValidateDTLDuelFinalizeTx(state *DTLState, tx DTLDuelFinalizeTx, currentHei
 	return nil
 }
 
+// validateDTLLendingRiskParams validates dtl lending risk params.
 func validateDTLLendingRiskParams(collateralFactorBPS, liquidationBonusBPS uint16) (uint16, uint16, error) {
 	if collateralFactorBPS == 0 {
 		collateralFactorBPS = DTLDefaultLendingLTVBPS
@@ -922,6 +1066,7 @@ func validateDTLLendingRiskParams(collateralFactorBPS, liquidationBonusBPS uint1
 	return collateralFactorBPS, liquidationBonusBPS, nil
 }
 
+// getDTLLendingPosition implements the get dtl lending position helper.
 func getDTLLendingPosition(state *DTLState, marketID, account string) *DTLLendingPositionState {
 	if state == nil {
 		return nil
@@ -929,17 +1074,21 @@ func getDTLLendingPosition(state *DTLState, marketID, account string) *DTLLendin
 	return state.LendingPositions[dtlLendingPositionKey(marketID, account)]
 }
 
+// ValidateDTLLendMarketCreateTx validates dtl lend market create tx.
 func ValidateDTLLendMarketCreateTx(state *DTLState, tx DTLLendMarketCreateTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `creator` stores the value produced by this operation.
 	creator := normalizeDTLAccount(tx.Creator)
 	if creator == "" {
 		return fmt.Errorf("dtl: invalid lending market creator")
 	}
+	// `collateralTokenID` stores the value produced by this operation.
 	collateralTokenID := normalizeDTLTokenID(tx.CollateralTokenID)
+	// `debtTokenID` stores the value produced by this operation.
 	debtTokenID := normalizeDTLTokenID(tx.DebtTokenID)
 	if collateralTokenID == "" || debtTokenID == "" {
 		return fmt.Errorf("dtl: invalid lending market token")
@@ -950,6 +1099,7 @@ func ValidateDTLLendMarketCreateTx(state *DTLState, tx DTLLendMarketCreateTx) er
 	if tx.DebtLiquidity == 0 {
 		return fmt.Errorf("dtl: debt liquidity must be > 0")
 	}
+	// `err` stores the error produced by this operation.
 	if _, _, err := validateDTLLendingRiskParams(tx.CollateralFactorBPS, tx.LiquidationBonusBPS); err != nil {
 		return err
 	}
@@ -959,21 +1109,27 @@ func ValidateDTLLendMarketCreateTx(state *DTLState, tx DTLLendMarketCreateTx) er
 	if tx.CloseFactorBPS > DTLMaxTaxBPS {
 		return fmt.Errorf("dtl: invalid close factor")
 	}
+	// `pairKey` stores the key used to access the related value.
 	pairKey := dtlLendingPairKey(collateralTokenID, debtTokenID)
+	// `existing` stores the value produced by this operation.
 	if existing := normalizeDTLMarketID(state.LendingIndex[pairKey]); existing != "" {
 		return fmt.Errorf("dtl: lending market already exists for pair: %s", existing)
 	}
+	// `collateralToken` stores the value produced by this operation.
 	collateralToken := state.Tokens[collateralTokenID]
 	if collateralToken == nil {
 		return ErrDTLUnknownToken
 	}
+	// `debtToken` and `err` store the error produced by this operation.
 	debtToken, _, _, err := validateDTLSpendable(state, debtTokenID, creator, tx.DebtLiquidity)
 	if err != nil {
 		return err
 	}
+	// `feedID` stores the value produced by this operation.
 	if feedID := normalizeDTLTokenID(tx.CollateralFeedID); feedID != "" && state.OracleFeeds[feedID] == nil {
 		return fmt.Errorf("dtl: unknown collateral oracle feed")
 	}
+	// `feedID` stores the value produced by this operation.
 	if feedID := normalizeDTLTokenID(tx.DebtFeedID); feedID != "" && state.OracleFeeds[feedID] == nil {
 		return fmt.Errorf("dtl: unknown debt oracle feed")
 	}
@@ -983,12 +1139,14 @@ func ValidateDTLLendMarketCreateTx(state *DTLState, tx DTLLendMarketCreateTx) er
 	return nil
 }
 
+// ValidateDTLLendDepositCollateralTx validates dtl lend deposit collateral tx.
 func ValidateDTLLendDepositCollateralTx(state *DTLState, tx DTLLendDepositCollateralTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `account` stores the measured quantity used by this operation.
 	account := normalizeDTLAccount(tx.Account)
 	if account == "" {
 		return fmt.Errorf("dtl: invalid lending account")
@@ -996,11 +1154,14 @@ func ValidateDTLLendDepositCollateralTx(state *DTLState, tx DTLLendDepositCollat
 	if tx.Amount == 0 {
 		return fmt.Errorf("dtl: deposit amount must be > 0")
 	}
+	// `marketID` stores the value produced by this operation.
 	marketID := normalizeDTLMarketID(tx.MarketID)
+	// `market` stores the value produced by this operation.
 	market := state.LendingMarkets[marketID]
 	if market == nil {
 		return fmt.Errorf("dtl: unknown lending market")
 	}
+	// `collateralToken` and `err` store the error produced by this operation.
 	collateralToken, _, _, err := validateDTLSpendable(state, market.CollateralTokenID, account, tx.Amount)
 	if err != nil {
 		return err
@@ -1011,12 +1172,14 @@ func ValidateDTLLendDepositCollateralTx(state *DTLState, tx DTLLendDepositCollat
 	return nil
 }
 
+// ValidateDTLLendBorrowTx validates dtl lend borrow tx.
 func ValidateDTLLendBorrowTx(state *DTLState, tx DTLLendBorrowTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `account` stores the measured quantity used by this operation.
 	account := normalizeDTLAccount(tx.Account)
 	if account == "" {
 		return fmt.Errorf("dtl: invalid lending account")
@@ -1024,19 +1187,24 @@ func ValidateDTLLendBorrowTx(state *DTLState, tx DTLLendBorrowTx) error {
 	if tx.Amount == 0 {
 		return fmt.Errorf("dtl: borrow amount must be > 0")
 	}
+	// `marketID` stores the value produced by this operation.
 	marketID := normalizeDTLMarketID(tx.MarketID)
+	// `market` stores the value produced by this operation.
 	market := state.LendingMarkets[marketID]
 	if market == nil {
 		return fmt.Errorf("dtl: unknown lending market")
 	}
+	// `position` stores the value produced by this operation.
 	position := getDTLLendingPosition(state, marketID, account)
 	if position == nil || position.Collateral == 0 {
 		return fmt.Errorf("dtl: no collateral position")
 	}
+	// `newDebt` and `err` store the error produced by this operation.
 	newDebt, err := dtlSafeAddU64(position.Debt, tx.Amount)
 	if err != nil {
 		return err
 	}
+	// `healthy` and `err` store the error produced by this operation.
 	healthy, err := dtlLendingIsHealthy(position.Collateral, newDebt, market.CollateralFactorBPS)
 	if err != nil {
 		return err
@@ -1044,19 +1212,23 @@ func ValidateDTLLendBorrowTx(state *DTLState, tx DTLLendBorrowTx) error {
 	if !healthy {
 		return fmt.Errorf("dtl: borrow would exceed collateral limit")
 	}
+	// `vault` stores the value produced by this operation.
 	vault := dtlLendingVaultAccount(marketID)
+	// `err` stores the error produced by this operation.
 	if _, _, _, err := validateDTLSpendable(state, market.DebtTokenID, vault, tx.Amount); err != nil {
 		return err
 	}
 	return nil
 }
 
+// ValidateDTLLendRepayTx validates dtl lend repay tx.
 func ValidateDTLLendRepayTx(state *DTLState, tx DTLLendRepayTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `account` stores the measured quantity used by this operation.
 	account := normalizeDTLAccount(tx.Account)
 	if account == "" {
 		return fmt.Errorf("dtl: invalid lending account")
@@ -1064,11 +1236,14 @@ func ValidateDTLLendRepayTx(state *DTLState, tx DTLLendRepayTx) error {
 	if tx.Amount == 0 {
 		return fmt.Errorf("dtl: repay amount must be > 0")
 	}
+	// `marketID` stores the value produced by this operation.
 	marketID := normalizeDTLMarketID(tx.MarketID)
+	// `market` stores the value produced by this operation.
 	market := state.LendingMarkets[marketID]
 	if market == nil {
 		return fmt.Errorf("dtl: unknown lending market")
 	}
+	// `position` stores the value produced by this operation.
 	position := getDTLLendingPosition(state, marketID, account)
 	if position == nil || position.Debt == 0 {
 		return fmt.Errorf("dtl: no outstanding debt")
@@ -1076,18 +1251,21 @@ func ValidateDTLLendRepayTx(state *DTLState, tx DTLLendRepayTx) error {
 	if tx.Amount > position.Debt {
 		return fmt.Errorf("dtl: repay exceeds outstanding debt")
 	}
+	// `err` stores the error produced by this operation.
 	if _, _, _, err := validateDTLSpendable(state, market.DebtTokenID, account, tx.Amount); err != nil {
 		return err
 	}
 	return nil
 }
 
+// ValidateDTLLendWithdrawCollateralTx validates dtl lend withdraw collateral tx.
 func ValidateDTLLendWithdrawCollateralTx(state *DTLState, tx DTLLendWithdrawCollateralTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `account` stores the measured quantity used by this operation.
 	account := normalizeDTLAccount(tx.Account)
 	if account == "" {
 		return fmt.Errorf("dtl: invalid lending account")
@@ -1095,16 +1273,21 @@ func ValidateDTLLendWithdrawCollateralTx(state *DTLState, tx DTLLendWithdrawColl
 	if tx.Amount == 0 {
 		return fmt.Errorf("dtl: withdraw amount must be > 0")
 	}
+	// `marketID` stores the value produced by this operation.
 	marketID := normalizeDTLMarketID(tx.MarketID)
+	// `market` stores the value produced by this operation.
 	market := state.LendingMarkets[marketID]
 	if market == nil {
 		return fmt.Errorf("dtl: unknown lending market")
 	}
+	// `position` stores the value produced by this operation.
 	position := getDTLLendingPosition(state, marketID, account)
 	if position == nil || position.Collateral < tx.Amount {
 		return fmt.Errorf("dtl: insufficient collateral")
 	}
+	// `remainingCollateral` stores the value produced by this operation.
 	remainingCollateral := position.Collateral - tx.Amount
+	// `healthy` and `err` store the error produced by this operation.
 	healthy, err := dtlLendingIsHealthy(remainingCollateral, position.Debt, market.CollateralFactorBPS)
 	if err != nil {
 		return err
@@ -1112,20 +1295,25 @@ func ValidateDTLLendWithdrawCollateralTx(state *DTLState, tx DTLLendWithdrawColl
 	if !healthy {
 		return fmt.Errorf("dtl: withdraw would make position unhealthy")
 	}
+	// `vault` stores the value produced by this operation.
 	vault := dtlLendingVaultAccount(marketID)
+	// `err` stores the error produced by this operation.
 	if _, _, _, err := validateDTLSpendable(state, market.CollateralTokenID, vault, tx.Amount); err != nil {
 		return err
 	}
 	return nil
 }
 
+// ValidateDTLLendLiquidateTx validates dtl lend liquidate tx.
 func ValidateDTLLendLiquidateTx(state *DTLState, tx DTLLendLiquidateTx, currentHeight uint64) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `liquidator` stores the value produced by this operation.
 	liquidator := normalizeDTLAccount(tx.Liquidator)
+	// `borrower` stores the value produced by this operation.
 	borrower := normalizeDTLAccount(tx.Borrower)
 	if liquidator == "" || borrower == "" {
 		return fmt.Errorf("dtl: invalid liquidation account")
@@ -1136,11 +1324,14 @@ func ValidateDTLLendLiquidateTx(state *DTLState, tx DTLLendLiquidateTx, currentH
 	if tx.RepayAmount == 0 {
 		return fmt.Errorf("dtl: liquidation repay amount must be > 0")
 	}
+	// `marketID` stores the value produced by this operation.
 	marketID := normalizeDTLMarketID(tx.MarketID)
+	// `market` stores the value produced by this operation.
 	market := state.LendingMarkets[marketID]
 	if market == nil {
 		return fmt.Errorf("dtl: unknown lending market")
 	}
+	// `position` stores the value produced by this operation.
 	position := getDTLLendingPosition(state, marketID, borrower)
 	if position == nil || position.Debt == 0 {
 		return fmt.Errorf("dtl: borrower has no debt")
@@ -1148,6 +1339,7 @@ func ValidateDTLLendLiquidateTx(state *DTLState, tx DTLLendLiquidateTx, currentH
 	if tx.RepayAmount > position.Debt {
 		return fmt.Errorf("dtl: repay exceeds borrower debt")
 	}
+	// `healthy` and `err` store the error produced by this operation.
 	healthy, _, err := dtlLendingHealthFactorBPS(state, market, position.Collateral, position.Debt, currentHeight)
 	if err != nil {
 		return err
@@ -1155,14 +1347,17 @@ func ValidateDTLLendLiquidateTx(state *DTLState, tx DTLLendLiquidateTx, currentH
 	if healthy {
 		return fmt.Errorf("dtl: position is healthy")
 	}
+	// `err` stores the error produced by this operation.
 	if _, _, _, err := validateDTLSpendable(state, market.DebtTokenID, liquidator, tx.RepayAmount); err != nil {
 		return err
 	}
+	// `seize` and `err` store the error produced by this operation.
 	seize, err := dtlLendingSeizeCollateral(tx.RepayAmount, market.LiquidationBonusBPS)
 	if err != nil {
 		return err
 	}
 	if market.CloseFactorBPS > 0 {
+		// `maxRepay` and `err` store the error produced by this operation.
 		maxRepay, err := dtlMulDivU64(position.Debt, uint64(market.CloseFactorBPS), DTLMaxTaxBPS)
 		if err != nil {
 			return err
@@ -1177,24 +1372,30 @@ func ValidateDTLLendLiquidateTx(state *DTLState, tx DTLLendLiquidateTx, currentH
 	if seize > position.Collateral {
 		seize = position.Collateral
 	}
+	// `vault` stores the value produced by this operation.
 	vault := dtlLendingVaultAccount(marketID)
+	// `err` stores the error produced by this operation.
 	if _, _, _, err := validateDTLSpendable(state, market.CollateralTokenID, vault, seize); err != nil {
 		return err
 	}
 	return nil
 }
 
+// ValidateDTLTournamentCreateTx validates dtl tournament create tx.
 func ValidateDTLTournamentCreateTx(state *DTLState, tx DTLTournamentCreateTx, currentHeight uint64) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `creator` stores the value produced by this operation.
 	creator := normalizeDTLAccount(tx.Creator)
 	if creator == "" {
 		return fmt.Errorf("dtl: invalid tournament creator")
 	}
+	// `tokenID` stores the value produced by this operation.
 	tokenID := normalizeDTLTokenID(tx.TokenID)
+	// `token` stores the value produced by this operation.
 	token := state.Tokens[tokenID]
 	if token == nil {
 		return ErrDTLUnknownToken
@@ -1208,10 +1409,12 @@ func ValidateDTLTournamentCreateTx(state *DTLState, tx DTLTournamentCreateTx, cu
 	if tx.MaxPlayers < 2 || tx.MaxPlayers > DTLMaxTournamentPlayers {
 		return fmt.Errorf("dtl: invalid tournament max_players")
 	}
+	// `joinBlocks` stores the current position in the related collection.
 	joinBlocks := tx.JoinExpiryBlocks
 	if joinBlocks == 0 {
 		joinBlocks = DTLDefaultTournamentJoinBlocks
 	}
+	// `revealBlocks` stores the value produced by this operation.
 	revealBlocks := tx.RevealExpiryBlocks
 	if revealBlocks == 0 {
 		revealBlocks = DTLDefaultTournamentRevealBlocks
@@ -1225,17 +1428,21 @@ func ValidateDTLTournamentCreateTx(state *DTLState, tx DTLTournamentCreateTx, cu
 	return nil
 }
 
+// ValidateDTLTournamentJoinTx validates dtl tournament join tx.
 func ValidateDTLTournamentJoinTx(state *DTLState, tx DTLTournamentJoinTx, currentHeight uint64) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `player` stores the value produced by this operation.
 	player := normalizeDTLAccount(tx.Player)
 	if player == "" {
 		return fmt.Errorf("dtl: invalid tournament player")
 	}
+	// `tournamentID` stores the value produced by this operation.
 	tournamentID := normalizeDTLTournamentID(tx.TournamentID)
+	// `tournament` stores the value produced by this operation.
 	tournament := state.Tournaments[tournamentID]
 	if tournament == nil {
 		return fmt.Errorf("dtl: unknown tournament")
@@ -1249,31 +1456,38 @@ func ValidateDTLTournamentJoinTx(state *DTLState, tx DTLTournamentJoinTx, curren
 	if len(tournament.Players) >= int(tournament.MaxPlayers) {
 		return fmt.Errorf("dtl: tournament is full")
 	}
+	// `err` stores the error produced by this operation.
 	if _, err := validateDTLCommitHash(tx.CommitHash); err != nil {
 		return err
 	}
+	// `existing` tracks the current values while iterating.
 	for _, existing := range tournament.Players {
 		if normalizeDTLAccount(existing) == player {
 			return fmt.Errorf("dtl: player already joined")
 		}
 	}
+	// `err` stores the error produced by this operation.
 	if _, _, _, err := validateDTLSpendable(state, tournament.TokenID, player, tournament.EntryFee); err != nil {
 		return err
 	}
 	return nil
 }
 
+// ValidateDTLTournamentRevealTx validates dtl tournament reveal tx.
 func ValidateDTLTournamentRevealTx(state *DTLState, tx DTLTournamentRevealTx, currentHeight uint64) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `player` stores the value produced by this operation.
 	player := normalizeDTLAccount(tx.Player)
 	if player == "" {
 		return fmt.Errorf("dtl: invalid tournament player")
 	}
+	// `tournamentID` stores the value produced by this operation.
 	tournamentID := normalizeDTLTournamentID(tx.TournamentID)
+	// `tournament` stores the value produced by this operation.
 	tournament := state.Tournaments[tournamentID]
 	if tournament == nil {
 		return fmt.Errorf("dtl: unknown tournament")
@@ -1284,6 +1498,7 @@ func ValidateDTLTournamentRevealTx(state *DTLState, tx DTLTournamentRevealTx, cu
 	if currentHeight > tournament.RevealDeadline {
 		return fmt.Errorf("dtl: tournament reveal deadline passed")
 	}
+	// `commit` stores the value produced by this operation.
 	commit := ""
 	if tournament.Commits != nil {
 		commit = normalizeDTLHex(tournament.Commits[player])
@@ -1296,6 +1511,7 @@ func ValidateDTLTournamentRevealTx(state *DTLState, tx DTLTournamentRevealTx, cu
 			return fmt.Errorf("dtl: player already revealed")
 		}
 	}
+	// `secret` stores the value produced by this operation.
 	secret := strings.TrimSpace(tx.Secret)
 	if secret == "" {
 		return fmt.Errorf("dtl: tournament secret is required")
@@ -1309,6 +1525,7 @@ func ValidateDTLTournamentRevealTx(state *DTLState, tx DTLTournamentRevealTx, cu
 	return nil
 }
 
+// ValidateDTLTournamentFinalizeTx validates dtl tournament finalize tx.
 func ValidateDTLTournamentFinalizeTx(state *DTLState, tx DTLTournamentFinalizeTx, currentHeight uint64) error {
 	if state == nil {
 		return ErrDTLInvalidState
@@ -1318,7 +1535,9 @@ func ValidateDTLTournamentFinalizeTx(state *DTLState, tx DTLTournamentFinalizeTx
 	if normalizeDTLAccount(tx.Caller) == "" {
 		return fmt.Errorf("dtl: invalid tournament finalize caller")
 	}
+	// `tournamentID` stores the value produced by this operation.
 	tournamentID := normalizeDTLTournamentID(tx.TournamentID)
+	// `tournament` stores the value produced by this operation.
 	tournament := state.Tournaments[tournamentID]
 	if tournament == nil {
 		return fmt.Errorf("dtl: unknown tournament")
@@ -1335,9 +1554,10 @@ func ValidateDTLTournamentFinalizeTx(state *DTLState, tx DTLTournamentFinalizeTx
 	if currentHeight < tournament.RevealDeadline {
 		return fmt.Errorf("dtl: tournament still waiting for reveal")
 	}
+	// `beaconHeight` stores the value produced by this operation.
 	beaconHeight := tournament.BeaconHeight
 	if beaconHeight == 0 {
-		beaconHeight = tournament.RevealDeadline + dtlBeaconDelayAtHeight(currentHeight)
+		beaconHeight = tournament.RevealDeadline + dtlProtocolBeaconDelayAtHeight(currentHeight)
 	}
 	if currentHeight < beaconHeight {
 		return fmt.Errorf("dtl: tournament waiting for beacon")
@@ -1345,17 +1565,21 @@ func ValidateDTLTournamentFinalizeTx(state *DTLState, tx DTLTournamentFinalizeTx
 	return nil
 }
 
+// ValidateDTLOracleFeedCreateTx validates dtl oracle feed create tx.
 func ValidateDTLOracleFeedCreateTx(state *DTLState, tx DTLOracleFeedCreateTx) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `creator` stores the value produced by this operation.
 	creator := normalizeDTLAccount(tx.Creator)
 	if creator == "" {
 		return fmt.Errorf("dtl: invalid oracle creator")
 	}
+	// `base` stores the value produced by this operation.
 	base := normalizeDTLTokenID(tx.BaseTokenID)
+	// `quote` stores the value produced by this operation.
 	quote := normalizeDTLTokenID(tx.QuoteTokenID)
 	if base == "" || quote == "" {
 		return fmt.Errorf("dtl: oracle requires base and quote token")
@@ -1363,13 +1587,18 @@ func ValidateDTLOracleFeedCreateTx(state *DTLState, tx DTLOracleFeedCreateTx) er
 	if base == quote {
 		return fmt.Errorf("dtl: oracle base and quote must differ")
 	}
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]struct{}, len(tx.Signers))
+	// `signers` stores the value produced by this operation.
 	signers := make([]string, 0, len(tx.Signers))
+	// `signer` tracks the current values while iterating.
 	for _, signer := range tx.Signers {
+		// `n` stores the value produced by this operation.
 		n := normalizeDTLAccount(signer)
 		if n == "" {
 			continue
 		}
+		// `ok` stores whether the related condition is satisfied.
 		if _, ok := seen[n]; ok {
 			continue
 		}
@@ -1379,7 +1608,7 @@ func ValidateDTLOracleFeedCreateTx(state *DTLState, tx DTLOracleFeedCreateTx) er
 	if len(signers) == 0 {
 		return fmt.Errorf("dtl: oracle signers required")
 	}
-	if len(signers) < int(ConfigDTLOracleMinSigners) {
+	if len(signers) < int(dtlProtocolOracleMinSigners()) {
 		return fmt.Errorf("dtl: oracle signer count below minimum")
 	}
 	if tx.Threshold == 0 || int(tx.Threshold) > len(signers) {
@@ -1388,7 +1617,9 @@ func ValidateDTLOracleFeedCreateTx(state *DTLState, tx DTLOracleFeedCreateTx) er
 	if tx.Decimals > DTLMaxDecimals {
 		return fmt.Errorf("dtl: invalid oracle decimals")
 	}
+	// `feedID` stores the value produced by this operation.
 	if feedID := normalizeDTLTokenID(tx.FeedID); feedID != "" {
+		// `exists` stores whether the related condition is satisfied.
 		if _, exists := state.OracleFeeds[feedID]; exists {
 			return fmt.Errorf("dtl: oracle feed already exists")
 		}
@@ -1396,12 +1627,14 @@ func ValidateDTLOracleFeedCreateTx(state *DTLState, tx DTLOracleFeedCreateTx) er
 	return nil
 }
 
+// ValidateDTLOraclePriceSubmitTx validates dtl oracle price submit tx.
 func ValidateDTLOraclePriceSubmitTx(state *DTLState, tx DTLOraclePriceSubmitTx, currentHeight uint64) error {
 	if state == nil {
 		return ErrDTLInvalidState
 	}
 	state.ensure()
 
+	// `submitter` stores the value produced by this operation.
 	submitter := normalizeDTLAccount(tx.Submitter)
 	if submitter == "" {
 		return fmt.Errorf("dtl: invalid oracle submitter")
@@ -1409,12 +1642,16 @@ func ValidateDTLOraclePriceSubmitTx(state *DTLState, tx DTLOraclePriceSubmitTx, 
 	if tx.Price == 0 {
 		return fmt.Errorf("dtl: oracle price must be > 0")
 	}
+	// `feedID` stores the value produced by this operation.
 	feedID := normalizeDTLTokenID(tx.FeedID)
+	// `feed` stores the value produced by this operation.
 	feed := state.OracleFeeds[feedID]
 	if feed == nil {
 		return fmt.Errorf("dtl: unknown oracle feed")
 	}
+	// `authorized` stores the value produced by this operation.
 	authorized := false
+	// `signer` tracks the current values while iterating.
 	for _, signer := range feed.Signers {
 		if normalizeDTLAccount(signer) == submitter {
 			authorized = true
@@ -1424,7 +1661,9 @@ func ValidateDTLOraclePriceSubmitTx(state *DTLState, tx DTLOraclePriceSubmitTx, 
 	if !authorized {
 		return fmt.Errorf("dtl: submitter is not feed signer")
 	}
+	// `samples` stores the value produced by this operation.
 	if samples := state.OracleSamples[feedID]; samples != nil {
+		// `sample` stores the value produced by this operation.
 		if sample := samples[submitter]; sample.Height > currentHeight {
 			return fmt.Errorf("dtl: oracle sample height regression")
 		}
@@ -1432,438 +1671,19 @@ func ValidateDTLOraclePriceSubmitTx(state *DTLState, tx DTLOraclePriceSubmitTx, 
 	return nil
 }
 
-func normalizeDTLContractLang(raw string) string {
-	lang := strings.ToLower(strings.TrimSpace(raw))
-	if lang == "dtl-script" {
-		return "dtl-script-v1"
-	}
-	if lang == "dtl-script-v2" {
-		return "dtl-script-v2"
-	}
-	if lang == "dtl-bytecode" || lang == "bytecode" {
-		return DTLContractLangBytecodeV1
-	}
-	return lang
+// ValidateDTLContractDeployTx permanently rejects the removed programmable
+// contract/VM transaction class. Native DTL transactions remain supported.
+func ValidateDTLContractDeployTx(_ *DTLState, _ string, _ uint64, _ DTLContractDeployTx) error {
+	return dtlContractRuntimeRemovedError("CONTRACT_DEPLOY")
 }
 
-func normalizeDTLContractStandard(raw string) string {
-	standard := strings.ToUpper(strings.TrimSpace(raw))
-	if standard == "" {
-		return DTLContractStandardCustom
-	}
-	return standard
+// ValidateDTLContractCallTx permanently rejects the removed programmable
+// contract/VM transaction class. Native DTL transactions remain supported.
+func ValidateDTLContractCallTx(_ *DTLState, _ DTLContractCallTx) error {
+	return dtlContractRuntimeRemovedError("CONTRACT_CALL")
 }
 
-func validateDTLContractStandard(raw string) (string, error) {
-	standard := normalizeDTLContractStandard(raw)
-	switch standard {
-	case DTLContractStandardCustom, DTLContractStandardMSC20, DTLContractStandardMSC721, DTLContractStandardMSC1155:
-		return standard, nil
-	default:
-		return "", fmt.Errorf("dtl: unsupported contract standard")
-	}
-}
-
-func dtlContractDeployUsesV2(tx DTLContractDeployTx) bool {
-	standard := normalizeDTLContractStandard(tx.Standard)
-	if standard != "" && standard != DTLContractStandardCustom {
-		return true
-	}
-	if strings.TrimSpace(tx.Bytecode) != "" {
-		return true
-	}
-	if len(tx.ABI) > 0 || strings.TrimSpace(tx.MetadataURI) != "" || len(tx.Interfaces) > 0 || tx.Upgradeable || strings.TrimSpace(tx.ProxyTarget) != "" {
-		return true
-	}
-	if tx.LogicPack != nil {
-		if tx.LogicPack.Version >= DTLLogicPackVersionV2 {
-			return true
-		}
-		for _, method := range tx.LogicPack.Methods {
-			for _, op := range method.Ops {
-				if isDTLLogicPackV2Opcode(op.Op) {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-func validateDTLContractOp(raw DTLContractOp) (DTLContractOp, error) {
-	op := DTLContractOp(strings.ToUpper(strings.TrimSpace(string(raw))))
-	switch op {
-	case DTLContractOpSetStr, DTLContractOpSetU64, DTLContractOpAddU64, DTLContractOpSubU64, DTLContractOpTokenTransfer:
-		return op, nil
-	default:
-		return "", fmt.Errorf("dtl: unsupported contract op: %s", raw)
-	}
-}
-
-func parseDTLContractArgU64(args map[string]string, name string) (uint64, error) {
-	v := strings.TrimSpace(args[name])
-	if v == "" {
-		return 0, fmt.Errorf("dtl: missing contract arg: %s", name)
-	}
-	n, err := strconv.ParseUint(v, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("dtl: invalid uint64 arg %s", name)
-	}
-	return n, nil
-}
-
-func parseDTLContractStoredU64(storage map[string]string, key string) (uint64, error) {
-	if storage == nil {
-		return 0, nil
-	}
-	raw := strings.TrimSpace(storage[key])
-	if raw == "" {
-		return 0, nil
-	}
-	n, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("dtl: contract storage %s is not uint64", key)
-	}
-	return n, nil
-}
-
-func ValidateDTLContractDeployTx(state *DTLState, chainID string, nonce uint64, tx DTLContractDeployTx) error {
-	if dtlContractRuntimeRemoved() {
-		return dtlContractRuntimeRemovedError("CONTRACT_DEPLOY")
-	}
-	if state == nil {
-		return ErrDTLInvalidState
-	}
-	state.ensure()
-
-	creator := normalizeDTLAccount(tx.Creator)
-	if creator == "" {
-		return fmt.Errorf("dtl: invalid contract creator")
-	}
-	name := strings.TrimSpace(tx.Name)
-	if name == "" || len(name) > DTLMaxNameLen {
-		return fmt.Errorf("dtl: invalid contract name length")
-	}
-	lang := normalizeDTLContractLang(tx.Lang)
-	switch lang {
-	case "solidity-like", "vyper-like", "dtl-script-v1", "dtl-script-v2", DTLContractLangBytecodeV1:
-	default:
-		return fmt.Errorf("dtl: unsupported contract language")
-	}
-	hasLogicPack := tx.LogicPack != nil
-	hasLegacyMethods := len(tx.Methods) > 0
-	hasBytecode := strings.TrimSpace(tx.Bytecode) != ""
-	sourceCount := 0
-	if hasLogicPack {
-		sourceCount++
-	}
-	if hasLegacyMethods {
-		sourceCount++
-	}
-	if hasBytecode {
-		sourceCount++
-	}
-	if sourceCount != 1 {
-		found := make([]string, 0, 3)
-		if hasLogicPack {
-			found = append(found, "logic_pack")
-		}
-		if hasLegacyMethods {
-			found = append(found, "methods")
-		}
-		if hasBytecode {
-			found = append(found, "bytecode")
-		}
-		foundList := "none"
-		if len(found) > 0 {
-			foundList = strings.Join(found, ", ")
-		}
-		return fmt.Errorf("dtl: contract deploy must define exactly one executable source: logic_pack | methods | bytecode (found: %s)", foundList)
-	}
-	if hasBytecode {
-		if lang != DTLContractLangBytecodeV1 && lang != "solidity-like" {
-			return fmt.Errorf("dtl: bytecode deploy requires lang dtl-bytecode-v1 or solidity-like")
-		}
-		if normalizeDTLBytecodeFormat(tx.BytecodeFormat) != DTLBytecodeFormatV1 {
-			return fmt.Errorf("dtl: bytecode_format must be %s", DTLBytecodeFormatV1)
-		}
-		decodedBytes, err := decodeDTLBytecodeHex(tx.Bytecode)
-		if err != nil {
-			return err
-		}
-		if ConfigDTLBytecodeMaxSize > 0 && uint64(len(decodedBytes)) > ConfigDTLBytecodeMaxSize {
-			return fmt.Errorf("dtl: bytecode exceeds max size")
-		}
-		if _, _, _, err := decodeNormalizeValidateDTLBytecode(state, tx.Bytecode); err != nil {
-			return err
-		}
-	}
-	standard, err := validateDTLContractStandard(tx.Standard)
-	if err != nil {
-		return err
-	}
-	if len(tx.MetadataURI) > DTLMaxContractValueLen {
-		return fmt.Errorf("dtl: metadata_uri too long")
-	}
-	if len(tx.Interfaces) > DTLMaxContractMethods {
-		return fmt.Errorf("dtl: too many interfaces")
-	}
-	for _, iface := range tx.Interfaces {
-		if len(strings.TrimSpace(iface)) > DTLMaxNameLen {
-			return fmt.Errorf("dtl: contract interface name too long")
-		}
-	}
-	if strings.TrimSpace(tx.ProxyTarget) != "" && !tx.Upgradeable {
-		return fmt.Errorf("dtl: proxy_target requires upgradeable=true")
-	}
-	if len(strings.TrimSpace(tx.Compiler)) > DTLMaxContractValueLen {
-		return fmt.Errorf("dtl: compiler too long")
-	}
-	if len(strings.TrimSpace(tx.SourceHash)) > DTLMaxContractValueLen {
-		return fmt.Errorf("dtl: source_hash too long")
-	}
-	if len(tx.ABI) > 0 {
-		var anyObj any
-		if err := json.Unmarshal(tx.ABI, &anyObj); err != nil {
-			return fmt.Errorf("dtl: invalid contract abi")
-		}
-	}
-
-	if lang == "dtl-script-v1" && tx.LogicPack == nil {
-		return fmt.Errorf("dtl: dtl-script-v1 requires logic_pack")
-	}
-	if lang == "dtl-script-v2" && tx.LogicPack == nil {
-		return fmt.Errorf("dtl: dtl-script-v2 requires logic_pack")
-	}
-	if lang == DTLContractLangBytecodeV1 && !hasBytecode {
-		return fmt.Errorf("dtl: dtl-bytecode-v1 requires bytecode")
-	}
-	if standard != DTLContractStandardCustom && !hasLogicPack && !hasLegacyMethods && !hasBytecode {
-		return fmt.Errorf("dtl: standard contract requires logic_pack, methods, or bytecode")
-	}
-	var normalizedLogicPack *DTLLogicPack
-	if hasLogicPack {
-		normalizedLogicPack, err = validateAndNormalizeDTLLogicPack(state, tx.LogicPack)
-		if err != nil {
-			return err
-		}
-	}
-	if hasBytecode {
-		_, normalizedPack, _, err := decodeNormalizeValidateDTLBytecode(state, tx.Bytecode)
-		if err != nil {
-			return err
-		}
-		normalizedLogicPack = cloneDTLLogicPack(normalizedPack)
-	}
-	if !hasLogicPack && !hasBytecode {
-		if len(tx.Methods) == 0 || len(tx.Methods) > DTLMaxContractMethods {
-			return fmt.Errorf("dtl: invalid contract method count")
-		}
-		seenMethods := make(map[string]struct{}, len(tx.Methods))
-		for _, method := range tx.Methods {
-			methodName := normalizeDTLContractMethodName(method.Name)
-			if methodName == "" || len(methodName) > DTLMaxNameLen {
-				return fmt.Errorf("dtl: invalid contract method name")
-			}
-			if _, exists := seenMethods[methodName]; exists {
-				return fmt.Errorf("dtl: duplicate contract method: %s", methodName)
-			}
-			seenMethods[methodName] = struct{}{}
-
-			op, err := validateDTLContractOp(method.Op)
-			if err != nil {
-				return err
-			}
-			key := strings.TrimSpace(method.Key)
-			arg := strings.TrimSpace(method.Arg)
-			toArg := strings.TrimSpace(method.ToArg)
-			if len(key) > DTLMaxContractKeyLen {
-				return fmt.Errorf("dtl: contract key too long")
-			}
-			if len(arg) > DTLMaxContractKeyLen || len(toArg) > DTLMaxContractKeyLen {
-				return fmt.Errorf("dtl: contract arg key too long")
-			}
-
-			switch op {
-			case DTLContractOpSetStr, DTLContractOpSetU64, DTLContractOpAddU64, DTLContractOpSubU64:
-				if key == "" || arg == "" {
-					return fmt.Errorf("dtl: contract method %s requires key and arg", methodName)
-				}
-			case DTLContractOpTokenTransfer:
-				tokenID, ok := resolveDTLTokenRef(state, method.TokenID)
-				if tokenID == "" {
-					return fmt.Errorf("dtl: contract transfer method requires token reference")
-				}
-				if !ok {
-					return ErrDTLUnknownToken
-				}
-				fromMode := strings.ToLower(strings.TrimSpace(method.From))
-				if fromMode == "" {
-					fromMode = "caller"
-				}
-				if fromMode != "caller" && fromMode != "contract" {
-					return fmt.Errorf("dtl: contract transfer from must be caller or contract")
-				}
-				if arg == "" || toArg == "" {
-					return fmt.Errorf("dtl: contract transfer method requires arg and to_arg")
-				}
-			}
-		}
-	}
-	for key, value := range tx.Init {
-		k := strings.TrimSpace(key)
-		if k == "" || len(k) > DTLMaxContractKeyLen {
-			return fmt.Errorf("dtl: invalid contract init key")
-		}
-		if len(value) > DTLMaxContractValueLen {
-			return fmt.Errorf("dtl: contract init value too long")
-		}
-		if normalizedLogicPack != nil {
-			known := false
-			for _, field := range normalizedLogicPack.Storage {
-				if strings.EqualFold(strings.TrimSpace(field.Key), k) {
-					known = true
-					break
-				}
-			}
-			if !known {
-				return fmt.Errorf("dtl: unknown logic pack storage key in init: %s", k)
-			}
-		}
-	}
-
-	contractID := normalizeDTLContractID(DTLContractIDFromDeploy(chainID, nonce, tx))
-	if _, exists := state.Contracts[contractID]; exists {
-		return fmt.Errorf("dtl: contract id collision")
-	}
-	return nil
-}
-
-func ValidateDTLContractCallTx(state *DTLState, tx DTLContractCallTx) error {
-	if dtlContractRuntimeRemoved() {
-		return dtlContractRuntimeRemovedError("CONTRACT_CALL")
-	}
-	if state == nil {
-		return ErrDTLInvalidState
-	}
-	state.ensure()
-
-	caller := normalizeDTLAccount(tx.Caller)
-	if caller == "" {
-		return fmt.Errorf("dtl: invalid contract caller")
-	}
-	contractID := normalizeDTLContractID(tx.ContractID)
-	contract := state.Contracts[contractID]
-	if contract == nil {
-		return fmt.Errorf("dtl: unknown contract")
-	}
-	if contract.Paused {
-		return ErrDTLPaused
-	}
-	if len(tx.Args) > DTLMaxContractArgs {
-		return fmt.Errorf("dtl: too many contract args")
-	}
-	methodName := normalizeDTLContractMethodName(tx.Method)
-	if methodName == "" {
-		return fmt.Errorf("dtl: missing contract method")
-	}
-	if strings.TrimSpace(contract.Bytecode) != "" {
-		program, normalizedPack, _, err := decodeNormalizeValidateDTLBytecode(state, contract.Bytecode)
-		if err != nil {
-			return err
-		}
-		if !methodExistsInDTLBytecodeProgram(program, methodName) {
-			return fmt.Errorf("dtl: unknown contract method: %s", methodName)
-		}
-		execContract := *contract
-		execContract.LogicPack = cloneDTLLogicPack(normalizedPack)
-		return validateDTLLogicPackCall(state, contractID, &execContract, tx)
-	}
-	if contract.LogicPack != nil {
-		return validateDTLLogicPackCall(state, contractID, contract, tx)
-	}
-	method := contract.Methods[methodName]
-	if method == nil {
-		return fmt.Errorf("dtl: unknown contract method: %s", methodName)
-	}
-	op, err := validateDTLContractOp(method.Op)
-	if err != nil {
-		return err
-	}
-
-	switch op {
-	case DTLContractOpSetStr:
-		v := strings.TrimSpace(tx.Args[method.Arg])
-		if v == "" {
-			return fmt.Errorf("dtl: missing contract arg: %s", method.Arg)
-		}
-		if len(v) > DTLMaxContractValueLen {
-			return fmt.Errorf("dtl: contract value too long")
-		}
-	case DTLContractOpSetU64:
-		if _, err := parseDTLContractArgU64(tx.Args, method.Arg); err != nil {
-			return err
-		}
-	case DTLContractOpAddU64:
-		cur, err := parseDTLContractStoredU64(contract.Storage, method.Key)
-		if err != nil {
-			return err
-		}
-		add, err := parseDTLContractArgU64(tx.Args, method.Arg)
-		if err != nil {
-			return err
-		}
-		if _, err := dtlSafeAddU64(cur, add); err != nil {
-			return err
-		}
-	case DTLContractOpSubU64:
-		cur, err := parseDTLContractStoredU64(contract.Storage, method.Key)
-		if err != nil {
-			return err
-		}
-		sub, err := parseDTLContractArgU64(tx.Args, method.Arg)
-		if err != nil {
-			return err
-		}
-		if sub > cur {
-			return fmt.Errorf("dtl: contract subtraction underflow")
-		}
-	case DTLContractOpTokenTransfer:
-		amount, err := parseDTLContractArgU64(tx.Args, method.Arg)
-		if err != nil {
-			return err
-		}
-		if amount == 0 {
-			return fmt.Errorf("dtl: transfer amount must be > 0")
-		}
-		to := normalizeDTLAccount(tx.Args[method.ToArg])
-		if to == "" {
-			return fmt.Errorf("dtl: invalid transfer recipient")
-		}
-		tokenID, ok := resolveDTLTokenRef(state, method.TokenID)
-		if tokenID == "" || !ok {
-			return ErrDTLUnknownToken
-		}
-		fromMode := strings.ToLower(strings.TrimSpace(method.From))
-		if fromMode == "" {
-			fromMode = "caller"
-		}
-		switch fromMode {
-		case "caller":
-			if _, _, _, err := validateDTLSpendable(state, tokenID, caller, amount); err != nil {
-				return err
-			}
-		case "contract":
-			if _, _, _, err := validateDTLSpendable(state, tokenID, dtlContractVaultAccount(contractID), amount); err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("dtl: invalid transfer from mode")
-		}
-	}
-	return nil
-}
-
+// ValidateDTLGovernanceCert validates dtl governance cert.
 func ValidateDTLGovernanceCert(
 	token *DTLTokenState,
 	cert DTLGovernanceCert,
@@ -1894,19 +1714,28 @@ func ValidateDTLGovernanceCert(
 	if len(cert.Signers) != len(cert.Signatures) {
 		return fmt.Errorf("dtl: signer/signature length mismatch")
 	}
-	if len(cert.SignerPublicKeys) > 0 && len(cert.SignerPublicKeys) != len(cert.Signers) {
+	if len(cert.SignerPublicKeys) != len(cert.Signers) {
 		return fmt.Errorf("dtl: signer/public key length mismatch")
 	}
 	if token.AuthorityThreshold == 0 {
 		return fmt.Errorf("dtl: token threshold must be > 0")
 	}
 
+	if cert.Epoch > currentEpoch {
+		return fmt.Errorf("dtl: cert epoch is in the future")
+	}
 	if replayWindow > 0 && currentEpoch > cert.Epoch && currentEpoch-cert.Epoch > replayWindow {
 		return fmt.Errorf("dtl: cert epoch is stale")
 	}
+	if err := validateDTLGovernanceCertReplayEnvelope(cert, currentEpoch); err != nil {
+		return err
+	}
 
+	// `allowed` stores whether the related condition is satisfied.
 	allowed := make(map[string]struct{}, len(token.AuthoritySigners))
+	// `signer` tracks the current values while iterating.
 	for _, signer := range token.AuthoritySigners {
+		// `n` stores the value produced by this operation.
 		n := normalizeDTLAccount(signer)
 		if n == "" {
 			continue
@@ -1914,40 +1743,41 @@ func ValidateDTLGovernanceCert(
 		allowed[n] = struct{}{}
 	}
 
-	signBytes := DTLGovernanceCertSignBytes(
-		cert.TokenID,
-		cert.Epoch,
-		cert.Action,
-		cert.ActionPayloadHash,
-	)
+	// `signBytes` stores the value produced by this operation.
+	signBytes := dtlGovernanceCertSigningBytes(cert)
 
+	// `validUnique` stores whether the related condition is satisfied.
 	validUnique := make(map[string]struct{})
+	// `i` and `signer` track the current position in the related collection.
 	for i, signer := range cert.Signers {
+		// `n` stores the value produced by this operation.
 		n := normalizeDTLAccount(signer)
 		if n == "" {
 			return fmt.Errorf("dtl: empty signer in cert")
 		}
+		// `dup` stores the value produced by this operation.
 		if _, dup := validUnique[n]; dup {
 			return fmt.Errorf("dtl: duplicate signer in cert: %s", n)
 		}
+		// `ok` stores whether the related condition is satisfied.
 		if _, ok := allowed[n]; !ok {
 			return fmt.Errorf("dtl: signer not in authority set: %s", n)
 		}
+		// `sigHex` stores the value produced by this operation.
 		sigHex := normalizeDTLHex(cert.Signatures[i])
 		if sigHex == "" {
 			return fmt.Errorf("dtl: empty signature for signer %s", n)
 		}
+		// `sig` and `err` store the error produced by this operation.
 		sig, err := hex.DecodeString(sigHex)
 		if err != nil || len(sig) != ed25519.SignatureSize {
 			return fmt.Errorf("dtl: invalid signature for signer %s", n)
 		}
 
+		// `pub` and `err` store the error produced by this operation.
 		pub, err := resolveDTLGovernanceSignerPublicKey(signer, certSignerPublicKeyAt(cert, i))
 		if err != nil {
 			return err
-		}
-		if isMSCAddressLike(n) && !AddressMatchesPublicKey(n, pub) {
-			return fmt.Errorf("dtl: signer/public key mismatch for %s", n)
 		}
 		if !ed25519.Verify(pub, signBytes, sig) {
 			return fmt.Errorf("dtl: signature verification failed for signer %s", n)
@@ -1965,6 +1795,35 @@ func ValidateDTLGovernanceCert(
 	return nil
 }
 
+// validateDTLGovernanceCertReplayEnvelope validates the v2 replay envelope.
+func validateDTLGovernanceCertReplayEnvelope(cert DTLGovernanceCert, currentEpoch uint64) error {
+	v2 := dtlGovernanceCertHasV2Fields(cert)
+	if currentEpoch >= DTLGovernanceCertV2ActivationEpoch && !v2 {
+		return fmt.Errorf("dtl: governance cert v2 envelope required")
+	}
+	if !v2 {
+		return nil
+	}
+	nonce := normalizeDTLGovernanceNonce(cert.Nonce)
+	if nonce == "" {
+		return fmt.Errorf("dtl: governance cert nonce required")
+	}
+	if len(nonce) > DTLGovernanceCertMaxNonceLen {
+		return fmt.Errorf("dtl: governance cert nonce too long")
+	}
+	if cert.Sequence == 0 {
+		return fmt.Errorf("dtl: governance cert sequence required")
+	}
+	if cert.Expiry == 0 {
+		return fmt.Errorf("dtl: governance cert expiry required")
+	}
+	if currentEpoch > cert.Expiry {
+		return fmt.Errorf("dtl: governance cert expired")
+	}
+	return nil
+}
+
+// certSignerPublicKeyAt implements the cert signer public key at helper.
 func certSignerPublicKeyAt(cert DTLGovernanceCert, idx int) string {
 	if idx < 0 || idx >= len(cert.SignerPublicKeys) {
 		return ""
@@ -1972,67 +1831,58 @@ func certSignerPublicKeyAt(cert DTLGovernanceCert, idx int) string {
 	return cert.SignerPublicKeys[idx]
 }
 
+// resolveDTLGovernanceSignerPublicKey implements the resolve dtl governance signer public key helper.
 func resolveDTLGovernanceSignerPublicKey(signerRaw, provided string) (ed25519.PublicKey, error) {
+	// `signer` stores the value produced by this operation.
+	signer := normalizeDTLAccount(signerRaw)
+	if !isMSCAddressLike(signer) {
+		return nil, fmt.Errorf("dtl: governance signer must be an MSC address: %s", signer)
+	}
+
 	provided = normalizeDTLHex(provided)
-	if provided != "" {
-		b, err := hex.DecodeString(provided)
-		if err != nil || len(b) != ed25519.PublicKeySize {
-			return nil, fmt.Errorf("dtl: invalid signer public key for %s", normalizeDTLAccount(signerRaw))
-		}
-		out := make([]byte, len(b))
-		copy(out, b)
-		return ed25519.PublicKey(out), nil
+	if provided == "" {
+		return nil, fmt.Errorf("dtl: signer_public_keys required for %s", signer)
 	}
-
-	signerID := strings.TrimSpace(signerRaw)
-	signerNorm := normalizeValidatorID(signerID)
-	validatorPubKeysMu.RLock()
-	defer validatorPubKeysMu.RUnlock()
-
-	tryGet := func(key string) (ed25519.PublicKey, bool) {
-		if key == "" {
-			return nil, false
-		}
-		if pk, ok := ValidatorPubKeys[key]; ok && len(pk) == ed25519.PublicKeySize {
-			out := make([]byte, len(pk))
-			copy(out, pk)
-			return ed25519.PublicKey(out), true
-		}
-		if pk, ok := GenesisValidatorPubKeys[key]; ok && len(pk) == ed25519.PublicKeySize {
-			out := make([]byte, len(pk))
-			copy(out, pk)
-			return ed25519.PublicKey(out), true
-		}
-		return nil, false
+	// `b` and `err` store the error produced by this operation.
+	b, err := hex.DecodeString(provided)
+	if err != nil || len(b) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("dtl: invalid signer public key for %s", signer)
 	}
-
-	if pk, ok := tryGet(signerNorm); ok {
-		return pk, nil
+	// `out` stores the result produced by this operation.
+	out := make([]byte, len(b))
+	copy(out, b)
+	// `pub` stores the value produced by this operation.
+	pub := ed25519.PublicKey(out)
+	if !AddressMatchesPublicKey(signer, pub) {
+		return nil, fmt.Errorf("dtl: signer/public key mismatch for %s", signer)
 	}
-	if pk, ok := tryGet(signerID); ok {
-		return pk, nil
-	}
-	return nil, fmt.Errorf(
-		"dtl: missing signer public key for %s (provide signer_public_keys in gcert)",
-		normalizeDTLAccount(signerRaw),
-	)
+	return pub, nil
 }
 
+// isMSCAddressLike implements the is msc address like helper.
 func isMSCAddressLike(v string) bool {
 	v = strings.TrimSpace(v)
 	return len(v) >= 3 && strings.EqualFold(v[:3], "MSC")
 }
 
+// ValidateDTLRotateAuthorityPayload validates dtl rotate authority payload.
 func ValidateDTLRotateAuthorityPayload(p DTLRotateAuthorityPayload) error {
 	if p.AuthorityThreshold == 0 {
 		return fmt.Errorf("dtl: rotate threshold must be > 0")
 	}
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]struct{})
+	// `signer` tracks the current values while iterating.
 	for _, signer := range p.AuthoritySigners {
+		// `n` stores the value produced by this operation.
 		n := normalizeDTLAccount(signer)
 		if n == "" {
 			return fmt.Errorf("dtl: rotate has empty signer")
 		}
+		if !isMSCAddressLike(n) {
+			return fmt.Errorf("dtl: rotate signer must be an MSC address: %s", n)
+		}
+		// `dup` stores the value produced by this operation.
 		if _, dup := seen[n]; dup {
 			return fmt.Errorf("dtl: rotate has duplicate signer %s", n)
 		}

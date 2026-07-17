@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSC Social Promo Frames</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body,
+    #stage {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #05060c;
+      color: #ffffff;
+      font-family: "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    .stage {
+      position: relative;
+      isolation: isolate;
+    }
+
+    .photo,
+    .portal-image {
+      position: absolute;
+      z-index: -3;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+    }
+
+    .shade {
+      position: absolute;
+      z-index: -2;
+      inset: 0;
+      background: rgba(2, 4, 10, 0.26);
+    }
+
+    .edge {
+      position: absolute;
+      z-index: 4;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 8px;
+      background: #a72cff;
+      box-shadow: 0 0 28px rgba(167, 44, 255, 0.75);
+    }
+
+    .brand {
+      position: absolute;
+      z-index: 5;
+      top: 44px;
+      left: 58px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 11px 18px 11px 12px;
+      border: 1px solid rgba(188, 107, 255, 0.55);
+      background: rgba(5, 6, 12, 0.86);
+    }
+
+    .brand img {
+      width: 54px;
+      height: 54px;
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 21px;
+      line-height: 1;
+    }
+
+    .brand span {
+      display: block;
+      margin-top: 5px;
+      color: #c8bfd9;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .caption {
+      position: absolute;
+      z-index: 4;
+      left: 66px;
+      right: 66px;
+      bottom: 58px;
+      padding: 32px 38px 34px;
+      border: 1px solid rgba(188, 107, 255, 0.5);
+      border-left: 8px solid #a72cff;
+      background: rgba(4, 6, 14, 0.93);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+    }
+
+    .eyebrow {
+      margin-bottom: 13px;
+      color: #c773ff;
+      font-size: 19px;
+      font-weight: 800;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 1600px;
+      margin: 0;
+      font-size: 59px;
+      font-weight: 800;
+      line-height: 1.03;
+    }
+
+    .caption p {
+      margin: 15px 0 0;
+      color: #d9d4e6;
+      font-size: 25px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+
+    .gold {
+      color: #ffc936;
+    }
+
+    .cyan {
+      color: #2fe0cb;
+    }
+
+    .legal {
+      position: absolute;
+      z-index: 5;
+      top: 54px;
+      right: 58px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .outro .shade {
+      background: rgba(3, 4, 11, 0.76);
+    }
+
+    .outro-content {
+      position: absolute;
+      z-index: 4;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px;
+      text-align: center;
+    }
+
+    .outro-logo {
+      width: 220px;
+      height: 220px;
+      margin-bottom: 28px;
+      filter: drop-shadow(0 0 32px rgba(167, 44, 255, 0.7));
+    }
+
+    .outro h1 {
+      max-width: 1500px;
+      font-size: 78px;
+    }
+
+    .outro p {
+      margin: 20px 0 0;
+      color: #d8d1e5;
+      font-size: 29px;
+      font-weight: 600;
+    }
+
+    .cta {
+      margin-top: 34px;
+      padding: 17px 30px;
+      background: #a72cff;
+      font-size: 24px;
+      font-weight: 800;
+      box-shadow: 0 0 34px rgba(167, 44, 255, 0.5);
+    }
+
+    .portrait .brand {
+      top: 88px;
+      left: 54px;
+      padding: 13px 19px 13px 14px;
+    }
+
+    .portrait .brand img {
+      width: 60px;
+      height: 60px;
+    }
+
+    .portrait .brand strong {
+      font-size: 24px;
+    }
+
+    .portrait .brand span {
+      font-size: 13px;
+    }
+
+    .portrait .legal {
+      top: 104px;
+      right: 48px;
+      width: 310px;
+      font-size: 14px;
+      text-align: right;
+    }
+
+    .portrait .photo {
+      object-position: center;
+    }
+
+    .portrait .caption {
+      left: 48px;
+      right: 48px;
+      bottom: 260px;
+      min-height: 430px;
+      padding: 42px 38px 44px;
+      border-left-width: 8px;
+    }
+
+    .portrait .eyebrow {
+      margin-bottom: 20px;
+      font-size: 22px;
+    }
+
+    .portrait h1 {
+      font-size: 63px;
+      line-height: 1.05;
+    }
+
+    .portrait .caption p {
+      margin-top: 24px;
+      font-size: 29px;
+      line-height: 1.32;
+    }
+
+    .portrait.portal {
+      background:
+        linear-gradient(rgba(167, 44, 255, 0.09) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(167, 44, 255, 0.09) 1px, transparent 1px),
+        #05060c;
+      background-size: 76px 76px;
+    }
+
+    .portrait.portal .portal-image {
+      z-index: 1;
+      top: 265px;
+      left: 48px;
+      width: 984px;
+      height: 615px;
+      object-fit: cover;
+      border: 2px solid rgba(188, 107, 255, 0.55);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.62);
+    }
+
+    .portrait.portal .shade {
+      display: none;
+    }
+
+    .portrait.portal .caption {
+      bottom: 270px;
+      min-height: 500px;
+    }
+
+    .portrait.outro .outro-content {
+      justify-content: center;
+      padding: 120px 58px 320px;
+    }
+
+    .portrait.outro .outro-logo {
+      width: 250px;
+      height: 250px;
+      margin-bottom: 42px;
+    }
+
+    .portrait.outro h1 {
+      font-size: 76px;
+      line-height: 1.04;
+    }
+
+    .portrait.outro p {
+      margin-top: 28px;
+      font-size: 32px;
+      line-height: 1.35;
+    }
+
+    .portrait.outro .cta {
+      margin-top: 42px;
+      padding: 21px 28px;
+      font-size: 27px;
+    }
+  </style>
+</head>
+<body>
+  <main id="stage" class="stage"></main>
+  <script>
+    const scenes = {
+      hook: {
+        image: "crypto-educator.png",
+        eyebrow: "The Next Wave of Creators",
+        title: "Creators do not just follow the future.",
+        subtitle: "They explain it, test it and help communities build it."
+      },
+      builders: {
+        image: "builder-team.png",
+        eyebrow: "Built for Real Communities",
+        title: "Educators. Developers. Tech creators.",
+        subtitle: "Bring credible blockchain knowledge to audiences that want to learn."
+      },
+      gaming: {
+        image: "gaming-creator.png",
+        eyebrow: "Gaming Meets Web3",
+        title: "Turn complex ideas into content people understand.",
+        subtitle: "Posts, stories, videos, demos and live community sessions."
+      },
+      program: {
+        image: "portal-program.png",
+        portal: true,
+        eyebrow: "Choose Your Level",
+        title: "Bronze <span class='gold'>|</span> Silver <span class='gold'>|</span> Gold",
+        subtitle: "Clear content requirements and transparent locked allocations."
+      },
+      rewards: {
+        image: "portal-rewards.png",
+        portal: true,
+        eyebrow: "Rewards With Guardrails",
+        title: "Locked MSC. Founder NFT. Future access.",
+        subtitle: "Published vesting, verified referrals and no guaranteed profit promises."
+      },
+      ama: {
+        image: "community-ama.png",
+        eyebrow: "Community Impact",
+        title: "Educate. Engage. Build reputation.",
+        subtitle: "Create genuine conversations around wallets, explorers, nodes and validators."
+      },
+      apply: {
+        image: "portal-apply.png",
+        portal: true,
+        eyebrow: "Applications Open",
+        title: "Start with <span class='cyan'>1K to 20K</span> followers.",
+        subtitle: "Real audiences only. No bots, fake traffic or misleading financial claims."
+      },
+      outro: {
+        image: "builder-team.png",
+        outro: true,
+        eyebrow: "MSC Ambassador Program",
+        title: "Educate. Engage. Build MSC.",
+        subtitle: "Join the creator community shaping the MSC ecosystem.",
+        cta: "Apply through the MSC Influencer Portal"
+      }
+    };
+
+    const params = new URLSearchParams(location.search);
+    const sceneName = params.get("scene") || "hook";
+    const format = params.get("format") === "portrait" ? "portrait" : "landscape";
+    const scene = scenes[sceneName] || scenes.hook;
+    const stage = document.getElementById("stage");
+    const logo = "../../ui/assets/msc-logo-512.png";
+    const image = `visuals/${scene.image}`;
+
+    stage.className = `stage ${format} ${scene.portal ? "portal" : ""} ${scene.outro ? "outro" : ""}`;
+
+    if (scene.outro) {
+      stage.innerHTML = `
+        <img class="photo" src="${image}" alt="" />
+        <div class="shade"></div>
+        <div class="edge"></div>
+        <div class="legal">Community program. No guaranteed profit.</div>
+        <section class="outro-content">
+          <img class="outro-logo" src="${logo}" alt="" />
+          <div class="eyebrow">${scene.eyebrow}</div>
+          <h1>${scene.title}</h1>
+          <p>${scene.subtitle}</p>
+          <div class="cta">${scene.cta}</div>
+        </section>
+      `;
+    } else {
+      stage.innerHTML = `
+        <img class="${scene.portal ? "portal-image" : "photo"}" src="${image}" alt="" />
+        <div class="shade"></div>
+        <div class="edge"></div>
+        <div class="brand">
+          <img src="${logo}" alt="" />
+          <div><strong>MSC Ambassador</strong><span>Influencer Program</span></div>
+        </div>
+        <div class="legal">Community program. No guaranteed profit.</div>
+        <section class="caption">
+          <div class="eyebrow">${scene.eyebrow}</div>
+          <h1>${scene.title}</h1>
+          <p>${scene.subtitle}</p>
+        </section>
+      `;
+    }
+  </script>
+</body>
+</html>

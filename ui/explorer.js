@@ -1,415 +1,434 @@
-(function () {
-  const preferHttpsForLocalRpc = (rpc) => {
-    const raw = String(rpc || "").trim();
-    if (!raw) return raw;
-    if (window.location.protocol !== "https:") return raw;
-    if (/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/i.test(raw)) {
-      return raw.replace(/^http:\/\//i, "https://");
-    }
-    return raw;
-  };
+(() => {
+  "use strict";
 
-  const state = {
-    rpcUrl: preferHttpsForLocalRpc(localStorage.getItem("msc_rpc") || window.location.origin),
-    apiToken: (localStorage.getItem("msc_token") || "").replace(/^Bearer\s+/i, "").trim(),
-    refreshMs: 3000,
-    timer: null,
-    selectedBlockHeight: 0,
-    adminMode: localStorage.getItem("msc_admin_mode") === "1",
-    latestValidators: null,
-    latestPeers: null,
-    latestPublicNodes: null,
-    latestStatus: null,
-    latestBlocks: null,
-    txRawMode: false,
-    lastTxPayload: null,
-    refreshSeq: 0,
-    lastAppliedSeq: 0,
-    refreshInFlight: false,
-    refreshQueued: false,
-    realtimeSocket: null,
-    realtimeConnected: false,
-    realtimeAttempts: 0,
-    realtimeHeight: 0,
-    realtimeFinalized: 0,
-    heightAnimationTimer: null,
-    lastBlockAgeBaseSeconds: null,
-    lastBlockAgeUpdatedAt: 0,
-    blockAgeTimer: null,
-    eventDelayMs: null,
-  };
-
-  const UPTIME_CACHE_KEY = "msc_public_node_uptime_v1";
-  const UPTIME_MAX_SAMPLES = 200;
-
-  const byId = (id) => document.getElementById(id);
-
-  const els = {
-    connControls: byId("connControls"),
-    rpcUrl: byId("rpcUrl"),
-    apiTokenField: byId("apiTokenField"),
-    apiToken: byId("apiToken"),
-    refreshMs: byId("refreshMs"),
-    connectBtn: byId("connectBtn"),
-    refreshBtn: byId("refreshBtn"),
-    adminToggleBtn: byId("adminToggleBtn"),
-    connState: byId("connState"),
-    quickSearchForm: byId("quickSearchForm"),
-    quickSearchInput: byId("quickSearchInput"),
-    topHeight: byId("topHeight"),
-    topLastBlockAge: byId("topLastBlockAge"),
-    topEventDelay: byId("topEventDelay"),
-    topCmd: byId("topCmd"),
-    topPeers: byId("topPeers"),
-    topState: byId("topState"),
-    nodeId: byId("nodeId"),
-    chainId: byId("chainId"),
-    nodeRole: byId("nodeRole"),
-    height: byId("height"),
-    finalized: byId("finalized"),
-    lastBlockAge: byId("lastBlockAge"),
-    peerCount: byId("peerCount"),
-    quorum: byId("quorum"),
-    consensusDetectorMode: byId("consensusDetectorMode"),
-    waitReason: byId("waitReason"),
-    livenessMode: byId("livenessMode"),
-    livenessDriftLimit: byId("livenessDriftLimit"),
-    livenessCounts: byId("livenessCounts"),
-    autohealState: byId("autohealState"),
-    autohealReason: byId("autohealReason"),
-    autohealMismatch: byId("autohealMismatch"),
-    autohealSuccess: byId("autohealSuccess"),
-    bootstrapLane: byId("bootstrapLane"),
-    stateText: byId("state"),
-    blocksMeta: byId("blocksMeta"),
-    blocksBody: byId("blocksBody"),
-    validatorsOnline: byId("validatorsOnline"),
-    validatorsOffline: byId("validatorsOffline"),
-    validatorsPendingAdd: byId("validatorsPendingAdd"),
-    validatorsPendingRemove: byId("validatorsPendingRemove"),
-    validatorsConnected: byId("validatorsConnected"),
-    validatorsConnectedUnhealthy: byId("validatorsConnectedUnhealthy"),
-    validatorsGap: byId("validatorsGap"),
-    validatorMeta: byId("validatorMeta"),
-    blockSearchForm: byId("blockSearchForm"),
-    blockHeightInput: byId("blockHeightInput"),
-    blockHashInput: byId("blockHashInput"),
-    txSearchForm: byId("txSearchForm"),
-    txIdInput: byId("txIdInput"),
-    blockDetailMeta: byId("blockDetailMeta"),
-    blockDetail: byId("blockDetail"),
-    txDetailMeta: byId("txDetailMeta"),
-    txDetail: byId("txDetail"),
-    txRawToggle: byId("txRawToggle"),
-    peersMeta: byId("peersMeta"),
-    peersBody: byId("peersBody"),
-    publicNodesMeta: byId("publicNodesMeta"),
-    publicNodesBody: byId("publicNodesBody"),
-  };
-
-  const LEGACY_CONTRACT_TX_KEYS = new Set([
-    "contract_id",
-    "runtime_mode",
-    "logic_hash",
-    "logic_pack_hash",
-    "contract_standard",
-    "contract_interfaces",
-    "abi_hash",
-    "upgradeable",
-    "proxy_target",
-    "bytecode_format",
-    "bytecode_hash",
-    "bytecode_size",
-    "compiler",
-    "source_hash",
+  const PAGE = document.body.dataset.explorerPage || "overview";
+  const DEFAULT_BASE = window.location.origin;
+  const MSC_LOGO_SRC = "assets/msc-logo-64.png";
+  const MSC_APP_ICON_SRC = "assets/msc-app-icon-64.png";
+  const MSC_WALLET_ICON_SRC = "assets/msc-wallet-icon.png";
+  const MSC_VALIDATOR_BADGE_SRC = "assets/msc-validator-badge.png";
+  const MSC_GOVERNANCE_BADGE_SRC = "assets/msc-governance-badge.png";
+  const MSC_BRIDGE_BADGE_SRC = "assets/msc-bridge-badge.png";
+  const EXPLORER_REQUEST_TIMEOUT_MS = 4500;
+  const EXPLORER_FALLBACK_HEDGE_MS = 350;
+  const EXPLORER_REALTIME_CONNECT_TIMEOUT_MS = 5000;
+  const MSC_FIXED_SUPPLY = 9193823602;
+  const MSC_TOKENOMICS_BUCKETS = Object.freeze([
+    ["Team Treasury", "MSC_OWNER_ACCOUNT", 25],
+    ["Foundation", "MSC_FOUNDATION", 15],
+    ["Validator Bootstrap", "MSC_VALIDATOR_BOOTSTRAP", 10],
+    ["Community", "MSC_COMMUNITY_POOL", 20],
+    ["Future Rewards", "USER_REWARD_POOL", 30],
   ]);
-
-  const setAdminMode = (enabled) => {
-    state.adminMode = !!enabled || !!state.apiToken;
-    if (els.connControls) {
-      els.connControls.classList.toggle("show-admin", state.adminMode);
-    }
-    if (els.adminToggleBtn) {
-      els.adminToggleBtn.textContent = state.adminMode ? "Hide Admin" : "Admin";
-    }
-    localStorage.setItem("msc_admin_mode", state.adminMode ? "1" : "0");
+  const state = {
+    status: null,
+    blocks: [],
+    validators: null,
+    leaderboard: null,
+    peers: [],
+    publicNodes: null,
+    publicStatus: null,
+    governance: null,
+    tokenomics: null,
+    tokenomicsAudit: null,
+    storage: null,
+    snapshot: null,
+    bridge: null,
+    security: null,
+    misbehavior: null,
+    coins: null,
+    recentTxs: [],
+    recentTxRequest: 0,
+    lastUpdated: 0,
+    realtime: {
+      socket: null,
+      connected: false,
+      reconnectAttempts: 0,
+      displayHeight: 0,
+      lastBlockAgeBaseSeconds: null,
+      lastBlockAgeUpdatedAt: 0,
+      queue: [],
+      queuedHeights: new Set(),
+      processing: false,
+      connectTimer: null,
+    },
   };
 
-  const txTypeName = (t) => {
-    const n = Number(t);
-    switch (n) {
-      case 0:
-        return "TRANSFER";
-      case 1:
-        return "TASK";
-      case 2:
-        return "STAKE";
-      case 3:
-        return "VOTE";
-      case 4:
-        return "VALIDATOR_UPDATE";
-      case 5:
-        return "FAUCET";
-      case 6:
-        return "UNSTAKE";
-      case 7:
-        return "EVM";
-      default:
-        return String(t);
-    }
-  };
+  const navGroups = [
+    ["Core", [
+      ["overview", "Dashboard", "explorer.html", "layout-dashboard"],
+      ["blocks", "Blocks", "explorer-blocks.html", "box"],
+      ["transactions", "Transactions", "explorer-transactions.html", "arrow-left-right"],
+      ["addresses", "Addresses", "explorer-addresses.html", "wallet-cards"],
+      ["validators", "Validators", "explorer-validators.html", "shield-check", MSC_VALIDATOR_BADGE_SRC],
+    ]],
+    ["Governance", [
+      ["governance", "Governance", "explorer-governance.html", "landmark", MSC_GOVERNANCE_BADGE_SRC],
+      ["treasury", "Treasury", "explorer-treasury.html", "vault"],
+      ["council", "Council", "explorer-council.html", "users"],
+    ]],
+    ["Insights", [
+      ["analytics", "Analytics", "explorer-analytics.html", "chart-no-axes-combined"],
+      ["charts", "Charts", "explorer-charts.html", "chart-spline"],
+      ["tokenomics", "Tokenomics", "explorer-tokenomics.html", "coins"],
+      ["rich-list", "Rich list", "explorer-rich-list.html", "list-ordered"],
+      ["staking", "Staking", "explorer-staking.html", "badge-percent"],
+    ]],
+    ["Infrastructure", [
+      ["network", "Network", "explorer-network.html", "waypoints"],
+      ["nodes", "Nodes", "explorer-nodes.html", "server"],
+      ["snapshots", "Snapshots", "explorer-snapshots.html", "database-backup"],
+      ["mempool", "Mempool", "explorer-mempool.html", "list-start"],
+      ["epochs", "Epochs", "explorer-epochs.html", "rotate-cw"],
+    ]],
+    ["Resources", [
+      ["bridge", "Bridge", "explorer-bridge.html", "route", MSC_BRIDGE_BADGE_SRC],
+      ["security", "Security", "explorer-security.html", "shield-alert"],
+      ["api", "API", "explorer-api.html", "braces"],
+      ["search", "Search", "explorer-search.html", "search"],
+      ["settings", "Settings", "explorer-settings.html", "settings-2"],
+    ]],
+  ];
+  const nav = navGroups.flatMap(([, items]) => items);
+  const mobileNav = [
+    nav.find(([key]) => key === "overview"),
+    nav.find(([key]) => key === "blocks"),
+    nav.find(([key]) => key === "transactions"),
+    nav.find(([key]) => key === "addresses"),
+  ];
 
-  const short = (v, n = 10) => {
-    if (!v) return "-";
-    const s = String(v);
-    if (s.length <= n * 2) return s;
-    return `${s.slice(0, n)}...${s.slice(-n)}`;
+  const $ = (id) => document.getElementById(id);
+  const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[ch]));
+  const unwrap = (value) => value && value.success && value.data !== undefined ? value.data : value;
+  const fmt = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? new Intl.NumberFormat("en-US").format(Math.round(n)) : "-";
   };
-
-  const asIntOrNull = (value) => {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return null;
-    return Math.trunc(num);
+  const short = (value, left = 8, right = 6) => {
+    const raw = String(value || "");
+    return raw.length > left + right + 3 ? `${raw.slice(0, left)}...${raw.slice(-right)}` : raw || "-";
   };
-
-  const asTextOrDash = (value) => {
-    if (value === undefined || value === null) return "-";
-    const text = String(value).trim();
-    return text || "-";
-  };
-
-  const fmtWallTime = (ts) => {
-    const num = Number(ts);
-    if (!Number.isFinite(num) || num <= 0) return "-";
-    let ms = num;
-    if (num < 1e12) ms = num * 1000;
-    else if (num > 1e16) ms = Math.floor(num / 1e6);
-    const d = new Date(ms);
-    if (Number.isNaN(d.getTime())) return String(ts);
-    return `${d.toLocaleString()} (${ts})`;
-  };
-
-  const fmtAge = (seconds) => {
+  const age = (seconds) => {
     const n = Number(seconds);
-    if (!Number.isFinite(n) || n < 0) return "-";
-    if (n < 60) return `${Math.trunc(n)}s`;
-    const mins = Math.floor(n / 60);
-    const secs = Math.trunc(n % 60);
-    if (mins < 60) return secs ? `${mins}m ${secs}s` : `${mins}m`;
-    const hours = Math.floor(mins / 60);
-    const remMins = mins % 60;
-    return remMins ? `${hours}h ${remMins}m` : `${hours}h`;
+    if (!Number.isFinite(n)) return "-";
+    if (n < 60) return `${Math.max(0, Math.round(n))}s`;
+    if (n < 3600) return `${Math.round(n / 60)}m`;
+    return `${Math.round(n / 3600)}h`;
   };
-
-  const fmtBlocks = (value) => {
-    const n = asIntOrNull(value);
-    if (n === null || n < 0) return "-";
-    return `${n} block${n === 1 ? "" : "s"}`;
+  const delay = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+  const tone = (value, good, warn) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "";
+    if (n <= good) return "good";
+    if (n <= warn) return "warn";
+    return "bad";
   };
-
-  const fmtLatency = (value) => {
-    const n = asIntOrNull(value);
-    if (n === null || n < 0) return "-";
-    return `${n}ms`;
+  const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, Number(value) || 0));
+  const pct = (value, total) => {
+    const n = Number(value);
+    const d = Number(total);
+    if (!Number.isFinite(n) || !Number.isFinite(d) || d <= 0) return 0;
+    return clamp((n / d) * 100);
   };
-
-  const publicNodeKey = (node) => String(node?.id || node?.target || node?.rpc_url || node?.rpc || "-").trim();
-
-  const loadUptimeCache = () => {
-    try {
-      return JSON.parse(localStorage.getItem(UPTIME_CACHE_KEY) || "{}") || {};
-    } catch (_) {
-      return {};
+  const UNKNOWN_PROPOSER_TEXT = "Unknown Proposer";
+  const UNKNOWN_PROPOSER_TITLE = "Proposer data unavailable in block header";
+  const proposerLabel = (value) => {
+    const label = String(value ?? "").trim();
+    if (!label || label === "-" || /^(unknown|null|undefined)$/i.test(label)) return "";
+    return label;
+  };
+  const firstProposerLabel = (...values) => {
+    for (const value of values) {
+      const label = proposerLabel(value);
+      if (label) return label;
     }
+    return "";
   };
-
-  const saveUptimeCache = (cache) => {
-    try {
-      localStorage.setItem(UPTIME_CACHE_KEY, JSON.stringify(cache));
-    } catch (_) {
-      // Uptime samples are display-only.
+  const proposerHTML = (value, options = {}) => {
+    const label = proposerLabel(value);
+    if (label) return `<span class="mono">${esc(label)}</span>`;
+    const text = options.compact ? "Unknown" : UNKNOWN_PROPOSER_TEXT;
+    return `<span class="badge warn proposer-unknown" title="${esc(UNKNOWN_PROPOSER_TITLE)}">${esc(text)}</span>`;
+  };
+  const firstBlockType = (...values) => {
+    for (const value of values) {
+      const label = String(value ?? "").trim();
+      if (label && label !== "-") return label;
     }
+    return "BLOCK";
   };
-
-  const recordPublicNodeUptime = (nodes) => {
-    if (!Array.isArray(nodes) || !nodes.length) return;
-    const cache = loadUptimeCache();
-    const now = Date.now();
-    for (const node of nodes) {
-      const key = publicNodeKey(node);
-      if (!key || key === "-") continue;
-      const samples = Array.isArray(cache[key]) ? cache[key] : [];
-      samples.push({ t: now, h: !!node.healthy });
-      cache[key] = samples.slice(-UPTIME_MAX_SAMPLES);
+  const blockTypeInfo = (block = {}) => {
+    const raw = firstBlockType(block.type, block.block_type).toUpperCase();
+    const txCount = Number(block.tx_count || block.transactions?.length || 0);
+    if (raw === "TIME") {
+      return {
+        raw,
+        label: "Empty",
+        tone: "good",
+        title: "TIME block: no user transactions; keeps finality and chain clock moving.",
+      };
     }
-    saveUptimeCache(cache);
-  };
-
-  const publicNodeUptimePct = (node) => {
-    const samples = loadUptimeCache()[publicNodeKey(node)] || [];
-    if (!samples.length) return "-";
-    const healthy = samples.filter((sample) => !!sample.h).length;
-    return `${Math.round((healthy / samples.length) * 100)}%`;
-  };
-
-  const publicNodeDisplayAgeSeconds = (node) => {
-    const base = asIntOrNull(node?.last_block_age_seconds);
-    if (base === null) return null;
-    const checked = Number(node?.last_checked || 0);
-    const checkedMs = checked > 0 ? (checked < 1e12 ? checked * 1000 : checked) : 0;
-    const elapsed = checkedMs > 0 ? Math.max(0, Math.floor((Date.now() - checkedMs) / 1000)) : 0;
-    return base + elapsed;
-  };
-
-  const publicNodeHeightLag = (node, bestHeight) => {
-    const explicit = asIntOrNull(node?.height_lag_blocks);
-    if (explicit !== null && explicit >= 0) return explicit;
-    const h = asIntOrNull(node?.height);
-    if (h === null || !Number.isFinite(bestHeight) || bestHeight <= 0) return 0;
-    return Math.max(0, Math.trunc(bestHeight - h));
-  };
-
-  const publicNodeTone = (node, bestHeight) => {
-    const healthState = String(node?.health_state || "").toLowerCase();
-    if (healthState === "unhealthy") return "bad";
-    if (healthState === "warning") return "warn";
-    if (!node?.healthy || node?.suspicious_reason) return "bad";
-    const heightLag = publicNodeHeightLag(node, bestHeight);
-    const finalityLag = asIntOrNull(node?.finality_lag) || 0;
-    const age = publicNodeDisplayAgeSeconds(node);
-    const cmd = String(node?.consensus_mode || "").toUpperCase();
-    if (heightLag > 20 || finalityLag > 20 || (age !== null && age > 60) || ["EMERGENCY", "HALTED", "ATTACK", "PARTITION"].includes(cmd)) return "bad";
-    if (heightLag > 2 || finalityLag > 2 || (age !== null && age >= 12) || ["STRICT", "RECOVERY", "DEGRADED"].includes(cmd)) return "warn";
-    return "ok";
-  };
-
-  const blockAgeTone = (status) => {
-    const age = asIntOrNull(status.last_block_age_seconds);
-    if (age === null) return "";
-    const haltedAfter = asIntOrNull(status.halted_after_seconds) || 60;
-    const degradedAfter = asIntOrNull(status.degraded_after_seconds) || 15;
-    if (age >= haltedAfter) return "bad";
-    if (age >= degradedAfter) return "bad";
-    if (age >= 10) return "warn";
-    return "ok";
-  };
-
-  const normalizeGatewayPublicNodes = (payload) => {
-    const backends = Array.isArray(payload?.backends) ? payload.backends : Array.isArray(payload?.upstreams) ? payload.upstreams : null;
-    if (!backends) return payload;
-    const nodes = backends.map((item) => ({
-      ...item,
-      id: item.id || item.node_id || item.target || item.rpc_url || "-",
-      rpc_url: item.rpc_url || window.location.origin,
-      role: item.role || "full",
-      public_gateway: item.public_gateway !== false,
-      healthy: item.health_state ? String(item.health_state).toLowerCase() !== "unhealthy" : (!!item.healthy || Number(item.status_code) === 200),
-    }));
-    const healthy = Number(payload.healthy ?? nodes.filter((item) => item.healthy).length);
-    const bestNode =
-      nodes.find((item) => item.rpc_url === payload.best) ||
-      nodes.slice().sort((a, b) => Number(b.score || 0) - Number(a.score || 0)).find((item) => item.healthy) ||
-      nodes[0] ||
-      null;
-    return {
-      status: payload.status || (healthy > 0 ? "healthy" : "down"),
-      healthy,
-      total: Number(payload.total ?? nodes.length),
-      best: payload.best || bestNode?.rpc_url || "",
-      best_node: bestNode,
-      nodes,
-      ts: payload.ts || Math.floor(Date.now() / 1000),
-    };
-  };
-
-  const mergePublicNodes = (base, update) => {
-    const baseNodes = Array.isArray(base?.nodes) ? base.nodes : [];
-    const updateNodes = Array.isArray(update?.nodes) ? update.nodes : [];
-    if (!baseNodes.length || updateNodes.length >= baseNodes.length) return update;
-    const keyFor = (node) => String(node.id || node.target || node.rpc_url || "").trim();
-    const merged = new Map(baseNodes.map((node) => [keyFor(node), node]));
-    for (const node of updateNodes) {
-      const key = keyFor(node);
-      if (!key) continue;
-      merged.set(key, { ...(merged.get(key) || {}), ...node });
+    if (raw === "WORK") {
+      return { raw, label: "Work", tone: "good", title: "WORK block" };
     }
-    const nodes = Array.from(merged.values());
-    const healthy = nodes.filter((node) => node.healthy).length;
-    const bestNode =
-      nodes.find((node) => node.rpc_url === update?.best) ||
-      nodes.slice().sort((a, b) => Number(b.score || 0) - Number(a.score || 0)).find((node) => node.healthy) ||
-      nodes[0] ||
-      null;
-    return {
-      ...(base || {}),
-      ...(update || {}),
-      healthy,
-      total: nodes.length,
-      best: update?.best || base?.best || bestNode?.rpc_url || "",
-      best_node: bestNode,
-      nodes,
-    };
+    if (raw === "TASK") {
+      return { raw, label: "Task", tone: "good", title: "TASK block" };
+    }
+    if (raw === "BLOCK") {
+      return {
+        raw,
+        label: txCount > 0 ? "Tx block" : "Block",
+        tone: txCount > 0 ? "good" : "",
+        title: "Standard block",
+      };
+    }
+    return { raw, label: raw, tone: "", title: `${raw} block` };
   };
-
-  const currentLastBlockAge = () => {
-    const base = asIntOrNull(state.lastBlockAgeBaseSeconds);
-    if (base === null) return null;
-    const updatedAt = Number(state.lastBlockAgeUpdatedAt || 0);
-    const elapsed = updatedAt > 0 ? Math.max(0, Math.floor((Date.now() - updatedAt) / 1000)) : 0;
-    return base + elapsed;
+  const blockTypeHTML = (block = {}) => {
+    const info = blockTypeInfo(block);
+    const toneClass = info.tone ? ` ${info.tone}` : "";
+    return `<span class="badge block-type-badge${toneClass}" title="${esc(info.title)}"><span>${esc(info.label)}</span><span class="badge-raw">${esc(info.raw)}</span></span>`;
   };
-
-  const renderBlockAgeDisplay = (age) => {
-    const n = asIntOrNull(age);
-    const blockAgeText = n === null ? "-" : fmtAge(n);
-    const ageTone = blockAgeTone({
-      last_block_age_seconds: n,
-      degraded_after_seconds: state.latestStatus?.degraded_after_seconds,
-      halted_after_seconds: state.latestStatus?.halted_after_seconds,
+  const firstFiniteNumber = (...values) => {
+    for (const value of values) {
+      const n = Number(value);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  };
+  const blockQuorumInfo = (block = {}, status = {}) => ({
+    votes: firstFiniteNumber(block.signature_count, block.vote_count, Array.isArray(block.signatures) ? block.signatures.length : undefined, block.execution_result_count),
+    required: firstFiniteNumber(block.required_quorum, status.required_quorum),
+    committee: firstFiniteNumber(block.committee_size, block.active_ready_count, status.committee_size, status.live_validators, status.committee_live_count),
+  });
+  const quorumBreakdownText = (block, status = {}) => {
+    const info = blockQuorumInfo(block, status);
+    return `Votes: ${fmt(info.votes)} Required: ${fmt(info.required)} Committee: ${fmt(info.committee)}`;
+  };
+  const quorumBreakdownHTML = (block, status = {}) => {
+    const info = blockQuorumInfo(block, status);
+    return `<span class="quorum-breakdown" title="Votes collected / required quorum / committee size">
+      <span>Votes: ${esc(fmt(info.votes))}</span>
+      <span>Required: ${esc(fmt(info.required))}</span>
+      <span>Committee: ${esc(fmt(info.committee))}</span>
+    </span>`;
+  };
+  const sum = (items, getter) => (items || []).reduce((total, item) => total + Number(getter(item) || 0), 0);
+  const normalizeTokenomics = (raw = {}) => {
+    const source = raw || {};
+    const rawPolicy = source.economic_policy || {};
+    const rawInflation = rawPolicy.inflation || {};
+    const audit = source.audit || {};
+    const maxSupply = Number(audit.max_supply ?? source.max_supply ?? MSC_FIXED_SUPPLY) || MSC_FIXED_SUPPLY;
+    const totalSupply = Number(audit.current_supply ?? source.total_supply ?? MSC_FIXED_SUPPLY) || MSC_FIXED_SUPPLY;
+    const rawBuckets = Array.isArray(source.buckets) && source.buckets.length
+      ? source.buckets
+      : MSC_TOKENOMICS_BUCKETS.map(([name, address, percent]) => ({ name, address, percent }));
+    const buckets = rawBuckets.map((bucket) => {
+      const percent = Number(bucket.percent);
+      const allocation = Number.isFinite(percent)
+        ? Math.round((maxSupply * percent) / 100)
+        : Number(bucket.allocation || bucket.balance || 0);
+      const balance = Number(bucket.balance);
+      return {
+        ...bucket,
+        allocation,
+        balance: Number.isFinite(balance) ? balance : allocation,
+      };
     });
-    if (els.lastBlockAge) {
-      els.lastBlockAge.textContent = blockAgeText;
-      setTone(els.lastBlockAge, ageTone);
-    }
-    if (els.topLastBlockAge) {
-      els.topLastBlockAge.textContent = blockAgeText;
-      setTone(els.topLastBlockAge, ageTone);
-    }
+    const observedSupply = Number(source.observed_total_supply ?? audit.current_supply ?? source.total_supply ?? 0);
+    return {
+      ...source,
+      audit,
+      total_supply: totalSupply,
+      max_supply: maxSupply,
+      supply_cap_surplus: Math.max(0, Number(audit.supply_cap_surplus ?? observedSupply - maxSupply)),
+      buckets,
+      economic_policy: {
+        ...rawPolicy,
+        fixed_total_supply: maxSupply,
+        inflation: {
+          burn_bps: 800,
+          ...rawInflation,
+          fixed_supply_cap_enforced: true,
+        },
+      },
+    };
   };
-
-  const renderEventDelay = () => {
-    const n = asIntOrNull(state.eventDelayMs);
-    if (els.topEventDelay) {
-      els.topEventDelay.textContent = n === null ? "-" : fmtLatency(n);
-    }
-  };
-
-  const updateBlockAgeBase = (age) => {
-    const n = asIntOrNull(age);
-    if (n === null) return;
-    state.lastBlockAgeBaseSeconds = n;
-    state.lastBlockAgeUpdatedAt = Date.now();
-    renderBlockAgeDisplay(n);
-  };
-
-  const startBlockAgeTicker = () => {
-    if (state.blockAgeTimer) return;
-    state.blockAgeTimer = setInterval(() => {
-      renderBlockAgeDisplay(currentLastBlockAge());
-      renderEventDelay();
-      if (state.latestPublicNodes) renderPublicNodes(state.latestPublicNodes);
-    }, 1000);
-  };
-
-  const setTone = (el, tone) => {
-    if (!el) return;
-    el.classList.remove("ok", "warn", "bad");
-    if (tone) el.classList.add(tone);
-  };
-
-  const walletEventURL = () => {
+  const configuredBase = () => {
+    const selected = String(localStorage.getItem("msc_explorer_rpc") || "").trim();
+    if (!selected || selected === "same-origin") return DEFAULT_BASE;
     try {
-      const url = new URL(state.rpcUrl || window.location.origin);
+      const url = new URL(selected, DEFAULT_BASE);
+      if (window.location.protocol === "https:" && url.protocol !== "https:") return DEFAULT_BASE;
+      return url.origin;
+    } catch (_) {
+      return DEFAULT_BASE;
+    }
+  };
+
+  function setText(id, value) {
+    const node = $(id);
+    if (node) node.textContent = value ?? "-";
+  }
+
+  function setHTML(id, value) {
+    const node = $(id);
+    if (node) node.innerHTML = value;
+  }
+
+  function chartCard(id, title, meta, body, chip = "") {
+    const node = $(id);
+    if (!node) return;
+    if (!body) {
+      node.classList.add("empty");
+      node.innerHTML = `<div>No chart data available</div>`;
+      return;
+    }
+    node.classList.remove("empty");
+    node.innerHTML = `
+      <div class="chart-head">
+        <div class="chart-title"><strong>${esc(title)}</strong><span>${esc(meta)}</span></div>
+        ${chip ? `<span class="badge">${esc(chip)}</span>` : ""}
+      </div>
+      ${body}`;
+  }
+
+  function barsHTML(items) {
+    if (!items.length) return "";
+    const max = Math.max(...items.map((item) => Number(item.value) || 0), 1);
+    return `<div class="chart-bars">${items.map((item) => {
+      const height = clamp(((Number(item.value) || 0) / max) * 100, 4, 100);
+      return `<span class="chart-bar" title="${esc(item.label)}: ${esc(item.value)}"><span class="bar-fill" style="--bar-height:${height}%;"></span></span>`;
+    }).join("")}</div>`;
+  }
+
+  function lineHTML(values) {
+    const nums = values.map((value) => Number(value) || 0);
+    if (!nums.length) return "";
+    const max = Math.max(...nums, 1);
+    const step = nums.length > 1 ? 100 / (nums.length - 1) : 100;
+    const points = nums.map((value, index) => {
+      const x = nums.length > 1 ? index * step : 50;
+      const y = 92 - clamp((value / max) * 84, 0, 84);
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(" ");
+    const area = `0,100 ${points} 100,100`;
+    return `<div class="chart-line"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon class="line-area" points="${area}"></polygon><polyline class="line-path" points="${points}"></polyline></svg></div>`;
+  }
+
+  function donutHTML(value, label, detail, toneName = "good") {
+    const color = toneName === "bad" ? "var(--coral)" : toneName === "warn" ? "var(--amber)" : "var(--mint)";
+    const safe = clamp(value);
+    return `<div class="chart-donut">
+      <div class="donut-ring" style="--donut-value:${safe};--donut-color:${color};"></div>
+      <div class="donut-copy"><div class="donut-value">${Math.round(safe)}%</div><div class="donut-label">${esc(label)}<br>${esc(detail)}</div></div>
+    </div>`;
+  }
+
+  function rowsHTML(items) {
+    if (!items.length) return "";
+    const max = Math.max(...items.map((item) => Number(item.value) || 0), 1);
+    return `<div class="chart-list">${items.map((item) => {
+      const width = clamp(((Number(item.value) || 0) / max) * 100);
+      const color = item.tone === "bad" ? "var(--coral)" : item.tone === "warn" ? "var(--amber)" : item.color || "var(--mint)";
+      return `<div class="chart-row" ${item.title ? `title="${esc(item.title)}"` : ""}>
+        <span>${esc(item.label)}</span>
+        <span class="chart-track"><span style="--track-value:${width}%;--track-color:${color};"></span></span>
+        <strong class="mono">${esc(item.display ?? item.value)}</strong>
+      </div>`;
+    }).join("")}</div>`;
+  }
+
+  function matrixHTML(items) {
+    if (!items.length) return "";
+    return `<div class="matrix-grid">${items.map((item) => `
+      <div class="matrix-cell"><span>${esc(item.label)}</span><strong>${esc(item.value)}</strong></div>
+    `).join("")}</div>`;
+  }
+
+  async function request(path, options = {}) {
+    const {
+      timeoutMs = EXPLORER_REQUEST_TIMEOUT_MS,
+      signal: upstreamSignal,
+      ...fetchOptions
+    } = options;
+    const controller = new AbortController();
+    const abortFromUpstream = () => controller.abort(upstreamSignal?.reason);
+    if (upstreamSignal?.aborted) abortFromUpstream();
+    else upstreamSignal?.addEventListener("abort", abortFromUpstream, { once: true });
+    const timer = window.setTimeout(() => controller.abort(), Math.max(1, Number(timeoutMs) || EXPLORER_REQUEST_TIMEOUT_MS));
+    try {
+      const response = await fetch(`${configuredBase()}${path}`, {
+        cache: "no-store",
+        ...fetchOptions,
+        signal: controller.signal,
+        headers: {
+          ...(fetchOptions.body ? { "Content-Type": "application/json" } : {}),
+          ...(fetchOptions.headers || {}),
+        },
+      });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`.trim());
+      return unwrap(await response.json());
+    } catch (error) {
+      if (controller.signal.aborted && !upstreamSignal?.aborted) {
+        throw new Error(`Explorer request timed out after ${timeoutMs}ms`);
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timer);
+      upstreamSignal?.removeEventListener("abort", abortFromUpstream);
+    }
+  }
+
+  async function first(paths, options = {}) {
+    const candidates = [...new Set((paths || []).filter(Boolean))];
+    if (!candidates.length) throw new Error("No explorer source available");
+    const timeoutMs = Math.max(1, Number(options.timeoutMs) || EXPLORER_REQUEST_TIMEOUT_MS);
+    const controller = new AbortController();
+    const timers = [];
+    let completed = 0;
+    let settled = false;
+    let lastError;
+    return new Promise((resolve, reject) => {
+      const finishFailure = (error) => {
+        completed += 1;
+        lastError = error;
+        if (completed !== candidates.length || settled) return;
+        settled = true;
+        controller.abort();
+        reject(lastError || new Error("No explorer source available"));
+      };
+      candidates.forEach((path, index) => {
+        timers.push(window.setTimeout(() => {
+          request(path, { ...options, timeoutMs, signal: controller.signal }).then((value) => {
+            if (settled) return;
+            settled = true;
+            controller.abort();
+            timers.forEach((timer) => window.clearTimeout(timer));
+            resolve(value);
+          }).catch(finishFailure);
+        }, index * EXPLORER_FALLBACK_HEDGE_MS));
+      });
+      timers.push(window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        controller.abort();
+        timers.forEach((timer) => window.clearTimeout(timer));
+        reject(lastError || new Error(`Explorer sources timed out after ${timeoutMs}ms`));
+      }, timeoutMs));
+    });
+  }
+
+  function explorerEventURL() {
+    try {
+      const url = new URL(configuredBase());
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       url.pathname = "/wallet/events";
       url.search = "";
@@ -418,1017 +437,1472 @@
     } catch (_) {
       return "";
     }
-  };
+  }
 
-  const renderLiveHeight = ({ height, finalized, lastBlockAge, mode, peers, networkHealth, syncing, ready }) => {
-    const h = asIntOrNull(height);
-    const f = asIntOrNull(finalized);
-    const age = asIntOrNull(lastBlockAge);
-    if (h !== null) {
-      if (els.height) els.height.textContent = String(h);
-      if (els.topHeight) els.topHeight.textContent = String(h);
-    }
-    if (f !== null && els.finalized) els.finalized.textContent = String(f);
-    if (age !== null) updateBlockAgeBase(age);
-    else renderBlockAgeDisplay(currentLastBlockAge());
-    if (els.topCmd && mode) {
-      els.topCmd.textContent = asTextOrDash(mode);
-      const cmd = String(mode || "").toUpperCase();
-      setTone(els.topCmd, cmd === "NORMAL" ? "ok" : cmd === "HALTED" || cmd === "EMERGENCY" || cmd === "ATTACK" ? "bad" : "warn");
-    }
-    if (els.consensusDetectorMode && mode) els.consensusDetectorMode.textContent = asTextOrDash(mode);
-    if (els.topPeers && peers !== undefined && peers !== null) els.topPeers.textContent = String(peers);
-    if (els.peerCount && peers !== undefined && peers !== null) els.peerCount.textContent = String(peers);
-    if (els.topState) {
-      els.topState.textContent = syncing ? "SYNCING" : ready ? "READY" : networkHealth || "LIVE";
-      setTone(els.topState, syncing ? "warn" : "ok");
-    }
-  };
+  function currentBlockAge() {
+    const base = Number(state.realtime.lastBlockAgeBaseSeconds);
+    if (!Number.isFinite(base) || base < 0) return Number(state.status?.last_block_age_seconds);
+    const elapsed = Math.max(0, Math.floor((Date.now() - state.realtime.lastBlockAgeUpdatedAt) / 1000));
+    return Math.trunc(base) + elapsed;
+  }
 
-  const animateConfirmedHeights = (heights, event) => {
-    const clean = Array.from(new Set((heights || []).map((x) => asIntOrNull(x)).filter((x) => x !== null && x > 0))).sort((a, b) => a - b);
-    if (state.heightAnimationTimer) {
-      clearTimeout(state.heightAnimationTimer);
-      state.heightAnimationTimer = null;
-    }
-    if (!clean.length) return;
-    let idx = 0;
-    const tick = () => {
-      const h = clean[idx];
-      renderLiveHeight({
-        height: h,
-        finalized: idx === clean.length - 1 ? event.finalized_height : null,
-        lastBlockAge: idx === clean.length - 1 ? event.last_block_age_seconds : null,
-        mode: event.mode,
-        peers: event.peer_count,
-        networkHealth: event.network_health,
-      });
-      idx += 1;
-      if (idx < clean.length) {
-        state.heightAnimationTimer = setTimeout(tick, 160);
-      }
-    };
-    tick();
-  };
+  function setBlockAgeBase(value = 0) {
+    const next = Number(value);
+    if (!Number.isFinite(next) || next < 0) return;
+    state.realtime.lastBlockAgeBaseSeconds = Math.trunc(next);
+    state.realtime.lastBlockAgeUpdatedAt = Date.now();
+    renderLiveBlockAge();
+  }
 
-  const inferLogicalClock = (ts, height) => {
-    const units = Number(ts);
-    const h = Number(height);
-    if (!Number.isFinite(units) || units <= 0 || !Number.isFinite(h) || h <= 0) {
-      return null;
-    }
-    if (units < h) return null;
-    const ticksPerEpoch = Math.round(units / h);
-    if (!Number.isFinite(ticksPerEpoch) || ticksPerEpoch < 2 || ticksPerEpoch > 100000) {
-      return null;
-    }
-    const tick = units - h * ticksPerEpoch;
-    if (tick < 0 || tick > ticksPerEpoch) return null;
-    return { epoch: h, tick, ticksPerEpoch };
-  };
+  function renderLiveBlockAge() {
+    const value = age(currentBlockAge());
+    setText("topBlockAge", value);
+    setText("metricBlockAge", value);
+  }
 
-  const fmtBlockTime = (ts, blockTime, height) => {
-    const epoch = Number(blockTime && blockTime.epoch);
-    const tick = Number(blockTime && blockTime.tick);
-    if (Number.isFinite(epoch) && epoch > 0 && Number.isFinite(tick) && tick >= 0) {
-      return `Epoch ${epoch}, Tick ${tick} (units ${ts})`;
-    }
-    const inferred = inferLogicalClock(ts, height);
-    if (inferred) {
-      return `Epoch ${inferred.epoch}, Tick ${inferred.tick} (units ${ts})`;
-    }
-    return fmtWallTime(ts);
-  };
+  function setExplorerRealtimeStatus(text, toneName = "") {
+    const node = $("explorerRealtime");
+    if (!node) return;
+    node.textContent = text;
+    node.classList.remove("good", "warn", "bad");
+    if (toneName) node.classList.add(toneName);
+  }
 
-  const setConn = (msg, tone) => {
-    els.connState.textContent = msg;
-    els.connState.classList.remove("ok", "bad", "warn");
-    if (tone) els.connState.classList.add(tone);
-  };
-
-  const stripHTMLForError = (value) => {
-    const raw = String(value || "").trim();
-    if (!raw) return "";
-    if (!/<[a-z][\s\S]*>/i.test(raw)) return raw;
-    const withoutComments = raw.replace(/<!--[\s\S]*?-->/g, " ");
-    const titleMatch = withoutComments.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    const h1Match = withoutComments.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-    const picked = titleMatch?.[1] || h1Match?.[1] || withoutComments;
-    return picked
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/gi, " ")
-      .replace(/&lt;/gi, "<")
-      .replace(/&gt;/gi, ">")
-      .replace(/&amp;/gi, "&")
-      .replace(/&quot;/gi, '"')
-      .replace(/&#39;/gi, "'")
-      .replace(/\s+/g, " ")
-      .trim();
-  };
-
-  const friendlyHTTPErrorMessage = (status, data, text, statusText) => {
-    if (status === 429) return "Rate limit hit — wait a few seconds";
-    if (data && typeof data === "object") {
-      if (typeof data.error === "string") return data.error;
-      if (data.error && typeof data.error.message === "string") return data.error.message;
-      if (typeof data.message === "string") return data.message;
-    }
-    const cleanText = stripHTMLForError(typeof data === "string" ? data : text);
-    if (/too many requests/i.test(cleanText)) return "Rate limit hit — wait a few seconds";
-    return cleanText || statusText || "Request failed";
-  };
-
-  const api = async (path) => {
-    const headers = {};
-    if (state.apiToken) headers.Authorization = `Bearer ${state.apiToken}`;
-    const res = await fetch(`${state.rpcUrl}${path}`, { headers });
-    const text = await res.text();
-    let data = null;
-    if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch (_) {
-        data = text;
-      }
-    }
-    if (!res.ok) {
-      const message = friendlyHTTPErrorMessage(res.status, data, text, res.statusText);
-      const err = new Error(message);
-      err.status = res.status;
-      err.payload = data;
-      throw err;
-    }
-    return data;
-  };
-
-  const apiV1 = async (path, fallbackPath = "") => {
-    try {
-      const payload = await api(path);
-      if (payload && typeof payload === "object" && Object.prototype.hasOwnProperty.call(payload, "success")) {
-        if (!payload.success) {
-          const message =
-            (payload.error && payload.error.message) || "request failed";
-          throw new Error(message);
-        }
-        return payload.data;
-      }
-      return payload;
-    } catch (err) {
-      if (fallbackPath) {
-        const st = Number(err && err.status);
-        if (st === 404 || st === 405 || st === 501) return api(fallbackPath);
-      }
-      throw err;
-    }
-  };
-
-  const unwrapSuccessPayload = (payload) => {
-    if (payload && typeof payload === "object" && Object.prototype.hasOwnProperty.call(payload, "success")) {
-      if (!payload.success) {
-        const message = (payload.error && payload.error.message) || "request failed";
-        throw new Error(message);
-      }
-      return payload.data;
-    }
-    return payload;
-  };
-
-  const apiFirst = async (paths) => {
-    let lastErr = null;
-    for (const path of paths) {
-      try {
-        return unwrapSuccessPayload(await api(path));
-      } catch (err) {
-        lastErr = err;
-        const st = Number(err && err.status);
-        if (![0, 404, 405, 429, 500, 502, 503, 504].includes(st)) {
-          throw err;
-        }
-      }
-    }
-    throw lastErr || new Error("all explorer sources unavailable");
-  };
-
-  const renderChipList = (container, values, variant = "") => {
-    if (!values || values.length === 0) {
-      container.innerHTML = "<span class=\"meta\">None</span>";
-      return;
-    }
-    const extraClass = variant ? ` ${variant}` : "";
-    container.innerHTML = values
-      .map((v) => `<span class="chip${extraClass}">${v}</span>`)
-      .join("");
-  };
-
-  const normalizeValidatorID = (value) => String(value || "").trim().toUpperCase();
-
-  const sortedUniqueValidatorIDs = (values) => {
-    const set = new Set();
-    for (const raw of values || []) {
-      const id = normalizeValidatorID(raw);
-      if (!id) continue;
-      set.add(id);
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  };
-
-  const derivePeerConnectivity = (peerPayload) => {
-    const healthySet = new Set();
-    const unhealthyReasons = new Map();
-    const peers = peerPayload && Array.isArray(peerPayload.peers) ? peerPayload.peers : [];
-    for (const p of peers) {
-      if (!p || !p.connected) continue;
-      const vid = normalizeValidatorID(p.validator_id);
-      if (!vid || vid === "-") continue;
-      const isHelloOK = !!p.hello_ok;
-      const isHashMatch = !!p.hash_match;
-      if (isHelloOK && isHashMatch) {
-        healthySet.add(vid);
-        unhealthyReasons.delete(vid);
-        continue;
-      }
-      if (healthySet.has(vid)) continue;
-      const reasonParts = [];
-      if (!isHashMatch) reasonParts.push("hash");
-      if (!isHelloOK) reasonParts.push("hello");
-      const incoming = reasonParts.join("+") || "health";
-      const prev = unhealthyReasons.get(vid);
-      if (!prev) {
-        unhealthyReasons.set(vid, incoming);
-        continue;
-      }
-      const merged = new Set(`${prev}+${incoming}`.split("+").map((x) => x.trim()).filter(Boolean));
-      unhealthyReasons.set(vid, Array.from(merged).sort((a, b) => a.localeCompare(b)).join("+"));
-    }
-    return { healthySet, unhealthyReasons };
-  };
-
-  const renderValidatorsDualView = () => {
-    const snap = state.latestValidators;
-    const peerSnap = state.latestPeers;
-    if (!snap || !peerSnap) return;
-
-    const online = sortedUniqueValidatorIDs(snap.online);
-    const offline = sortedUniqueValidatorIDs(snap.offline);
-    const pendingAdd = Array.isArray(snap.pendingAdd) ? snap.pendingAdd : [];
-    const pendingRemove = Array.isArray(snap.pendingRemove) ? snap.pendingRemove : [];
-
-    const connectivity = derivePeerConnectivity(peerSnap);
-    const connectedHealthy = Array.from(connectivity.healthySet).sort((a, b) => a.localeCompare(b));
-    const connectedUnhealthy = Array.from(connectivity.unhealthyReasons.keys())
-      .filter((id) => !connectivity.healthySet.has(id))
-      .sort((a, b) => a.localeCompare(b))
-      .map((id) => `${id} (${connectivity.unhealthyReasons.get(id) || "health"})`);
-    const onlineSet = new Set(online);
-    const gap = online.filter((id) => !connectivity.healthySet.has(id));
-
-    renderChipList(els.validatorsOnline, online);
-    renderChipList(els.validatorsOffline, offline, "offline");
-    renderChipList(els.validatorsPendingAdd, pendingAdd);
-    renderChipList(els.validatorsPendingRemove, pendingRemove, "offline");
-    renderChipList(els.validatorsConnected, connectedHealthy);
-    renderChipList(els.validatorsConnectedUnhealthy, connectedUnhealthy, "unhealthy");
-    renderChipList(els.validatorsGap, gap, "offline");
-
-    els.validatorMeta.textContent =
-      `set_h=${snap.height ?? "-"} online_liveness=${onlineSet.size} offline=${offline.length} connected_healthy=${connectedHealthy.length} connected_unhealthy=${connectedUnhealthy.length}`;
-  };
-
-  const renderStatus = (status) => {
-    const strictLive = asIntOrNull(status.validator_live_strict_count);
-    const heartbeatLive = asIntOrNull(status.validator_live_heartbeat_count);
-    const outOfDrift = asIntOrNull(status.validator_live_out_of_drift_count);
-    const fallbackLive = asIntOrNull(status.live_validators);
-    const requiredQuorum = asIntOrNull(status.required_quorum);
-    const quorumLive = strictLive !== null ? strictLive : fallbackLive;
-    const driftLimit = asIntOrNull(status.validator_liveness_max_height_drift_blocks);
-    const mismatchHeight = asIntOrNull(status.validator_autoheal_last_mismatch_height);
-    const successHeight = asIntOrNull(status.validator_autoheal_last_success_height);
-    const laneCandidates = asIntOrNull(status.validator_bootstrap_lane_candidates);
-    const laneSlotsUsed = asIntOrNull(status.validator_bootstrap_lane_slots_used);
-    const blockAge = asIntOrNull(status.last_block_age_seconds);
-    const expectedHash = asTextOrDash(status.validator_autoheal_expected_hash);
-    const gotHash = asTextOrDash(status.validator_autoheal_got_hash);
-    const mismatchHashText =
-      expectedHash === "-" && gotHash === "-" && mismatchHeight === null
-        ? "-"
-        : `h=${mismatchHeight === null ? "-" : mismatchHeight} exp=${short(expectedHash, 6)} got=${short(gotHash, 6)}`;
-
-    els.nodeId.textContent = status.node_id || "-";
-    els.chainId.textContent = status.chain_id || "-";
-    els.nodeRole.textContent = status.role || (status.is_validator ? "validator" : "full");
-    const statusHeight = asIntOrNull(status.height);
-    const statusFinalized = asIntOrNull(status.finalized_height);
-    const displayHeight = Math.max(statusHeight || 0, state.realtimeHeight || 0) || status.height;
-    const displayFinalized = Math.max(statusFinalized || 0, state.realtimeFinalized || 0) || status.finalized_height;
-    renderLiveHeight({
-      height: displayHeight,
-      finalized: displayFinalized,
-      lastBlockAge: blockAge,
-      mode: status.consensus_detector_mode,
-      peers: status.peers,
-      networkHealth: status.network_health,
-      syncing: status.syncing,
-      ready: status.ready,
-    });
-    els.peerCount.textContent = String(status.peers ?? "-");
-    els.quorum.textContent = `${quorumLive === null ? "-" : quorumLive} / ${requiredQuorum === null ? "-" : requiredQuorum}`;
-    els.consensusDetectorMode.textContent = asTextOrDash(status.consensus_detector_mode);
-    els.waitReason.textContent = status.wait_reason || "-";
-    els.livenessMode.textContent = asTextOrDash(status.validator_liveness_mode);
-    els.livenessDriftLimit.textContent = driftLimit === null ? "-" : `${driftLimit} blocks`;
-    els.livenessCounts.textContent = `${strictLive === null ? "-" : strictLive} / ${heartbeatLive === null ? "-" : heartbeatLive} / ${outOfDrift === null ? "-" : outOfDrift}`;
-    els.autohealState.textContent = asTextOrDash(status.validator_autoheal_state);
-    els.autohealReason.textContent = asTextOrDash(status.validator_autoheal_last_reason);
-    els.autohealMismatch.textContent = mismatchHashText;
-    els.autohealSuccess.textContent = successHeight === null ? "-" : String(successHeight);
-    els.bootstrapLane.textContent =
-      laneSlotsUsed === null && laneCandidates === null
-        ? "-"
-        : `used=${laneSlotsUsed === null ? "-" : laneSlotsUsed} candidates=${laneCandidates === null ? "-" : laneCandidates}`;
-
-    const parts = [];
-    parts.push(status.ready ? "READY" : "NOT_READY");
-    if (status.head_synced) parts.push("HEAD_SYNCED");
-    if (status.history_backfill_pending) parts.push("HISTORY_BACKFILL");
-    if (status.syncing) parts.push("SYNCING");
-    if (status.consensus_running) parts.push("CONSENSUS");
-    if (status.consensus_ready) parts.push("CONSENSUS_OK");
-    els.stateText.textContent = parts.join(" | ");
-  };
-
-  const renderBlocks = (payload) => {
-    const blocks = payload.blocks || [];
-    els.blocksMeta.textContent = `latest=${payload.latest_height ?? "-"} finalized=${payload.finalized_height ?? "-"}`;
-
-    if (blocks.length === 0) {
-      els.blocksBody.innerHTML = "<tr><td colspan=\"7\">No blocks</td></tr>";
-      return;
-    }
-
-    els.blocksBody.innerHTML = blocks
-      .map((b) => {
-        const sel = Number(state.selectedBlockHeight) === Number(b.height) ? " style=\"background:rgba(29,209,161,.12)\"" : "";
-        return `<tr class="clickable" data-height="${b.height}"${sel}>
-          <td class="mono">${b.height}</td>
-          <td>${b.type}</td>
-          <td class="mono">${b.proposer || "-"}</td>
-          <td class="mono">${b.tx_count}</td>
-          <td class="mono">${b.execution_result_count}</td>
-          <td class="mono">${fmtBlockTime(b.timestamp, b.block_time, b.height)}</td>
-          <td class="mono">${short(b.hash, 8)}</td>
-        </tr>`;
-      })
-      .join("");
-
-    els.blocksBody.querySelectorAll("tr.clickable").forEach((row) => {
-      row.addEventListener("click", () => {
-        const h = Number(row.getAttribute("data-height"));
-        if (Number.isFinite(h) && h > 0) {
-          state.selectedBlockHeight = h;
-          loadBlockByHeight(h).catch((err) => showBlockError(err));
-          renderBlocks(payload);
-        }
-      });
-    });
-
-    if (!state.selectedBlockHeight && blocks[0] && blocks[0].height) {
-      state.selectedBlockHeight = Number(blocks[0].height);
-      loadBlockByHeight(state.selectedBlockHeight).catch((err) => showBlockError(err));
-    }
-  };
-
-  const showBlockError = (err) => {
-    els.blockDetailMeta.textContent = "Error";
-    els.blockDetail.textContent = `Failed to load block\n\n${err.message || err}`;
-  };
-
-  const renderBlockDetail = (data) => {
-    const header = {
-      height: data.height,
-      hash: data.hash,
-      prev_hash: data.prev_hash,
-      type: data.type,
-      proposer: data.proposer,
-      timestamp: data.timestamp,
-      timestamp_local: fmtBlockTime(data.timestamp, data.block_time, data.height),
-      latest_height: data.latest_height,
-      finalized_height: data.finalized_height,
-      confirmations: data.confirmations,
-      is_finalized: data.is_finalized,
-      round: data.round,
-      mempool_root: data.mempool_root,
-      state_root: data.state_root,
-      validator_set_hash: data.validator_set_hash,
-      validator_registry_hash: data.validator_registry_hash || (data.summary && data.summary.validator_registry_hash) || "",
-      tx_count: data.tx_count,
-      execution_result_count: data.execution_result_count,
-      receipt_count: data.receipt_count,
-      signature_count: data.signature_count,
-      signatures: data.signatures,
-    };
-
-    const txs = Array.isArray(data.transactions) ? data.transactions : [];
-    const exec = Array.isArray(data.execution_results) ? data.execution_results : [];
-    const receipts = Array.isArray(data.receipts) ? data.receipts : [];
-
-    const packed = {
-      header,
-      transactions: txs.map((tx) => ({
-        id: tx.id,
-        from: tx.from,
-        to: tx.to,
-        amount: tx.amount,
-        fee: tx.fee,
-        nonce: tx.nonce,
-        type: txTypeName(tx.type),
-        coin: tx.coin || "MSC",
-        chain_id: tx.ChainID || tx.chain_id || "",
-        expiry: tx.expiry,
-        stake_epochs: tx.stake_epochs,
-        signature: tx.signature,
-      })),
-      execution_results: exec,
-      receipts,
-    };
-
-    els.blockDetailMeta.textContent = `h=${data.height} tx=${txs.length} exec=${exec.length}`;
-    els.blockDetail.textContent = JSON.stringify(packed, null, 2);
-  };
-
-  const buildCuratedTxView = (data) => {
-    const out = {};
-    const rootOrder = [
-      "tx_id",
-      "state",
-      "height",
-      "latest_height",
-      "finalized_height",
-      "confirmations",
-      "is_finalized",
-      "dtl_tx_type",
-      "oracle_feed_id",
-      "health_factor",
-    ];
-    for (const key of rootOrder) {
-      if (data[key] !== undefined && data[key] !== null && data[key] !== "") {
-        out[key] = data[key];
-      }
-    }
-
-    if (data.tx && typeof data.tx === "object") {
-      const tx = data.tx;
-      const txView = {
-        id: tx.id,
-        from: tx.from,
-        to: tx.to,
-        amount: tx.amount,
-        fee: tx.fee,
-        nonce: tx.nonce,
-        type: tx.type,
-        type_name: txTypeName(tx.type),
-        coin: tx.coin || "MSC",
-      };
-      if (tx.chain_id !== undefined) txView.chain_id = tx.chain_id;
-      if (tx.ChainID !== undefined && txView.chain_id === undefined) txView.chain_id = tx.ChainID;
-      if (tx.expiry !== undefined) txView.expiry = tx.expiry;
-      if (tx.stake_epochs !== undefined) txView.stake_epochs = tx.stake_epochs;
-      out.tx = txView;
-    }
-
-    if (data.block && typeof data.block === "object") {
-      const block = { ...data.block };
-      if (block.timestamp !== undefined) {
-        block.timestamp_local = fmtBlockTime(block.timestamp, block.block_time, block.height);
-      }
-      out.block = block;
-    }
-
-    if (data.receipt && typeof data.receipt === "object") {
-      out.receipt = data.receipt;
-    }
-    if (data.error !== undefined) {
-      out.error = data.error;
-    }
-    if (data.receipts !== undefined) {
-      out.receipts = data.receipts;
-    }
-
-    // Keep any non-legacy top-level keys in curated output.
-    for (const [key, value] of Object.entries(data)) {
-      if (out[key] !== undefined) continue;
-      if (LEGACY_CONTRACT_TX_KEYS.has(key)) continue;
-      if (value === undefined || value === null || value === "") continue;
-      out[key] = value;
-    }
-    return out;
-  };
-
-  const updateTxRawToggleLabel = () => {
-    if (!els.txRawToggle) return;
-    els.txRawToggle.textContent = state.txRawMode ? "Show Curated View" : "Show Raw JSON";
-  };
-
-  const renderTxDetail = (data) => {
-    state.lastTxPayload = data;
-    if (state.txRawMode) {
-      els.txDetailMeta.textContent = `state=${data.state || "-"} | raw`;
-      els.txDetail.textContent = JSON.stringify(data, null, 2);
-      updateTxRawToggleLabel();
-      return;
-    }
-    const view = buildCuratedTxView(data);
-    els.txDetailMeta.textContent = `state=${data.state || "-"} | curated`;
-    els.txDetail.textContent = JSON.stringify(view, null, 2);
-    updateTxRawToggleLabel();
-  };
-
-  const renderPeers = (data) => {
-    const peers = data.peers || [];
-    const roleCounts = { validator: 0, full: 0, light: 0 };
-    for (const p of peers) {
-      const role = (p.role || (p.validator_id ? "validator" : "full")).toLowerCase();
-      if (role === "validator" || role === "full" || role === "light") {
-        roleCounts[role] += 1;
-      }
-    }
-    els.peersMeta.textContent = `count=${data.count ?? peers.length} v=${roleCounts.validator} f=${roleCounts.full} l=${roleCounts.light}`;
-
-    if (peers.length === 0) {
-      els.peersBody.innerHTML = "<tr><td colspan=\"9\">No peer records</td></tr>";
-      return;
-    }
-
-    els.peersBody.innerHTML = peers
-      .map((p) => {
-        const connected = p.connected ? "YES" : "NO";
-        const suspect = p.suspect_since && p.suspect_since > 0 ? fmtWallTime(p.suspect_since) : "-";
-        const role = p.role || (p.validator_id ? "validator" : "full");
-        return `<tr>
-          <td class="mono">${short(p.peer_id, 12)}</td>
-          <td class="mono">${role}</td>
-          <td class="mono">${p.validator_id || "-"}</td>
-          <td class="mono">${connected}</td>
-          <td class="mono">${p.hello_ok ? "YES" : "NO"}</td>
-          <td class="mono">${p.hash_match ? "YES" : "NO"}</td>
-          <td class="mono">${p.ack_height ?? 0}</td>
-          <td class="mono">${p.dial_failures ?? 0}</td>
-          <td class="mono">${suspect}</td>
-        </tr>`;
-      })
-      .join("");
-  };
-
-  const renderPublicNodes = (data) => {
-    if (!els.publicNodesBody || !els.publicNodesMeta) return;
-    const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
-    const healthy = Number(data?.healthy ?? nodes.filter((item) => item.healthy).length);
-    const total = Number(data?.total ?? nodes.length);
-    const best = data?.best || data?.best_node?.rpc_url || "-";
-    els.publicNodesMeta.textContent = `healthy=${healthy}/${total} best=${best}`;
-
-    if (!nodes.length) {
-      els.publicNodesBody.innerHTML = "<tr><td colspan=\"14\">No public full nodes discovered yet</td></tr>";
-      return;
-    }
-    const bestHeight = Math.max(0, ...nodes.map((node) => Number(node.height || 0)).filter((height) => Number.isFinite(height)));
-
-    els.publicNodesBody.innerHTML = nodes
-      .map((node) => {
-        const status = node.health_state || (node.healthy ? "healthy" : node.suspicious_reason || node.error ? "unhealthy" : "warning");
-        const gateway = node.active_gateway ? "active" : node.excluded_reason ? `standby:${node.excluded_reason}` : "standby";
-        const reason = node.selected_reason || node.excluded_reason || node.health_reason || node.suspicious_reason || node.error || node.network_health || "-";
-        const tone = publicNodeTone(node, bestHeight);
-        const heightLag = publicNodeHeightLag(node, bestHeight);
-        const finalityLag = asIntOrNull(node.finality_lag) || 0;
-        const age = publicNodeDisplayAgeSeconds(node);
-        return `<tr class="${tone}">
-          <td class="mono">${node.id || "-"}</td>
-          <td class="mono">${short(node.gateway_rpc_url || node.rpc_url || "-", 18)}</td>
-          <td class="mono ${tone === "ok" ? "ok" : tone === "warn" ? "warn" : "bad"}">${status}</td>
-          <td class="mono">${gateway}</td>
-          <td class="mono">${node.height ?? 0}</td>
-          <td class="mono">${fmtBlocks(heightLag)}</td>
-          <td class="mono">${fmtBlocks(finalityLag)}</td>
-          <td class="mono">${age === null ? "-" : fmtAge(age)}</td>
-          <td class="mono">${node.peer_count ?? "-"}</td>
-          <td class="mono">${fmtLatency(node.latency_ms)}</td>
-          <td class="mono">${node.consensus_mode || "-"}</td>
-          <td class="mono">${Math.round(Number(node.score || 0))}</td>
-          <td class="mono">${publicNodeUptimePct(node)}</td>
-          <td class="mono">${reason}</td>
-        </tr>`;
-      })
-      .join("");
-  };
-
-  const normalizePendingEntries = (values) =>
-    (Array.isArray(values) ? values : []).map((x) => {
-      if (x && typeof x === "object") {
-        const id = normalizeValidatorID(x.id);
-        const activation = x.activation_height;
-        if (!id || activation === undefined || activation === null || activation === "") {
-          return "";
-        }
-        return `${id}@${activation}`;
-      }
-      return String(x || "").trim();
-    }).filter(Boolean);
-
-  const fetchValidatorsData = async () => {
-    try {
-      const current = await apiV1("/v1/validators");
-      return {
-        height: current.height,
-        online: current.online_validators || [],
-        offline: current.offline_validators || current.inactive_validators || [],
-        pendingAdd: normalizePendingEntries(current.pending_add),
-        pendingRemove: normalizePendingEntries(current.pending_remove),
-      };
-    } catch (err) {
-      const st = Number(err && err.status);
-      if (st !== 404 && st !== 405 && st !== 501) throw err;
-    }
-
-    const [current, pending] = await Promise.all([api("/validators"), api("/validators/pending")]);
+  function normalizeBlockPayload(payload, fallback = {}) {
+    const source = payload || {};
+    const summary = source.summary || source.block?.summary || source.block || source;
+    const block = source.block && typeof source.block === "object" ? source.block : {};
+    const header = summary.header || summary.block_header || source.header || source.block_header || block.header || block.block_header || {};
+    const transactions = source.transactions || source.txs || summary.transactions || summary.txs || [];
+    const executionResults = source.execution_results || summary.execution_results || [];
     return {
-      height: current.height,
-      online: current.online_validators || [],
-      offline: current.offline_validators || current.inactive_validators || [],
-      pendingAdd: normalizePendingEntries(pending.pending_add),
-      pendingRemove: normalizePendingEntries(pending.pending_remove),
+      ...fallback,
+      ...summary,
+      height: Number(summary.height || source.height || fallback.height || 0),
+      hash: summary.hash || summary.block_hash || source.hash || fallback.hash || "",
+      proposer: firstProposerLabel(
+        summary.proposer,
+        source.proposer,
+        block.proposer,
+        header.proposer,
+        summary.proposer_id,
+        source.proposer_id,
+        block.proposer_id,
+        header.proposer_id,
+        summary.leader,
+        source.leader,
+        fallback.proposer,
+      ),
+      type: firstBlockType(summary.type, source.block_type, block.type, header.type, source.type, fallback.type),
+      tx_count: summary.tx_count ?? source.tx_count ?? transactions.length ?? fallback.tx_count ?? 0,
+      execution_result_count:
+        summary.execution_result_count ?? source.execution_result_count ?? executionResults.length ?? fallback.execution_result_count ?? 0,
     };
-  };
+  }
 
-  const fetchStatusData = async () => apiV1("/v1/status", "/status");
+  function mergeBlock(block) {
+    const height = Number(block?.height || 0);
+    if (!height) return;
+    state.blocks = [block, ...(state.blocks || []).filter((candidate) => Number(candidate.height) !== height)]
+      .sort((a, b) => Number(b.height || 0) - Number(a.height || 0))
+      .slice(0, 40);
+  }
 
-  const fetchBlocksData = async () =>
-    apiFirst([
-      "/indexer/blocks?limit=40",
-      "/archive-rpc/explorer/blocks?limit=40",
-      "/v1/blocks?limit=40",
-      "/explorer/blocks?limit=40",
-    ]);
-
-  const fetchPeersData = async () => apiV1("/v1/peers", "/explorer/peers");
-
-  const fetchPublicNodesData = async () => {
+  async function hydrateRealtimeBlock(height, event = {}, attempt = 0) {
     try {
-      return normalizeGatewayPublicNodes(await api("/gateway/lb-status.json"));
+      const payload = await first([
+        `/archive-rpc/explorer/block?height=${encodeURIComponent(height)}`,
+        `/explorer/block?height=${encodeURIComponent(height)}`,
+        `/indexer/block?height=${encodeURIComponent(height)}`,
+      ]);
+      mergeBlock(normalizeBlockPayload(payload, {
+        height,
+        hash: event.hash || "",
+        proposer: event.proposer || event.block_proposer || event.leader || "",
+        type: event.block_type || "",
+        tx_count: event.tx_count,
+        execution_result_count: event.execution_result_count,
+      }));
+      renderBlocks();
+      renderExplorerCharts();
     } catch (_) {
-      return apiV1("/v1/public-nodes", "/public-nodes");
+      if (attempt < 5) {
+        window.setTimeout(() => hydrateRealtimeBlock(height, event, attempt + 1), 400 * (attempt + 1));
+      }
     }
-  };
+  }
 
-  const refreshBlocksPanel = async () => {
-    const payload = await fetchBlocksData();
-    state.latestBlocks = payload;
-    renderBlocks(payload);
-    return payload;
-  };
-
-  const renderRealtimeEvent = (event) => {
-    if (!event || typeof event !== "object") return;
-    const sentMs = Number(event.ts_ms || (event.ts ? Number(event.ts) * 1000 : 0));
-    if (Number.isFinite(sentMs) && sentMs > 0) {
-      state.eventDelayMs = Math.max(0, Date.now() - sentMs);
-      renderEventDelay();
+  function enqueueRealtimeBlocks(event) {
+    const target = Number(event?.height || 0);
+    if (!target) return;
+    const displayed = Number(state.realtime.displayHeight || state.status?.height || state.blocks?.[0]?.height || 0);
+    if (target <= displayed) {
+      hydrateRealtimeBlock(target, event);
+      return;
     }
-    const incomingHeight = asIntOrNull(event.height);
-    const incomingFinalized = asIntOrNull(event.finalized_height);
-    const currentHeight = Math.max(
-      state.realtimeHeight || 0,
-      asIntOrNull(state.latestStatus && state.latestStatus.height) || 0,
-    );
-    if (incomingHeight !== null && incomingHeight > 0) {
-      state.realtimeHeight = Math.max(state.realtimeHeight || 0, incomingHeight);
-    }
-    if (incomingFinalized !== null && incomingFinalized > 0) {
-      state.realtimeFinalized = Math.max(state.realtimeFinalized || 0, incomingFinalized);
-    }
-
-    const merged = {
-      ...(state.latestStatus || {}),
-      height: state.realtimeHeight || incomingHeight || state.latestStatus?.height,
-      finalized_height: state.realtimeFinalized || incomingFinalized || state.latestStatus?.finalized_height,
-      last_block_age_seconds:
-        event.last_block_age_seconds !== undefined ? event.last_block_age_seconds : state.latestStatus?.last_block_age_seconds,
-      consensus_detector_mode: event.mode || state.latestStatus?.consensus_detector_mode,
-      consensus_detector_reason: event.reason || state.latestStatus?.consensus_detector_reason,
-      peers: event.peer_count !== undefined ? event.peer_count : state.latestStatus?.peers,
-      network_health: event.network_health || state.latestStatus?.network_health,
-    };
-    state.latestStatus = merged;
-
-    if (Array.isArray(event.public_nodes)) {
-      state.latestPublicNodes = mergePublicNodes(state.latestPublicNodes, {
-        status: event.public_nodes_healthy === event.public_nodes_total ? "healthy" : event.public_nodes_healthy > 0 ? "degraded" : "down",
-        healthy: event.public_nodes_healthy || 0,
-        total: event.public_nodes_total || event.public_nodes.length,
-        best: event.public_nodes_best || "",
-        nodes: event.public_nodes,
-        ts: event.ts || Math.floor(Date.now() / 1000),
+    const start = displayed > 0 && target - displayed <= 64 ? displayed + 1 : target;
+    for (let height = start; height <= target; height += 1) {
+      if (state.realtime.queuedHeights.has(height)) continue;
+      state.realtime.queuedHeights.add(height);
+      state.realtime.queue.push({
+        height,
+        event: height === target ? event : { ...event, height, hash: "" },
       });
-      recordPublicNodeUptime(state.latestPublicNodes.nodes);
-      renderPublicNodes(state.latestPublicNodes);
     }
+    processRealtimeBlockQueue();
+  }
 
-    if (incomingHeight !== null && incomingHeight > currentHeight + 1) {
-      refreshBlocksPanel()
-        .then((payload) => {
-          const confirmed = (payload.blocks || [])
-            .map((b) => asIntOrNull(b.height))
-            .filter((h) => h !== null && h > currentHeight && h <= incomingHeight)
-            .sort((a, b) => a - b);
-          animateConfirmedHeights(confirmed.length ? confirmed : [incomingHeight], event);
-        })
-        .catch(() => animateConfirmedHeights([incomingHeight], event));
+  async function processRealtimeBlockQueue() {
+    if (state.realtime.processing) return;
+    state.realtime.processing = true;
+    while (state.realtime.queue.length) {
+      const item = state.realtime.queue.shift();
+      state.realtime.queuedHeights.delete(item.height);
+      const event = item.event || {};
+      mergeBlock(normalizeBlockPayload({}, {
+        height: item.height,
+        hash: event.hash || "",
+        type: event.block_type || "BLOCK",
+        proposer: event.proposer || event.block_proposer || event.leader || "-",
+        consensus_mode: event.mode || state.status?.consensus_detector_mode || "",
+        required_quorum: event.quorum ?? state.status?.required_quorum,
+        active_ready_count: event.active_validators ?? state.status?.active_ready_count,
+        tx_count: event.tx_count ?? 0,
+        execution_result_count: event.execution_result_count ?? 0,
+      }));
+      state.realtime.displayHeight = item.height;
+      state.status = {
+        ...(state.status || {}),
+        height: item.height,
+        finalized_height: Number(event.finalized_height || state.status?.finalized_height || 0),
+        consensus_detector_mode: event.mode || state.status?.consensus_detector_mode,
+        network_health: event.network_health || state.status?.network_health,
+        last_block_age_seconds: 0,
+      };
+      setBlockAgeBase(0);
+      renderCommon();
+      renderBlocks();
+      renderExplorerCharts();
+      hydrateRealtimeBlock(item.height, event);
+      await delay(180);
+    }
+    state.realtime.processing = false;
+  }
+
+  function handleExplorerRealtimeEvent(event) {
+    if (!event || typeof event !== "object") return;
+    if (event.last_block_age_seconds !== undefined) setBlockAgeBase(event.last_block_age_seconds);
+    if (event.type === "hello") {
+      state.realtime.displayHeight = Number(event.height || state.realtime.displayHeight || 0);
+      state.status = {
+        ...(state.status || {}),
+        height: state.realtime.displayHeight,
+        finalized_height: Number(event.finalized_height || state.status?.finalized_height || 0),
+        consensus_detector_mode: event.mode || state.status?.consensus_detector_mode,
+        network_health: event.network_health || state.status?.network_health,
+        peers: event.peer_count ?? state.status?.peers,
+        live_validators: event.active_validators ?? state.status?.live_validators,
+        required_quorum: event.quorum ?? state.status?.required_quorum,
+      };
+      renderCommon();
+      hydrateRealtimeBlock(state.realtime.displayHeight, event);
       return;
     }
-
-    renderStatus(merged);
     if (event.type === "new_block") {
-      refreshBlocksPanel().catch(() => {});
-    }
-  };
-
-  const renderAllFromState = () => {
-    if (state.latestStatus) renderStatus(state.latestStatus);
-    if (state.latestBlocks) renderBlocks(state.latestBlocks);
-    if (state.latestPeers) renderPeers(state.latestPeers);
-    if (state.latestPublicNodes) renderPublicNodes(state.latestPublicNodes);
-    if (state.latestValidators && state.latestPeers) renderValidatorsDualView();
-  };
-
-  const loadBlockByHeight = async (height) => {
-    const encoded = encodeURIComponent(height);
-    const data = await apiFirst([
-      `/indexer/block?height=${encoded}`,
-      `/archive-rpc/explorer/block?height=${encoded}`,
-      `/explorer/block?height=${encoded}`,
-    ]);
-    renderBlockDetail(data);
-  };
-
-  const loadBlockByHash = async (hash) => {
-    const encoded = encodeURIComponent(hash);
-    const data = await apiFirst([
-      `/indexer/block?hash=${encoded}`,
-      `/archive-rpc/explorer/block?hash=${encoded}`,
-      `/explorer/block?hash=${encoded}`,
-    ]);
-    state.selectedBlockHeight = Number(data.height) || 0;
-    renderBlockDetail(data);
-  };
-
-  const loadTx = async (txId) => {
-    const encoded = encodeURIComponent(txId);
-    const data = await apiFirst([
-      `/indexer/tx?tx_id=${encoded}`,
-      `/archive-rpc/explorer/tx?tx_id=${encoded}`,
-      `/v1/tx/${encoded}`,
-      `/explorer/tx?tx_id=${encoded}`,
-    ]);
-    renderTxDetail(data);
-  };
-
-  const refreshAll = async () => {
-    if (state.refreshInFlight) {
-      state.refreshQueued = true;
+      enqueueRealtimeBlocks(event);
       return;
     }
-    state.refreshInFlight = true;
-    const seq = state.refreshSeq + 1;
-    state.refreshSeq = seq;
-    try {
-      const tasks = [
-        fetchStatusData(),
-        fetchBlocksData(),
-        fetchValidatorsData(),
-        fetchPeersData(),
-        fetchPublicNodesData(),
-      ];
-      const results = await Promise.allSettled(tasks);
-      if (seq < state.lastAppliedSeq) {
-        return;
-      }
-      const nextStatus = results[0];
-      const nextBlocks = results[1];
-      const nextValidators = results[2];
-      const nextPeers = results[3];
-      const nextPublicNodes = results[4];
-      if (nextStatus.status === "fulfilled") state.latestStatus = nextStatus.value;
-      if (nextBlocks.status === "fulfilled") state.latestBlocks = nextBlocks.value;
-      if (nextValidators.status === "fulfilled") state.latestValidators = nextValidators.value;
-      if (nextPeers.status === "fulfilled") state.latestPeers = nextPeers.value;
-      if (nextPublicNodes.status === "fulfilled") {
-        state.latestPublicNodes = nextPublicNodes.value;
-        recordPublicNodeUptime(state.latestPublicNodes.nodes);
-      }
-      state.lastAppliedSeq = seq;
-      renderAllFromState();
-      const failed = results.filter((r) => r.status === "rejected");
-      if (failed.length === 0) {
-        setConn("Connected", "ok");
-      } else if (failed.length < results.length) {
-        const sample = failed[0];
-        const msg = sample && sample.reason && sample.reason.message ? sample.reason.message : "partial refresh error";
-        setConn(`Warning: partial refresh (${failed.length}/${results.length}) - ${msg}`, "warn");
-      } else {
-        const first = failed[0];
-        const msg = first && first.reason && first.reason.message ? first.reason.message : "refresh failed";
-        setConn(`Error: ${msg}`, "bad");
-      }
-    } catch (err) {
-      setConn(`Error: ${err.message || err}`, "bad");
-    } finally {
-      state.refreshInFlight = false;
-      if (state.refreshQueued) {
-        state.refreshQueued = false;
-        refreshAll();
-      }
-    }
-  };
+    state.status = {
+      ...(state.status || {}),
+      finalized_height: Number(event.finalized_height || state.status?.finalized_height || 0),
+      consensus_detector_mode: event.mode || state.status?.consensus_detector_mode,
+      network_health: event.network_health || state.status?.network_health,
+      peers: event.peer_count ?? state.status?.peers,
+      live_validators: event.active_validators ?? state.status?.live_validators,
+      required_quorum: event.quorum ?? state.status?.required_quorum,
+    };
+    renderCommon();
+  }
 
-  const restartTimer = () => {
-    if (state.timer) clearInterval(state.timer);
-    const interval = state.realtimeConnected ? Math.max(state.refreshMs, 15000) : state.refreshMs;
-    state.timer = setInterval(refreshAll, interval);
-  };
-
-  const connectRealtime = (force = false) => {
+  function connectExplorerRealtime(force = false) {
     if (!window.WebSocket) {
-      state.realtimeConnected = false;
-      restartTimer();
+      setExplorerRealtimeStatus("Polling", "warn");
       return;
     }
-    if (!force && state.realtimeSocket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(state.realtimeSocket.readyState)) {
-      return;
-    }
+    if (!force && state.realtime.socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(state.realtime.socket.readyState)) return;
     try {
-      state.realtimeSocket?.close();
+      state.realtime.socket?.close();
     } catch (_) {
-      // Best-effort cleanup before reconnecting to the active RPC.
+      // Best-effort cleanup before reconnecting.
     }
-    const url = walletEventURL();
+    const url = explorerEventURL();
     if (!url) return;
-    const ws = new WebSocket(url);
-    state.realtimeSocket = ws;
-    setConn("Connecting realtime...", "warn");
-    ws.onopen = () => {
-      if (state.realtimeSocket !== ws) return;
-      state.realtimeConnected = true;
-      state.realtimeAttempts = 0;
-      setConn("Realtime connected", "ok");
-      restartTimer();
+    const socket = new WebSocket(url);
+    state.realtime.socket = socket;
+    setExplorerRealtimeStatus("Connecting", "warn");
+    window.clearTimeout(state.realtime.connectTimer);
+    state.realtime.connectTimer = window.setTimeout(() => {
+      if (state.realtime.socket !== socket || socket.readyState !== WebSocket.CONNECTING) return;
+      setExplorerRealtimeStatus("Polling", "warn");
+      socket.close();
+    }, EXPLORER_REALTIME_CONNECT_TIMEOUT_MS);
+    socket.onopen = () => {
+      window.clearTimeout(state.realtime.connectTimer);
+      state.realtime.connected = true;
+      state.realtime.reconnectAttempts = 0;
+      setExplorerRealtimeStatus("Live", "good");
     };
-    ws.onmessage = (message) => {
+    socket.onmessage = (message) => {
       try {
-        renderRealtimeEvent(JSON.parse(message.data || "{}"));
+        handleExplorerRealtimeEvent(JSON.parse(message.data || "{}"));
       } catch (_) {
-        // Polling remains active as a safety net for malformed events.
+        // Malformed events are ignored; the uncached polling fallback remains active.
       }
     };
-    ws.onerror = () => {
-      if (state.realtimeSocket !== ws) return;
-      state.realtimeConnected = false;
-      setConn("Realtime error - fallback polling", "warn");
+    socket.onerror = () => {
+      window.clearTimeout(state.realtime.connectTimer);
+      state.realtime.connected = false;
+      setExplorerRealtimeStatus("Polling", "warn");
     };
-    ws.onclose = () => {
-      if (state.realtimeSocket !== ws) return;
-      state.realtimeConnected = false;
-      restartTimer();
-      const attempt = Math.min(6, state.realtimeAttempts + 1);
-      state.realtimeAttempts = attempt;
-      const delay = Math.min(60000, 1000 * (2 ** attempt)) + Math.floor(Math.random() * 1500);
-      setConn("Realtime fallback polling", "warn");
-      setTimeout(() => connectRealtime(), delay);
+    socket.onclose = () => {
+      if (state.realtime.socket !== socket) return;
+      window.clearTimeout(state.realtime.connectTimer);
+      state.realtime.connected = false;
+      setExplorerRealtimeStatus("Polling", "warn");
+      const attempt = Math.min(6, state.realtime.reconnectAttempts + 1);
+      state.realtime.reconnectAttempts = attempt;
+      window.setTimeout(() => connectExplorerRealtime(), Math.min(30000, 1000 * (2 ** attempt)));
     };
-  };
-
-  const applyConnection = () => {
-    state.rpcUrl = preferHttpsForLocalRpc((els.rpcUrl.value || "").trim() || window.location.origin);
-    state.apiToken = (els.apiToken.value || "").replace(/^Bearer\s+/i, "").trim();
-    if (state.apiToken) {
-      setAdminMode(true);
-    }
-
-    const r = Number(els.refreshMs.value);
-    state.refreshMs = Number.isFinite(r) && r >= 500 ? r : 3000;
-    els.refreshMs.value = String(state.refreshMs);
-
-    localStorage.setItem("msc_rpc", state.rpcUrl);
-    localStorage.setItem("msc_token", state.apiToken);
-
-    restartTimer();
-    connectRealtime(true);
-    refreshAll();
-  };
-
-  els.connectBtn.addEventListener("click", applyConnection);
-  els.refreshBtn.addEventListener("click", refreshAll);
-  if (els.adminToggleBtn) {
-    els.adminToggleBtn.addEventListener("click", () => setAdminMode(!state.adminMode));
   }
 
-  if (els.quickSearchForm && els.quickSearchInput) {
-    els.quickSearchForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const query = (els.quickSearchInput.value || "").trim();
-      if (!query) return;
-      try {
-        if (/^\d+$/.test(query)) {
-          const h = Number(query);
-          state.selectedBlockHeight = h;
-          await loadBlockByHeight(h);
-          return;
-        }
-        try {
-          const search = await apiFirst([`/indexer/search?q=${encodeURIComponent(query)}`]);
-          if (search && search.type === "block" && search.result) {
-            const block = search.result;
-            state.selectedBlockHeight = Number(block.height || block.summary?.height) || 0;
-            renderBlockDetail(block);
-            return;
-          }
-          if (search && search.type === "tx" && search.result) {
-            renderTxDetail(search.result);
-            return;
-          }
-          if (search && search.type === "address" && search.result) {
-            els.txDetailMeta.textContent = `address=${query}`;
-            els.txDetail.textContent = JSON.stringify(search.result, null, 2);
-            return;
-          }
-        } catch (_) {
-          // Indexer search is preferred when available; legacy lookups remain below.
-        }
-        try {
-          await loadTx(query);
-        } catch (_) {
-          await loadBlockByHash(query);
-        }
-      } catch (err) {
-        els.txDetailMeta.textContent = "Search error";
-        els.txDetail.textContent = `Search failed\n\n${err.message || err}`;
-        showBlockError(err);
+  function navLinks(mobile = false) {
+    const items = mobile ? mobileNav : nav;
+    return items.map(([key, label, href, icon, asset]) => `
+      <a class="${key === PAGE ? "active" : ""}" href="${href}">
+        ${navIcon(icon, asset)}${mobile ? `<span>${label}</span>` : label}
+      </a>`).join("");
+  }
+
+  function navIcon(icon, asset) {
+    return asset
+      ? `<img class="nav-brand-icon" src="${asset}" alt="" />`
+      : `<i data-lucide="${icon}"></i>`;
+  }
+
+  function groupedNavLinks() {
+    return navGroups.map(([group, items]) => `
+      <div class="side-nav-group">
+        <div class="side-section-label">${esc(group)}</div>
+        <nav class="explorer-nav" aria-label="${esc(group)} navigation">${items.map(([key, label, href, icon, asset]) => `
+          <a class="${key === PAGE ? "active" : ""}" href="${href}">${navIcon(icon, asset)}${esc(label)}</a>
+        `).join("")}</nav>
+      </div>`).join("");
+  }
+
+  function fullNavLinks() {
+    return navGroups.map(([group, items]) => `
+      <section class="mobile-menu-group"><div class="side-section-label">${esc(group)}</div>
+        <nav>${items.map(([key, label, href, icon, asset]) => `<a class="${key === PAGE ? "active" : ""}" href="${href}">${navIcon(icon, asset)}<span>${esc(label)}</span></a>`).join("")}</nav>
+      </section>`).join("");
+  }
+
+  function installShell() {
+    const content = document.querySelector(".explorer-content");
+    if (!content || document.querySelector(".explorer-shell")) return;
+    const shell = document.createElement("div");
+    shell.className = "explorer-shell";
+    shell.innerHTML = `
+      <aside class="explorer-sidebar">
+        <a class="explorer-brand" href="explorer.html">
+          <span class="brand-mark"><img src="${MSC_LOGO_SRC}" alt="MSC logo" /></span>
+          <span class="brand-copy">
+            <span class="brand-title">Chain Explorer</span>
+            <span class="brand-subtitle">Mainnet 91938</span>
+          </span>
+        </a>
+        <div class="sidebar-scroll">${groupedNavLinks()}</div>
+        <div>
+          <div class="side-section-label">Products</div>
+          <nav class="explorer-nav">
+            <a href="https://wallet.mscblockexplorer.in"><img class="nav-brand-icon" src="${MSC_WALLET_ICON_SRC}" alt="" />Wallet</a>
+            <a href="portal/index.html"><img class="nav-brand-icon" src="${MSC_APP_ICON_SRC}" alt="" />Network portal</a>
+            <a href="dtl_ide.html"><i data-lucide="code-2"></i>DTL IDE</a>
+            <a href="https://github.com/MSCBlockchainO/msc-chain" target="_blank" rel="noopener noreferrer"><i data-lucide="github"></i>GitHub</a>
+          </nav>
+        </div>
+        <div class="sidebar-foot">
+          <div class="sidebar-foot-row"><span>Network</span><strong id="sideNetwork">Checking</strong></div>
+          <div class="sidebar-foot-row"><span>Live data</span><span class="live-dot" aria-label="Live"></span></div>
+        </div>
+      </aside>
+      <div class="explorer-main">
+        <header class="explorer-topbar">
+          <form id="globalSearch" class="top-search">
+            <i data-lucide="search"></i>
+            <input id="globalSearchInput" type="search" placeholder="Search block height, hash, transaction, or address" autocomplete="off" />
+            <span class="key-hint">Enter</span>
+          </form>
+          <div class="top-status">
+            <span class="status-chip">Height <strong id="topHeight">-</strong></span>
+            <span class="status-chip">Finalized <strong id="topFinalized">-</strong></span>
+            <span class="status-chip">Age <strong id="topBlockAge">-</strong></span>
+            <span class="status-chip">CMD <strong id="topMode">-</strong></span>
+            <span id="explorerRealtime" class="status-chip warn">Connecting</span>
+          </div>
+          <div class="top-actions">
+            <a class="icon-button" href="https://github.com/MSCBlockchainO/msc-chain" target="_blank" rel="noopener noreferrer" title="Open MSC Chain on GitHub" aria-label="Open MSC Chain on GitHub"><i data-lucide="github"></i></a>
+            <button id="refreshExplorer" class="icon-button" type="button" title="Refresh explorer" aria-label="Refresh explorer"><i data-lucide="refresh-cw"></i></button>
+          </div>
+        </header>
+      </div>
+      <nav class="mobile-nav" aria-label="Mobile explorer navigation">
+        ${navLinks(true)}
+        <button id="mobileMenuToggle" type="button" aria-label="Open all explorer pages"><i data-lucide="menu"></i><span>More</span></button>
+      </nav>
+      <aside id="mobileMenu" class="mobile-menu" aria-label="All explorer pages">
+        <div class="mobile-menu-head"><strong>Explorer pages</strong><button id="mobileMenuClose" class="icon-button" type="button" aria-label="Close explorer pages"><i data-lucide="x"></i></button></div>
+        <div class="mobile-menu-scroll">${fullNavLinks()}</div>
+      </aside>
+      <button id="mobileMenuBackdrop" class="mobile-menu-backdrop" type="button" aria-label="Close explorer pages"></button>`;
+    document.body.appendChild(shell);
+    shell.querySelector(".explorer-main").appendChild(content);
+    window.lucide?.createIcons();
+  }
+
+  function bindShell() {
+    $("globalSearch")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      routeSearch($("globalSearchInput")?.value || "");
+    });
+    $("refreshExplorer")?.addEventListener("click", () => refresh(true));
+    const toggleMenu = (open) => {
+      $("mobileMenu")?.classList.toggle("open", open);
+      $("mobileMenuBackdrop")?.classList.toggle("open", open);
+      document.body.classList.toggle("menu-open", open);
+    };
+    $("mobileMenuToggle")?.addEventListener("click", () => toggleMenu(true));
+    $("mobileMenuClose")?.addEventListener("click", () => toggleMenu(false));
+    $("mobileMenuBackdrop")?.addEventListener("click", () => toggleMenu(false));
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "/" && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) {
+        event.preventDefault();
+        $("globalSearchInput")?.focus();
       }
     });
   }
 
-  els.blockSearchForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const h = Number(els.blockHeightInput.value);
-    const hash = (els.blockHashInput.value || "").trim();
-
-    try {
-      if (hash) {
-        await loadBlockByHash(hash);
-      } else if (Number.isFinite(h) && h > 0) {
-        state.selectedBlockHeight = h;
-        await loadBlockByHeight(h);
-      } else {
-        throw new Error("Provide block height or hash");
-      }
-    } catch (err) {
-      showBlockError(err);
+  function routeSearch(raw) {
+    const query = String(raw || "").trim();
+    if (!query) return;
+    if (/^\d+$/.test(query)) {
+      location.href = `explorer-blocks.html?height=${encodeURIComponent(query)}`;
+      return;
     }
-  });
+    location.href = `explorer-search.html?q=${encodeURIComponent(query)}`;
+  }
 
-  els.txSearchForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const txId = (els.txIdInput.value || "").trim();
-    if (!txId) {
-      els.txDetailMeta.textContent = "Error";
-      els.txDetail.textContent = "Please enter a tx id";
+  const pageDefinitions = {
+    addresses: {
+      eyebrow: "Accounts",
+      title: "Addresses",
+      description: "Inspect wallet balances, confirmed transaction history, and token holdings.",
+      features: ["Wallet details", "Balance", "Transaction history", "Token holdings"],
+    },
+    governance: {
+      eyebrow: "Protocol",
+      title: "Governance",
+      description: "Follow proposals, outcomes, voting statistics, and participation across the authority set.",
+      features: ["Governance overview", "Proposal statistics", "Voting statistics", "Active proposals", "Passed proposals", "Rejected proposals", "Validator votes", "Proposal votes", "Vote participation"],
+    },
+    treasury: {
+      eyebrow: "Governance",
+      title: "Treasury",
+      description: "Track treasury balance, governed transactions, and spending history.",
+      features: ["Treasury balance", "Treasury transactions", "Spending history"],
+    },
+    council: {
+      eyebrow: "Governance",
+      title: "Council",
+      description: "Inspect council membership, authority status, and governance council votes.",
+      features: ["Council members", "Authority status", "Governance council votes"],
+    },
+    analytics: {
+      eyebrow: "Insights",
+      title: "Analytics",
+      description: "Measure network growth, usage, economic activity, and operational trends.",
+      features: ["Network analytics", "Growth metrics", "User statistics", "Economic charts"],
+    },
+    network: {
+      eyebrow: "Infrastructure",
+      title: "Network",
+      description: "Monitor peer health, topology, consensus status, and observed network latency.",
+      features: ["Peer health", "Node map", "Consensus status", "Network latency"],
+    },
+    snapshots: {
+      eyebrow: "Storage",
+      title: "Snapshots",
+      description: "Inspect available state snapshots, retention history, and download endpoints.",
+      features: ["Available snapshots", "Snapshot history", "Download center"],
+    },
+    api: {
+      eyebrow: "Developers",
+      title: "API",
+      description: "Explore public REST and RPC endpoints, SDK integration, and gateway rate limits.",
+      features: ["REST API docs", "RPC endpoints", "SDKs", "Rate limits"],
+    },
+    charts: {
+      eyebrow: "Insights",
+      title: "Charts",
+      description: "Compare throughput, block timing, address activity, volume, and validator performance.",
+      features: ["TPS chart", "Block time chart", "Active addresses", "Volume chart", "Validator performance charts"],
+    },
+    staking: {
+      eyebrow: "Economics",
+      title: "Staking",
+      description: "Review validator stake, delegations, reward policy, and estimated APR inputs.",
+      features: ["Validators", "Delegations", "Rewards", "APR"],
+    },
+    tokenomics: {
+      eyebrow: "Economics",
+      title: "Tokenomics",
+      description: "Inspect MSC supply, circulation, emissions, reward allocation, and burn policy.",
+      features: ["Supply", "Circulating supply", "Emissions", "Burn statistics"],
+    },
+    "rich-list": {
+      eyebrow: "Economics",
+      title: "Rich List",
+      description: "Analyze publicly known allocation holders and MSC distribution concentration.",
+      features: ["Top holders", "Distribution analysis"],
+    },
+    mempool: {
+      eyebrow: "Activity",
+      title: "Mempool",
+      description: "Monitor pending transactions, queue pressure, and observed fee statistics.",
+      features: ["Pending transactions", "Queue size", "Gas statistics"],
+    },
+    epochs: {
+      eyebrow: "Consensus",
+      title: "Epochs",
+      description: "Track stable validator epochs, membership boundaries, and per-block proposer rotation.",
+      features: ["Current epoch", "Active committee", "Online now", "Next set boundary"],
+    },
+    bridge: {
+      eyebrow: "Interoperability",
+      title: "Bridge",
+      description: "Inspect bridge safety configuration, registered assets, and cross-chain activity.",
+      features: ["Bridge transfers", "Bridge status", "Cross-chain history"],
+    },
+    security: {
+      eyebrow: "Assurance",
+      title: "Security",
+      description: "Review runtime invariants, validator slashing signals, and incident reports.",
+      features: ["Security status", "Validator slashing", "Incident reports"],
+    },
+    search: {
+      eyebrow: "Discovery",
+      title: "Universal Search",
+      description: "Search blocks, transactions, addresses, validators, and governance proposals.",
+      features: ["Block", "Transaction", "Address", "Validator", "Proposal"],
+    },
+    settings: {
+      eyebrow: "Preferences",
+      title: "Settings",
+      description: "Configure explorer theme, language, RPC selection, and notifications.",
+      features: ["Theme", "Language", "RPC selection", "Notifications"],
+    },
+  };
+
+  function pageTabs(features) {
+    return `<nav class="page-tabs" aria-label="Page sections">${features.map((feature, index) =>
+      `<a href="#section-${index + 1}">${esc(feature)}</a>`).join("")}</nav>`;
+  }
+
+  function generatedSearch(page) {
+    if (page === "addresses") {
+      return `<form id="addressLookupForm" class="search-panel"><input id="addressQuery" type="search" placeholder="Enter MSC wallet address" autocomplete="off" /><button class="button primary" type="submit"><i data-lucide="search"></i>Inspect address</button></form>`;
+    }
+    if (page === "search") {
+      return `<form id="universalSearchForm" class="search-panel"><input id="universalSearchQuery" type="search" placeholder="Block, transaction, address, validator, or proposal" autocomplete="off" /><button class="button primary" type="submit"><i data-lucide="search"></i>Search chain</button></form>`;
+    }
+    return "";
+  }
+
+  function generatedSettings() {
+    return `<section class="settings-grid">
+      <article class="setting-panel" id="section-1"><div><strong>Theme</strong><span>Choose the explorer appearance.</span></div><div class="segmented-control" id="themeControl"><button type="button" data-theme="dark">Dark</button><button type="button" data-theme="contrast">Contrast</button><button type="button" data-theme="system">System</button></div></article>
+      <article class="setting-panel" id="section-2"><div><strong>Language</strong><span>Set interface language preference.</span></div><select id="languageSelect"><option value="en">English</option><option value="hi">Hindi</option><option value="ur">Urdu</option></select></article>
+      <article class="setting-panel" id="section-3"><div><strong>RPC selection</strong><span>Select the explorer data source.</span></div><select id="rpcSelect"><option value="same-origin">Explorer gateway</option><option value="https://wallet.mscblockexplorer.in">Wallet public RPC</option></select></article>
+      <article class="setting-panel" id="section-4"><div><strong>Notifications</strong><span>Notify on halted consensus or unhealthy RPC status.</span></div><label id="notificationToggleControl" class="toggle"><input id="notificationToggle" type="checkbox" /><span></span></label></article>
+    </section>
+    <section class="panel"><div class="panel-head"><h2>Current preferences</h2><span class="table-meta">Saved in this browser</span></div><div id="settingsSummary" class="detail-grid"></div></section>`;
+  }
+
+  function renderGeneratedPage() {
+    const definition = pageDefinitions[PAGE];
+    const content = document.querySelector(".explorer-content");
+    const hasPrerenderFallback =
+      content?.children.length === 1 &&
+      content.firstElementChild?.classList.contains("seo-prerender");
+    if (!definition || !content || (content.children.length && !hasPrerenderFallback)) return;
+    document.title = `MSC Explorer | ${definition.title}`;
+    content.innerHTML = `
+      <section class="page-heading"><div><div class="eyebrow">${esc(definition.eyebrow)}</div><h1>${esc(definition.title)}</h1><p>${esc(definition.description)}</p></div><div class="heading-actions"><span class="badge good">Live explorer</span><span id="pageUpdated" class="badge">Updating</span></div></section>
+      ${pageTabs(definition.features)}
+      ${generatedSearch(PAGE)}
+      ${PAGE === "settings" ? generatedSettings() : `
+        <section class="metric-grid" id="extendedMetrics">
+          ${definition.features.slice(0, 4).map((feature, index) => `<article class="metric" id="section-${index + 1}"><div class="metric-top"><span>${esc(feature)}</span><span class="metric-icon"><i data-lucide="${["activity", "chart-no-axes-column-increasing", "circle-gauge", "database"][index]}"></i></span></div><div id="extendedMetric${index}" class="metric-value">-</div><div id="extendedMetricFoot${index}" class="metric-foot">Live network data</div></article>`).join("")}
+        </section>
+        <section class="chart-grid compact"><div id="extendedChartPrimary" class="chart-card wide"></div><div id="extendedChartSecondary" class="chart-card"></div></section>
+        <section class="workspace"><div class="panel"><div class="panel-head"><h2 id="extendedPrimaryTitle">${esc(definition.features[0])}</h2><span class="table-meta">Live data</span></div><div id="extendedPrimary" class="extended-list"><div class="empty-state">Loading ${esc(definition.title.toLowerCase())}...</div></div></div><aside class="panel"><div class="panel-head"><h2 id="extendedSideTitle">${esc(definition.features[1] || "Summary")}</h2><span class="badge">Current</span></div><div id="extendedSide" class="side-stack"></div></aside></section>
+        <section class="panel"><div class="panel-head"><h2 id="extendedSecondaryTitle">${esc(definition.features.slice(2).join(" / ") || "Details")}</h2><span class="table-meta">Canonical explorer view</span></div><div id="extendedSecondary" class="detail-grid"></div></section>
+      `}`;
+  }
+
+  function renderCommon() {
+    const status = state.status || {};
+    const audit = state.tokenomicsAudit || state.tokenomics?.audit || {};
+    const displayHeight = state.realtime.connected && state.realtime.displayHeight
+      ? state.realtime.displayHeight
+      : status.height;
+    setText("topHeight", fmt(displayHeight));
+    setText("topFinalized", fmt(status.finalized_height));
+    setText("topMode", status.consensus_detector_mode || status.quorum_policy_mode || "-");
+    setText("sideNetwork", status.network_health || "unknown");
+    setText("metricHeight", fmt(displayHeight));
+    setText("metricFinalized", fmt(status.finalized_height));
+    setText("metricPeers", fmt(status.peers));
+    setText("metricValidators", fmt(status.committee_size ?? status.live_validators ?? status.active_ready_count));
+    renderLiveBlockAge();
+    setText("metricMode", status.consensus_detector_mode || status.quorum_policy_mode || "-");
+    setText("metricMempool", fmt(status.mempool_depth));
+    const recentBlocks = state.blocks || [];
+    setText("metricTPS", recentBlocks.length ? (sum(recentBlocks, (block) => block.tx_count) / recentBlocks.length).toFixed(2) : "-");
+    setText("metricNode", status.node_id || "-");
+    setText("networkHealth", status.network_health || "-");
+    setText("networkSummary", status.network_health_summary || "-");
+    setText("chainId", status.chain_id || "-");
+    setText("nodeRole", status.role || "-");
+    setText("syncState", status.sync_complete ? "Complete" : status.sync_mode || "-");
+    setText("quorum", `${status.active_ready_count ?? "-"} / ${status.required_quorum ?? "-"}`);
+    setText("lastUpdated", state.lastUpdated ? new Date(state.lastUpdated).toLocaleTimeString() : "-");
+    const auditAlert = $("supplyAuditAlert");
+    if (auditAlert) {
+      const failed = audit.invariant_ok === false || String(audit.invariant_status || "").toLowerCase() === "failed";
+      auditAlert.hidden = !failed;
+      auditAlert.textContent = failed
+        ? `Supply Audit Failed: current ${fmt(audit.current_supply)} / max ${fmt(audit.max_supply)}`
+        : "";
+    }
+    maybeNotifyStatus(status);
+  }
+
+  function maybeNotifyStatus(status) {
+    if (localStorage.getItem("msc_explorer_notifications") !== "true" || !("Notification" in window) || Notification.permission !== "granted") return;
+    const mode = String(status.consensus_detector_mode || status.network_health || "").toUpperCase();
+    if (!/HALTED|STALLED|DOWN|UNHEALTHY/.test(mode)) return;
+    const key = `${mode}:${status.height || 0}`;
+    const previous = localStorage.getItem("msc_explorer_last_notification") || "";
+    if (previous === key) return;
+    localStorage.setItem("msc_explorer_last_notification", key);
+    new Notification("MSC Explorer network alert", { body: `${mode} at height ${fmt(status.height)}` });
+  }
+
+  function blocksRows(blocks) {
+    const status = state.status || {};
+    return (blocks || []).map((block) => `
+      <tr class="clickable" data-height="${esc(block.height)}">
+        <td><a class="height-link" href="explorer-blocks.html?height=${encodeURIComponent(block.height)}">#${fmt(block.height)}</a></td>
+        <td>${blockTypeHTML(block)}</td>
+        <td>${proposerHTML(block.proposer, { compact: true })}</td>
+        <td class="mono">${fmt(block.tx_count)}</td>
+        <td class="mono">${fmt(block.execution_result_count)}</td>
+        <td>${quorumBreakdownHTML(block, status)}</td>
+        <td><a class="hash-link" href="explorer-blocks.html?hash=${encodeURIComponent(block.hash || "")}">${esc(short(block.hash, 9, 6))}</a></td>
+      </tr>`).join("") || `<tr><td colspan="7">No blocks available</td></tr>`;
+  }
+
+  function renderBlocks() {
+    const blocks = state.blocks || [];
+    setHTML("overviewBlocks", blocksRows(blocks.slice(0, 8)));
+    setHTML("blocksTable", blocksRows(blocks));
+    setText("blocksCount", `${fmt(blocks.length)} recent blocks`);
+    const heights = blocks.map((block) => Number(block.height || 0)).filter(Boolean);
+    setText("blocksRange", heights.length ? `#${fmt(Math.min(...heights))} - #${fmt(Math.max(...heights))}` : "-");
+    setHTML("activityVisual", blocks.slice(0, 28).reverse().map((block, index) => {
+      const size = 24 + Math.min(70, Number(block.execution_result_count || 0) * 10 + Number(block.tx_count || 0) * 14 + (index % 5) * 5);
+      return `<span class="activity-bar" style="--bar-height:${size}%;" title="Block ${esc(block.height)}"></span>`;
+    }).join(""));
+  }
+
+  function renderOverviewSide() {
+    const status = state.status || {};
+    const publicNodes = state.publicNodes || {};
+    const rows = [
+      ["Network health", status.network_health || "-"],
+      ["Node / role", `${status.node_id || "-"} / ${status.role || "-"}`],
+      ["Sync", status.sync_complete ? "Complete" : status.sync_mode || "-"],
+      ["Quorum", `Votes: ${fmt(status.network_quorum_votes ?? status.active_ready_count)} Required: ${fmt(status.network_quorum_required ?? status.required_quorum)} Committee: ${fmt(status.committee_size ?? status.live_validators)}`],
+      ["Validator set", `${fmt(status.committee_size)} active / ${fmt(status.live_validators ?? status.active_ready_count)} online`],
+      ["Next set boundary", status.validator_set_next_epoch_height ? `#${fmt(status.validator_set_next_epoch_height)}` : "-"],
+      ["Public RPCs", `${publicNodes.healthy ?? "-"} / ${publicNodes.total ?? "-"} healthy`],
+      ["Chain ID", status.chain_id || "-"],
+    ];
+    setHTML("overviewSummary", rows.map(([label, value]) => `<div class="summary-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join(""));
+  }
+
+  function renderExplorerCharts() {
+    const status = state.status || {};
+    const blocks = state.blocks || [];
+    const recent = blocks.slice(0, 32);
+    const chronological = recent.slice().reverse();
+    const txDensity = chronological.map((block) => Number(block.tx_count || 0) + Number(block.execution_result_count || 0) * 1.25);
+    const execDensity = chronological.map((block) => Number(block.execution_result_count || 0));
+    const proposerCounts = new Map();
+    let unknownProposerBlocks = 0;
+    for (const block of recent) {
+      const proposer = proposerLabel(block.proposer);
+      if (!proposer) {
+        unknownProposerBlocks += 1;
+        continue;
+      }
+      proposerCounts.set(proposer, (proposerCounts.get(proposer) || 0) + 1);
+    }
+    const knownProposerCount = proposerCounts.size;
+    const proposerRows = [...proposerCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, unknownProposerBlocks > 0 ? 5 : 6)
+      .map(([label, value]) => ({ label: `Validator ${label}`, value, display: value }));
+    if (unknownProposerBlocks > 0) {
+      proposerRows.push({
+        label: "Unknown proposer",
+        value: unknownProposerBlocks,
+        display: `${fmt(unknownProposerBlocks)} block${unknownProposerBlocks === 1 ? "" : "s"}`,
+        title: UNKNOWN_PROPOSER_TITLE,
+        tone: "warn",
+      });
+    }
+    const quorumRows = recent.slice(0, 8).map((block) => {
+      const info = blockQuorumInfo(block, status);
+      const votes = Number(info.votes || 0);
+      const required = Number(info.required || 0);
+      const value = pct(votes, Math.max(required, votes, 1));
+      return {
+        label: `#${fmt(block.height)}`,
+        value,
+        display: quorumBreakdownText(block, status),
+        title: "Votes collected / required quorum / committee size",
+        tone: votes >= required ? "good" : "warn",
+      };
+    });
+    const height = Number(status.height || 0);
+    const finalized = Number(status.finalized_height || 0);
+    const finalityLag = Math.max(0, height - finalized);
+    const finalityScore = height > 0 ? clamp(100 - finalityLag * 10) : 0;
+
+    chartCard(
+      "activityVisual",
+      "Block activity",
+      "Recent transaction and execution density",
+      `${lineHTML(txDensity)}${matrixHTML([
+        ["Window", `${fmt(recent.length)} blocks`],
+        ["Tx seen", fmt(recent.reduce((sum, block) => sum + Number(block.tx_count || 0), 0))],
+        ["Exec results", fmt(recent.reduce((sum, block) => sum + Number(block.execution_result_count || 0), 0))],
+        ["Latest", height ? `#${fmt(height)}` : "-"],
+      ].map(([label, value]) => ({ label, value })))}`,
+      "live",
+    );
+    chartCard("proposerChart", "Proposer mix", "Recent block production share", rowsHTML(proposerRows), `${fmt(knownProposerCount)} validators`);
+    chartCard("quorumChart", "Quorum strength", "Votes collected against required quorum", rowsHTML(quorumRows), `${fmt(status.network_quorum_required ?? status.required_quorum)} required`);
+    chartCard("finalityChart", "Finality", "Head to finalized gap", donutHTML(finalityScore, "Finality freshness", `${fmt(finalityLag)} block lag`, finalityLag <= 1 ? "good" : finalityLag <= 3 ? "warn" : "bad"));
+
+    chartCard(
+      "blockProductionChart",
+      "Production timeline",
+      "Latest blocks by execution density",
+      `${barsHTML(chronological.map((block) => ({
+        label: `#${block.height}`,
+        value: Number(block.execution_result_count || 0) + Number(block.tx_count || 0),
+      })))}${matrixHTML([
+        ["Range", recent.length ? `#${fmt(Math.min(...recent.map((block) => Number(block.height || 0))))} - #${fmt(Math.max(...recent.map((block) => Number(block.height || 0))))}` : "-"],
+        ["Avg exec", recent.length ? (recent.reduce((sum, block) => sum + Number(block.execution_result_count || 0), 0) / recent.length).toFixed(1) : "-"],
+        ["Avg tx", recent.length ? (recent.reduce((sum, block) => sum + Number(block.tx_count || 0), 0) / recent.length).toFixed(1) : "-"],
+      ].map(([label, value]) => ({ label, value })))}`,
+    );
+    chartCard("blockMixChart", "Block mix", "Proposer and execution balance", rowsHTML([
+      { label: "Transactions", value: recent.reduce((sum, block) => sum + Number(block.tx_count || 0), 0), display: fmt(recent.reduce((sum, block) => sum + Number(block.tx_count || 0), 0)) },
+      { label: "Executions", value: recent.reduce((sum, block) => sum + Number(block.execution_result_count || 0), 0), display: fmt(recent.reduce((sum, block) => sum + Number(block.execution_result_count || 0), 0)) },
+      { label: "Quorum votes", value: Number(status.network_quorum_votes ?? status.active_ready_count ?? 0), display: `${fmt(status.network_quorum_votes ?? status.active_ready_count)} votes` },
+      { label: "Required", value: Number(status.network_quorum_required ?? status.required_quorum ?? 0), display: `${fmt(status.network_quorum_required ?? status.required_quorum)} required` },
+    ]));
+    chartCard("txFlowChart", "Transaction flow", "Confirmed tx count across recent blocks", `${barsHTML(chronological.map((block) => ({ label: `#${block.height}`, value: Number(block.tx_count || 0) })))}${lineHTML(execDensity)}`, `${fmt(status.mempool_depth || 0)} pending`);
+    chartCard("mempoolChart", "Mempool pressure", "Pending queue and latest block age", donutHTML(clamp(100 - Number(status.mempool_depth || 0) * 8), "Queue headroom", `${fmt(status.mempool_depth || 0)} pending | ${age(status.last_block_age_seconds)} age`, Number(status.mempool_depth || 0) <= 2 ? "good" : "warn"));
+
+    const validators = state.validators || {};
+    const all = validators.validators || validators.online_validators || [];
+    const online = new Set(validators.online_validators || []);
+    const offline = new Set(validators.offline_validators || validators.inactive_validators || []);
+    const readinessTotal = all.length || Number(status.committee_size || status.total_validators || 0);
+    const readiness = online.size || Number(status.active_ready_count || 0);
+    chartCard("validatorQuorumDonut", "Quorum readiness", "Online validators vs active set", donutHTML(pct(readiness, readinessTotal || readiness), "Readiness", `${fmt(readiness)} / ${fmt(readinessTotal || readiness)} online`, offline.size ? "warn" : "good"));
+    chartCard("validatorReadinessChart", "Validator state", "Committee participation health", rowsHTML([
+      { label: "Online", value: readiness, display: fmt(readiness) },
+      { label: "Offline", value: offline.size, display: fmt(offline.size), tone: offline.size ? "bad" : "good" },
+      { label: "Required", value: Number(status.required_quorum || 0), display: fmt(status.required_quorum) },
+      { label: "Strict", value: Number(status.strict_quorum || 0), display: fmt(status.strict_quorum) },
+    ]));
+    chartCard("validatorPendingChart", "Pending set", "Validator registry changes", matrixHTML([
+      { label: "Pending add", value: fmt((validators.pending_add || []).length) },
+      { label: "Pending remove", value: fmt((validators.pending_remove || []).length) },
+      { label: "Mode", value: status.consensus_detector_mode || status.quorum_policy_mode || "-" },
+      { label: "Committee", value: fmt(status.committee_size || all.length) },
+    ]));
+
+    const publicNodes = normalizeNodes(state.publicNodes);
+    const nodeTotal = Number(publicNodes.total ?? publicNodes.nodes?.length ?? 0);
+    const nodeHealthy = Number(publicNodes.healthy ?? (publicNodes.nodes || []).filter((node) => node.healthy || node.status_code === 200).length);
+    chartCard("nodeHealthChart", "Public RPC health", "Wallet-safe public node availability", donutHTML(pct(nodeHealthy, nodeTotal), "Healthy nodes", `${fmt(nodeHealthy)} / ${fmt(nodeTotal)} available`, nodeHealthy === nodeTotal ? "good" : nodeHealthy ? "warn" : "bad"));
+    chartCard("peerReputationChart", "Peer reputation", "Direct peer quality and acknowledgement", rowsHTML((state.peers || []).slice(0, 8).map((peer) => ({
+      label: peer.validator_id ? `Validator ${peer.validator_id}` : short(peer.peer_id, 8, 4),
+      value: clamp(Number(peer.reputation || 0) * 100),
+      display: Number(peer.reputation || 0).toFixed(3),
+      tone: Number(peer.reputation || 0) >= 0.9 ? "good" : "warn",
+    }))), `${fmt((state.peers || []).length)} peers`);
+  }
+
+  function renderValidators() {
+    const payload = state.validators || {};
+    const ranked = state.leaderboard?.entries || state.leaderboard?.validators || [];
+    const all = payload.validators || payload.online_validators || ranked.map((validator) => validator.validator_id || validator.id);
+    const online = new Set(payload.online_validators || []);
+    const offline = new Set(payload.offline_validators || payload.inactive_validators || []);
+    const committeeSize = Number(state.status?.committee_size || all.length || 0);
+    const onlineCount = online.size || Number(state.status?.live_validators || state.status?.active_ready_count || 0);
+    const offlineCount = Math.max(offline.size, committeeSize - onlineCount, 0);
+    setText("validatorTotal", fmt(committeeSize));
+    setText("validatorOnline", fmt(onlineCount));
+    setText("validatorOffline", fmt(offlineCount));
+    setText("validatorPending", fmt((payload.pending_add || []).length + (payload.pending_remove || []).length));
+    setHTML("validatorList", all.map((id) => {
+      const isOnline = online.has(id);
+      const profile = ranked.find((validator) => String(validator.validator_id || validator.id) === String(id)) || {};
+      return `<div class="validator-row">
+        <span class="validator-avatar">${esc(id)}</span>
+        <span><span class="row-title">Validator ${esc(id)}</span><span class="row-subtitle">Consensus participant · Mainnet</span></span>
+        <span class="badge ${isOnline || profile.online ? "good" : "bad"}">${isOnline || profile.online ? "Online" : "Offline"}</span>
+      </div>`;
+    }).join("") || `<div class="empty-state">Validator roster unavailable</div>`);
+    const readiness = state.status?.active_ready_count || online.size || 0;
+    const required = state.status?.required_quorum || 0;
+    setHTML("quorumSummary", [
+      ["Active ready", readiness],
+      ["Required quorum", required],
+      ["Strict quorum", state.status?.strict_quorum ?? "-"],
+      ["Committee size", state.status?.committee_size ?? all.length],
+      ["Epoch", state.status?.validator_set_epoch_enabled ? `#${fmt(state.status?.validator_set_epoch_number)}` : "Activates at protocol gate"],
+      ["Next set boundary", state.status?.validator_set_next_epoch_height ? `#${fmt(state.status.validator_set_next_epoch_height)}` : "-"],
+      ["Pending add", (payload.pending_add || []).length],
+      ["Pending remove", (payload.pending_remove || []).length],
+    ].map(([label, value]) => `<div class="summary-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join(""));
+  }
+
+  function normalizeNodes(payload) {
+    const data = unwrap(payload) || {};
+    return {
+      ...data,
+      nodes: data.nodes || data.backends || [],
+    };
+  }
+
+  function renderNodes() {
+    const peers = state.peers || [];
+    const publicNodes = normalizeNodes(state.publicNodes);
+    setText("peerTotal", fmt(peers.length));
+    setText("publicHealthy", fmt(publicNodes.healthy));
+    setText("publicTotal", fmt(publicNodes.total));
+    setText("activeGateway", publicNodes.best_node?.id || publicNodes.nodes?.find((node) => node.active_gateway)?.id || "-");
+    setHTML("publicNodeList", (publicNodes.nodes || []).map((node) => {
+      const health = node.health_state || (node.healthy ? "healthy" : "unhealthy");
+      const healthTone = health === "healthy" ? "good" : health === "warning" ? "warn" : "bad";
+      return `<div class="node-row">
+        <span class="node-avatar">${esc(node.id || "?")}</span>
+        <span><span class="row-title">${esc(node.id || "Public node")} · ${esc(node.role || "full")}</span><span class="row-subtitle">${esc(node.gateway_rpc_url || node.rpc_url || node.target || "-")}</span></span>
+        <span class="badge ${healthTone}">${esc(health)}</span>
+      </div>`;
+    }).join("") || `<div class="empty-state">Public node registry unavailable</div>`);
+    setHTML("peersTable", peers.map((peer) => `
+      <tr>
+        <td class="mono">${esc(short(peer.peer_id, 10, 8))}</td>
+        <td><span class="badge ${peer.connected ? "good" : "bad"}">${peer.connected ? "Connected" : "Offline"}</span></td>
+        <td class="mono">${esc(peer.validator_id || "-")}</td>
+        <td>${esc(peer.role || "-")}</td>
+        <td class="mono">${Number(peer.reputation || 0).toFixed(3)}</td>
+        <td class="mono">${fmt(peer.ack_height)}</td>
+        <td><span class="badge ${peer.hash_match && peer.hello_ok ? "good" : "warn"}">${peer.hash_match && peer.hello_ok ? "Verified" : "Check"}</span></td>
+      </tr>`).join("") || `<tr><td colspan="7">No peers available</td></tr>`);
+  }
+
+  function detailCards(items) {
+    return items.map(([label, value]) => `<div class="detail-card"><span class="label">${esc(label)}</span><strong>${esc(value ?? "-")}</strong></div>`).join("");
+  }
+
+  function firstPresent(...values) {
+    return values.find((value) => value !== undefined && value !== null && value !== "");
+  }
+
+  function snapshotChunkCount(snapshot) {
+    const manifest = snapshot?.manifest || {};
+    return firstPresent(
+      snapshot?.chunk_count,
+      snapshot?.chunkCount,
+      snapshot?.total_chunks,
+      snapshot?.totalChunks,
+      Array.isArray(snapshot?.chunk_hashes) ? snapshot.chunk_hashes.length : undefined,
+      Array.isArray(snapshot?.chunks) ? snapshot.chunks.length : undefined,
+      manifest.chunk_count,
+      manifest.chunkCount,
+      manifest.total_chunks,
+      manifest.totalChunks,
+      Array.isArray(manifest.chunk_hashes) ? manifest.chunk_hashes.length : undefined,
+      Array.isArray(manifest.chunks) ? manifest.chunks.length : undefined,
+    );
+  }
+
+  async function loadSnapshotMetadata() {
+    const latest = await first(["/snapshot/latest", "/v1/snapshot/latest"]);
+    if (PAGE !== "snapshots" || !latest?.height) return latest;
+    try {
+      const manifest = await first([
+        `/v1/snapshot/manifest?height=${encodeURIComponent(latest.height)}`,
+        `/snapshot/manifest?height=${encodeURIComponent(latest.height)}`,
+        "/v1/snapshot/manifest",
+        "/snapshot/manifest",
+      ]);
+      return { ...latest, ...manifest, manifest: manifest.manifest || latest.manifest };
+    } catch (_) {
+      return latest;
+    }
+  }
+
+  function listRows(items) {
+    return items.map((item) => `<div class="data-row">
+      <span class="data-row-main"><strong>${esc(item.title || "-")}</strong><small>${esc(item.subtitle || "")}</small></span>
+      <span class="data-row-value ${item.tone ? `tone-${item.tone}` : ""}">${esc(item.value ?? "-")}</span>
+    </div>`).join("") || `<div class="empty-state">No published data available</div>`;
+  }
+
+  function setExtendedMetrics(items) {
+    for (let index = 0; index < 4; index += 1) {
+      const item = items[index] || {};
+      setText(`extendedMetric${index}`, item.value ?? "-");
+      setText(`extendedMetricFoot${index}`, item.foot || "Live network data");
+    }
+  }
+
+  function renderRecentTransactions() {
+    const txs = state.recentTxs || [];
+    setHTML("latestTransactionsTable", txs.slice(0, 20).map((entry) => {
+      const tx = entry.tx || entry.transaction || entry;
+      return `<tr><td class="mono"><a class="hash-link" href="explorer-transactions.html?q=${encodeURIComponent(tx.id || tx.tx_id || "")}">${esc(short(tx.id || tx.tx_id, 10, 7))}</a></td><td>${esc(tx.type || tx.tx_type || "transfer")}</td><td class="mono">${esc(short(tx.from || tx.sender, 8, 5))}</td><td class="mono">${esc(short(tx.to || tx.recipient, 8, 5))}</td><td class="mono">${esc(tx.amount ?? "-")}</td><td class="mono">#${fmt(entry.height || tx.height)}</td></tr>`;
+    }).join("") || `<tr><td colspan="6">No recent transactions in the current block window</td></tr>`);
+  }
+
+  function renderExtendedPage() {
+    if (!pageDefinitions[PAGE] || PAGE === "settings") return;
+    const status = state.status || {};
+    const blocks = state.blocks || [];
+    const leaderboard = state.leaderboard?.entries || state.leaderboard?.validators || [];
+    const publicStatus = state.publicStatus || {};
+    const publicNodes = normalizeNodes(state.publicNodes);
+    const governance = state.governance || {};
+    const proposals = Object.values(governance.proposals || {});
+    const tokenomics = normalizeTokenomics(state.tokenomics || {});
+    const tokenomicsAudit = state.tokenomicsAudit || tokenomics.audit || {};
+    const buckets = tokenomics.buckets || [];
+    const storage = state.storage || {};
+    const snapshot = state.snapshot || {};
+    const bridge = state.bridge || {};
+    const security = state.security || {};
+    const incidents = state.misbehavior?.items || [];
+    const recent = blocks.slice(0, 32);
+    const chronological = recent.slice().reverse();
+    const avgBlockTx = recent.length ? sum(recent, (block) => block.tx_count) / recent.length : 0;
+    const avgExec = recent.length ? sum(recent, (block) => block.execution_result_count) / recent.length : 0;
+    const onlineValidators = leaderboard.filter((validator) => validator.online);
+    const totalStake = sum(leaderboard, (validator) => validator.effective_stake || validator.actual_stake);
+    const set = (metrics, primaryTitle, primary, sideTitle, side, secondaryTitle, secondary) => {
+      setExtendedMetrics(metrics);
+      setText("extendedPrimaryTitle", primaryTitle);
+      setHTML("extendedPrimary", primary);
+      setText("extendedSideTitle", sideTitle);
+      setHTML("extendedSide", side);
+      setText("extendedSecondaryTitle", secondaryTitle);
+      setHTML("extendedSecondary", secondary);
+      setText("pageUpdated", state.lastUpdated ? new Date(state.lastUpdated).toLocaleTimeString() : "Unavailable");
+    };
+
+    if (PAGE === "addresses") {
+      set([{ value: "-", foot: "Search a wallet address" }, { value: "-", foot: "Confirmed balance" }, { value: "-", foot: "Confirmed activity" }, { value: "-", foot: "Indexed assets" }],
+        "Wallet details", `<div class="empty-state">Enter an MSC address to inspect wallet details.</div>`,
+        "Address activity", listRows((state.recentTxs || []).slice(0, 5).map((item) => ({ title: short(item.tx?.from || item.from, 10, 6), subtitle: `Block #${fmt(item.height)}`, value: item.tx?.amount ?? item.amount ?? "-" }))),
+        "Token holdings", detailCards((state.coins?.coins || []).map((coin) => [coin.symbol, `${coin.decimals} decimals`])));
+      chartCard("extendedChartPrimary", "Address activity", "Recent observed transfers", barsHTML(chronological.map((block) => ({ label: `#${block.height}`, value: block.tx_count || 0 }))));
+      chartCard("extendedChartSecondary", "Search readiness", "Indexer and public RPC availability", donutHTML(publicStatus.indexer?.some?.((node) => node.healthy) ? 100 : 30, "Address lookup", publicStatus.indexer?.some?.((node) => node.healthy) ? "Indexer online" : "RPC fallback"));
+    } else if (PAGE === "governance") {
+      const active = proposals.filter((proposal) => String(proposal.status || "").toLowerCase() === "active");
+      const passed = proposals.filter((proposal) => /approved|passed|applied/.test(String(proposal.status || "").toLowerCase()));
+      const rejected = proposals.filter((proposal) => /rejected|failed/.test(String(proposal.status || "").toLowerCase()));
+      const votes = proposals.flatMap((proposal) => Object.entries(proposal.votes || {}).map(([voter, choice]) => ({ voter, choice, proposal: proposal.id || proposal.title })));
+      set([{ value: fmt(proposals.length), foot: "All proposals" }, { value: fmt(active.length), foot: "Active proposals" }, { value: fmt(votes.length), foot: "Recorded votes" }, { value: `${fmt(passed.length)} / ${fmt(rejected.length)}`, foot: "Passed / rejected" }],
+        "Proposals", listRows(proposals.map((proposal) => ({ title: proposal.title || proposal.id || "Proposal", subtitle: proposal.kind || "governance", value: proposal.status || "unknown", tone: /approved|passed|applied/.test(String(proposal.status || "").toLowerCase()) ? "good" : /rejected|failed/.test(String(proposal.status || "").toLowerCase()) ? "bad" : "warn" }))),
+        "Governance status", detailCards([["State hash", short(governance.state_hash, 12, 8)], ["Treasury balance", fmt(governance.treasury_balance)], ["Emergency pause", governance.emergency_pause?.active ? "Active" : "Inactive"], ["Protocol gates", fmt(Object.keys(governance.protocol_gates || {}).length)]]),
+        "Validator and proposal votes", listRows(votes.map((vote) => ({ title: vote.voter, subtitle: vote.proposal, value: vote.choice }))));
+      chartCard("extendedChartPrimary", "Proposal outcomes", "Active, passed, and rejected proposals", rowsHTML([{ label: "Active", value: active.length, display: active.length }, { label: "Passed", value: passed.length, display: passed.length }, { label: "Rejected", value: rejected.length, display: rejected.length, tone: rejected.length ? "bad" : "good" }]));
+      chartCard("extendedChartSecondary", "Vote participation", "Authority votes recorded", donutHTML(pct(votes.length, Math.max(proposals.length * Number(status.committee_size || 1), 1)), "Participation", `${fmt(votes.length)} votes`));
+    } else if (PAGE === "treasury") {
+      const treasuryBuckets = buckets.filter((bucket) => /treasury|foundation|community/i.test(bucket.name || bucket.address || ""));
+      set([{ value: fmt(governance.treasury_balance), foot: "Governance treasury" }, { value: fmt(sum(treasuryBuckets, (bucket) => bucket.balance)), foot: "Known governed pools" }, { value: fmt(proposals.filter((p) => p.kind === "treasury").length), foot: "Treasury proposals" }, { value: tokenomics.economic_policy?.treasury?.allow_treasury_ops ? "Enabled" : "Locked", foot: "Direct operations" }],
+        "Treasury balances", listRows(treasuryBuckets.map((bucket) => ({ title: bucket.name, subtitle: bucket.address, value: fmt(bucket.balance) }))),
+        "Treasury policy", detailCards([["Fees to treasury", tokenomics.economic_policy?.treasury?.transaction_fees_to_treasury ? "Yes" : "No"], ["Admin required", tokenomics.economic_policy?.treasury?.treasury_ops_require_admin ? "Yes" : "No"], ["Treasury address", tokenomics.economic_policy?.treasury?.treasury_address || "-"], ["Owner address", tokenomics.economic_policy?.treasury?.owner_address || "-"]]),
+        "Spending history", listRows(proposals.filter((p) => p.kind === "treasury").map((p) => ({ title: p.title || p.id, subtitle: p.treasury_recipient || "-", value: fmt(p.treasury_amount) }))));
+      chartCard("extendedChartPrimary", "Governed pool balances", "Known treasury and foundation allocations", rowsHTML(treasuryBuckets.map((bucket) => ({ label: bucket.name, value: bucket.balance, display: fmt(bucket.balance) }))));
+      chartCard("extendedChartSecondary", "Treasury controls", "Direct operations safety", donutHTML(tokenomics.economic_policy?.treasury?.allow_treasury_ops ? 100 : 0, "Operations", tokenomics.economic_policy?.treasury?.allow_treasury_ops ? "Enabled" : "Governance locked", tokenomics.economic_policy?.treasury?.allow_treasury_ops ? "warn" : "good"));
+    } else if (PAGE === "council") {
+      const members = leaderboard.filter((validator) => validator.active);
+      set([{ value: fmt(members.length), foot: "Active authority members" }, { value: fmt(onlineValidators.length), foot: "Online members" }, { value: fmt(status.required_quorum), foot: "Required quorum" }, { value: governance.emergency_pause?.active ? "Paused" : "Active", foot: "Authority status" }],
+        "Council members", listRows(members.map((member) => ({ title: `Validator ${member.validator_id || member.id}`, subtitle: `${member.country || "-"} · ${member.slot_type || "authority"}`, value: member.online ? "Online" : "Offline", tone: member.online ? "good" : "bad" }))),
+        "Authority status", detailCards([["Consensus mode", status.consensus_detector_mode || "-"], ["Ready", fmt(status.active_ready_count)], ["Required quorum", fmt(status.required_quorum)], ["Strict quorum", fmt(status.strict_quorum)]]),
+        "Governance council votes", listRows(proposals.flatMap((proposal) => Object.entries(proposal.votes || {}).map(([voter, choice]) => ({ title: voter, subtitle: proposal.title || proposal.id, value: choice })))));
+      chartCard("extendedChartPrimary", "Council availability", "Active member uptime", rowsHTML(members.map((member) => ({ label: member.validator_id || member.id, value: member.signed_ratio_bps || 0, display: `${Number(member.signed_ratio_bps || 0) / 100}%`, tone: member.online ? "good" : "bad" }))));
+      chartCard("extendedChartSecondary", "Authority quorum", "Ready members against strict quorum", donutHTML(pct(status.active_ready_count, status.strict_quorum || status.committee_size), "Ready authority", `${fmt(status.active_ready_count)} ready`));
+    } else if (PAGE === "analytics" || PAGE === "charts") {
+      set([{ value: avgBlockTx.toFixed(2), foot: "Average tx per recent block" }, { value: avgExec.toFixed(2), foot: "Average executions" }, { value: fmt(new Set((state.recentTxs || []).flatMap((item) => [item.tx?.from, item.tx?.to]).filter(Boolean)).size), foot: "Observed active addresses" }, { value: fmt(totalStake), foot: "Validator voting power" }],
+        "Network analytics", listRows(recent.slice(0, 12).map((block) => ({ title: `Block #${fmt(block.height)}`, subtitle: proposerLabel(block.proposer) || UNKNOWN_PROPOSER_TEXT, value: `${fmt(block.tx_count)} tx / ${fmt(block.execution_result_count)} exec` }))),
+        "Growth metrics", detailCards([["Current height", fmt(status.height)], ["Finalized height", fmt(status.finalized_height)], ["Validators", fmt(leaderboard.length)], ["Public RPC nodes", fmt(publicNodes.total)]]),
+        "Economic and validator charts", detailCards([["Supply", fmt(tokenomics.total_supply)], ["Max supply", fmt(tokenomics.max_supply)], ["Known holder buckets", fmt(buckets.length)], ["Online validators", fmt(onlineValidators.length)]]));
+      chartCard("extendedChartPrimary", PAGE === "charts" ? "TPS and volume chart" : "Network growth", "Recent block transaction and execution density", `${barsHTML(chronological.map((block) => ({ label: `#${block.height}`, value: block.tx_count || 0 })))}${lineHTML(chronological.map((block) => Number(block.execution_result_count || 0)))}`);
+      chartCard("extendedChartSecondary", "Validator performance", "Signed participation across validators", rowsHTML(leaderboard.map((v) => ({ label: v.validator_id || v.id, value: v.signed_ratio_bps || 0, display: `${Number(v.signed_ratio_bps || 0) / 100}%`, tone: v.online ? "good" : "bad" }))));
+    } else if (PAGE === "network") {
+      const nodeList = publicNodes.nodes || [];
+      set([{ value: fmt(state.peers.length), foot: "Connected peers" }, { value: fmt(publicNodes.healthy), foot: "Healthy public RPCs" }, { value: status.consensus_detector_mode || "-", foot: "Consensus status" }, { value: `${fmt(nodeList.length ? sum(nodeList, (node) => node.latency_ms) / nodeList.length : 0)}ms`, foot: "Average RPC latency" }],
+        "Peer health", listRows(state.peers.map((peer) => ({ title: peer.validator_id || short(peer.peer_id, 10, 5), subtitle: peer.role || "peer", value: peer.connected ? "Connected" : "Offline", tone: peer.connected ? "good" : "bad" }))),
+        "Consensus status", detailCards([["Mode", status.consensus_detector_mode || "-"], ["Reason", status.consensus_detector_reason || "-"], ["Finality lag", fmt(status.consensus_detector_finality_lag_blocks)], ["Partition risk", status.consensus_detector_partition_risk ? "Detected" : "Clear"]]),
+        "Node map and latency", listRows(nodeList.map((node) => ({ title: node.id || "RPC node", subtitle: `${node.role || "full"} · ${node.gateway_rpc_url || node.rpc_url || "-"}`, value: `${fmt(node.latency_ms)}ms`, tone: node.healthy ? "good" : "bad" }))));
+      chartCard("extendedChartPrimary", "Network latency", "Observed public RPC response times", barsHTML(nodeList.map((node) => ({ label: node.id || "node", value: node.latency_ms || 0 }))));
+      chartCard("extendedChartSecondary", "Peer health", "Connected peer reputation", rowsHTML(state.peers.map((peer) => ({ label: peer.validator_id || short(peer.peer_id), value: Number(peer.reputation || 0) * 100, display: Number(peer.reputation || 0).toFixed(3) }))));
+    } else if (PAGE === "snapshots") {
+      const chunkCount = snapshotChunkCount(snapshot);
+      set([{ value: snapshot.height ? `#${fmt(snapshot.height)}` : "-", foot: "Latest available snapshot" }, { value: fmt(storage.validator_snapshot_keep_last), foot: "Validator snapshots retained" }, { value: storage.profile || "-", foot: "Storage profile" }, { value: storage.cold_export_enabled ? "Enabled" : "Disabled", foot: "Cold export" }],
+        "Available snapshots", listRows(snapshot.height ? [{ title: `Snapshot #${fmt(snapshot.height)}`, subtitle: short(snapshot.snapshot_hash, 12, 8), value: snapshot.source || "committed", tone: "good" }] : []),
+        "Retention policy", detailCards([["Hourly retain", fmt(storage.hourly_snapshot_retain)], ["Daily retain", fmt(storage.daily_snapshot_retain)], ["Weekly retain", fmt(storage.weekly_snapshot_retain)], ["Monthly retain", fmt(storage.monthly_snapshot_retain)]]),
+        "Download center", detailCards([["Snapshot manifest", snapshot.height ? `/v1/snapshot/manifest?height=${snapshot.height}` : "Unavailable"], ["Latest metadata", "/v1/snapshot/latest"], ["Compression", snapshot.compression || snapshot.manifest?.compression || storage.cold_export_compression || "-"], ["Chunk count", fmt(chunkCount)]]));
+      chartCard("extendedChartPrimary", "Snapshot retention history", "Configured retention windows", barsHTML([["Hourly", storage.hourly_snapshot_retain], ["Daily", storage.daily_snapshot_retain], ["Weekly", storage.weekly_snapshot_retain], ["Monthly", storage.monthly_snapshot_retain]].map(([label, value]) => ({ label, value }))));
+      chartCard("extendedChartSecondary", "Storage mode", "Hot and cold history policy", donutHTML(storage.archive_mode ? 100 : pct(storage.hot_window_blocks, storage.finalized_height), "Hot history", storage.retention_summary || "-"));
+    } else if (PAGE === "api") {
+      const endpoints = ["/status", "/explorer/blocks", "/explorer/block?height=1", "/explorer/tx?tx_id=...", "/balance?address=...", "/validators", "/governance/status", "/tokenomics", "/tokenomics/audit", "/bridge/status", "/snapshot/latest"];
+      set([{ value: fmt(endpoints.length), foot: "Documented REST endpoints" }, { value: "JSON-RPC", foot: "/rpc and /v1/rpc" }, { value: "JavaScript", foot: "Browser fetch compatible" }, { value: "Gateway", foot: "Public read rate limits" }],
+        "REST API docs", listRows(endpoints.map((endpoint) => ({ title: endpoint, subtitle: "GET · JSON response", value: "Public" }))),
+        "RPC endpoints", detailCards([["JSON-RPC", "/rpc"], ["Versioned RPC", "/v1/rpc"], ["Events", "/wallet/events"], ["Indexer", "/indexer/* when configured"]]),
+        "SDKs and rate limits", detailCards([["JavaScript", "fetch / WebSocket"], ["Go", "net/http / JSON-RPC"], ["Read policy", "Gateway rate limited"], ["Write policy", "Separate strict limit"]]));
+      chartCard("extendedChartPrimary", "Public API surface", "Endpoint groups available through the explorer gateway", rowsHTML([{ label: "Chain", value: 6, display: "6" }, { label: "Governance", value: 5, display: "5" }, { label: "Light client", value: 4, display: "4" }, { label: "Snapshots", value: 6, display: "6" }]));
+      chartCard("extendedChartSecondary", "RPC availability", "Active gateway health", donutHTML(publicNodes.healthy ? 100 : 0, "Public RPC", `${fmt(publicNodes.healthy)} healthy`, publicNodes.healthy ? "good" : "bad"));
+    } else if (PAGE === "staking") {
+      const policy = tokenomics.economic_policy?.staking || {};
+      const rewards = tokenomics.economic_policy?.rewards || {};
+      set([{ value: fmt(leaderboard.length), foot: "Active validators" }, { value: fmt(totalStake), foot: "Effective validator stake" }, { value: fmt(policy.validator_min_stake), foot: "Minimum validator stake" }, { value: rewards.work_block_base_reward ? `${fmt(rewards.work_block_base_reward)} MSC` : "-", foot: "Base work reward" }],
+        "Validator staking", listRows(leaderboard.map((validator) => ({ title: `Validator ${validator.validator_id || validator.id}`, subtitle: validator.slot_type || "validator", value: `${fmt(validator.effective_stake || validator.actual_stake)} MSC`, tone: validator.online ? "good" : "warn" }))),
+        "Staking policy", detailCards([["Delegations", policy.one_wallet_one_validator ? "One wallet / validator" : "Supported"], ["Lock epochs", fmt(policy.default_lock_epochs)], ["Minimum lock", fmt(policy.min_lock_epochs)], ["Rejoin restake", policy.rejoin_requires_restake ? "Required" : "Not required"]]),
+        "Rewards and APR inputs", detailCards([["Base reward", fmt(rewards.work_block_base_reward)], ["Treasury split", `${tokenomics.economic_policy?.rewards?.unified_treasury_bps / 100 || 0}%`], ["Validator split", `${tokenomics.economic_policy?.rewards?.unified_validator_bps / 100 || 0}%`], ["APR", "Variable by participation and emissions"]]));
+      chartCard("extendedChartPrimary", "Validator voting power", "Effective stake by active validator", rowsHTML(leaderboard.map((validator) => ({ label: validator.validator_id || validator.id, value: validator.effective_stake || 0, display: fmt(validator.effective_stake) }))));
+      chartCard("extendedChartSecondary", "Online stake", "Participation-weighted availability", donutHTML(pct(sum(onlineValidators, (v) => v.effective_stake), totalStake), "Online voting power", `${fmt(sum(onlineValidators, (v) => v.effective_stake))} MSC`));
+    } else if (PAGE === "tokenomics" || PAGE === "rich-list") {
+      const maxSupply = Number(tokenomicsAudit.max_supply ?? tokenomics.max_supply ?? 0);
+      const totalSupply = Number(tokenomicsAudit.current_supply ?? tokenomics.total_supply ?? 0);
+      const circulating = Number(tokenomicsAudit.circulating ?? sum(buckets.filter((bucket) => !/future rewards/i.test(bucket.name)), (bucket) => bucket.balance));
+      const burn = tokenomics.economic_policy?.inflation?.burn_bps || 0;
+      set([{ value: fmt(totalSupply), foot: "Current supply" }, { value: fmt(circulating), foot: "Circulating supply" }, { value: fmt(maxSupply), foot: "Max supply" }, { value: tokenomicsAudit.invariant_ok === false ? "Check" : "OK", foot: "Runtime audit" }],
+        PAGE === "rich-list" ? "Top holders" : "Supply allocation", listRows(buckets.slice().sort((a, b) => Number(b.balance) - Number(a.balance)).map((bucket, index) => ({ title: `${index + 1}. ${bucket.name}`, subtitle: bucket.address, value: `${fmt(bucket.balance)} MSC` }))),
+        "Supply policy", detailCards([["Symbol", tokenomics.symbol || "MSC"], ["Decimals", fmt(tokenomics.decimals)], ["Genesis supply", fmt(tokenomicsAudit.genesis_supply)], ["Burn floor", fmt(tokenomics.supply_burn_floor)], ["Remaining mintable", fmt(tokenomicsAudit.remaining_mintable)]]),
+        PAGE === "rich-list" ? "Distribution analysis" : "Runtime supply audit", detailCards([["Minted", fmt(tokenomicsAudit.minted)], ["Burned", fmt(tokenomicsAudit.burned)], ["Treasury", fmt(tokenomicsAudit.treasury)], ["Foundation", fmt(tokenomicsAudit.foundation)], ["Community", fmt(tokenomicsAudit.community)], ["Ecosystem", fmt(tokenomicsAudit.ecosystem)], ["Validator locked", fmt(tokenomicsAudit.validator_locked)], ["Last audit height", fmt(tokenomicsAudit.last_audit_height)], ["Invariant status", tokenomicsAudit.invariant_status || (tokenomicsAudit.invariant_ok === false ? "failed" : "ok")], ["Burn BPS", fmt(burn)]]));
+      chartCard("extendedChartPrimary", "MSC distribution", "Known genesis and policy allocation buckets", rowsHTML(buckets.map((bucket) => ({ label: bucket.name, value: bucket.balance, display: `${bucket.percent || 0}%` }))));
+      chartCard("extendedChartSecondary", "Supply cap utilization", "Reported supply against fixed cap", donutHTML(pct(totalSupply, maxSupply), "Supply utilization", `${fmt(totalSupply)} / ${fmt(maxSupply)}`, totalSupply <= maxSupply ? "good" : "warn"));
+    } else if (PAGE === "mempool") {
+      const fees = (state.recentTxs || []).map((item) => Number(item.tx?.fee ?? item.fee ?? 0));
+      set([{ value: fmt(status.mempool_depth), foot: "Pending transactions" }, { value: status.tx_lane_status || "-", foot: "Queue status" }, { value: status.tx_lane_reason || "-", foot: "Queue reason" }, { value: fees.length ? (fees.reduce((a, b) => a + b, 0) / fees.length).toFixed(2) : "-", foot: "Observed average fee" }],
+        "Pending transactions", `<div class="empty-state">${Number(status.mempool_depth || 0) ? "Pending transaction details are private to the node mempool." : "Mempool is currently clear."}</div>`,
+        "Queue size", detailCards([["Depth", fmt(status.mempool_depth)], ["Lane status", status.tx_lane_status || "-"], ["Lane reason", status.tx_lane_reason || "-"], ["Gossip active", status.tx_gossip_active ? "Yes" : "No"]]),
+        "Gas statistics", detailCards([["Observed fee samples", fmt(fees.length)], ["Average fee", fees.length ? (fees.reduce((a, b) => a + b, 0) / fees.length).toFixed(2) : "-"], ["Maximum fee", fees.length ? Math.max(...fees) : "-"], ["Pending nonce API", "/nonce/pending"]]));
+      chartCard("extendedChartPrimary", "Recent queue pressure", "Mempool depth and block transaction throughput", barsHTML(chronological.map((block) => ({ label: `#${block.height}`, value: block.tx_count || 0 }))));
+      chartCard("extendedChartSecondary", "Queue headroom", "Pending depth against a nominal 100 transaction window", donutHTML(clamp(100 - Number(status.mempool_depth || 0)), "Available capacity", `${fmt(status.mempool_depth)} pending`));
+    } else if (PAGE === "epochs") {
+      const epochLength = Number(status.validator_set_epoch_length_blocks || status.validator_pool_epoch_blocks || 10000);
+      const height = Number(status.height || 0);
+      const currentEpoch = Number(status.validator_set_epoch_number || (height ? Math.floor((height - 1) / epochLength) + 1 : 0));
+      const epochStart = Number(status.validator_set_epoch_start_height || (currentEpoch ? (currentEpoch - 1) * epochLength + 1 : 0));
+      const epochEnd = Number(status.validator_set_epoch_end_height || (epochStart ? epochStart + epochLength - 1 : 0));
+      const progress = epochStart && height >= epochStart ? Math.min(epochLength, height - epochStart + 1) : 0;
+      const epochEnabled = status.validator_set_epoch_enabled === true;
+      const committeeSize = Number(status.committee_size || 0);
+      const onlineCount = Number(status.live_validators ?? status.active_ready_count ?? 0);
+      set([{ value: epochEnabled ? fmt(currentEpoch) : "Pending", foot: epochEnabled ? "Current validator epoch" : `Activates at #${fmt(status.validator_set_epoch_v1_height)}` }, { value: fmt(committeeSize), foot: "Active committee" }, { value: fmt(onlineCount), foot: "Online now" }, { value: `#${fmt(status.validator_set_next_epoch_height)}`, foot: "Next set boundary" }],
+        "Current epoch", listRows([{ title: epochEnabled ? `Epoch ${fmt(currentEpoch)}` : "Epoch-frozen membership pending", subtitle: epochEnabled ? `Blocks #${fmt(epochStart)} - #${fmt(epochEnd)}` : `Protocol activation #${fmt(status.validator_set_epoch_v1_height)}`, value: epochEnabled ? `${fmt(progress)} / ${fmt(epochLength)}` : `${fmt(status.validator_set_epoch_blocks_remaining)} blocks` }]),
+        "Validator membership", detailCards([["Active committee", fmt(committeeSize)], ["Online now", fmt(onlineCount)], ["Registered", fmt(status.validator_registered_count)], ["Maximum active", fmt(status.validator_set_max_active)], ["Set mode", epochEnabled ? "Frozen within epoch" : "Legacy until activation"], ["Proposer", "Changes every block"]]),
+        "Epoch history", detailCards(Array.from({ length: 8 }, (_, index) => { const epoch = Math.max(1, currentEpoch - index); const start = (epoch - 1) * epochLength + 1; return [`Epoch ${fmt(epoch)}`, `#${fmt(start)} - #${fmt(start + epochLength - 1)}`]; })));
+      chartCard("extendedChartPrimary", "Epoch progress", "Validator membership changes only at the next boundary", donutHTML(epochEnabled ? pct(progress, epochLength) : pct(height, Number(status.validator_set_epoch_v1_height || 1)), epochEnabled ? "Epoch progress" : "Activation progress", epochEnabled ? `${fmt(progress)} / ${fmt(epochLength)} blocks` : `Gate #${fmt(status.validator_set_epoch_v1_height)}`));
+      chartCard("extendedChartSecondary", "Committee readiness", "Stable active set versus current liveness", rowsHTML([{ label: "Active committee", value: committeeSize, display: fmt(committeeSize) }, { label: "Online now", value: onlineCount, display: fmt(onlineCount), tone: onlineCount >= Number(status.required_quorum || 0) ? "good" : "bad" }, { label: "Required quorum", value: Number(status.required_quorum || 0), display: fmt(status.required_quorum) }]));
+    } else if (PAGE === "bridge") {
+      set([{ value: bridge.enabled ? "Enabled" : "Disabled", foot: "Bridge status" }, { value: bridge.mode || "-", foot: "Execution mode" }, { value: fmt(bridge.required_confirmations), foot: "Required confirmations" }, { value: fmt(bridge.oracle_quorum), foot: "Oracle quorum" }],
+        "Bridge transfers", `<div class="empty-state">No public bridge transfer history has been published.</div>`,
+        "Bridge status", detailCards([["Protocol", bridge.version || "-"], ["Light client required", bridge.light_client_required ? "Yes" : "No"], ["IBC style", bridge.ibc_style_enabled ? "Enabled" : "Disabled"], ["Registered assets", fmt((bridge.registered_assets || []).length)]]),
+        "Cross-chain history and safety", listRows((bridge.safety || []).map((item) => ({ title: item, subtitle: "Bridge safety invariant", value: "Enforced", tone: "good" }))));
+      chartCard("extendedChartPrimary", "Bridge readiness", "Configured chains and assets", rowsHTML([{ label: "Chains", value: (bridge.registered_chains || []).length, display: fmt((bridge.registered_chains || []).length) }, { label: "Assets", value: (bridge.registered_assets || []).length, display: fmt((bridge.registered_assets || []).length) }, { label: "Confirmations", value: bridge.required_confirmations || 0, display: fmt(bridge.required_confirmations) }]));
+      chartCard("extendedChartSecondary", "Bridge execution", "Current safety mode", donutHTML(bridge.enabled ? 100 : 0, "Execution", bridge.enabled ? bridge.mode : "Disabled by policy", bridge.enabled ? "warn" : "good"));
+    } else if (PAGE === "security") {
+      const invariants = security.runtime_invariants || [];
+      const failed = invariants.filter((item) => !item.passed);
+      set([{ value: security.healthy ? "Healthy" : "Attention", foot: "Security status" }, { value: fmt(invariants.length), foot: "Runtime invariants" }, { value: fmt(failed.length), foot: "Failed invariants" }, { value: fmt(state.misbehavior?.events_total), foot: "Recorded validator incidents" }],
+        "Security status", listRows(invariants.map((item) => ({ title: item.id, subtitle: item.evidence || item.severity, value: item.status, tone: item.passed ? "good" : "bad" }))),
+        "Formal verification", detailCards([["Scope", security.scope || "-"], ["Machine checked", security.machine_checked ? "Yes" : "No"], ["External proof", security.external_proof_status || "-"], ["Consensus mode", security.detector_mode || "-"]]),
+        "Validator slashing and incidents", listRows(incidents.map((item) => ({ title: `Validator ${item.validator}`, subtitle: `${item.last_reason} · block #${fmt(item.last_height)}`, value: `${fmt(item.count)} events`, tone: "bad" }))));
+      chartCard("extendedChartPrimary", "Runtime invariants", "Machine-checked security conditions", rowsHTML(invariants.map((item) => ({ label: item.id, value: item.passed ? 100 : 0, display: item.passed ? "pass" : "fail", tone: item.passed ? "good" : "bad" }))));
+      chartCard("extendedChartSecondary", "Security health", "Passing runtime invariants", donutHTML(pct(invariants.length - failed.length, invariants.length), "Invariant health", `${fmt(invariants.length - failed.length)} / ${fmt(invariants.length)} pass`, failed.length ? "bad" : "good"));
+    } else if (PAGE === "search") {
+      set([{ value: "Block", foot: "Height or hash" }, { value: "Transaction", foot: "Transaction ID" }, { value: "Address", foot: "MSC wallet" }, { value: "Validator / proposal", foot: "Authority and governance" }],
+        "Search results", `<div id="universalSearchResults" class="empty-state">Enter a query to search the chain.</div>`,
+        "Search sources", detailCards([["Indexer", publicStatus.indexer?.some?.((node) => node.healthy) ? "Online" : "Fallback"], ["Blocks", "/explorer/block"], ["Transactions", "/explorer/tx"], ["Governance", "/governance/status"]]),
+        "Search tips", detailCards([["Block", "Enter a numeric height or block hash"], ["Transaction", "Enter the full transaction ID"], ["Address", "Enter an MSC-prefixed wallet address"], ["Validator / proposal", "Enter an exact or partial identifier"]]));
+      chartCard("extendedChartPrimary", "Universal search coverage", "Explorer entity types", rowsHTML([{ label: "Blocks", value: 100, display: "Live" }, { label: "Transactions", value: 100, display: "Live" }, { label: "Addresses", value: 70, display: "RPC / indexer" }, { label: "Validators", value: 100, display: "Live" }, { label: "Proposals", value: 100, display: "Live" }]));
+      chartCard("extendedChartSecondary", "Indexer status", "Historical search availability", donutHTML(publicStatus.indexer?.some?.((node) => node.healthy) ? 100 : 30, "Search index", publicStatus.indexer?.some?.((node) => node.healthy) ? "Online" : "RPC fallback"));
+    }
+    window.lucide?.createIcons();
+  }
+
+  function blockDetailHTML(block) {
+    const summary = block.summary || block;
+    const detailQuorumBlock = {
+      ...block,
+      ...summary,
+      signature_count: summary.signature_count ?? block.signature_count,
+      signatures: summary.signatures ?? block.signatures,
+      committee_size: summary.committee_size ?? block.committee_size,
+    };
+    const rows = [
+      ["Height", summary.height || block.height],
+      ["Hash", summary.hash || block.hash],
+      ["Previous hash", summary.prev_hash || block.prev_hash],
+      ["Proposer", proposerHTML(summary.proposer ?? block.proposer), true],
+      ["Type", blockTypeHTML({ ...block, ...summary }), true],
+      ["Consensus mode", summary.consensus_mode || block.consensus_mode],
+      ["Transactions", summary.tx_count ?? block.tx_count ?? (block.transactions || []).length],
+      ["Execution results", summary.execution_result_count ?? block.execution_result_count ?? (block.execution_results || []).length],
+      ["Required quorum", summary.required_quorum ?? block.required_quorum],
+      ["Quorum", quorumBreakdownHTML(detailQuorumBlock, state.status || {}), true],
+      ["State root", summary.state_root || block.state_root],
+      ["Validator set hash", summary.validator_set_hash || block.validator_set_hash],
+      ["Registry hash", summary.validator_registry_hash || block.validator_registry_hash],
+    ];
+    return rows.map(([label, value, html]) => `<div class="detail-card"><span class="label">${esc(label)}</span><strong>${html ? value : esc(value ?? "-")}</strong></div>`).join("");
+  }
+
+  async function loadBlock(query) {
+    const raw = String(query || "").trim();
+    if (!raw) return;
+    setHTML("blockDetailGrid", `<div class="empty-state">Loading block...</div>`);
+    try {
+      const key = /^\d+$/.test(raw) ? `height=${encodeURIComponent(raw)}` : `hash=${encodeURIComponent(raw)}`;
+      const block = await first([
+        `/archive-rpc/explorer/block?${key}`,
+        `/explorer/block?${key}`,
+        `/indexer/block?${key}`,
+      ]);
+      setHTML("blockDetailGrid", blockDetailHTML(block));
+      setText("blockDetailMeta", `Block #${fmt(block.height || block.summary?.height)}`);
+      setText("blockRaw", JSON.stringify(block, null, 2));
+    } catch (error) {
+      setHTML("blockDetailGrid", `<div class="empty-state">Block lookup failed: ${esc(error.message || error)}</div>`);
+      setText("blockRaw", "");
+    }
+  }
+
+  function txSummaryHTML(data, query) {
+    if (Array.isArray(data)) {
+      return data.map((tx) => txSummaryHTML(tx, query)).join("");
+    }
+    const tx = data.transaction || data.tx || data;
+    const rows = [
+      ["Transaction ID", tx.id || tx.tx_id || query],
+      ["Status", data.state || data.status || tx.status || "Found"],
+      ["From", tx.from || tx.sender || "-"],
+      ["To", tx.to || tx.recipient || "-"],
+      ["Amount", tx.amount ?? "-"],
+      ["Coin", tx.coin || tx.denom || "MSC"],
+      ["Fee", tx.fee ?? "-"],
+      ["Height", data.height || tx.height || "-"],
+      ["Nonce", tx.nonce ?? "-"],
+      ["Type", tx.type || tx.tx_type || "-"],
+    ];
+    return rows.map(([label, value]) => `<div class="detail-card"><span class="label">${esc(label)}</span><strong>${esc(value)}</strong></div>`).join("");
+  }
+
+  async function loadTransaction(query) {
+    const raw = String(query || "").trim();
+    if (!raw) return;
+    setHTML("txDetailGrid", `<div class="empty-state">Searching chain activity...</div>`);
+    try {
+      let result;
+      if (/^MSC/i.test(raw)) {
+        result = await first([`/txs?address=${encodeURIComponent(raw)}`, `/v1/txs?address=${encodeURIComponent(raw)}`]);
+      } else {
+        result = await first([
+          `/indexer/tx?tx_id=${encodeURIComponent(raw)}`,
+          `/archive-rpc/explorer/tx?tx_id=${encodeURIComponent(raw)}`,
+          `/v1/tx/${encodeURIComponent(raw)}`,
+          `/explorer/tx?tx_id=${encodeURIComponent(raw)}`,
+        ]);
+      }
+      const normalized = result.transactions || result.txs || result;
+      setHTML("txDetailGrid", txSummaryHTML(normalized, raw));
+      setText("txDetailMeta", /^MSC/i.test(raw) ? `Address ${short(raw)}` : `Transaction ${short(raw)}`);
+      setText("txRaw", JSON.stringify(result, null, 2));
+    } catch (error) {
+      try {
+        await loadBlock(raw);
+        location.href = `explorer-blocks.html?hash=${encodeURIComponent(raw)}`;
+      } catch (_) {
+        setHTML("txDetailGrid", `<div class="empty-state">No transaction or address activity found: ${esc(error.message || error)}</div>`);
+        setText("txRaw", "");
+      }
+    }
+  }
+
+  async function loadAddress(query) {
+    const address = String(query || "").trim();
+    if (!address) return;
+    setHTML("extendedPrimary", `<div class="empty-state">Loading address...</div>`);
+    const [balanceResult, historyResult, indexedResult] = await Promise.allSettled([
+      first([`/v1/balance?address=${encodeURIComponent(address)}`, `/balance?address=${encodeURIComponent(address)}`]),
+      first([`/txs?address=${encodeURIComponent(address)}`, `/indexer/address?address=${encodeURIComponent(address)}&limit=50`]),
+      first([`/indexer/address?address=${encodeURIComponent(address)}&limit=50`]),
+    ]);
+    const balance = balanceResult.status === "fulfilled" ? balanceResult.value : {};
+    const historyData = historyResult.status === "fulfilled" ? historyResult.value : {};
+    const indexed = indexedResult.status === "fulfilled" ? indexedResult.value : {};
+    const txs = historyData.transactions || historyData.txs || indexed.txs || [];
+    setExtendedMetrics([
+      { value: short(address, 10, 7), foot: "Wallet address" },
+      { value: fmt(balance.balance ?? balance.amount), foot: `${balance.coin || "MSC"} balance` },
+      { value: fmt(txs.length), foot: "Confirmed history entries" },
+      { value: fmt((state.coins?.coins || []).length), foot: "Known chain assets" },
+    ]);
+    setText("extendedPrimaryTitle", "Wallet details");
+    setHTML("extendedPrimary", detailCards([["Address", address], ["Balance", `${fmt(balance.balance ?? balance.amount)} ${balance.coin || "MSC"}`], ["Nonce", fmt(balance.nonce)], ["Indexed history", fmt(txs.length)]]));
+    setText("extendedSideTitle", "Token holdings");
+    setHTML("extendedSide", detailCards((state.coins?.coins || []).map((coin) => [coin.symbol, coin.symbol === (balance.coin || "MSC") ? fmt(balance.balance ?? balance.amount) : "Not indexed"])));
+    setText("extendedSecondaryTitle", "Transaction history");
+    setHTML("extendedSecondary", txs.length ? txSummaryHTML(txs, address) : `<div class="empty-state">No confirmed address activity found.</div>`);
+    history.replaceState(null, "", `?address=${encodeURIComponent(address)}`);
+  }
+
+  async function universalSearch(query) {
+    const raw = String(query || "").trim();
+    if (!raw) return;
+    const target = $("universalSearchResults");
+    if (target) target.className = "extended-list";
+    setHTML("universalSearchResults", `<div class="empty-state">Searching chain...</div>`);
+    if (/^\d+$/.test(raw)) {
+      location.href = `explorer-blocks.html?height=${encodeURIComponent(raw)}`;
+      return;
+    }
+    if (/^MSC/i.test(raw) || /^0x[a-f0-9]{40}$/i.test(raw)) {
+      location.href = `explorer-addresses.html?address=${encodeURIComponent(raw)}`;
       return;
     }
     try {
-      await loadTx(txId);
-    } catch (err) {
-      els.txDetailMeta.textContent = "Error";
-      els.txDetail.textContent = `Failed to load tx\n\n${err.message || err}`;
+      const result = await first([`/indexer/search?q=${encodeURIComponent(raw)}`]);
+      const type = result.type || "result";
+      const value = result.result || result;
+      setHTML("universalSearchResults", listRows([{ title: `${type[0]?.toUpperCase() || ""}${type.slice(1)} found`, subtitle: raw, value: "Open", tone: "good" }]) + `<pre class="json-view compact">${esc(JSON.stringify(value, null, 2))}</pre>`);
+      return;
+    } catch (_) {
+      // Continue through public RPC and local governance/validator data.
     }
-  });
-
-  if (els.txRawToggle) {
-    els.txRawToggle.addEventListener("click", () => {
-      state.txRawMode = !state.txRawMode;
-      updateTxRawToggleLabel();
-      if (state.lastTxPayload) {
-        renderTxDetail(state.lastTxPayload);
-      }
-    });
-    updateTxRawToggleLabel();
+    const validator = (state.leaderboard?.entries || []).find((item) => String(item.validator_id || item.id || "").toLowerCase().includes(raw.toLowerCase()));
+    if (validator) {
+      setHTML("universalSearchResults", detailCards([["Type", "Validator"], ["Validator", validator.validator_id || validator.id], ["Status", validator.online ? "Online" : "Offline"], ["Voting power", fmt(validator.effective_stake)]]));
+      return;
+    }
+    const proposal = Object.values(state.governance?.proposals || {}).find((item) => JSON.stringify(item).toLowerCase().includes(raw.toLowerCase()));
+    if (proposal) {
+      setHTML("universalSearchResults", detailCards([["Type", "Proposal"], ["Proposal", proposal.title || proposal.id], ["Status", proposal.status], ["Kind", proposal.kind]]));
+      return;
+    }
+    try {
+      const tx = await first([`/explorer/tx?tx_id=${encodeURIComponent(raw)}`, `/v1/tx/${encodeURIComponent(raw)}`]);
+      setHTML("universalSearchResults", txSummaryHTML(tx, raw));
+      return;
+    } catch (_) {
+      // Try block hash last.
+    }
+    try {
+      const block = await first([`/explorer/block?hash=${encodeURIComponent(raw)}`, `/archive-rpc/explorer/block?hash=${encodeURIComponent(raw)}`]);
+      setHTML("universalSearchResults", blockDetailHTML(block));
+    } catch (_) {
+      setHTML("universalSearchResults", `<div class="empty-state">No block, transaction, address, validator, or proposal matched this query.</div>`);
+    }
   }
 
-  els.rpcUrl.value = state.rpcUrl;
-  els.apiToken.value = state.apiToken;
-  els.refreshMs.value = String(state.refreshMs);
-  setAdminMode(state.adminMode);
+  function applyTheme(theme) {
+    const selected = ["dark", "contrast", "system"].includes(theme) ? theme : "dark";
+    document.documentElement.dataset.theme = selected;
+    localStorage.setItem("msc_explorer_theme", selected);
+    document.querySelectorAll("button[data-theme]").forEach((button) => button.classList.toggle("active", button.dataset.theme === selected));
+  }
 
-  startBlockAgeTicker();
-  restartTimer();
-  connectRealtime();
-  refreshAll();
+  function renderSettings() {
+    if (PAGE !== "settings") return;
+    const theme = localStorage.getItem("msc_explorer_theme") || "dark";
+    const language = localStorage.getItem("msc_explorer_language") || "en";
+    const rpc = localStorage.getItem("msc_explorer_rpc") || "same-origin";
+    const notifications = localStorage.getItem("msc_explorer_notifications") === "true";
+    applyTheme(theme);
+    document.documentElement.lang = language;
+    if ($("languageSelect")) $("languageSelect").value = language;
+    if ($("rpcSelect")) $("rpcSelect").value = rpc;
+    if ($("notificationToggle")) $("notificationToggle").checked = notifications;
+    setHTML("settingsSummary", detailCards([["Theme", theme], ["Language", language], ["RPC", configuredBase()], ["Notifications", notifications ? "Enabled" : "Disabled"]]));
+    setText("pageUpdated", new Date().toLocaleTimeString());
+  }
+
+  function bindSettings() {
+    document.querySelectorAll("[data-theme]").forEach((button) => button.addEventListener("click", () => {
+      applyTheme(button.dataset.theme);
+      renderSettings();
+    }));
+    $("languageSelect")?.addEventListener("change", (event) => {
+      localStorage.setItem("msc_explorer_language", event.target.value);
+      renderSettings();
+    });
+    $("rpcSelect")?.addEventListener("change", (event) => {
+      localStorage.setItem("msc_explorer_rpc", event.target.value);
+      renderSettings();
+      refresh(true).catch(() => {});
+    });
+    $("notificationToggleControl")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      const input = $("notificationToggle");
+      if (!input) return;
+      input.checked = !input.checked;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    $("notificationToggle")?.addEventListener("change", (event) => {
+      localStorage.setItem("msc_explorer_notifications", String(event.target.checked));
+      if (event.target.checked && "Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+      }
+      renderSettings();
+    });
+  }
+
+  function bindPage() {
+    $("blockLookupForm")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const query = $("blockQuery")?.value || "";
+      const key = /^\d+$/.test(query.trim()) ? "height" : "hash";
+      history.replaceState(null, "", `?${key}=${encodeURIComponent(query.trim())}`);
+      loadBlock(query);
+    });
+    $("txLookupForm")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const query = $("txQuery")?.value || "";
+      history.replaceState(null, "", `?q=${encodeURIComponent(query.trim())}`);
+      loadTransaction(query);
+    });
+    $("addressLookupForm")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      loadAddress($("addressQuery")?.value || "");
+    });
+    $("universalSearchForm")?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const query = $("universalSearchQuery")?.value || "";
+      history.replaceState(null, "", `?q=${encodeURIComponent(query.trim())}`);
+      universalSearch(query);
+    });
+    bindSettings();
+    document.addEventListener("click", (event) => {
+      const row = event.target.closest("tr[data-height]");
+      if (row && PAGE === "blocks") loadBlock(row.dataset.height);
+    });
+  }
+
+  async function loadCore() {
+    const [status, blocks, validators, peers, publicNodes, publicStatus, leaderboard, governance, tokenomics, tokenomicsAudit, storage, snapshot, bridge, security, misbehavior, coins] = await Promise.allSettled([
+      first(["/status", "/v1/status"]),
+      first(["/archive-rpc/explorer/blocks?limit=40", "/explorer/blocks?limit=40", "/indexer/blocks?limit=40", "/v1/blocks?limit=40"]),
+      first(["/validators", "/v1/validators"]),
+      first(["/explorer/peers", "/v1/peers"]),
+      first(["/gateway/lb-status.json", "/v1/public-nodes", "/public-nodes"]),
+      first(["/public/status", "/v1/public/status"]),
+      first(["/validators/leaderboard", "/v1/validators/leaderboard"]),
+      first(["/governance/status", "/v1/governance/status"]),
+      first(["/tokenomics"]),
+      first(["/tokenomics/audit", "/v1/tokenomics/audit"]),
+      first(["/storage/policy", "/v1/storage/policy"]),
+      loadSnapshotMetadata(),
+      first(["/bridge/status", "/v1/bridge/status"]),
+      first(["/formal/verification", "/v1/formal/verification"]),
+      first(["/misbehavior", "/v1/misbehavior"]),
+      first(["/coins"]),
+    ]);
+    if (status.status === "fulfilled") state.status = status.value;
+    if (blocks.status === "fulfilled") {
+      const incoming = (blocks.value.blocks || []).map((block) => normalizeBlockPayload(block));
+      if (state.realtime.connected && state.realtime.displayHeight) {
+        const visible = incoming.filter((block) => Number(block.height || 0) <= state.realtime.displayHeight);
+        state.blocks = [...visible, ...(state.blocks || [])]
+          .filter((block, index, all) => all.findIndex((candidate) => Number(candidate.height) === Number(block.height)) === index)
+          .sort((a, b) => Number(b.height || 0) - Number(a.height || 0))
+          .slice(0, 40);
+      } else {
+        state.blocks = incoming;
+      }
+    }
+    if (validators.status === "fulfilled") state.validators = validators.value;
+    if (peers.status === "fulfilled") state.peers = peers.value.peers || [];
+    if (publicNodes.status === "fulfilled") state.publicNodes = normalizeNodes(publicNodes.value);
+    if (publicStatus.status === "fulfilled") state.publicStatus = publicStatus.value;
+    if (leaderboard.status === "fulfilled") state.leaderboard = leaderboard.value;
+    if (governance.status === "fulfilled") state.governance = governance.value;
+    if (tokenomics.status === "fulfilled") state.tokenomics = tokenomics.value;
+    if (tokenomicsAudit.status === "fulfilled") state.tokenomicsAudit = tokenomicsAudit.value;
+    if (storage.status === "fulfilled") state.storage = storage.value;
+    if (snapshot.status === "fulfilled") state.snapshot = snapshot.value;
+    if (bridge.status === "fulfilled") state.bridge = bridge.value;
+    if (security.status === "fulfilled") state.security = security.value;
+    if (misbehavior.status === "fulfilled") state.misbehavior = misbehavior.value;
+    if (coins.status === "fulfilled") state.coins = coins.value;
+    const headHeight = Number(state.status?.height || 0);
+    if (headHeight && state.realtime.connected && state.realtime.displayHeight && headHeight > state.realtime.displayHeight) {
+      enqueueRealtimeBlocks({
+        type: "new_block",
+        height: headHeight,
+        finalized_height: state.status?.finalized_height,
+        mode: state.status?.consensus_detector_mode || state.status?.quorum_policy_mode,
+        last_block_age_seconds: state.status?.last_block_age_seconds || 0,
+        network_health: state.status?.network_health,
+      });
+    }
+    if (headHeight && (!state.realtime.connected || !state.realtime.displayHeight)) {
+      const hasHeadBlock = state.blocks.some((block) => Number(block.height || 0) === headHeight);
+      if (!hasHeadBlock) {
+        try {
+          const head = await first([
+            `/archive-rpc/explorer/block?height=${encodeURIComponent(headHeight)}`,
+            `/explorer/block?height=${encodeURIComponent(headHeight)}`,
+            `/indexer/block?height=${encodeURIComponent(headHeight)}`,
+          ]);
+          mergeBlock(normalizeBlockPayload(head, { height: headHeight }));
+        } catch (_) {
+          // The recent-block list remains the fallback when exact head lookup is unavailable.
+        }
+      }
+      state.realtime.displayHeight = headHeight;
+    }
+    if (state.realtime.lastBlockAgeBaseSeconds === null || !state.realtime.connected) {
+      setBlockAgeBase(state.status?.last_block_age_seconds || 0);
+    }
+    const needsRecentTransactions = ["overview", "transactions", "addresses", "analytics", "charts", "mempool"].includes(PAGE);
+    if (needsRecentTransactions && state.blocks.length) {
+      void hydrateRecentTransactions(state.blocks.slice(0, 6));
+    }
+    state.lastUpdated = Date.now();
+  }
+
+  async function hydrateRecentTransactions(blocks) {
+    const requestID = ++state.recentTxRequest;
+    const details = await Promise.allSettled(blocks.map((block) => first([
+      `/archive-rpc/explorer/block?height=${encodeURIComponent(block.height)}`,
+      `/explorer/block?height=${encodeURIComponent(block.height)}`,
+      `/indexer/block?height=${encodeURIComponent(block.height)}`,
+    ])));
+    if (requestID !== state.recentTxRequest) return;
+    state.recentTxs = details.flatMap((result) => {
+      if (result.status !== "fulfilled") return [];
+      const block = result.value || {};
+      return (block.transactions || block.txs || []).map((tx) => ({ height: block.height || block.summary?.height, tx }));
+    });
+    renderRecentTransactions();
+    if (["overview", "analytics", "charts"].includes(PAGE)) renderExplorerCharts();
+  }
+
+  async function refresh(force = false) {
+    const button = $("refreshExplorer");
+    button?.setAttribute("disabled", "disabled");
+    try {
+      await loadCore();
+      renderCommon();
+      renderBlocks();
+      renderOverviewSide();
+      renderValidators();
+      renderNodes();
+      renderExplorerCharts();
+      renderRecentTransactions();
+      renderExtendedPage();
+      renderSettings();
+      if (force) window.lucide?.createIcons();
+    } finally {
+      button?.removeAttribute("disabled");
+    }
+  }
+
+  function runInitialQuery() {
+    const params = new URLSearchParams(location.search);
+    if (PAGE === "blocks") {
+      const query = params.get("height") || params.get("hash") || "";
+      if (query) {
+        setText("blockQuery", query);
+        const input = $("blockQuery");
+        if (input) input.value = query;
+        loadBlock(query);
+      }
+    }
+    if (PAGE === "transactions") {
+      const query = params.get("q") || params.get("tx") || params.get("address") || "";
+      if (query) {
+        const input = $("txQuery");
+        if (input) input.value = query;
+        loadTransaction(query);
+      }
+    }
+    if (PAGE === "addresses") {
+      const query = params.get("address") || params.get("q") || "";
+      if (query) {
+        const input = $("addressQuery");
+        if (input) input.value = query;
+        loadAddress(query);
+      }
+    }
+    if (PAGE === "search") {
+      const query = params.get("q") || "";
+      if (query) {
+        const input = $("universalSearchQuery");
+        if (input) input.value = query;
+        universalSearch(query);
+      }
+    }
+  }
+
+  applyTheme(localStorage.getItem("msc_explorer_theme") || "dark");
+  document.documentElement.lang = localStorage.getItem("msc_explorer_language") || "en";
+  renderGeneratedPage();
+  installShell();
+  bindShell();
+  bindPage();
+  renderSettings();
+  refresh().then(runInitialQuery).catch((error) => {
+    setText("sideNetwork", "Unavailable");
+    setHTML("overviewSummary", `<div class="empty-state">${esc(error.message || error)}</div>`);
+  });
+  connectExplorerRealtime(true);
+  window.setInterval(renderLiveBlockAge, 1000);
+  window.setInterval(() => refresh(false).catch(() => {}), 30000);
 })();

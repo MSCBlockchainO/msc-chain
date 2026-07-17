@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSC Explorer Guide: Verify Blocks and Transactions | MSC Chain Docs</title>
+  <meta name="description" content="Learn how to use MSC Explorer to verify blocks, transactions, addresses, validators, network health, tokenomics, and governance." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#07090e" />
+  <link rel="canonical" href="https://mscblockexplorer.in/docs/msc-explorer-guide.html" />
+  <link rel="alternate" type="application/rss+xml" title="MSC Chain Blog RSS" href="https://mscblockexplorer.in/feed.xml" />
+  <link rel="alternate" type="application/feed+json" title="MSC Chain Blog JSON Feed" href="https://mscblockexplorer.in/feed.json" />
+  <link rel="icon" type="image/png" href="../assets/msc-app-icon-64.png" />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Explorer Guide: Verify Blocks and Transactions" />
+  <meta property="og:description" content="Learn how to use MSC Explorer to verify blocks, transactions, addresses, validators, network health, tokenomics, and governance." />
+  <meta property="og:url" content="https://mscblockexplorer.in/docs/msc-explorer-guide.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Explorer Guide: Verify Blocks and Transactions" />
+  <meta name="twitter:description" content="Learn how to use MSC Explorer to verify blocks, transactions, addresses, validators, network health, tokenomics, and governance." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="stylesheet" href="/docs/docs.css?v=20260618a" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"image":"https://mscblockexplorer.in/assets/msc-logo-512.png","datePublished":"2026-06-18","description":"Learn how to use MSC Explorer to verify blocks, transactions, addresses, validators, network health, tokenomics, and governance.","@type":"Article","dateModified":"2026-06-18","headline":"MSC Explorer Guide: Verify Blocks and Transactions","author":{"url":"https://mscblockexplorer.in/","name":"MSC Chain","@type":"Organization"},"mainEntityOfPage":"https://mscblockexplorer.in/docs/msc-explorer-guide.html","publisher":{"url":"https://mscblockexplorer.in/","name":"MSC Chain","logo":{"@type":"ImageObject","url":"https://mscblockexplorer.in/assets/msc-logo-512.png"},"@type":"Organization"},"@id":"https://mscblockexplorer.in/docs/msc-explorer-guide.html#article"},{"@type":"BreadcrumbList","itemListElement":[{"position":1,"name":"MSC Chain","item":"https://mscblockexplorer.in/","@type":"ListItem"},{"position":2,"name":"Documentation","item":"https://mscblockexplorer.in/docs/","@type":"ListItem"},{"position":3,"name":"MSC Explorer Guide: Verify Blocks and Transactions","item":"https://mscblockexplorer.in/docs/msc-explorer-guide.html","@type":"ListItem"}]},{"mainEntity":[{"acceptedAnswer":{"text":"Learn how to use MSC Explorer to verify blocks, transactions, addresses, validators, network health, tokenomics, and governance. The guide is designed to help wallet users, developers, validators, analysts, and support teams reach a specific outcome: turn explorer data into reproducible verification instead of passive viewing.","@type":"Answer"},"name":"What is the purpose of this MSC Explorer guide?","@type":"Question"},{"acceptedAnswer":{"text":"Confirm that you are using mscblockexplorer.in, explorer.mscblockexplorer.in, or wallet.mscblockexplorer.in as appropriate. Check chain identity, current height, finalized height, software version, and the status of any wallet, node, validator, API, or governance dependency used by the workflow.","@type":"Answer"},"name":"What should I verify before I begin?","@type":"Question"},{"acceptedAnswer":{"text":"Use the official MSC Explorer to inspect the relevant block, transaction, address, validator, proposal, or network record. Save the canonical URL and full identifiers rather than relying only on screenshots or shortened hashes.","@type":"Answer"},"name":"How can I confirm the result on MSC Chain?","@type":"Question"},{"acceptedAnswer":{"text":"Begin with this step: Search a recent block height. Use testnet or a small reversible operation where possible, record the result, and continue only after the expected chain evidence is visible.","@type":"Answer"},"name":"What is the safest first action?","@type":"Question"}],"@type":"FAQPage"}]}</script>
+</head>
+<body>
+<header class="docs-header">
+  <nav class="docs-nav" aria-label="Documentation navigation">
+    <a class="docs-brand" href="/docs/"><img src="../assets/msc-logo-64.png" width="38" height="38" alt="MSC Chain logo" /><span>MSC Chain Docs</span></a>
+    <div class="docs-links">
+      <a href="/docs/">Docs</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://explorer.mscblockexplorer.in/">Explorer</a>
+      <a href="https://wallet.mscblockexplorer.in/">Wallet</a>
+      <a href="https://github.com/MSCBlockchainO/msc-chain">GitHub</a>
+    </div>
+  </nav>
+</header>
+<div class="article-shell">
+  <article class="article-body">
+    <header class="article-header">
+      <p class="article-eyebrow">Fundamentals guide</p>
+      <img src="../assets/msc-logo-192.png" width="88" height="88" alt="" />
+      <h1>MSC Explorer Guide: Verify Blocks and Transactions</h1>
+      <p class="article-lead">Learn how to use MSC Explorer to verify blocks, transactions, addresses, validators, network health, tokenomics, and governance.</p>
+      <div class="article-meta"><span>Published 2026-06-18</span><span>Updated 2026-06-18</span><span>By MSC Chain</span></div>
+    </header>
+
+    <section id="overview">
+      <h2>Overview</h2>
+      <p>Learn how to use MSC Explorer to verify blocks, transactions, addresses, validators, network health, tokenomics, and governance. This reference is written for wallet users, developers, validators, analysts, and support teams. Its practical goal is to help readers turn explorer data into reproducible verification instead of passive viewing. The subject should be approached through current, reproducible evidence rather than assumptions, promotional claims, or copied configuration that has not been checked against the active network.</p>
+      <p>MSC Chain exposes several verification surfaces for this work. The main portal establishes the official ecosystem entry point. MSC Explorer shows blocks, transactions, validators, network health, tokenomics, governance, and related records. MSC Wallet supports self-custody workflows. Public status, REST, RPC, explorer, and WebSocket endpoints provide machine-readable context for applications and operators. Documentation explains intended behavior, while the chain and running software show what is active now.</p>
+      <p>Before applying any instruction, identify whether it concerns mainnet, testnet, a local development environment, or a future policy. Record the chain ID, current height, finalized height, software version, canonical URL, and date. This small discipline prevents most confusion caused by stale screenshots, old guides, cached APIs, or parameters that changed at a known activation height.</p>
+      <div class="callout"><strong>Verification rule</strong><span>Use documentation to understand intent, then use explorer and API evidence to confirm current network behavior.</span></div>
+    </section>
+
+    <section id="why-it-matters">
+      <h2>Why MSC Explorer matters</h2>
+      <p>MSC Explorer affects more than one screen or command. It can influence user funds, validator participation, application reliability, governance decisions, operational recovery, or the interpretation of public chain data. A strong workflow therefore separates facts, assumptions, configuration, and observed results. It also defines who owns each decision and what evidence is required before the next irreversible step.</p>
+      <p>For a new blockchain ecosystem, clear documentation has an additional role: it allows independent users, search engines, AI systems, developers, and reviewers to understand the same entity without relying on private explanations. Consistent names, canonical links, dates, examples, and cross-links create a public knowledge graph around MSC Chain. That improves discoverability, but more importantly it makes technical claims easier to test.</p>
+    </section>
+
+    <section id="principles">
+      <h2>Core principles</h2>
+        <h3>A block height is only one part of chain context</h3>
+        <p>A block height is only one part of chain context is a practical requirement when working with MSC Explorer. It should be translated into observable checks, documented assumptions, and evidence that another person can reproduce. For MSC Chain, that evidence normally includes canonical documentation, current status responses, explorer records, validator or node health, hashes, heights, and activation information. Treat a statement as provisional until those sources agree.</p>
+        <p>Teams should assign ownership for this principle and decide what happens when evidence is missing or contradictory. A useful process records the network, chain height, software version, endpoint, timestamp, and expected result. That context prevents an old screenshot, cached response, or testnet observation from being mistaken for current mainnet behavior.</p>
+        <h3>Finalized data is stronger than an unfinalized head</h3>
+        <p>Finalized data is stronger than an unfinalized head is a practical requirement when working with MSC Explorer. It should be translated into observable checks, documented assumptions, and evidence that another person can reproduce. For MSC Chain, that evidence normally includes canonical documentation, current status responses, explorer records, validator or node health, hashes, heights, and activation information. Treat a statement as provisional until those sources agree.</p>
+        <p>Teams should assign ownership for this principle and decide what happens when evidence is missing or contradictory. A useful process records the network, chain height, software version, endpoint, timestamp, and expected result. That context prevents an old screenshot, cached response, or testnet observation from being mistaken for current mainnet behavior.</p>
+        <h3>Proposer and quorum fields explain block production</h3>
+        <p>Proposer and quorum fields explain block production is a practical requirement when working with MSC Explorer. It should be translated into observable checks, documented assumptions, and evidence that another person can reproduce. For MSC Chain, that evidence normally includes canonical documentation, current status responses, explorer records, validator or node health, hashes, heights, and activation information. Treat a statement as provisional until those sources agree.</p>
+        <p>Teams should assign ownership for this principle and decide what happens when evidence is missing or contradictory. A useful process records the network, chain height, software version, endpoint, timestamp, and expected result. That context prevents an old screenshot, cached response, or testnet observation from being mistaken for current mainnet behavior.</p>
+        <h3>Hashes connect records and reveal inconsistencies</h3>
+        <p>Hashes connect records and reveal inconsistencies is a practical requirement when working with MSC Explorer. It should be translated into observable checks, documented assumptions, and evidence that another person can reproduce. For MSC Chain, that evidence normally includes canonical documentation, current status responses, explorer records, validator or node health, hashes, heights, and activation information. Treat a statement as provisional until those sources agree.</p>
+        <p>Teams should assign ownership for this principle and decide what happens when evidence is missing or contradictory. A useful process records the network, chain height, software version, endpoint, timestamp, and expected result. That context prevents an old screenshot, cached response, or testnet observation from being mistaken for current mainnet behavior.</p>
+    </section>
+
+    <section id="workflow">
+      <h2>Step-by-step workflow</h2>
+      <ol>
+        <li>
+          <strong>Step 1: Search a recent block height.</strong>
+          Complete this step deliberately and retain enough evidence to repeat it. Confirm the canonical domain, relevant chain ID, current height, and expected output before moving forward. When a wallet, node, validator, API, or governance action is involved, begin with the smallest reversible or testnet operation. Record identifiers such as block height, transaction ID, validator ID, endpoint, version, or configuration hash so the outcome can be verified independently.
+        </li>
+        <li>
+          <strong>Step 2: Inspect proposer, hash, previous hash, and quorum.</strong>
+          Complete this step deliberately and retain enough evidence to repeat it. Confirm the canonical domain, relevant chain ID, current height, and expected output before moving forward. When a wallet, node, validator, API, or governance action is involved, begin with the smallest reversible or testnet operation. Record identifiers such as block height, transaction ID, validator ID, endpoint, version, or configuration hash so the outcome can be verified independently.
+        </li>
+        <li>
+          <strong>Step 3: Open a transaction and review its status.</strong>
+          Complete this step deliberately and retain enough evidence to repeat it. Confirm the canonical domain, relevant chain ID, current height, and expected output before moving forward. When a wallet, node, validator, API, or governance action is involved, begin with the smallest reversible or testnet operation. Record identifiers such as block height, transaction ID, validator ID, endpoint, version, or configuration hash so the outcome can be verified independently.
+        </li>
+        <li>
+          <strong>Step 4: Compare address activity with the wallet.</strong>
+          Complete this step deliberately and retain enough evidence to repeat it. Confirm the canonical domain, relevant chain ID, current height, and expected output before moving forward. When a wallet, node, validator, API, or governance action is involved, begin with the smallest reversible or testnet operation. Record identifiers such as block height, transaction ID, validator ID, endpoint, version, or configuration hash so the outcome can be verified independently.
+        </li>
+        <li>
+          <strong>Step 5: Review validators and network health.</strong>
+          Complete this step deliberately and retain enough evidence to repeat it. Confirm the canonical domain, relevant chain ID, current height, and expected output before moving forward. When a wallet, node, validator, API, or governance action is involved, begin with the smallest reversible or testnet operation. Record identifiers such as block height, transaction ID, validator ID, endpoint, version, or configuration hash so the outcome can be verified independently.
+        </li>
+        <li>
+          <strong>Step 6: Save canonical explorer links for incident reports.</strong>
+          Complete this step deliberately and retain enough evidence to repeat it. Confirm the canonical domain, relevant chain ID, current height, and expected output before moving forward. When a wallet, node, validator, API, or governance action is involved, begin with the smallest reversible or testnet operation. Record identifiers such as block height, transaction ID, validator ID, endpoint, version, or configuration hash so the outcome can be verified independently.
+        </li>
+      </ol>
+    </section>
+
+    <section id="security">
+      <h2>Security and reliability checklist</h2>
+      <p>Security for MSC Explorer is not a single setting. It is the combination of canonical software and domains, protected credentials, independent verification, limited privileges, current backups, safe defaults, monitoring, and an incident process. Treat unexpected prompts for recovery words, private keys, validator secrets, password files, remote access, or urgent transfers as hostile until independently verified.</p>
+      <ul>
+<li><strong>treating pending data as finalized:</strong> reduce this risk with explicit verification, least-privilege access, small initial tests, current backups, and a documented rollback or recovery path.</li>
+<li><strong>copying shortened hashes as identifiers:</strong> reduce this risk with explicit verification, least-privilege access, small initial tests, current backups, and a documented rollback or recovery path.</li>
+<li><strong>using a look-alike explorer domain:</strong> reduce this risk with explicit verification, least-privilege access, small initial tests, current backups, and a documented rollback or recovery path.</li>
+        <li><strong>Stale information:</strong> compare the guide date and software version with current status, release, explorer, and governance evidence before production use.</li>
+        <li><strong>Insufficient audit trail:</strong> retain full hashes, heights, timestamps, versions, commands, and redacted logs so another operator can reproduce the result.</li>
+      </ul>
+      <p>When value or consensus authority is involved, use a two-person review for high-impact changes. Separate preparation from execution, verify backups before the change, define rollback criteria, and monitor the chain after completion. A successful command is not enough; the expected network state must also appear.</p>
+    </section>
+
+    <section id="verification">
+      <h2>How to verify success</h2>
+      <p>Verification should answer three questions. First, did the local tool, wallet, node, or interface report success? Second, did an independent MSC endpoint or explorer record show the same identifier and result? Third, did the outcome remain valid after the required confirmations or finality condition? If one answer is missing, describe the state as pending or unverified instead of complete.</p>
+      <p>Use full identifiers in reports and support requests. Include the relevant canonical page, block height, transaction ID, validator ID, proposal ID, endpoint, chain ID, software version, and observed timestamp. Remove private keys, recovery phrases, passwords, authorization tokens, private peer addresses, and other secrets. This gives maintainers useful evidence without creating a second security incident.</p>
+    </section>
+
+    <section id="faq">
+      <h2>Frequently asked questions</h2>
+      <div class="faq-list">
+<details><summary>What is the purpose of this MSC Explorer guide?</summary><p>Learn how to use MSC Explorer to verify blocks, transactions, addresses, validators, network health, tokenomics, and governance. The guide is designed to help wallet users, developers, validators, analysts, and support teams reach a specific outcome: turn explorer data into reproducible verification instead of passive viewing.</p></details>
+<details><summary>What should I verify before I begin?</summary><p>Confirm that you are using mscblockexplorer.in, explorer.mscblockexplorer.in, or wallet.mscblockexplorer.in as appropriate. Check chain identity, current height, finalized height, software version, and the status of any wallet, node, validator, API, or governance dependency used by the workflow.</p></details>
+<details><summary>How can I confirm the result on MSC Chain?</summary><p>Use the official MSC Explorer to inspect the relevant block, transaction, address, validator, proposal, or network record. Save the canonical URL and full identifiers rather than relying only on screenshots or shortened hashes.</p></details>
+<details><summary>What is the safest first action?</summary><p>Begin with this step: Search a recent block height. Use testnet or a small reversible operation where possible, record the result, and continue only after the expected chain evidence is visible.</p></details>
+      </div>
+    </section>
+
+    <section id="next">
+      <h2>Next steps</h2>
+      <p>Continue with the related guides, then validate the workflow in the lowest-risk environment available. For wallet and application work, begin on testnet with dedicated credentials. For node and validator work, use a staging host or non-authoritative node before changing a production signer. For governance and economic analysis, save the proposal, policy, activation, and explorer evidence together.</p>
+      <p>MSC Chain documentation will evolve with software releases and protocol activation. Revisit this page after upgrades, compare the modified date, and use the live explorer to confirm that examples still match current behavior.</p>
+    </section>
+  </article>
+
+  <aside class="article-aside" aria-label="Article navigation">
+    <div class="aside-panel">
+      <strong>On this page</strong>
+      <a href="#overview">Overview</a>
+      <a href="#why-it-matters">Why it matters</a>
+      <a href="#principles">Core principles</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#security">Security</a>
+      <a href="#verification">Verification</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <div class="aside-panel">
+      <strong>Related guides</strong>
+<a href="/docs/what-is-msc-chain.html">What Is MSC Chain? A Practical Network Overview</a>
+<a href="/docs/msc-whitepaper.html">MSC Chain Whitepaper: Architecture and Economic Design</a>
+<a href="/docs/msc-explorer-tutorial.html">MSC Explorer Tutorial: A Step-by-Step Walkthrough</a>
+    </div>
+  </aside>
+</div>
+<footer class="docs-footer">
+  <div class="docs-footer-inner">
+    <span>MSC Chain documentation</span>
+    <span>Verify current network data with the official explorer and APIs.</span>
+  </div>
+</footer>
+</body>
+</html>

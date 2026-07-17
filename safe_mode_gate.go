@@ -2,6 +2,7 @@ package main
 
 import "sync/atomic"
 
+// armPostBlockSafeModeGate implements the arm post block safe mode gate helper.
 func (n *Node) armPostBlockSafeModeGate(height uint64) bool {
 	if n == nil || height == 0 || !ConsensusPostBlockSafeModeEnabled {
 		return false
@@ -11,6 +12,7 @@ func (n *Node) armPostBlockSafeModeGate(height uint64) bool {
 	return true
 }
 
+// postBlockSafeModeGateActiveForHeight implements the post block safe mode gate active for height helper.
 func (n *Node) postBlockSafeModeGateActiveForHeight(height uint64) bool {
 	if n == nil || height == 0 || !ConsensusPostBlockSafeModeEnabled {
 		return false
@@ -21,6 +23,7 @@ func (n *Node) postBlockSafeModeGateActiveForHeight(height uint64) bool {
 	return atomic.LoadUint64(&n.safeModeGateHeight) == height
 }
 
+// clearPostBlockSafeModeGate implements the clear post block safe mode gate helper.
 func (n *Node) clearPostBlockSafeModeGate(height uint64) {
 	if n == nil {
 		return

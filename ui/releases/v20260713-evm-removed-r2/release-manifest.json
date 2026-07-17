@@ -1,0 +1,48 @@
+{
+    "version_tag":  "v20260713-evm-removed-r2",
+    "generated_utc":  "2026-07-13T10:51:47Z",
+    "git_commit":  "workspace-release",
+    "genesis_sha256":  "f6230e42861022d676ca43c57d0f3b6c0984c3cd17bfcd932059c353ab46821c",
+    "config_sha256":  "87104f94b53691f909dd89345449cc01b8c8d48931c42b8036b9228da2154870",
+    "installer_sha256":  "a4200004ed009725fb06552cfb6e78c8a5797fa5e2f35210365c3b87eb6159c7",
+    "root_installer_sha256":  "213394cc0d50205a0e3c16801797b7aad566824e821280e96f1325ea31f66576",
+    "snapshot_bootstrap_sha256":  "514152492abe6af8b84320b84fec4397364d96cbf3309ef6ebeae0dbf08c3dff",
+    "snapshot_public_key_sha256":  "9fc8fce3f2e5e8a290ad1eea96dbb95fcc91e6d584f6313faf7ca60654d10488",
+    "checksums_path":  "v20260713-evm-removed-r2/checksums.txt",
+    "genesis_path":  "v20260713-evm-removed-r2/genesis.json",
+    "config_path":  "v20260713-evm-removed-r2/config.toml",
+    "installer_path":  "v20260713-evm-removed-r2/scripts/install_msc_node.sh",
+    "snapshot_bootstrap_path":  "v20260713-evm-removed-r2/scripts/bootstrap_msc_snapshot.sh",
+    "snapshot_public_key_path":  "v20260713-evm-removed-r2/snapshot_pubkey.pem",
+    "snapshot_url":  "https://mscblockexplorer.in/snapshots",
+    "snapshot_required":  true,
+    "snapshot_require_signature":  true,
+    "bootnodes":  [
+                      "/ip4/54.80.4.133/tcp/7001/p2p/12D3KooWC3z8AMHZSEoP9WA7J1c5MDqNbfQuXCJv8kusMGGZeKt4",
+                      "/ip4/3.109.153.171/tcp/7001/p2p/12D3KooWBz6EfQ2d39GoeQSmxxXC8bbZKZRX9kuE46A71xqndd93",
+                      "/ip4/47.129.174.99/tcp/7001/p2p/12D3KooWRR1uHrvBh29BhhrfGRZzjLGHMJgU9nCY661GLQUuiCWw",
+                      "/ip4/18.61.229.92/tcp/7001/p2p/12D3KooWSgQjVMthN8VYBkTvYZAdPPDbaJEXX3nCuiWYU5DCPPpS"
+                  ],
+    "bootstrap_peers":  [
+                            "/ip4/54.80.4.133/tcp/7001/p2p/12D3KooWC3z8AMHZSEoP9WA7J1c5MDqNbfQuXCJv8kusMGGZeKt4",
+                            "/ip4/3.109.153.171/tcp/7001/p2p/12D3KooWBz6EfQ2d39GoeQSmxxXC8bbZKZRX9kuE46A71xqndd93",
+                            "/ip4/47.129.174.99/tcp/7001/p2p/12D3KooWRR1uHrvBh29BhhrfGRZzjLGHMJgU9nCY661GLQUuiCWw",
+                            "/ip4/18.61.229.92/tcp/7001/p2p/12D3KooWSgQjVMthN8VYBkTvYZAdPPDbaJEXX3nCuiWYU5DCPPpS"
+                        ],
+    "artifacts":  [
+                      {
+                          "os":  "linux",
+                          "arch":  "amd64",
+                          "file":  "msc-v20260713-evm-removed-r2-linux-amd64",
+                          "url_path":  "v20260713-evm-removed-r2/msc-v20260713-evm-removed-r2-linux-amd64",
+                          "sha256":  "eea643009705efd2b9733511c93ea225ea82e33d9ee5fc95c3bdacfd556c840a"
+                      },
+                      {
+                          "os":  "linux",
+                          "arch":  "arm64",
+                          "file":  "msc-v20260713-evm-removed-r2-linux-arm64",
+                          "url_path":  "v20260713-evm-removed-r2/msc-v20260713-evm-removed-r2-linux-arm64",
+                          "sha256":  "bb0b7c732f95882c5e77f24e049b670c7309242395851770d8ae6573a2b8a633"
+                      }
+                  ]
+}

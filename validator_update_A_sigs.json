@@ -1,0 +1,22 @@
+{
+    "A":  {
+              "target":  "A",
+              "nonce":  1781162767185065,
+              "expiry":  93614,
+              "payload":  "MSC_VALIDATOR_UPDATE_V1|91938|add|A|4fc8ded39d811556cd2a6146a7b79b600e135c4fdf0f00a4766d7ec7f98806f3|1781162767185065|93614",
+              "signatures":  [
+                                 {
+                                     "signer_id":  "B",
+                                     "sig_hex":  "8f310a9a7f9bc8082b652f08f493de073ee20b22e1613641458aefb03e87e3f5c1ec91ecaf3f36ba4e6a19cc3effb5825b9bde0aaac28a19b3c45e2ea44b7908"
+                                 },
+                                 {
+                                     "signer_id":  "C",
+                                     "sig_hex":  "aeddd509d139df6af0a5c79b09d9da0fc1921a4984fab02d01b8ab3ba29ae9f529d2940bb309f763b4caa5c0ada5de70f5f5a5d09d13c63769bfeb6b919d8e02"
+                                 },
+                                 {
+                                     "signer_id":  "D",
+                                     "sig_hex":  "fef8f04caa0139080c3f7329e44a9a01a6abaccaba92aa186621bdc01d3553cdfc8e944baf5759eb8596ca16d0ff42c9f7f31dc702d420c9799c5082f8eb6502"
+                                 }
+                             ]
+          }
+}

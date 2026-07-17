@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Manage MSC Bridge networks, assets, audited contracts, validator keys, finality, and emergency pause controls." />
+  <meta name="robots" content="noindex,nofollow" />
+  <meta name="theme-color" content="#05070c" />
+  <title>MSC Bridge Administration Console</title>
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/bridge-admin.html" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260715-observer1" />
+</head>
+<body data-page="bridge-admin">
+  <main class="content bridge-admin-content">
+    <section class="page-hero bridge-hero">
+      <div><div class="eyebrow">Restricted Control Plane</div><h1>Bridge Admin</h1><p class="muted">Register source networks, assets, audited contracts, validator keys, finality status, and emergency pause state.</p></div>
+      <a class="button" href="bridge.html"><i data-lucide="arrow-left"></i>Wallet Bridge</a>
+    </section>
+
+    <section class="panel bridge-admin-connect">
+      <form id="bridgeAdminConnectForm" class="row">
+        <div class="field"><label for="bridgeAdminRPC">Node RPC URL</label><input id="bridgeAdminRPC" name="rpc" type="url" placeholder="https://node.example" required /></div>
+        <div class="field"><label for="bridgeAdminToken">MSC RPC admin token</label><input id="bridgeAdminToken" name="token" type="password" autocomplete="current-password" required /></div>
+        <button class="primary" type="submit"><i data-lucide="log-in"></i>Connect</button>
+      </form>
+      <div id="bridgeAdminConnectStatus" class="result">Admin token is kept in this browser tab only.</div>
+    </section>
+
+    <div id="bridgeAdminDashboard" class="stack" hidden>
+      <section class="grid bridge-admin-metrics">
+        <div class="card"><div class="label">Emergency State</div><div id="adminPaused" class="value">-</div></div>
+        <div class="card"><div class="label">Chains</div><div id="adminChainsCount" class="value">0</div></div>
+        <div class="card"><div class="label">Assets</div><div id="adminAssetsCount" class="value">0</div></div>
+        <div class="card"><div class="label">Contracts</div><div id="adminContractsCount" class="value">0</div></div>
+        <div class="card"><div class="label">Validators</div><div id="adminValidatorsCount" class="value">0</div></div>
+        <div class="card"><div class="label">Checkpoints</div><div id="adminCheckpointsCount" class="value">0</div></div>
+        <div class="card"><div class="label">State Root</div><div id="adminStateRoot" class="value mono">-</div></div>
+      </section>
+
+      <section class="bridge-admin-grid">
+        <details class="panel admin-module" open>
+          <summary><span><i data-lucide="shield-alert"></i>Emergency Pause</span><i data-lucide="chevron-down"></i></summary>
+          <form id="bridgeSettingsForm" class="stack">
+            <div class="row">
+              <div class="field"><label for="adminPauseState">State</label><select id="adminPauseState" name="paused"><option value="true">Paused</option><option value="false">Unpaused</option></select></div>
+              <div class="field"><label for="adminPauseReason">Reason</label><input id="adminPauseReason" name="pause_reason" maxlength="512" /></div>
+            </div>
+            <button type="submit"><i data-lucide="power"></i>Apply State</button>
+          </form>
+        </details>
+
+        <details class="panel admin-module">
+          <summary><span><i data-lucide="network"></i>Register Chain</span><i data-lucide="chevron-down"></i></summary>
+          <form id="bridgeChainForm" class="stack">
+            <div class="row"><div class="field"><label>Chain ID</label><input name="chain_id" required /></div><div class="field"><label>Name</label><input name="name" required /></div><div class="field"><label>Native symbol</label><input name="native_symbol" maxlength="16" /></div></div>
+            <div class="row"><div class="field"><label>Chain type</label><select name="chain_type"><option value="evm">EVM</option><option value="tron">Tron</option><option value="solana">Solana</option><option value="utxo">UTXO</option><option value="ibc">IBC</option></select></div><div class="field"><label>Trust model</label><select name="trust_model"><option value="hybrid">Hybrid</option><option value="light_client">Light client</option><option value="oracle_quorum">Oracle quorum</option></select></div><div class="field"><label>Confirmations</label><input name="min_confirmations" type="number" min="1" required /></div></div>
+            <div class="row"><div class="field"><label>Status</label><select name="status"><option value="setup_required">Setup required</option><option value="testing">Testing</option><option value="active">Active</option><option value="paused">Paused</option><option value="disabled">Disabled</option></select></div><div class="field"><label>Finality</label><select name="finality_status"><option value="unknown">Unknown</option><option value="syncing">Syncing</option><option value="finalized">Finalized</option><option value="stalled">Stalled</option></select></div><div class="field"><label>Light client ID</label><input name="light_client" /></div></div>
+            <div class="row"><div class="field"><label>Observed height</label><input name="latest_observed_height" type="number" min="0" /></div><div class="field"><label>Finalized height</label><input name="latest_finalized_height" type="number" min="0" /></div><div class="field"><label>Explorer URL</label><input name="explorer_url" type="url" /></div></div>
+            <button type="submit"><i data-lucide="plus"></i>Save Chain</button>
+          </form>
+        </details>
+
+        <details class="panel admin-module">
+          <summary><span><i data-lucide="coins"></i>Register Asset</span><i data-lucide="chevron-down"></i></summary>
+          <form id="bridgeAssetForm" class="stack">
+            <div class="row"><div class="field"><label>Route denom</label><input name="denom" placeholder="USDT-BSC" required /></div><div class="field"><label>Symbol</label><input name="symbol" placeholder="USDT" required /></div><div class="field"><label>Origin chain ID</label><input name="origin_chain" required /></div></div>
+            <div class="field"><label>Official token contract / mint</label><input name="origin_asset" class="mono" required /></div>
+            <div class="row"><div class="field"><label>MSC local denom</label><input name="local_denom" value="mscUSDT" required /></div><div class="field"><label>Decimals</label><input name="decimals" type="number" min="0" max="30" required /></div><div class="field"><label>Status</label><select name="status"><option value="setup_required">Setup required</option><option value="testing">Testing</option><option value="active">Active</option><option value="paused">Paused</option><option value="disabled">Disabled</option></select></div></div>
+            <div class="row"><div class="field"><label>Minimum deposit</label><input name="min_deposit" inputmode="decimal" /></div><div class="field"><label>Daily limit</label><input name="daily_limit" inputmode="decimal" /></div><div class="field"><label>Escrow policy</label><select name="escrow_policy"><option value="lock_and_mint">Lock and mint</option><option value="burn_and_unlock">Burn and unlock</option></select></div></div>
+            <button type="submit"><i data-lucide="plus"></i>Save Asset</button>
+          </form>
+        </details>
+
+        <details class="panel admin-module">
+          <summary><span><i data-lucide="file-key-2"></i>Register Contract</span><i data-lucide="chevron-down"></i></summary>
+          <form id="bridgeContractForm" class="stack">
+            <div class="row"><label class="button" for="bridgeVaultDeploymentUpload"><i data-lucide="upload"></i>Load Vault Deployment</label><input id="bridgeVaultDeploymentUpload" type="file" accept="application/json,.json" hidden /></div>
+            <div class="row"><div class="field"><label>Route ID</label><input name="route_id" placeholder="usdt-bsc" required /></div><div class="field"><label>Chain ID</label><input name="chain_id" required /></div><div class="field"><label>Asset denom</label><input name="asset_denom" placeholder="USDT-BSC" required /></div></div>
+            <div class="field"><label>Bridge contract address</label><input name="contract_address" class="mono" required /></div>
+            <div class="field"><label>Deposit / vault address</label><input name="deposit_address" class="mono" required /></div>
+            <div class="row"><div class="field"><label>Deposit mode</label><select name="deposit_mode"><option value="contract_call">Contract call</option><option value="memo">Memo</option><option value="direct_transfer">Direct transfer</option></select></div><div class="field"><label>Execution adapter</label><select name="execution_adapter"><option value="evm_vault_v1">EVM Vault v1</option><option value="tron_vault_v1">Tron Vault v1</option><option value="solana_program_v1">Solana Program v1 (testing)</option></select></div><div class="field"><label>Status</label><select name="status"><option value="setup_required">Setup required</option><option value="testing">Testing</option><option value="active">Active</option><option value="paused">Paused</option><option value="disabled">Disabled</option></select></div><div class="field"><label>Finality</label><select name="finality_status"><option value="unknown">Unknown</option><option value="syncing">Syncing</option><option value="finalized">Finalized</option><option value="stalled">Stalled</option></select></div></div>
+            <div class="row"><div class="field"><label>Minimum deposit</label><input name="min_deposit" inputmode="decimal" /></div><div class="field"><label>Daily limit</label><input name="daily_limit" inputmode="decimal" /></div></div>
+            <div class="field"><label>Audit reference URL</label><input name="audit_reference" type="url" /></div>
+            <div class="field"><label>Deployment transaction hash</label><input name="deployment_tx_hash" class="mono" /></div>
+            <div class="field"><label>Runtime code / program hash</label><input name="runtime_code_hash" class="mono" /></div>
+            <button type="submit"><i data-lucide="plus"></i>Save Contract</button>
+          </form>
+        </details>
+
+        <details class="panel admin-module">
+          <summary><span><i data-lucide="server-cog"></i>Register Bridge Validator</span><i data-lucide="chevron-down"></i></summary>
+          <form id="bridgeValidatorForm" class="stack">
+            <div class="row"><div class="field"><label>Validator ID</label><input name="validator_id" required /></div><div class="field"><label>Status</label><select name="status"><option value="active">Active</option><option value="testing">Testing</option><option value="paused">Paused</option><option value="disabled">Disabled</option></select></div><div class="field"><label>Weight</label><input name="weight" type="number" min="1" max="65535" value="1" /></div></div>
+            <div class="field"><label>Ed25519 public key</label><input name="public_key" class="mono" minlength="64" maxlength="64" required /></div>
+            <div class="field"><label>Public endpoint</label><input name="endpoint" type="url" /></div>
+            <button type="submit"><i data-lucide="plus"></i>Save Validator</button>
+          </form>
+        </details>
+
+        <details class="panel admin-module">
+          <summary><span><i data-lucide="shield-check"></i>Register Finality Checkpoint</span><i data-lucide="chevron-down"></i></summary>
+          <form id="bridgeCheckpointForm" class="stack">
+            <div class="row"><label class="button" for="bridgeObserverArtifactUpload"><i data-lucide="upload"></i>Load Observer Artifact</label><input id="bridgeObserverArtifactUpload" type="file" accept="application/json,.json" hidden /></div>
+            <div class="field"><label>Threshold-signed checkpoint JSON</label><textarea name="checkpoint" rows="12" spellcheck="false" placeholder='{"version":"msc-bridge-checkpoint-v2","source_chain_id":"tron-mainnet","height":1000,"observed_height":1063,"block_hash":"...","event_root":"...","transaction_root":"...","receipt_root":"...","issued_at_unix":0,"validator_signatures":[]}' required></textarea></div>
+            <button type="submit"><i data-lucide="badge-check"></i>Verify and Register</button>
+          </form>
+        </details>
+
+        <details class="panel admin-module">
+          <summary><span><i data-lucide="scan-search"></i>Record Verified Event</span><i data-lucide="chevron-down"></i></summary>
+          <form id="bridgeEventForm" class="stack">
+            <div class="field"><label>Deposit intent ID</label><input name="intent_id" required /></div>
+            <div class="field"><label>Bridge proof JSON</label><textarea name="proof" spellcheck="false" required></textarea></div>
+            <button type="submit"><i data-lucide="file-check-2"></i>Verify and Record</button>
+          </form>
+        </details>
+
+        <details class="panel admin-module">
+          <summary><span><i data-lucide="badge-check"></i>Prepare Consensus Mint</span><i data-lucide="chevron-down"></i></summary>
+          <form id="bridgeMintForm" class="stack">
+            <div class="field"><label>Transfer ID</label><input name="transfer_id" required /></div>
+            <div class="field"><label>Fee-paying proposer wallet</label><input name="proposer" class="mono" required /></div>
+            <div class="field"><label>Threshold DTL governance certificate JSON</label><textarea name="governance_cert" spellcheck="false" required></textarea></div>
+            <button type="submit"><i data-lucide="file-signature"></i>Validate Certificate</button>
+          </form>
+        </details>
+
+        <details class="panel admin-module">
+          <summary><span><i data-lucide="circle-check-big"></i>Confirm Mint Finality</span><i data-lucide="chevron-down"></i></summary>
+          <form id="bridgeMintConfirmForm" class="stack">
+            <div class="field"><label>Transfer ID</label><input name="transfer_id" required /></div>
+            <div class="field"><label>Committed MSC transaction ID</label><input name="msc_transaction_id" class="mono" required /></div>
+            <button type="submit"><i data-lucide="badge-check"></i>Confirm Finality</button>
+          </form>
+        </details>
+
+        <details class="panel admin-module">
+          <summary><span><i data-lucide="flame"></i>Confirm Withdrawal Burn</span><i data-lucide="chevron-down"></i></summary>
+          <form id="bridgeBurnConfirmForm" class="stack">
+            <div class="field"><label>Transfer ID</label><input name="transfer_id" required /></div>
+            <div class="field"><label>Committed MSC burn transaction ID</label><input name="msc_transaction_id" class="mono" required /></div>
+            <button type="submit"><i data-lucide="badge-check"></i>Verify Burn</button>
+          </form>
+        </details>
+
+        <details class="panel admin-module">
+          <summary><span><i data-lucide="users-round"></i>Authorize External Unlock</span><i data-lucide="chevron-down"></i></summary>
+          <form id="bridgeUnlockAuthorizeForm" class="stack">
+            <div class="field"><label>Transfer ID</label><input name="transfer_id" required /></div>
+            <div class="field"><label>Bridge validator signatures JSON</label><textarea name="signatures" spellcheck="false" placeholder='[{"signer":"bridge-validator-a","public_key":"...","signature":"..."}]' required></textarea></div>
+            <button type="submit"><i data-lucide="file-signature"></i>Validate Quorum</button>
+          </form>
+        </details>
+
+        <details class="panel admin-module">
+          <summary><span><i data-lucide="circle-check-big"></i>Confirm External Unlock</span><i data-lucide="chevron-down"></i></summary>
+          <form id="bridgeUnlockConfirmForm" class="stack">
+            <div class="field"><label>Transfer ID</label><input name="transfer_id" required /></div>
+            <div class="field"><label>Finalized unlock proof JSON</label><textarea name="proof" spellcheck="false" required></textarea></div>
+            <button type="submit"><i data-lucide="shield-check"></i>Confirm Unlock</button>
+          </form>
+        </details>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading"><div><div class="label">Registry</div><strong>Routes and infrastructure</strong></div><button id="refreshBridgeAdmin" type="button" title="Refresh admin state"><i data-lucide="refresh-cw"></i></button></div>
+        <div id="bridgeAdminRegistry" class="bridge-route-list"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-heading"><div><div class="label">Source Finality</div><strong>Threshold checkpoints</strong></div></div>
+        <div id="bridgeAdminCheckpoints" class="bridge-route-list"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-heading"><div><div class="label">Operations</div><strong>Transfer queue</strong></div></div>
+        <div id="bridgeAdminTransfers" class="bridge-route-list"></div>
+      </section>
+      <section class="panel"><div class="label">Admin Result</div><div id="bridgeAdminActionResult" class="result">Connected.</div></section>
+    </div>
+  </main>
+  <script src="vendor/lucide.min.js?v=20260618a"></script>
+  <script src="bridge_admin.js?v=20260717-tron-mainnet-v3"></script>
+</body>
+</html>

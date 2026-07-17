@@ -1,0 +1,30 @@
+{
+  "name": "msc-bridge-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compile": "node scripts/compile.mjs",
+    "compile:tron": "tronbox compile --all",
+    "deploy": "node scripts/deploy.mjs",
+    "deploy:tron": "node scripts/tron-deploy.mjs",
+    "release": "node scripts/release.mjs",
+    "release:tron": "node scripts/tron-release.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@openzeppelin/contracts": "5.6.1",
+    "ethers": "6.17.0",
+    "hardhat": "3.9.1",
+    "solc": "0.8.36",
+    "tronbox": "4.9.0",
+    "tronweb": "6.4.0"
+  },
+  "overrides": {
+    "axios": "1.18.1",
+    "diff": "8.0.3",
+    "serialize-javascript": "7.0.7",
+    "tmp": "0.2.7",
+    "ws": "8.21.1"
+  }
+}

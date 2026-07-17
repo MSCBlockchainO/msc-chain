@@ -116,26 +116,26 @@ Audit events are JSONL records. Expected event types include `badge_awarded`, `p
 Campaign status:
 
 ```bash
-curl -s https://mscblockexplorer.in/v1/testnet/campaign
+curl -s https://explorer.mscblockexplorer.in/v1/testnet/campaign
 ```
 
 Weekly snapshot export:
 
 ```bash
-curl -s "https://mscblockexplorer.in/v1/testnet/campaign/export?format=json&week=1"
-curl -s "https://mscblockexplorer.in/v1/testnet/campaign/export?format=csv&week=1"
+curl -s "https://explorer.mscblockexplorer.in/v1/testnet/campaign/export?format=json&week=1"
+curl -s "https://explorer.mscblockexplorer.in/v1/testnet/campaign/export?format=csv&week=1"
 ```
 
 Validator leaderboard:
 
 ```bash
-curl -s https://mscblockexplorer.in/v1/validators/leaderboard
+curl -s https://explorer.mscblockexplorer.in/v1/validators/leaderboard
 ```
 
 Public validators page:
 
 ```text
-https://mscblockexplorer.in/validators.html
+https://explorer.mscblockexplorer.in/portal/validators.html
 ```
 
 ## Discord Structure

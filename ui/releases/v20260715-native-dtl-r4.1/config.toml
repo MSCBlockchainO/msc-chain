@@ -1,0 +1,430 @@
+[chain]
+chain_id = "91938"
+moniker = "Mainnet-Node-1"
+genesis_path = "genesis.json"
+genesis_hash = "f6230e42861022d676ca43c57d0f3b6c0984c3cd17bfcd932059c353ab46821c"
+
+[p2p]
+laddr = ""
+external_address = ""
+seeds = []
+persistent_peers = []
+persist_peer_id_refresh=false
+prune_localhost_on_refused = true
+prune_localhost_refused_failures = 3
+
+[consensus]
+timeout_propose = "3000ms"
+timeout_propose_delta = "500ms"
+timeout_prevote = "1000ms"
+timeout_prevote_delta = "500ms"
+timeout_precommit = "1000ms"
+timeout_precommit_delta = "500ms"
+timeout_commit = "5000ms"
+propose = "3s"
+prevote = "1s"
+precommit = "1s"
+commit = "5s"
+min_block_interval = "4s"
+recompute_pause = "4s"
+detector_degraded_after_seconds = 15
+detector_halted_after_seconds = 60
+detector_recovery_validator_lag_blocks = 100
+weak_subjectivity_depth = 2048
+max_future_block_gap = 256
+validator_set_commitment_v2_height = 1
+enforce_deterministic_tx_order = true
+proposer_round_timeout_seconds = 2
+fast_proposer_failover_enabled = true
+fast_proposer_failover_min_seconds = 1
+proposer_round_max_skew = 1
+transition_barrier_relax_seconds = 60
+transition_barrier_max_drop = 1
+transition_barrier_retry_mode = "per_block"
+exec_quorum_emergency_enabled = true
+exec_quorum_emergency_stall_seconds = 8
+penalty_enforce_mode = "converged_only"
+invalid_proposer_quarantine_after = 4
+exec_mismatch_quarantine_after = 3
+exec_mismatch_slash_after = 5
+propose_requires_sync_ready = true
+post_block_safe_mode_enabled = true
+post_block_safe_mode_min_seconds = 2
+post_block_safe_mode_max_seconds = 8
+post_block_safe_mode_history_blocks = 32
+post_block_safe_mode_live_quorum_bps = 6700
+core_pending_excluded_from_proposer = true
+core_activation_effective_height_buffer = 64
+
+[rpc]
+laddr = "127.0.0.1:26657"
+cors_allowed_origins = ["*"]
+tls_cert_file = ""
+tls_key_file = ""
+require_auth_for_read_endpoints = false
+require_auth_for_submit_endpoints = false
+max_request_body_bytes = 1048576
+read_rate_limit_per_minute = 600
+write_rate_limit_per_minute = 120
+max_concurrent_requests = 256
+read_header_timeout_seconds = 5
+read_timeout_seconds = 30
+write_timeout_seconds = 120
+idle_timeout_seconds = 120
+
+[validators]
+dynamic_selection = true
+deterministic_selection = true
+equal_chance_selection = true
+active_set_size = 6
+active_set_mode = "adaptive_committee"
+max_active_committee = 512
+max_active_validators = 6
+performance_slots = 3
+rotation_slots = 2
+effective_stake_cap = 5000000
+validator_epoch_blocks = 10000
+score_weight_stake = 40
+score_weight_uptime = 35
+score_weight_performance = 15
+score_weight_decentralization = 10
+performance_min_signed_bps = 9000
+promotion_window_epochs = 10
+minimum_age_for_performance_slot_epochs = 10
+promotion_window_record_v1_height = 0
+minimum_online_validators_when_full = 3
+diversity_weight_asn = 40
+diversity_weight_region = 30
+diversity_weight_provider = 20
+diversity_weight_home_pc = 10
+adaptive_committee_log_multiplier = 16
+committee_rotation_blocks = 32
+selection_activity_window_blocks = 64
+selection_min_signed_blocks = 1
+onboarding_grace_blocks = 64
+onboarding_max_new_slots = 0
+onboarding_strict_activation = true
+validator_set_autoheal_mode = "strict_core_quorum"
+validator_set_autoheal_trusted_only_on_mismatch = true
+validator_set_autoheal_near_tip_force_after = 2
+validator_set_autoheal_pause_seconds = 6
+onboarding_bootstrap_lane_enabled = true
+onboarding_bootstrap_max_new_slots = 0
+onboarding_bootstrap_require_stake = true
+onboarding_bootstrap_require_not_jailed = true
+heartbeat_scope = "committee_only"
+min_active_validators = 3
+min_stake = 100
+stake_cap_pct = 0.05
+uptime_window = 1000
+reputation_recovery_threshold = 0.30
+long_uptime_threshold = 0.95
+require_stake = true
+core_stake_exempt = true
+validator_set_activation_delay = 5
+validator_set_activation_model_v2_height = 0
+validator_set_rotation_window = 50
+inactive_remove_blocks = 8
+inactivity_penalty_enabled = true
+inactivity_penalty_burn_bps = 100
+inactivity_penalty_jail_blocks = 500
+inactivity_penalty_cooldown_blocks = 50
+permanent_remove_on_inactive = false
+liveness_heartbeat_ttl_seconds = 25
+liveness_grace_seconds = 10
+liveness_max_height_drift_blocks = 8
+rejoin_required_heartbeats = 3
+rejoin_required_signed_blocks = 1
+rejoin_window_blocks = 16
+fail_on_key_unavailable = true
+allow_identity_rotation_on_existing_chain = false
+required_key_fingerprint = ""
+key_backup_required = true
+key_backup_dir = "secure-backups"
+key_backup_max_age_hours = 24
+key_restore_allowed_on_missing = true
+allow_env_password_in_production = true
+core_env_password_allowed = true
+core_password_file = ""
+password_mode = "file_or_prompt"
+# Mainnet signer policy:
+# - Current production recommendation: HSM/external signer per validator.
+# - Keep hsm_enabled=false until hsm_public_key and hsm_external_signer_command are configured and rehearsed.
+# - Future large-validator path: enable MPC threshold signing instead of HSM after a 24h/72h rehearsal.
+# - If mpc_enabled=true, MPC is the effective signer and software/HSM fallback is disabled.
+# - Built-in rehearsal command: validator mpc-keygen --validator F --threshold 2 --participants 3 --outdir data/F/mpc.
+hsm_enabled = false
+hsm_provider = "external"
+hsm_key_id = ""
+hsm_public_key = ""
+hsm_external_signer_command = ""
+hsm_timeout_ms = 3000
+hsm_require_user_presence = false
+mpc_enabled = false
+mpc_provider = "threshold"
+mpc_key_id = ""
+mpc_public_key = ""
+mpc_external_signer_command = ""
+mpc_timeout_ms = 3000
+mpc_threshold = 0
+mpc_participants = 0
+diversity_enabled = true
+diversity_mode = "warn"
+diversity_min_countries = 2
+diversity_min_asns = 3
+diversity_min_clouds = 2
+diversity_max_country_pct = 67
+diversity_max_asn_pct = 50
+diversity_max_cloud_pct = 67
+diversity_metadata = [
+  "A|US|AS14618|AWS|us-east-1",
+  "B|US|AS14618|AWS|us-east-1",
+  "C|US|AS14618|AWS|us-east-1",
+  "D|US|AS14618|AWS|us-east-1",
+  "F|US|AS14618|AWS|us-east-1",
+  "G|US|AS14618|AWS|us-east-1",
+]
+
+[dtl]
+# Native DTL protocol operations are deterministic consensus rules.
+# Programmable contract/VM execution is permanently removed.
+contracts_v2_enabled = false
+v2_activation_height = 0
+logs_index_enabled = true
+oracle_min_signers = 3
+oracle_max_staleness_blocks = 120
+lending_accrual_interval_blocks = 1
+game_beacon_delay_blocks = 8
+router_enabled = true
+router_max_hops = 4
+router_deadline_max_blocks = 30
+router_max_price_impact_bps = 3000
+router_quote_max_paths = 16
+defi_farm_enabled = true
+gamefi_season_enabled = true
+gamefi_reward_token = "MSC"
+gamefi_season_length_blocks = 43200
+gamefi_claim_grace_blocks = 21600
+gamefi_fee_share_from_pool_bps = 2500
+gamefi_fee_share_from_lending_bps = 2000
+gamefi_duel_win_points = 100
+gamefi_tournament_win_points = 600
+gamefi_tournament_participation_points = 80
+farm_min_stake_blocks = 50
+farm_lp_points_per_block = 1
+farm_max_multiplier_bps = 30000
+gamefi_max_reward_per_account_per_season = 1000000
+
+[bridge]
+# Cross-chain bridge framework is verification-only and disabled by default.
+# Enable on testnet first; do not enable guarded mint/unlock without governance activation and audit.
+enabled = false
+mode = "verification_only"
+ibc_style_enabled = false
+light_client_required = true
+required_confirmations = 64
+oracle_quorum = 3
+# Catalog entries are registered but intentionally not active. The admin must
+# add audited contracts, synced finality trackers, and governance approval.
+# Format: "chain_id|name|chain_type|trust_model|min_confirmations|light_client|status|finality|native_symbol|explorer_url"
+chains = [
+  "1|Ethereum|evm|hybrid|64||setup_required|unknown|ETH|https://etherscan.io",
+  "56|BNB Chain|evm|hybrid|30||setup_required|unknown|BNB|https://bscscan.com",
+  "137|Polygon|evm|hybrid|128||setup_required|unknown|POL|https://polygonscan.com",
+  "8453|Base|evm|hybrid|64||setup_required|unknown|ETH|https://basescan.org",
+  "42161|Arbitrum One|evm|hybrid|64||setup_required|unknown|ETH|https://arbiscan.io",
+  "10|Optimism|evm|hybrid|64||setup_required|unknown|ETH|https://optimistic.etherscan.io",
+  "tron-mainnet|Tron|tron|hybrid|20||setup_required|unknown|TRX|https://tronscan.org",
+  "solana-mainnet|Solana|solana|hybrid|32||setup_required|unknown|SOL|https://explorer.solana.com"
+]
+# Origin asset placeholders cannot be activated; replace each one with the
+# official token contract/mint verified for that source chain.
+# Format: "denom|origin_chain|origin_asset|local_denom|decimals|escrow_policy|symbol|status|min_deposit|daily_limit"
+assets = [
+  "USDT-ETH|1|official_contract_required|mscUSDT|6|lock_and_mint|USDT|setup_required|10|100000",
+  "USDT-BSC|56|official_contract_required|mscUSDT|18|lock_and_mint|USDT|setup_required|10|100000",
+  "USDT-POLYGON|137|official_contract_required|mscUSDT|6|lock_and_mint|USDT|setup_required|10|100000",
+  "USDT-BASE|8453|official_contract_required|mscUSDT|6|lock_and_mint|USDT|setup_required|10|100000",
+  "USDT-ARBITRUM|42161|official_contract_required|mscUSDT|6|lock_and_mint|USDT|setup_required|10|100000",
+  "USDT-OPTIMISM|10|official_contract_required|mscUSDT|6|lock_and_mint|USDT|setup_required|10|100000",
+  "USDT-TRON|tron-mainnet|official_contract_required|mscUSDT|6|lock_and_mint|USDT|setup_required|10|100000",
+  "USDT-SOLANA|solana-mainnet|official_mint_required|mscUSDT|6|lock_and_mint|USDT|setup_required|10|100000"
+]
+
+[tokenomics]
+allow_treasury_ops = false
+random_user_reward_enabled = true
+random_user_reward_chance_bps = 2500
+emission_enabled = true
+emission_min_reward = 2
+emission_max_reward = 4
+work_block_reward_enabled = true
+work_block_base_reward = 2
+emission_jackpot_chance_bps = 100
+emission_base_chance_bps = 10000
+emission_high_chance_after_blocks = 1105840
+emission_high_chance_bps = 10000
+emission_halving_interval_blocks = 1105840
+emission_treasury_bps = 2000
+emission_validator_bps = 7200
+emission_burn_bps = 800
+emission_interval_mode = false
+emission_gap_min_blocks = 4
+emission_gap_max_blocks = 6
+emission_validator_to_proposer = false
+supply_burn_floor = 62000000
+unified_team_reward_enabled = true
+unified_team_reward_treasury_bps = 2000
+unified_team_reward_proposer_bps = 3500
+unified_team_reward_validator_bps = 4500
+
+[fees]
+min_bps = 20
+max_bps = 300
+floor_amount = 200
+ceil_amount = 100000
+dtl_create_base_fee = 1
+dtl_transfer_base_fee = 1
+dtl_mint_base_fee = 1
+dtl_burn_base_fee = 1
+dtl_payload_fee_per_kb = 0
+dtl_fee_max_multiplier = 10
+
+[network]
+disable_dht = false
+block_public_peers = false
+peer_diversity_enabled = true
+peer_diversity_max_per_subnet = 8
+peer_diversity_ipv4_prefix = 24
+peer_diversity_ipv6_prefix = 64
+mdns = true
+self_heal_enabled = true
+self_heal_interval_seconds = 5
+self_heal_min_peers = 5
+self_heal_stall_seconds = 20
+
+[sync]
+direct_gossip_max_blocks = 128
+fast_block_sync_max_blocks = 256
+range_fetch_max_blocks = 50000
+restart_snapshot_grace_blocks = 256
+snapshot_delta_max_blocks = 10000000
+snapshot_threshold_blocks = 2000
+fresh_join_fallback_block_replay_enabled = true
+snapshot_publish_new_node_threshold_blocks = 50
+snapshot_publish_lag_threshold_blocks = 20
+snapshot_publish_reannounce_cooldown_seconds = 12
+snapshot_warmup_seconds = 10
+delta_replay_max_blocks = 50000
+delta_replay_batch_blocks = 1024
+delta_replay_verify_workers = 8
+delta_state_sync_enabled = true
+ed25519_batch_verify_workers = 8
+snapshot_distribution_enabled = true
+snapshot_multi_peer_chunk_fetch = true
+snapshot_compression = "zstd"
+snapshot_chunk_size_bytes = 1048576
+snapshot_parallel_chunks = 8
+snapshot_chunk_replication_factor = 2
+sync_stall_seconds = 180
+sync_peer_timeout_seconds = 15
+snapshot_anchor_timeout_seconds = 10
+snapshot_anchor_max_retries = 6
+checkpoint_interval_blocks = 32
+snapshot_checkpoint_domain = "MSC_SNAPSHOT_V1"
+snapshot_checkpoint_v2_height = 0
+snapshot_session_ttl_seconds = 0
+snapshot_quorum_apply_watchdog_seconds = 15
+snapshot_session_reset_watchdog_seconds = 60
+snapshot_invalid_proof_quarantine_after = 3
+history_mode = "background"
+trusted_snapshot_require_checkpoint_proof = true
+usable_head_fast_bootstrap_enabled = true
+usable_head_roles = ["full", "archive"]
+usable_head_min_gap_blocks = 2000
+usable_head_target_seconds = 3
+usable_head_require_checkpoint_proof = true
+usable_head_background_history = true
+usable_head_recent_replay_window_blocks = 2048
+
+[promotion]
+candidate_observation_epochs = 50
+candidate_dcs_min = 0.85
+candidate_uptime_min = 0.98
+candidate_diversity_pct_min = 0.70
+candidate_diversity_epochs = 20
+max_promotions_per_window = 1
+promotion_window_size = 100
+candidate_srp_min = 0.90
+candidate_srp_alpha = 0.15
+testing_relaxed_promotion = false
+
+[auth]
+require_wallet = true
+open_browser = true
+timeout_seconds = 600
+challenge_ttl_seconds = 180
+token_ttl_seconds = 86400
+core_validators = [
+  "VAL_6741169D69FD8782020C68F6667AF703",
+  "VAL_80BCBF5246B10BFD9A83C9AAB668F25B",
+  "VAL_247E8B0257337C830835C48EDD113C2A",
+  "VAL_36EDF7FFA87C6C5E0D0E53BF216F3F20",
+  "VAL_B84F325C74FCD2102493B7B778B4DF49",
+  "VAL_A8ECC6229EC1C475210D529C775AE7A6"
+]
+
+[core]
+registry_path = "core_validators.json"
+registry_enforcement = "warn"
+registry_min_signatures = 0
+registry_reload_seconds = 10
+
+[founder]
+# Founder validator badges are disabled until governance/testnet activation.
+validator_badge_enabled = false
+validator_cutoff_height = 0
+validator_max_count = 0
+validator_min_signed_bps = 9500
+validator_nft_collection = ""
+
+[testnet_campaign]
+# MSC Founding Validators Program. Disabled by default until testnet launch.
+enabled = false
+program_name = "MSC Founding Validators Program"
+season_id = "testnet-season-1"
+start_time = ""
+end_time = ""
+discord_url = ""
+telegram_url = ""
+bug_report_url = ""
+weekly_publish_day = "Friday"
+data_dir = "data/campaign"
+founder_max_count = 100
+founder_days = 30
+reporter_cooldown_per_day = 3
+
+[storage]
+encryption_key_env = "MSC_DB_ENCRYPTION_KEY"
+encryption_key_file = ""
+encryption_key_hex = ""
+encryption_key_base64 = ""
+history_profile = "auto" # auto | validator | full | archive
+state_pruning_enabled = true
+epoch_length_blocks = 100
+validator_retained_epochs = 10
+validator_rollback_window_blocks = 256
+validator_snapshot_keep_last = 3
+validator_recent_block_window = 2048
+full_node_history_blocks = 5256000
+hourly_snapshot_retain = 24
+daily_snapshot_retain = 30
+weekly_snapshot_retain = 12
+monthly_snapshot_retain = 24
+hourly_snapshot_interval_blocks = 3600
+cold_export_enabled = true
+cold_export_compression = "zstd"
+parallel_gc_workers = 4
+state_rent_enabled = false
+state_rent_archive_inactive_after_epochs = 0
+state_layout_mode = "merkle"

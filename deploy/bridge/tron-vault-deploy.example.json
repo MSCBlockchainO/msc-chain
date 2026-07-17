@@ -1,0 +1,47 @@
+{
+  "version": "msc-bridge-tron-deploy-config-v2",
+  "testnet": false,
+  "network": {
+    "label": "tron-mainnet",
+    "chain_id": "tron-mainnet",
+    "tip712_chain_id": "0x2b6653dc",
+    "explorer_url": "https://tronscan.org"
+  },
+  "rpc_url_env": "MSC_BRIDGE_TRON_RPC_URL",
+  "deployer_key_env": "MSC_BRIDGE_TRON_DEPLOYER_KEY",
+  "deployment_confirmations": 20,
+  "deployment_timeout_seconds": 600,
+  "fee_limit_sun": "1000000000",
+  "release_fee_limit_sun": "500000000",
+  "origin_energy_limit": 10000000,
+  "user_fee_percentage": 100,
+  "default_admin_delay_seconds": 86400,
+  "governance": "REPLACE_WITH_GOVERNANCE_MULTISIG",
+  "guardian": "REPLACE_WITH_SEPARATE_GUARDIAN",
+  "release_executor": "REPLACE_WITH_SEPARATE_RELEASE_EXECUTOR",
+  "msc_source_chain_id": "91938",
+  "committee": [
+    "REPLACE_WITH_COMMITTEE_MEMBER_1",
+    "REPLACE_WITH_COMMITTEE_MEMBER_2",
+    "REPLACE_WITH_COMMITTEE_MEMBER_3",
+    "REPLACE_WITH_COMMITTEE_MEMBER_4",
+    "REPLACE_WITH_COMMITTEE_MEMBER_5"
+  ],
+  "committee_threshold": 4,
+  "route": {
+    "route_id": "usdt-tron-mainnet",
+    "chain_name": "TRON Mainnet",
+    "native_symbol": "TRX",
+    "asset_denom": "USDT-TRON",
+    "symbol": "USDT",
+    "token_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+    "local_denom": "mscUSDT",
+    "decimals": 6,
+    "min_confirmations": 64,
+    "min_amount_raw": "10000000",
+    "max_amount_raw": "1000000000",
+    "daily_lock_limit_raw": "10000000000",
+    "daily_unlock_limit_raw": "10000000000",
+    "audit_reference": "REPLACE_WITH_PUBLISHED_HTTPS_AUDIT_REPORT"
+  }
+}

@@ -1,0 +1,50 @@
+﻿{
+    "version_tag":  "v20260713-evm-removed-r3",
+    "git_commit":  "55a7c4e91608420983c2560cf1d5ae90589a399a",
+    "git_short":  "55a7c4e91608",
+    "git_dirty":  true,
+    "genesis_sha256":  "f6230e42861022d676ca43c57d0f3b6c0984c3cd17bfcd932059c353ab46821c",
+    "config_genesis_hash":  "f6230e42861022d676ca43c57d0f3b6c0984c3cd17bfcd932059c353ab46821c",
+    "compiled_genesis_hash":  "f6230e42861022d676ca43c57d0f3b6c0984c3cd17bfcd932059c353ab46821c",
+    "generated_utc":  "2026-07-13T11:10:26.7172551Z",
+    "go_version":  "go version go1.26.1 windows/amd64",
+    "reproducible_build_flags":  "-trimpath -buildvcs=false -ldflags=\"-s -w -X main.BuildVersionTag=v20260713-evm-removed-r3 -X main.BuildGitCommit=55a7c4e91608420983c2560cf1d5ae90589a399a\" CGO_ENABLED=0",
+    "artifacts":  [
+                      {
+                          "os":  "windows",
+                          "arch":  "amd64",
+                          "file":  "msc-chain-v20260713-evm-removed-r3-windows-amd64.exe",
+                          "sha256":  "a12c9fdca9925f303aaf44988e80225cecf66938c057b0ebf6fc369e1d0a646b"
+                      },
+                      {
+                          "os":  "windows",
+                          "arch":  "amd64",
+                          "file":  "msc-v20260713-evm-removed-r3-windows-amd64.exe",
+                          "sha256":  "a12c9fdca9925f303aaf44988e80225cecf66938c057b0ebf6fc369e1d0a646b"
+                      },
+                      {
+                          "os":  "linux",
+                          "arch":  "amd64",
+                          "file":  "msc-chain-v20260713-evm-removed-r3-linux-amd64",
+                          "sha256":  "f736d9dc928639e430008de187cae070159bb46a3dc2db644db8043cccc5b079"
+                      },
+                      {
+                          "os":  "linux",
+                          "arch":  "amd64",
+                          "file":  "msc-v20260713-evm-removed-r3-linux-amd64",
+                          "sha256":  "f736d9dc928639e430008de187cae070159bb46a3dc2db644db8043cccc5b079"
+                      },
+                      {
+                          "os":  "linux",
+                          "arch":  "arm64",
+                          "file":  "msc-chain-v20260713-evm-removed-r3-linux-arm64",
+                          "sha256":  "51a800028fb4fa887c87ccc9c50f99679f56a84cd2eed81702be553b1988c256"
+                      },
+                      {
+                          "os":  "linux",
+                          "arch":  "arm64",
+                          "file":  "msc-v20260713-evm-removed-r3-linux-arm64",
+                          "sha256":  "51a800028fb4fa887c87ccc9c50f99679f56a84cd2eed81702be553b1988c256"
+                      }
+                  ]
+}

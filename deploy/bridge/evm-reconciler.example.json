@@ -1,0 +1,33 @@
+{
+  "version": "msc-bridge-reconciler-config-v2",
+  "msc_accounting_url": "http://127.0.0.1:26657/bridge/accounting",
+  "request_timeout": "10s",
+  "max_accounting_age": "2m",
+  "poll_interval": "30s",
+  "failure_threshold": 3,
+  "auto_pause": false,
+  "admin_settings_url": "",
+  "admin_token_env": "",
+  "listen_address": "127.0.0.1:9470",
+  "allow_insecure_msc_http": false,
+  "routes": [
+    {
+      "chain_type": "evm",
+      "route_id": "usdt-bnb-testnet",
+      "source_chain_id": "97",
+      "expected_evm_chain_id": 97,
+      "rpc_urls": [
+        "https://independent-provider-a.example/bnb-testnet",
+        "https://independent-provider-b.example/bnb-testnet",
+        "https://independent-provider-c.example/bnb-testnet"
+      ],
+      "rpc_quorum": 2,
+      "confirmations": 15,
+      "vault_address": "REPLACE_WITH_DEPLOYED_VAULT_ADDRESS",
+      "token_address": "REPLACE_WITH_VERIFIED_USDT_ADDRESS",
+      "local_token_id": "REPLACE_WITH_MSC_WRAPPED_TOKEN_ID",
+      "source_decimals": 6,
+      "allow_insecure_rpc_http": false
+    }
+  ]
+}

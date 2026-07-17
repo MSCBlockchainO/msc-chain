@@ -3,6 +3,8 @@
 
   const PAGE = document.body.dataset.page || "home";
   const CHAIN_ID = "91938";
+  const MSC_LOGO_SRC = "../assets/msc-logo-64.png";
+  const MSC_VALIDATOR_BADGE_SRC = "../assets/msc-validator-badge.png";
   const GENESIS_HASH = "d6d7d96ea1a70d2aca31389ce7ef7953794ce77b4c933828295269702768fa3c";
   const VERSION = "v1.0.0-mainnet";
   const TTL = {
@@ -127,7 +129,7 @@
         <header class="portal-header">
           <nav class="portal-nav" aria-label="MSC Chain Portal">
             <a class="brand" href="index.html">
-              <span class="brand-mark">MSC</span>
+              <span class="brand-mark"><img src="${MSC_LOGO_SRC}" alt="MSC logo" /></span>
               <span>
                 <span class="brand-title">MSC Chain</span>
                 <span class="brand-subtitle">Layer-1 infrastructure</span>
@@ -144,7 +146,7 @@
         <footer class="footer">
           <div class="footer-inner">
             <div class="brand">
-              <span class="brand-mark">MSC</span>
+              <span class="brand-mark"><img src="${MSC_LOGO_SRC}" alt="MSC logo" /></span>
               <span>
                 <span class="brand-title">MSC Chain</span>
                 <span class="brand-subtitle">Copyright MSC Chain</span>
@@ -264,8 +266,8 @@
         <div class="card">
           <div class="label">Connection Info</div>
           <div class="list">
-            <div class="list-item"><span>RPC</span><span class="mono">https://mscblockexplorer.in</span></div>
-            <div class="list-item"><span>WebSocket</span><span class="mono">wss://mscblockexplorer.in/wallet/events</span></div>
+            <div class="list-item"><span>RPC</span><span class="mono">https://wallet.mscblockexplorer.in</span></div>
+            <div class="list-item"><span>WebSocket</span><span class="mono">wss://wallet.mscblockexplorer.in/wallet/events</span></div>
             <div class="list-item"><span>Seed Nodes</span><span id="testnetSeeds">Configured by installer</span></div>
             <div class="list-item"><span>Peer Nodes</span><span id="testnetPeers">Auto discovery</span></div>
           </div>
@@ -598,7 +600,7 @@ curl -fsSL https://install.mscchain.io | bash
     if (v.home_pc) list.push("Home Validator");
     if (Number(v.signed_ratio_bps || 0) >= 9900) list.push("Uptime Hero");
     if (Array.isArray(v.campaign_badges)) list.push(...v.campaign_badges.slice(0, 3));
-    return [...new Set(list)].slice(0, 5).map((b) => `<span class="badge">${esc(b)}</span>`).join("");
+    return [...new Set(list)].slice(0, 5).map((b) => `<span class="badge"><img src="${MSC_VALIDATOR_BADGE_SRC}" alt="" />${esc(b)}</span>`).join("");
   }
 
   function renderTopLists(entries) {

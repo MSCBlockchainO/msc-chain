@@ -10,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
+// syncSnapshotChunkReplicationFactor implements the sync snapshot chunk replication factor helper.
 func syncSnapshotChunkReplicationFactor() int {
 	if SyncSnapshotChunkReplicationFactor <= 0 {
 		return 2
@@ -20,6 +21,7 @@ func syncSnapshotChunkReplicationFactor() int {
 	return SyncSnapshotChunkReplicationFactor
 }
 
+// syncBlockRangeReplicationFactor implements the sync block range replication factor helper.
 func syncBlockRangeReplicationFactor() int {
 	if SyncBlockRangeReplicationFactor <= 0 {
 		return 2
@@ -30,6 +32,7 @@ func syncBlockRangeReplicationFactor() int {
 	return SyncBlockRangeReplicationFactor
 }
 
+// snapshotChunkReplicaProviders implements the snapshot chunk replica providers helper.
 func snapshotChunkReplicaProviders(providers []peer.ID, idx uint64, batchStart int, replicationFactor int) []peer.ID {
 	if len(providers) == 0 || replicationFactor <= 0 {
 		return nil
@@ -37,15 +40,22 @@ func snapshotChunkReplicaProviders(providers []peer.ID, idx uint64, batchStart i
 	if replicationFactor > len(providers) {
 		replicationFactor = len(providers)
 	}
+	// `out` stores the result produced by this operation.
 	out := make([]peer.ID, 0, replicationFactor)
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]struct{}, replicationFactor)
+	// `offset` stores the value produced by this operation.
 	for offset := 0; offset < len(providers) && len(out) < replicationFactor; offset++ {
+		// `pos` stores the value produced by this operation.
 		pos := (int(idx) + batchStart + offset) % len(providers)
+		// `pid` stores the value produced by this operation.
 		pid := providers[pos]
+		// `key` stores the key used to access the related value.
 		key := strings.TrimSpace(pid.String())
 		if key == "" {
 			continue
 		}
+		// `ok` stores whether the related condition is satisfied.
 		if _, ok := seen[key]; ok {
 			continue
 		}
@@ -56,13 +66,19 @@ func snapshotChunkReplicaProviders(providers []peer.ID, idx uint64, batchStart i
 }
 
 type snapshotChunkReplicaResult struct {
-	pid     peer.ID
-	resp    *SnapshotChunkResponse
-	err     error
+	// `pid` stores the value associated with this record.
+	pid peer.ID
+	// `resp` stores the response produced by this operation.
+	resp *SnapshotChunkResponse
+	// `err` stores the error produced by this operation.
+	err error
+	// `elapsed` stores the value associated with this record.
 	elapsed time.Duration
+	// `timeout` stores the result produced by this operation.
 	timeout bool
 }
 
+// fetchReplicatedSnapshotChunk implements the fetch replicated snapshot chunk helper.
 func (n *Node) fetchReplicatedSnapshotChunk(manifest *SnapshotManifest, providers []peer.ID, idx uint64) ([]byte, peer.ID, error) {
 	if n == nil || manifest == nil {
 		return nil, "", fmt.Errorf("snapshot manifest unavailable")
@@ -70,6 +86,7 @@ func (n *Node) fetchReplicatedSnapshotChunk(manifest *SnapshotManifest, provider
 	if idx >= uint64(len(manifest.ChunkHashes)) {
 		return nil, "", fmt.Errorf("snapshot chunk hash unavailable index=%d", idx)
 	}
+	// `replicationFactor` stores the value produced by this operation.
 	replicationFactor := syncSnapshotChunkReplicationFactor()
 	if !syncSnapshotMultiPeerChunkFetchEnabled() {
 		replicationFactor = 1
@@ -80,17 +97,25 @@ func (n *Node) fetchReplicatedSnapshotChunk(manifest *SnapshotManifest, provider
 	if replicationFactor <= 0 {
 		replicationFactor = 1
 	}
+	// `expectedHash` stores the digest used to identify or verify the related data.
 	expectedHash := strings.TrimSpace(manifest.ChunkHashes[idx])
+	// `batchStart` stores the value produced by this operation.
 	for batchStart := 0; batchStart < len(providers); batchStart += replicationFactor {
+		// `replicas` stores the value produced by this operation.
 		replicas := snapshotChunkReplicaProviders(providers, idx, batchStart, replicationFactor)
 		if len(replicas) == 0 {
 			continue
 		}
+		// `resultsCh` stores the result produced by this operation.
 		resultsCh := make(chan snapshotChunkReplicaResult, len(replicas))
+		// `pid` tracks the current values while iterating.
 		for _, pid := range replicas {
+			// `pid` stores the value produced by this operation.
 			pid := pid
 			go func() {
+				// `started` stores the value produced by this operation.
 				started := time.Now()
+				// `resp` and `err` store the error produced by this operation.
 				resp, err := n.requestSnapshotChunkFromPeer(pid, manifest.Height, idx)
 				resultsCh <- snapshotChunkReplicaResult{
 					pid:     pid,
@@ -103,10 +128,13 @@ func (n *Node) fetchReplicatedSnapshotChunk(manifest *SnapshotManifest, provider
 		}
 
 		var (
+			// `winner` stores the value used by this operation.
 			winner peer.ID
-			data   []byte
+			// `data` stores the value used by this operation.
+			data []byte
 		)
 		for range replicas {
+			// `result` stores the result produced by this operation.
 			result := <-resultsCh
 			if result.err != nil {
 				n.recordSyncPeerSnapshotResult(result.pid.String(), false, result.elapsed, 0, result.timeout)
@@ -120,6 +148,11 @@ func (n *Node) fetchReplicatedSnapshotChunk(manifest *SnapshotManifest, provider
 				n.recordSyncPeerInvalidProof(result.pid.String())
 				continue
 			}
+			if !snapshotManifestChunkDataValid(manifest, idx, result.resp.Data) {
+				n.recordSyncPeerInvalidProof(result.pid.String())
+				continue
+			}
+			// `actualHash` stores the digest used to identify or verify the related data.
 			actualHash := snapshotChunkHash(result.resp.Data)
 			if !strings.EqualFold(strings.TrimSpace(result.resp.ChunkHash), expectedHash) || !strings.EqualFold(actualHash, expectedHash) {
 				n.recordSyncPeerInvalidProof(result.pid.String())
@@ -149,38 +182,57 @@ func (n *Node) fetchReplicatedSnapshotChunk(manifest *SnapshotManifest, provider
 }
 
 type syncReplicatedRangeAssignment struct {
-	From  uint64
-	To    uint64
+	// `From` stores the value associated with this record.
+	From uint64
+	// `To` stores the value associated with this record.
+	To uint64
+	// `Peers` stores the value associated with this record.
 	Peers []peer.ID
 }
 
 type syncReplicatedRangeResult struct {
-	assignment  syncReplicatedRangeAssignment
-	blocks      []Block
+	// `assignment` stores the value associated with this record.
+	assignment syncReplicatedRangeAssignment
+	// `blocks` stores the block data handled by this operation.
+	blocks []Block
+	// `failedPeers` stores the value associated with this record.
 	failedPeers map[peer.ID]struct{}
-	err         error
+	// `err` stores the error produced by this operation.
+	err error
 }
 
 type syncHeaderFetchResult struct {
-	pid     peer.ID
+	// `pid` stores the value associated with this record.
+	pid peer.ID
+	// `headers` stores the block data handled by this operation.
 	headers []SyncBlockHeader
-	err     error
+	// `err` stores the error produced by this operation.
+	err error
+	// `elapsed` stores the value associated with this record.
 	elapsed time.Duration
+	// `timeout` stores the result produced by this operation.
 	timeout bool
 }
 
 type syncBlockFetchResult struct {
-	pid     peer.ID
-	blocks  []Block
-	err     error
+	// `pid` stores the value associated with this record.
+	pid peer.ID
+	// `blocks` stores the block data handled by this operation.
+	blocks []Block
+	// `err` stores the error produced by this operation.
+	err error
+	// `elapsed` stores the value associated with this record.
 	elapsed time.Duration
+	// `timeout` stores the result produced by this operation.
 	timeout bool
 }
 
+// syncBlocksEquivalent implements the sync blocks equivalent helper.
 func syncBlocksEquivalent(left []Block, right []Block) bool {
 	if len(left) != len(right) {
 		return false
 	}
+	// `idx` tracks the current position in the related collection.
 	for idx := range left {
 		if left[idx].ID != right[idx].ID {
 			return false
@@ -195,10 +247,12 @@ func syncBlocksEquivalent(left []Block, right []Block) bool {
 	return true
 }
 
+// syncBlocksMatchHeaders implements the sync blocks match headers helper.
 func syncBlocksMatchHeaders(blocks []Block, headers []SyncBlockHeader) bool {
 	if len(blocks) != len(headers) {
 		return false
 	}
+	// `idx` tracks the current position in the related collection.
 	for idx := range blocks {
 		if blocks[idx].ID != headers[idx].Height {
 			return false
@@ -213,10 +267,15 @@ func syncBlocksMatchHeaders(blocks []Block, headers []SyncBlockHeader) bool {
 	return true
 }
 
+// syncReplicatedAssignmentPeerCount implements the sync replicated assignment peer count helper.
 func syncReplicatedAssignmentPeerCount(assignments []syncReplicatedRangeAssignment) int {
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]struct{}, len(assignments))
+	// `assignment` tracks the current values while iterating.
 	for _, assignment := range assignments {
+		// `pid` tracks the current values while iterating.
 		for _, pid := range assignment.Peers {
+			// `key` stores the key used to access the related value.
 			key := strings.TrimSpace(pid.String())
 			if key == "" {
 				continue
@@ -227,7 +286,9 @@ func syncReplicatedAssignmentPeerCount(assignments []syncReplicatedRangeAssignme
 	return len(seen)
 }
 
+// planReplicatedSyncRangeAssignments implements the plan replicated sync range assignments helper.
 func planReplicatedSyncRangeAssignments(start uint64, targetHeight uint64, window uint64, peers []peer.ID, replicationFactor int) []syncReplicatedRangeAssignment {
+	// `base` stores the value produced by this operation.
 	base := planSyncRangeAssignments(start, targetHeight, window, peers)
 	if len(base) == 0 {
 		return nil
@@ -241,19 +302,27 @@ func planReplicatedSyncRangeAssignments(start uint64, targetHeight uint64, windo
 	if replicationFactor <= 0 {
 		replicationFactor = 1
 	}
+	// `assignments` stores the value produced by this operation.
 	assignments := make([]syncReplicatedRangeAssignment, 0, len(base))
+	// `idx` and `assignment` track the current position in the related collection.
 	for idx, assignment := range base {
+		// `group` stores the value produced by this operation.
 		group := make([]peer.ID, 0, replicationFactor)
 		group = append(group, assignment.Peer)
+		// `seen` stores the value produced by this operation.
 		seen := map[string]struct{}{
 			strings.TrimSpace(assignment.Peer.String()): {},
 		}
+		// `offset` stores the value produced by this operation.
 		for offset := 1; offset < len(peers) && len(group) < replicationFactor; offset++ {
+			// `pid` stores the value produced by this operation.
 			pid := peers[(idx+offset)%len(peers)]
+			// `key` stores the key used to access the related value.
 			key := strings.TrimSpace(pid.String())
 			if key == "" {
 				continue
 			}
+			// `ok` stores whether the related condition is satisfied.
 			if _, ok := seen[key]; ok {
 				continue
 			}
@@ -269,14 +338,17 @@ func planReplicatedSyncRangeAssignments(start uint64, targetHeight uint64, windo
 	return assignments
 }
 
+// syncExpectedPrevHashForRange implements the sync expected prev hash for range helper.
 func (n *Node) syncExpectedPrevHashForRange(from uint64) string {
 	if n == nil || from <= 1 || n.Blockchain == nil {
 		return ""
 	}
+	// `localHeight` stores the value produced by this operation.
 	localHeight := n.Blockchain.Height()
 	if from != localHeight+1 {
 		return ""
 	}
+	// `block` and `ok` store whether the related condition is satisfied.
 	block, ok := n.LoadBlock(int(localHeight))
 	if !ok {
 		return ""
@@ -284,6 +356,7 @@ func (n *Node) syncExpectedPrevHashForRange(from uint64) string {
 	return strings.TrimSpace(block.BlockHash)
 }
 
+// buildCommonAncestorLocators builds common ancestor locators.
 func (n *Node) buildCommonAncestorLocators(localHeight uint64, maxDepth uint64) []HeaderSyncLocator {
 	if n == nil || localHeight == 0 {
 		return nil
@@ -291,11 +364,17 @@ func (n *Node) buildCommonAncestorLocators(localHeight uint64, maxDepth uint64) 
 	if maxDepth == 0 {
 		maxDepth = syncHeaderCommonAncestorDepth()
 	}
+	// `locators` stores the value produced by this operation.
 	locators := make([]HeaderSyncLocator, 0, 16)
+	// `seen` stores the value produced by this operation.
 	seen := make(map[uint64]struct{}, 16)
+	// `step` stores the value produced by this operation.
 	step := uint64(1)
+	// `height` stores the value produced by this operation.
 	for height := localHeight; height > 0; {
+		// `ok` stores whether the related condition is satisfied.
 		if _, ok := seen[height]; !ok {
+			// `block` and `ok` store whether the related condition is satisfied.
 			if block, ok := n.LoadBlock(int(height)); ok && strings.TrimSpace(block.BlockHash) != "" {
 				locators = append(locators, HeaderSyncLocator{
 					Height:    height,
@@ -327,7 +406,9 @@ func (n *Node) buildCommonAncestorLocators(localHeight uint64, maxDepth uint64) 
 	return locators
 }
 
+// findCommonAncestorWithPeer implements the find common ancestor with peer helper.
 func (n *Node) findCommonAncestorWithPeer(pid peer.ID, localHeight uint64) (uint64, string, error) {
+	// `locators` stores the value produced by this operation.
 	locators := n.buildCommonAncestorLocators(localHeight, syncHeaderCommonAncestorDepth())
 	if len(locators) == 0 {
 		return 0, "", fmt.Errorf("common ancestor locators unavailable")
@@ -335,10 +416,12 @@ func (n *Node) findCommonAncestorWithPeer(pid peer.ID, localHeight uint64) (uint
 	return n.requestCommonAncestorFromPeer(pid, locators)
 }
 
+// headerSyncFallbackEligible implements the header sync fallback eligible helper.
 func headerSyncFallbackEligible(err error) bool {
 	if err == nil {
 		return false
 	}
+	// `msg` stores the value produced by this operation.
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "protocol") ||
 		strings.Contains(msg, "empty header response") ||
@@ -349,20 +432,34 @@ func headerSyncFallbackEligible(err error) bool {
 		strings.Contains(msg, "deadline exceeded")
 }
 
+// fetchCanonicalHeadersForRange implements the fetch canonical headers for range helper.
 func (n *Node) fetchCanonicalHeadersForRange(assign syncReplicatedRangeAssignment) ([]SyncBlockHeader, []peer.ID, map[peer.ID]struct{}, bool, error) {
 	if n == nil || len(assign.Peers) == 0 {
 		return nil, nil, nil, false, fmt.Errorf("header_sync_peers_unavailable")
 	}
+	// `expectedPrevHash` stores the digest used to identify or verify the related data.
 	expectedPrevHash := n.syncExpectedPrevHashForRange(assign.From)
+	// `failedPeers` stores the value produced by this operation.
 	failedPeers := make(map[peer.ID]struct{})
+	// `matchingPeers` stores the value produced by this operation.
 	matchingPeers := make([]peer.ID, 0, len(assign.Peers))
+	// `fallbackPeers` stores the value produced by this operation.
 	fallbackPeers := make([]peer.ID, 0, len(assign.Peers))
+	// `fallbackSeen` stores the value produced by this operation.
 	fallbackSeen := make(map[string]struct{}, len(assign.Peers))
+	// `canonical` stores the value used by this operation.
 	var canonical []SyncBlockHeader
+	// `headerPrevMismatchNoCommonAncestor` tracks whether every peer view may
+	// be ahead of a local fork whose previous hash is no longer canonical.
+	headerPrevMismatchNoCommonAncestor := false
 
+	// `pid` tracks the current values while iterating.
 	for _, pid := range assign.Peers {
+		// `started` stores the value produced by this operation.
 		started := time.Now()
+		// `headers` and `err` store the error produced by this operation.
 		headers, err := n.requestHeadersFromPeer(pid, assign.From, assign.To)
+		// `result` stores the result produced by this operation.
 		result := syncHeaderFetchResult{
 			pid:     pid,
 			headers: headers,
@@ -372,8 +469,10 @@ func (n *Node) fetchCanonicalHeadersForRange(assign syncReplicatedRangeAssignmen
 		}
 		if result.err != nil {
 			if headerSyncFallbackEligible(result.err) {
+				// `key` stores the key used to access the related value.
 				key := strings.TrimSpace(result.pid.String())
 				if key != "" {
+					// `ok` stores whether the related condition is satisfied.
 					if _, ok := fallbackSeen[key]; !ok {
 						fallbackSeen[key] = struct{}{}
 						fallbackPeers = append(fallbackPeers, result.pid)
@@ -385,10 +484,12 @@ func (n *Node) fetchCanonicalHeadersForRange(assign syncReplicatedRangeAssignmen
 			failedPeers[result.pid] = struct{}{}
 			continue
 		}
+		// `err` stores the error produced by this operation.
 		if err := validateSyncHeaderBatch(assign.From, result.headers, expectedPrevHash); err != nil {
 			n.recordSyncPeerBlockResult(result.pid.String(), false, result.elapsed, 0, false)
 			failedPeers[result.pid] = struct{}{}
 			if strings.Contains(err.Error(), "header_first_prev_hash_mismatch") && n.Blockchain != nil {
+				// `commonHeight`, `commonHash`, and `commonErr` store the error produced by this operation.
 				commonHeight, commonHash, commonErr := n.findCommonAncestorWithPeer(result.pid, n.Blockchain.Height())
 				if commonErr == nil {
 					fmt.Printf("[SYNC-FORK] peer=%s local=%d requested=%d-%d common_height=%d common_hash=%s reason=header_prev_mismatch\n",
@@ -404,6 +505,8 @@ func (n *Node) fetchCanonicalHeadersForRange(assign syncReplicatedRangeAssignmen
 							return nil, nil, failedPeers, false, fmt.Errorf("local_rewind_to_common_ancestor")
 						}
 					}
+				} else {
+					headerPrevMismatchNoCommonAncestor = true
 				}
 			}
 			continue
@@ -427,18 +530,31 @@ func (n *Node) fetchCanonicalHeadersForRange(assign syncReplicatedRangeAssignmen
 	if len(fallbackPeers) > 0 {
 		return nil, fallbackPeers, failedPeers, true, nil
 	}
+	if headerPrevMismatchNoCommonAncestor && n.Blockchain != nil && assign.To > n.Blockchain.Height() {
+		localHeight := n.Blockchain.Height()
+		fmt.Printf("[SYNC-FORK] action=snapshot_resync local=%d requested=%d-%d reason=header_prev_mismatch_no_common_ancestor\n",
+			localHeight, assign.From, assign.To)
+		go n.forceSnapshotResyncNow(assign.To, "header_prev_mismatch_no_common_ancestor")
+		return nil, nil, failedPeers, false, fmt.Errorf("snapshot_resync_scheduled_header_prev_mismatch")
+	}
 	return nil, nil, failedPeers, false, fmt.Errorf("header_sync_no_valid_headers")
 }
 
+// fetchReplicatedBlocksForRange implements the fetch replicated blocks for range helper.
 func (n *Node) fetchReplicatedBlocksForRange(assign syncReplicatedRangeAssignment, headers []SyncBlockHeader, peers []peer.ID) ([]Block, map[peer.ID]struct{}, error) {
 	if n == nil || len(peers) == 0 {
 		return nil, nil, fmt.Errorf("block_sync_peers_unavailable")
 	}
+	// `resultsCh` stores the result produced by this operation.
 	resultsCh := make(chan syncBlockFetchResult, len(peers))
+	// `pid` tracks the current values while iterating.
 	for _, pid := range peers {
+		// `pid` stores the value produced by this operation.
 		pid := pid
 		go func() {
+			// `started` stores the value produced by this operation.
 			started := time.Now()
+			// `blocks` and `err` store the error produced by this operation.
 			blocks, _, _, err := n.requestBlocksFromPeer(pid, assign.From, assign.To, false, 0)
 			resultsCh <- syncBlockFetchResult{
 				pid:     pid,
@@ -450,9 +566,12 @@ func (n *Node) fetchReplicatedBlocksForRange(assign syncReplicatedRangeAssignmen
 		}()
 	}
 
+	// `failedPeers` stores the value produced by this operation.
 	failedPeers := make(map[peer.ID]struct{})
+	// `winner` stores the value used by this operation.
 	var winner []Block
 	for range peers {
+		// `result` stores the result produced by this operation.
 		result := <-resultsCh
 		if result.err != nil || len(result.blocks) == 0 {
 			n.recordSyncPeerBlockResult(result.pid.String(), false, result.elapsed, 0, result.timeout)
@@ -464,6 +583,7 @@ func (n *Node) fetchReplicatedBlocksForRange(assign syncReplicatedRangeAssignmen
 			failedPeers[result.pid] = struct{}{}
 			continue
 		}
+		// `err` stores the error produced by this operation.
 		if err := preflightDeltaReplayBatch(assign.From, result.blocks); err != nil {
 			n.recordSyncPeerBlockResult(result.pid.String(), false, result.elapsed, len(MustJSON(result.blocks)), false)
 			failedPeers[result.pid] = struct{}{}
@@ -492,19 +612,27 @@ func (n *Node) fetchReplicatedBlocksForRange(assign syncReplicatedRangeAssignmen
 	return winner, failedPeers, nil
 }
 
+// fetchSingleProviderBlocksForRange implements the fetch single provider blocks for range helper.
 func (n *Node) fetchSingleProviderBlocksForRange(assign syncReplicatedRangeAssignment, reason string) ([]Block, peer.ID, map[peer.ID]struct{}, error) {
+	// `failedPeers` stores the value produced by this operation.
 	failedPeers := make(map[peer.ID]struct{})
 	if n == nil || n.Blockchain == nil || len(assign.Peers) == 0 || assign.From == 0 || assign.To < assign.From {
 		return nil, "", failedPeers, fmt.Errorf("single_provider_range_unavailable")
 	}
+	// `localHeight` stores the value produced by this operation.
 	localHeight := n.Blockchain.Height()
 	if assign.From != localHeight+1 {
 		return nil, "", failedPeers, fmt.Errorf("single_provider_range_not_next local=%d from=%d", localHeight, assign.From)
 	}
+	// `localTip` stores the value produced by this operation.
 	localTip := n.Blockchain.LastBlock()
+	// `pid` tracks the current values while iterating.
 	for _, pid := range assign.Peers {
+		// `started` stores the value produced by this operation.
 		started := time.Now()
+		// `blocks` and `err` store the error produced by this operation.
 		blocks, _, _, err := n.requestBlocksFromPeerDirect(pid, assign.From, assign.To, false, 0)
+		// `elapsed` stores the value produced by this operation.
 		elapsed := time.Since(started)
 		if err != nil || len(blocks) == 0 {
 			n.recordSyncPeerBlockResult(pid.String(), false, elapsed, 0, isSyncTimeoutError(err))
@@ -521,6 +649,7 @@ func (n *Node) fetchSingleProviderBlocksForRange(assign syncReplicatedRangeAssig
 			failedPeers[pid] = struct{}{}
 			continue
 		}
+		// `err` stores the error produced by this operation.
 		if err := preflightDeltaReplayBatch(assign.From, blocks); err != nil {
 			n.recordSyncPeerBlockResult(pid.String(), false, elapsed, len(MustJSON(blocks)), false)
 			failedPeers[pid] = struct{}{}
@@ -534,13 +663,17 @@ func (n *Node) fetchSingleProviderBlocksForRange(assign syncReplicatedRangeAssig
 	return nil, "", failedPeers, fmt.Errorf("single_provider_range_unavailable")
 }
 
+// requestReplicatedBlockRange implements the request replicated block range helper.
 func (n *Node) requestReplicatedBlockRange(assign syncReplicatedRangeAssignment) ([]Block, map[peer.ID]struct{}, error) {
+	// `headers`, `peers`, `failedPeers`, `fallbackMode`, and `err` store the error produced by this operation.
 	headers, peers, failedPeers, fallbackMode, err := n.fetchCanonicalHeadersForRange(assign)
 	if err != nil {
+		// `blocks`, `singleFailedPeers`, and `singleErr` store the error produced by this operation.
 		blocks, _, singleFailedPeers, singleErr := n.fetchSingleProviderBlocksForRange(assign, "header_"+err.Error())
 		if failedPeers == nil {
 			failedPeers = make(map[peer.ID]struct{})
 		}
+		// `pid` tracks the current values while iterating.
 		for pid := range singleFailedPeers {
 			failedPeers[pid] = struct{}{}
 		}
@@ -553,17 +686,21 @@ func (n *Node) requestReplicatedBlockRange(assign syncReplicatedRangeAssignment)
 		headers = nil
 		peers = append([]peer.ID{}, assign.Peers...)
 	}
+	// `blocks`, `blockFailedPeers`, and `err` store the error produced by this operation.
 	blocks, blockFailedPeers, err := n.fetchReplicatedBlocksForRange(assign, headers, peers)
 	if len(blockFailedPeers) > 0 {
 		if failedPeers == nil {
 			failedPeers = make(map[peer.ID]struct{}, len(blockFailedPeers))
 		}
+		// `pid` tracks the current values while iterating.
 		for pid := range blockFailedPeers {
 			failedPeers[pid] = struct{}{}
 		}
 	}
 	if err != nil {
+		// `blocks`, `singleFailedPeers`, and `singleErr` store the error produced by this operation.
 		blocks, _, singleFailedPeers, singleErr := n.fetchSingleProviderBlocksForRange(assign, "replicated_"+err.Error())
+		// `pid` tracks the current values while iterating.
 		for pid := range singleFailedPeers {
 			failedPeers[pid] = struct{}{}
 		}
@@ -574,14 +711,19 @@ func (n *Node) requestReplicatedBlockRange(assign syncReplicatedRangeAssignment)
 	return blocks, failedPeers, err
 }
 
+// requestParallelReplicatedBlockRanges implements the request parallel replicated block ranges helper.
 func (n *Node) requestParallelReplicatedBlockRanges(assignments []syncReplicatedRangeAssignment) ([]Block, map[peer.ID]struct{}, error) {
 	if n == nil || len(assignments) == 0 {
 		return nil, nil, fmt.Errorf("replicated_parallel_sync_assignments_empty")
 	}
+	// `resultsCh` stores the result produced by this operation.
 	resultsCh := make(chan syncReplicatedRangeResult, len(assignments))
+	// `assignment` tracks the current values while iterating.
 	for _, assignment := range assignments {
+		// `assignment` stores the value produced by this operation.
 		assignment := assignment
 		go func() {
+			// `blocks`, `failedPeers`, and `err` store the error produced by this operation.
 			blocks, failedPeers, err := n.requestReplicatedBlockRange(assignment)
 			resultsCh <- syncReplicatedRangeResult{
 				assignment:  assignment,
@@ -592,10 +734,14 @@ func (n *Node) requestParallelReplicatedBlockRanges(assignments []syncReplicated
 		}()
 	}
 
+	// `results` stores the result produced by this operation.
 	results := make([]syncReplicatedRangeResult, 0, len(assignments))
+	// `failedPeers` stores the value produced by this operation.
 	failedPeers := make(map[peer.ID]struct{})
 	for range assignments {
+		// `result` stores the result produced by this operation.
 		result := <-resultsCh
+		// `pid` tracks the current values while iterating.
 		for pid := range result.failedPeers {
 			failedPeers[pid] = struct{}{}
 		}
@@ -608,13 +754,16 @@ func (n *Node) requestParallelReplicatedBlockRanges(assignments []syncReplicated
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].assignment.From < results[j].assignment.From
 	})
+	// `merged` stores the value produced by this operation.
 	merged := make([]Block, 0)
+	// `result` tracks the result produced by this operation.
 	for _, result := range results {
 		merged = append(merged, result.blocks...)
 	}
 	if len(merged) == 0 {
 		return nil, failedPeers, fmt.Errorf("replicated_parallel_sync_fetch_empty")
 	}
+	// `err` stores the error produced by this operation.
 	if err := preflightDeltaReplayBatch(assignments[0].From, merged); err != nil {
 		return nil, failedPeers, err
 	}

@@ -1,0 +1,42 @@
+{
+    "version_tag":  "v20260715-native-dtl-r4.2",
+    "git_commit":  "55a7c4e91608420983c2560cf1d5ae90589a399a",
+    "git_short":  "55a7c4e91608",
+    "generated_utc":  "2026-07-14T19:35:45.5165491Z",
+    "manifest_path":  "v20260715-native-dtl-r4.2/release-manifest.json",
+    "checksums_path":  "v20260715-native-dtl-r4.2/checksums.txt",
+    "genesis_path":  "v20260715-native-dtl-r4.2/genesis.json",
+    "genesis_sha256":  "f6230e42861022d676ca43c57d0f3b6c0984c3cd17bfcd932059c353ab46821c",
+    "config_path":  "v20260715-native-dtl-r4.2/config.toml",
+    "config_sha256":  "507d82e384b0d3b496c9df9f2eba04d096a90a0c09d9393160fe8eafd7139439",
+    "source_inputs_manifest_path":  "v20260715-native-dtl-r4.2/source-inputs.json",
+    "source_inputs_manifest_sha256":  "f07e4bcfaf1cff8cd516bc7ba5165a6547e3928f09b40c80a2c288566fa1b84d",
+    "source_inputs_bundle_path":  "v20260715-native-dtl-r4.2/source-inputs.zip",
+    "source_inputs_bundle_sha256":  "7ffca4d51cb505b898278b40aa3393f792d129683f48bbc2493ec2af5f59a765",
+    "installer_path":  "v20260715-native-dtl-r4.2/scripts/install_msc_node.sh",
+    "installer_sha256":  "6d3f2580a49599003ea0386e94d8c389754b1904a483ae09ef4f73c213a596d7",
+    "snapshot_bootstrap_path":  "v20260715-native-dtl-r4.2/scripts/bootstrap_msc_snapshot.sh",
+    "snapshot_bootstrap_sha256":  "514152492abe6af8b84320b84fec4397364d96cbf3309ef6ebeae0dbf08c3dff",
+    "snapshot_url":  "https://mscblockexplorer.in/snapshots",
+    "snapshot_required":  true,
+    "snapshot_require_signature":  true,
+    "snapshot_public_key_path":  "v20260715-native-dtl-r4.2/snapshot_pubkey.pem",
+    "snapshot_public_key_sha256":  "9fc8fce3f2e5e8a290ad1eea96dbb95fcc91e6d584f6313faf7ca60654d10488",
+    "bootnodes":  "/ip4/54.80.4.133/tcp/7001/p2p/12D3KooWC3z8AMHZSEoP9WA7J1c5MDqNbfQuXCJv8kusMGGZeKt4,/ip4/3.109.153.171/tcp/7001/p2p/12D3KooWBz6EfQ2d39GoeQSmxxXC8bbZKZRX9kuE46A71xqndd93,/ip4/47.129.174.99/tcp/7001/p2p/12D3KooWRR1uHrvBh29BhhrfGRZzjLGHMJgU9nCY661GLQUuiCWw,/ip4/18.61.229.92/tcp/7001/p2p/12D3KooWSgQjVMthN8VYBkTvYZAdPPDbaJEXX3nCuiWYU5DCPPpS",
+    "artifacts":  [
+                      {
+                          "os":  "linux",
+                          "arch":  "amd64",
+                          "file":  "msc-v20260715-native-dtl-r4.2-linux-amd64",
+                          "sha256":  "6b55c1ab3ff7a19e52ece85a19a1ea9fbedfa9b2da30fe8cd9b71af0acfda015",
+                          "url_path":  "v20260715-native-dtl-r4.2/msc-v20260715-native-dtl-r4.2-linux-amd64"
+                      },
+                      {
+                          "os":  "linux",
+                          "arch":  "arm64",
+                          "file":  "msc-v20260715-native-dtl-r4.2-linux-arm64",
+                          "sha256":  "bb674285c1ef9b1a1b4dabc1d83510b4547a769f9a1bdb9b1690b8160464d675",
+                          "url_path":  "v20260715-native-dtl-r4.2/msc-v20260715-native-dtl-r4.2-linux-arm64"
+                      }
+                  ]
+}

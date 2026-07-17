@@ -1,0 +1,18 @@
+[Unit]
+Description=MSC Production V2 Explorer Indexer
+After=network-online.target msc-production-v2-index-source.service
+Wants=network-online.target
+Requires=msc-production-v2-index-source.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/.msc/production-v2/release
+ExecStart=/home/ubuntu/.msc/production-v2/release/msc-node indexer run --source=http://127.0.0.1:26657 --listen=127.0.0.1:26780 --datadir=/home/ubuntu/.msc/production-v2/indexer
+Restart=always
+RestartSec=4
+TimeoutStopSec=30
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

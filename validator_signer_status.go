@@ -6,21 +6,34 @@ import (
 )
 
 type ValidatorSignerStatus struct {
+	// `Mode` stores the value associated with this record.
 	Mode                     string `json:"mode"`
+	// `Ready` stores the value associated with this record.
 	Ready                    bool   `json:"ready"`
+	// `Reason` stores the value associated with this record.
 	Reason                   string `json:"reason,omitempty"`
+	// `Provider` stores the value associated with this record.
 	Provider                 string `json:"provider,omitempty"`
+	// `KeyID` stores the key used to access the related value.
 	KeyID                    string `json:"key_id,omitempty"`
+	// `PublicKeyHex` stores the value associated with this record.
 	PublicKeyHex             string `json:"public_key_hex,omitempty"`
+	// `Fingerprint` stores the value associated with this record.
 	Fingerprint              string `json:"fingerprint,omitempty"`
+	// `ExternalSignerConfigured` stores the value associated with this record.
 	ExternalSignerConfigured bool   `json:"external_signer_configured"`
+	// `Threshold` stores the value associated with this record.
 	Threshold                int    `json:"threshold,omitempty"`
+	// `Participants` stores the value associated with this record.
 	Participants             int    `json:"participants,omitempty"`
+	// `TimeoutMS` stores the value associated with this record.
 	TimeoutMS                int    `json:"timeout_ms,omitempty"`
 }
 
+// validatorSignerStatus implements the validator signer status helper.
 func validatorSignerStatus(nodeID string, key ValidatorKey) ValidatorSignerStatus {
 	if ValidatorMPCEnabled {
+		// `st` stores the value produced by this operation.
 		st := validatorMPCStatus(nodeID, key)
 		return ValidatorSignerStatus{
 			Mode:                     "mpc",
@@ -37,6 +50,7 @@ func validatorSignerStatus(nodeID string, key ValidatorKey) ValidatorSignerStatu
 		}
 	}
 	if ValidatorHSMEnabled {
+		// `st` stores the value produced by this operation.
 		st := validatorHSMStatus(nodeID, key)
 		return ValidatorSignerStatus{
 			Mode:                     "hsm",
@@ -50,6 +64,7 @@ func validatorSignerStatus(nodeID string, key ValidatorKey) ValidatorSignerStatu
 			TimeoutMS:                st.TimeoutMS,
 		}
 	}
+	// `status` stores the value produced by this operation.
 	status := ValidatorSignerStatus{
 		Mode:     "none",
 		Ready:    false,
@@ -70,6 +85,7 @@ func validatorSignerStatus(nodeID string, key ValidatorKey) ValidatorSignerStatu
 	return status
 }
 
+// signerStatusReason implements the signer status reason helper.
 func signerStatusReason(ready bool, reason string) string {
 	if reason != "" {
 		return reason
@@ -80,6 +96,7 @@ func signerStatusReason(ready bool, reason string) string {
 	return "not_ready"
 }
 
+// validatorSignerModeCode implements the validator signer mode code helper.
 func validatorSignerModeCode(mode string) float64 {
 	switch mode {
 	case "software":

@@ -1,0 +1,59 @@
+{
+    "version_tag":  "v20260715-native-dtl-r4.2",
+    "git_commit":  "55a7c4e91608420983c2560cf1d5ae90589a399a",
+    "git_short":  "55a7c4e91608",
+    "git_dirty":  true,
+    "genesis_sha256":  "f6230e42861022d676ca43c57d0f3b6c0984c3cd17bfcd932059c353ab46821c",
+    "config_genesis_hash":  "f6230e42861022d676ca43c57d0f3b6c0984c3cd17bfcd932059c353ab46821c",
+    "compiled_genesis_hash":  "f6230e42861022d676ca43c57d0f3b6c0984c3cd17bfcd932059c353ab46821c",
+    "generated_utc":  "2026-07-14T19:35:45.5165491Z",
+    "go_version":  "go version go1.26.1 windows/amd64",
+    "reproducible_build_flags":  "-trimpath -buildvcs=false -ldflags=\"-s -w -X main.BuildVersionTag=v20260715-native-dtl-r4.2 -X main.BuildGitCommit=55a7c4e91608420983c2560cf1d5ae90589a399a\" CGO_ENABLED=0",
+    "test_gate":  "passed",
+    "test_command":  "CGO_ENABLED=0 go test ./... -vet=off -count=1",
+    "test_host":  "windows/amd64",
+    "test_duration_seconds":  129.32,
+    "removed_vm_dependency_gate":  "passed",
+    "source_inputs_manifest":  "source-inputs.json",
+    "source_inputs_manifest_sha256":  "f07e4bcfaf1cff8cd516bc7ba5165a6547e3928f09b40c80a2c288566fa1b84d",
+    "source_inputs_bundle":  "source-inputs.zip",
+    "source_inputs_bundle_sha256":  "7ffca4d51cb505b898278b40aa3393f792d129683f48bbc2493ec2af5f59a765",
+    "artifacts":  [
+                      {
+                          "os":  "windows",
+                          "arch":  "amd64",
+                          "file":  "msc-chain-v20260715-native-dtl-r4.2-windows-amd64.exe",
+                          "sha256":  "7545a14896cf2a32be9e22471320966be266fbb7c53518e585ba14b7100bfe68"
+                      },
+                      {
+                          "os":  "windows",
+                          "arch":  "amd64",
+                          "file":  "msc-v20260715-native-dtl-r4.2-windows-amd64.exe",
+                          "sha256":  "7545a14896cf2a32be9e22471320966be266fbb7c53518e585ba14b7100bfe68"
+                      },
+                      {
+                          "os":  "linux",
+                          "arch":  "amd64",
+                          "file":  "msc-chain-v20260715-native-dtl-r4.2-linux-amd64",
+                          "sha256":  "6b55c1ab3ff7a19e52ece85a19a1ea9fbedfa9b2da30fe8cd9b71af0acfda015"
+                      },
+                      {
+                          "os":  "linux",
+                          "arch":  "amd64",
+                          "file":  "msc-v20260715-native-dtl-r4.2-linux-amd64",
+                          "sha256":  "6b55c1ab3ff7a19e52ece85a19a1ea9fbedfa9b2da30fe8cd9b71af0acfda015"
+                      },
+                      {
+                          "os":  "linux",
+                          "arch":  "arm64",
+                          "file":  "msc-chain-v20260715-native-dtl-r4.2-linux-arm64",
+                          "sha256":  "bb674285c1ef9b1a1b4dabc1d83510b4547a769f9a1bdb9b1690b8160464d675"
+                      },
+                      {
+                          "os":  "linux",
+                          "arch":  "arm64",
+                          "file":  "msc-v20260715-native-dtl-r4.2-linux-arm64",
+                          "sha256":  "bb674285c1ef9b1a1b4dabc1d83510b4547a769f9a1bdb9b1690b8160464d675"
+                      }
+                  ]
+}

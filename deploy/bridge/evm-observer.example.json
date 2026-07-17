@@ -1,0 +1,18 @@
+{
+  "source_chain_id": "56",
+  "rpc_urls": [
+    "https://independent-provider-a.example/bnb",
+    "https://independent-provider-b.example/bnb",
+    "https://independent-provider-c.example/bnb"
+  ],
+  "rpc_quorum": 2,
+  "confirmations": 64,
+  "bridge_contract": "0x0000000000000000000000000000000000000000",
+  "asset_denom": "USDT-BSC",
+  "origin_asset": "0x0000000000000000000000000000000000000000",
+  "asset_decimals": 18,
+  "lock_event_signature": "Locked(address,address,bytes,uint256)",
+  "unlock_event_signature": "Unlocked(bytes32,address,address,uint256)",
+  "request_timeout": "12s",
+  "allow_insecure_http": false
+}

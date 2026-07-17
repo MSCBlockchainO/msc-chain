@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mscblockexplorer.in/sitemap-docs.xml

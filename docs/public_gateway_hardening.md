@@ -7,24 +7,26 @@ RPC ports.
 
 - Validator RPC: private IP or localhost only.
 - Public RPC: full node only, behind nginx.
-- Explorer/wallet: public only through the full node gateway.
+- Explorer and wallet: public only through the full node gateway, on separate subdomains.
 - HTTPS/domain: mandatory for production.
 - Rate limits: mandatory at nginx and node RPC layers.
 - Metrics: scrape privately; do not expose `/metrics` through the public gateway.
 
 ## Domain
 
-Production domain:
+Production domains:
 
 ```text
-mscblockexplorer.in
+explorer.mscblockexplorer.in
+wallet.mscblockexplorer.in
 ```
 
-The domain A record must point to the public full node gateway IP before HTTPS
-can be issued:
+Both A records must point to the public full node gateway IP before HTTPS can
+be issued:
 
 ```text
-mscblockexplorer.in -> 50.19.167.221
+explorer.mscblockexplorer.in -> 50.19.167.221
+wallet.mscblockexplorer.in -> 50.19.167.221
 ```
 
 ## Deploy
@@ -36,7 +38,8 @@ $env:MSC_IDE_PASSWORD = "<strong-password>"
 .\scripts\ec2_public_ui_gateway.ps1 `
   -GatewayHost "50.19.167.221" `
   -GatewayUser "ubuntu" `
-  -Domain "mscblockexplorer.in" `
+  -ExplorerDomain "explorer.mscblockexplorer.in" `
+  -WalletDomain "wallet.mscblockexplorer.in" `
   -RpcTarget "127.0.0.1:26665"
 ```
 
@@ -47,7 +50,8 @@ dry run only:
 .\scripts\ec2_public_ui_gateway.ps1 `
   -GatewayHost "50.19.167.221" `
   -GatewayUser "ubuntu" `
-  -Domain "mscblockexplorer.in" `
+  -ExplorerDomain "explorer.mscblockexplorer.in" `
+  -WalletDomain "wallet.mscblockexplorer.in" `
   -RpcTarget "127.0.0.1:26665" `
   -AllowHttpOnlyUntilDNS
 ```

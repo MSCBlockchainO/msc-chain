@@ -3,34 +3,75 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MSC Wallet Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="wallet_pages.css?v=20260602h" />
+  <title>MSC Wallet Start - Official Wallet Access</title>
+  <meta name="description" content="Start with the official MSC Chain wallet to create or unlock an account and access self-custody tools." />
+  <meta name="robots" content="noindex,follow" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Wallet Start - Official Wallet Access" />
+  <meta property="og:description" content="Start with the official MSC Chain wallet to create or unlock an account and access self-custody tools." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Wallet Start - Official Wallet Access" />
+  <meta name="twitter:description" content="Start with the official MSC Chain wallet to create or unlock an account and access self-custody tools." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
 </head>
 <body data-page="dashboard">
   <main class="content">
-    <section class="page-hero">
-      <div class="eyebrow">MSC Wallet</div>
-      <h1>Dashboard</h1>
-      <p class="muted">Balance, latest activity, network health, CMD status, and validator health.</p>
+    <section class="wallet-home-hero">
+      <div class="wallet-home-copy">
+        <div class="eyebrow">MSC Wallet</div>
+        <h1>Your MSC, simple and safe</h1>
+        <p class="muted">Create a wallet, check your balance, send or receive MSC, and review activity without confusing setup screens.</p>
+        <div id="walletHomeActions" class="action-row">
+          <a class="button primary" href="create-wallet.html"><i data-lucide="plus-circle"></i>Create Wallet</a>
+          <a class="button" href="login.html"><i data-lucide="unlock-keyhole"></i>Unlock Wallet</a>
+        </div>
+      </div>
+      <div class="balance-card">
+        <div class="balance-card-top">
+          <span id="walletHomeState" class="pill warn">No wallet yet</span>
+          <span id="dashboardVerification" class="pill">Checking</span>
+        </div>
+        <div class="label">Available balance</div>
+        <div id="totalBalance" class="balance-value">- MSC</div>
+        <div id="walletHomeAddress" class="wallet-address-preview">Create or unlock a wallet to show your address.</div>
+        <div class="balance-actions">
+          <a class="button primary" href="send.html"><i data-lucide="send"></i>Send</a>
+          <a class="button" href="receive.html"><i data-lucide="qr-code"></i>Receive</a>
+        </div>
+      </div>
     </section>
-    <section class="grid">
-      <div class="card"><div class="label">Total Balance</div><div id="totalBalance" class="value">- MSC</div></div>
-      <div class="card"><div class="label">USD Value</div><div id="usdValue" class="value">$-</div></div>
-      <div class="card"><div class="label">Network Status</div><div id="networkStatus" class="value">-</div></div>
-      <div class="card"><div class="label">CMD Status</div><div id="cmdStatus" class="value">-</div></div>
-      <div class="card"><div class="label">Validator Status</div><div id="validatorStatus" class="value">-</div></div>
-      <div class="card"><div class="label">Latest Blocks</div><div id="latestBlocks" class="mono">-</div></div>
+
+    <section id="walletHomeGuide" class="getting-started">
+      <article><span>1</span><strong>Create or unlock</strong><p>Your wallet is encrypted and saved only in this browser.</p></article>
+      <article><span>2</span><strong>Receive MSC</strong><p>Share your address or QR code with the sender.</p></article>
+      <article><span>3</span><strong>Send safely</strong><p>Review address, amount, fee, and password before sending.</p></article>
     </section>
-    <section class="card">
-      <div class="label">Latest Transactions</div>
-      <div id="latestTx" class="list"><div class="list-item">Load wallet to show transactions.</div></div>
+
+    <section class="quick-action-grid">
+      <a class="quick-action-card" href="receive.html"><i data-lucide="qr-code"></i><strong>Receive</strong><span>Show address and QR code</span></a>
+      <a class="quick-action-card" href="send.html"><i data-lucide="send"></i><strong>Send</strong><span>Transfer MSC to another address</span></a>
+      <a class="quick-action-card" href="transactions.html"><i data-lucide="list"></i><strong>History</strong><span>Review wallet activity</span></a>
+      <a class="quick-action-card" href="staking.html"><i data-lucide="landmark"></i><strong>Stake</strong><span>Delegate only when you are ready</span></a>
     </section>
+
+    <section class="wallet-home-grid">
+      <section class="card"><div class="section-title"><div><div class="label">Activity</div><h2>Recent transactions</h2></div><a href="transactions.html">View all</a></div><div id="latestTx" class="list"><div class="list-item">Unlock wallet to show transactions.</div></div></section>
+      <section class="card"><div class="section-title"><div><div class="label">Network</div><h2>Wallet connection</h2></div><a href="status.html">Advanced</a></div><div class="simple-status-grid"><div><span>Network</span><strong id="networkStatus">Connecting</strong></div><div><span>Latest block</span><strong id="blockHeight">-</strong></div><div><span>Finalized</span><strong id="finalizedHeight">-</strong></div><div><span>Status</span><strong id="cmdStatus">-</strong></div></div></section>
+    </section>
+    <div class="hide"><span id="usdValue">$-</span><span id="validatorStatus">-</span><span id="latestBlocks">-</span></div>
   </main>
   <script src="vendor/nacl.min.js"></script>
   <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
-  <script src="wallet_pages.js?v=20260603a"></script>
+  <script src="wallet_pages.js?v=20260714-vmremoved"></script>
 </body>
 </html>

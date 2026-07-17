@@ -1,0 +1,16 @@
+[Unit]
+Description=MSC validator epoch activation verifier
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /opt/msc-epoch-watch/watch_validator_epoch_activation.py --endpoint http://127.0.0.1:26657 --report /var/lib/msc-epoch-watch/validator-epoch-activation.latest.json --chain-id 91938 --activation-height 100001 --epoch-length 10000 --max-active 25 --block-window 64 --minimum-unique-proposers 3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/msc-epoch-watch

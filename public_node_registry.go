@@ -15,103 +15,186 @@ import (
 )
 
 const (
-	defaultPublicNodeRPC = "https://mscblockexplorer.in"
-	publicNodeProbeTTL   = 5 * time.Second
+	// `defaultPublicNodeRPC` defines the constant value used by this package.
+	defaultPublicNodeRPC = "https://wallet.mscblockexplorer.in"
+	// `publicNodeProbeTTL` defines the constant value used by this package.
+	publicNodeProbeTTL = 5 * time.Second
 )
 
+func defaultPublicNodeRPCURL() string {
+	if value := strings.TrimSpace(os.Getenv("MSC_PUBLIC_NODE_DEFAULT_RPC")); value != "" {
+		return value
+	}
+	return defaultPublicNodeRPC
+}
+
 type PublicNodeConfig struct {
-	ID            string `toml:"id" json:"id"`
-	RPCURL        string `toml:"rpc_url" json:"rpc_url"`
-	Role          string `toml:"role" json:"role"`
-	PublicGateway bool   `toml:"public_gateway" json:"public_gateway"`
-	Version       string `toml:"version" json:"version,omitempty"`
-	Country       string `toml:"country" json:"country,omitempty"`
-	ASN           string `toml:"asn" json:"asn,omitempty"`
-	Cloud         string `toml:"cloud" json:"cloud,omitempty"`
-	Region        string `toml:"region" json:"region,omitempty"`
+	// `ID` stores the current position in the related collection.
+	ID string `toml:"id" json:"id"`
+	// `RPCURL` stores the value associated with this record.
+	RPCURL string `toml:"rpc_url" json:"rpc_url"`
+	// `Role` stores the value associated with this record.
+	Role string `toml:"role" json:"role"`
+	// `PublicGateway` stores the value associated with this record.
+	PublicGateway bool `toml:"public_gateway" json:"public_gateway"`
+	// `Version` stores the value associated with this record.
+	Version string `toml:"version" json:"version,omitempty"`
+	// `Country` stores the measured quantity used by this operation.
+	Country string `toml:"country" json:"country,omitempty"`
+	// `ASN` stores the value associated with this record.
+	ASN string `toml:"asn" json:"asn,omitempty"`
+	// `Cloud` stores the value associated with this record.
+	Cloud string `toml:"cloud" json:"cloud,omitempty"`
+	// `Region` stores the value associated with this record.
+	Region string `toml:"region" json:"region,omitempty"`
 }
 
 type PublicNodesConfig struct {
-	Nodes     []PublicNodeConfig `toml:"nodes"`
-	Endpoints StringList         `toml:"endpoints"`
+	// `Nodes` stores the value associated with this record.
+	Nodes []PublicNodeConfig `toml:"nodes"`
+	// `Endpoints` stores the value associated with this record.
+	Endpoints StringList `toml:"endpoints"`
 }
 
 type publicNodeHealthView struct {
-	ID                  string `json:"id"`
-	RPCURL              string `json:"rpc_url"`
-	GatewayRPCURL       string `json:"gateway_rpc_url,omitempty"`
-	Role                string `json:"role"`
-	PublicGateway       bool   `json:"public_gateway"`
-	ActiveGateway       bool   `json:"active_gateway,omitempty"`
-	SelectedReason      string `json:"selected_reason,omitempty"`
-	ExcludedReason      string `json:"excluded_reason,omitempty"`
-	ChainID             string `json:"chain_id,omitempty"`
-	GenesisHash         string `json:"genesis_hash,omitempty"`
-	Version             string `json:"version,omitempty"`
-	Country             string `json:"country,omitempty"`
-	ASN                 string `json:"asn,omitempty"`
-	Cloud               string `json:"cloud,omitempty"`
-	Region              string `json:"region,omitempty"`
-	Height              uint64 `json:"height"`
-	FinalizedHeight     uint64 `json:"finalized_height"`
-	HeightLagBlocks     uint64 `json:"height_lag_blocks,omitempty"`
-	FinalityLag         uint64 `json:"finality_lag"`
+	// `ID` stores the current position in the related collection.
+	ID string `json:"id"`
+	// `RPCURL` stores the value associated with this record.
+	RPCURL string `json:"rpc_url"`
+	// `GatewayRPCURL` stores the value associated with this record.
+	GatewayRPCURL string `json:"gateway_rpc_url,omitempty"`
+	// `Role` stores the value associated with this record.
+	Role string `json:"role"`
+	// `PublicGateway` stores the value associated with this record.
+	PublicGateway bool `json:"public_gateway"`
+	// `ActiveGateway` stores the value associated with this record.
+	ActiveGateway bool `json:"active_gateway,omitempty"`
+	// `SelectedReason` stores the value associated with this record.
+	SelectedReason string `json:"selected_reason,omitempty"`
+	// `ExcludedReason` stores the value associated with this record.
+	ExcludedReason string `json:"excluded_reason,omitempty"`
+	// `ChainID` stores the value associated with this record.
+	ChainID string `json:"chain_id,omitempty"`
+	// `GenesisHash` stores the digest used to identify or verify the related data.
+	GenesisHash string `json:"genesis_hash,omitempty"`
+	// `Version` stores the value associated with this record.
+	Version string `json:"version,omitempty"`
+	// `Country` stores the measured quantity used by this operation.
+	Country string `json:"country,omitempty"`
+	// `ASN` stores the value associated with this record.
+	ASN string `json:"asn,omitempty"`
+	// `Cloud` stores the value associated with this record.
+	Cloud string `json:"cloud,omitempty"`
+	// `Region` stores the value associated with this record.
+	Region string `json:"region,omitempty"`
+	// `Height` stores the value associated with this record.
+	Height uint64 `json:"height"`
+	// `FinalizedHeight` stores the value associated with this record.
+	FinalizedHeight uint64 `json:"finalized_height"`
+	// `HeightLagBlocks` stores the value associated with this record.
+	HeightLagBlocks uint64 `json:"height_lag_blocks,omitempty"`
+	// `FinalityLag` stores the value associated with this record.
+	FinalityLag uint64 `json:"finality_lag"`
+	// `LastBlockAgeSeconds` stores the value associated with this record.
 	LastBlockAgeSeconds uint64 `json:"last_block_age_seconds"`
-	PeerCount           int    `json:"peer_count"`
-	ConsensusMode       string `json:"consensus_mode,omitempty"`
-	NetworkHealth       string `json:"network_health,omitempty"`
-	Syncing             bool   `json:"syncing,omitempty"`
-	SyncComplete        bool   `json:"sync_complete,omitempty"`
-	LatencyMS           int64  `json:"latency_ms"`
-	Healthy             bool   `json:"healthy"`
-	HealthState         string `json:"health_state,omitempty"`
-	HealthReason        string `json:"health_reason,omitempty"`
-	BadSamples          int    `json:"bad_samples,omitempty"`
-	GoodSamples         int    `json:"good_samples,omitempty"`
-	LastHealthyAt       int64  `json:"last_healthy_at,omitempty"`
-	Score               int    `json:"score"`
-	SuspiciousReason    string `json:"suspicious_reason,omitempty"`
-	LastChecked         int64  `json:"last_checked"`
-	StatusCode          int    `json:"status_code,omitempty"`
-	Error               string `json:"error,omitempty"`
+	// `PeerCount` stores the measured quantity used by this operation.
+	PeerCount int `json:"peer_count"`
+	// `ConsensusMode` stores the value associated with this record.
+	ConsensusMode string `json:"consensus_mode,omitempty"`
+	// `NetworkHealth` stores the value associated with this record.
+	NetworkHealth string `json:"network_health,omitempty"`
+	// `Syncing` stores the value associated with this record.
+	Syncing bool `json:"syncing,omitempty"`
+	// `SyncComplete` stores the value associated with this record.
+	SyncComplete bool `json:"sync_complete,omitempty"`
+	// `LatencyMS` stores the value associated with this record.
+	LatencyMS int64 `json:"latency_ms"`
+	// `Healthy` stores the value associated with this record.
+	Healthy bool `json:"healthy"`
+	// `HealthState` stores the value associated with this record.
+	HealthState string `json:"health_state,omitempty"`
+	// `HealthReason` stores the value associated with this record.
+	HealthReason string `json:"health_reason,omitempty"`
+	// `BadSamples` stores the value associated with this record.
+	BadSamples int `json:"bad_samples,omitempty"`
+	// `GoodSamples` stores the value associated with this record.
+	GoodSamples int `json:"good_samples,omitempty"`
+	// `LastHealthyAt` stores the value associated with this record.
+	LastHealthyAt int64 `json:"last_healthy_at,omitempty"`
+	// `Score` stores the value associated with this record.
+	Score int `json:"score"`
+	// `SuspiciousReason` stores the value associated with this record.
+	SuspiciousReason string `json:"suspicious_reason,omitempty"`
+	// `LastChecked` stores the value associated with this record.
+	LastChecked int64 `json:"last_checked"`
+	// `StatusCode` stores the value associated with this record.
+	StatusCode int `json:"status_code,omitempty"`
+	// `Error` stores the error produced by this operation.
+	Error string `json:"error,omitempty"`
 }
 
 type publicNodesPayload struct {
-	Status      string                 `json:"status"`
-	ChainID     string                 `json:"chain_id"`
-	GenesisHash string                 `json:"genesis_hash,omitempty"`
-	Healthy     int                    `json:"healthy"`
-	Stable      int                    `json:"stable_healthy,omitempty"`
-	Warning     int                    `json:"warning,omitempty"`
-	Unhealthy   int                    `json:"unhealthy,omitempty"`
-	Active      int                    `json:"active,omitempty"`
-	Total       int                    `json:"total"`
-	Best        string                 `json:"best,omitempty"`
-	BestNode    *publicNodeHealthView  `json:"best_node,omitempty"`
-	Nodes       []publicNodeHealthView `json:"nodes"`
-	TS          int64                  `json:"ts"`
+	// `Status` stores the value associated with this record.
+	Status string `json:"status"`
+	// `ChainID` stores the value associated with this record.
+	ChainID string `json:"chain_id"`
+	// `GenesisHash` stores the digest used to identify or verify the related data.
+	GenesisHash string `json:"genesis_hash,omitempty"`
+	// `Healthy` stores the value associated with this record.
+	Healthy int `json:"healthy"`
+	// `Stable` stores the value associated with this record.
+	Stable int `json:"stable_healthy,omitempty"`
+	// `Warning` stores the value associated with this record.
+	Warning int `json:"warning,omitempty"`
+	// `Unhealthy` stores the value associated with this record.
+	Unhealthy int `json:"unhealthy,omitempty"`
+	// `Active` stores the value associated with this record.
+	Active int `json:"active,omitempty"`
+	// `Total` stores the measured quantity used by this operation.
+	Total int `json:"total"`
+	// `Best` stores the value associated with this record.
+	Best string `json:"best,omitempty"`
+	// `BestNode` stores the value associated with this record.
+	BestNode *publicNodeHealthView `json:"best_node,omitempty"`
+	// `Nodes` stores the value associated with this record.
+	Nodes []publicNodeHealthView `json:"nodes"`
+	// `TS` stores the value associated with this record.
+	TS int64 `json:"ts"`
 }
 
 var (
+	// `ConfigPublicNodes` stores the configuration used by this operation.
 	ConfigPublicNodes []PublicNodeConfig
 
-	publicNodeRegistryMu        sync.Mutex
+	// `publicNodeRegistryMu` stores the synchronization state protecting shared data.
+	publicNodeRegistryMu sync.Mutex
+	// `publicNodeRegistryCachedKey` stores the key used to access the related value.
 	publicNodeRegistryCachedKey string
+	// `publicNodeRegistryCheckedAt` stores the value used by this operation.
 	publicNodeRegistryCheckedAt time.Time
-	publicNodeRegistryCached    publicNodesPayload
-	publicNodeHealthMemory      = map[string]publicNodeHealthSample{}
+	// `publicNodeRegistryCached` stores the value used by this operation.
+	publicNodeRegistryCached publicNodesPayload
+	// `publicNodeHealthMemory` stores the value used by this operation.
+	publicNodeHealthMemory = map[string]publicNodeHealthSample{}
 )
 
 type publicNodeHealthSample struct {
-	GoodSamples   int
-	BadSamples    int
+	// `GoodSamples` stores the value associated with this record.
+	GoodSamples int
+	// `BadSamples` stores the value associated with this record.
+	BadSamples int
+	// `LastHealthyAt` stores the value associated with this record.
 	LastHealthyAt int64
-	LastState     string
+	// `LastState` stores the value associated with this record.
+	LastState string
 }
 
+// applyPublicNodesConfig applies public nodes config.
 func applyPublicNodesConfig(cfg PublicNodesConfig) bool {
+	// `nodes` stores the value produced by this operation.
 	nodes := make([]PublicNodeConfig, 0, len(cfg.Nodes)+len(cfg.Endpoints))
 	nodes = append(nodes, cfg.Nodes...)
+	// `i` and `endpoint` track the current position in the related collection.
 	for i, endpoint := range cfg.Endpoints {
 		endpoint = strings.TrimSpace(endpoint)
 		if endpoint == "" {
@@ -124,6 +207,7 @@ func applyPublicNodesConfig(cfg PublicNodesConfig) bool {
 			PublicGateway: true,
 		})
 	}
+	// `normalized` stores the value produced by this operation.
 	normalized := normalizeConfiguredPublicNodes(nodes, false)
 	if len(normalized) == 0 {
 		return false
@@ -132,6 +216,7 @@ func applyPublicNodesConfig(cfg PublicNodesConfig) bool {
 	return true
 }
 
+// handlePublicNodesForbiddenDefault handles public nodes forbidden default.
 func handlePublicNodesForbiddenDefault(id, role, rpc string) bool {
 	if isCoreValidator(id) {
 		return true
@@ -145,9 +230,13 @@ func handlePublicNodesForbiddenDefault(id, role, rpc string) bool {
 	return false
 }
 
+// normalizeConfiguredPublicNodes normalizes configured public nodes.
 func normalizeConfiguredPublicNodes(nodes []PublicNodeConfig, allowUnsafe bool) []PublicNodeConfig {
+	// `out` stores the result produced by this operation.
 	out := make([]PublicNodeConfig, 0, len(nodes))
+	// `seen` stores the value produced by this operation.
 	seen := map[string]struct{}{}
+	// `node` tracks the current values while iterating.
 	for _, node := range nodes {
 		node.ID = strings.TrimSpace(node.ID)
 		node.RPCURL = normalizePublicNodeRPCURL(node.RPCURL)
@@ -165,7 +254,9 @@ func normalizeConfiguredPublicNodes(nodes []PublicNodeConfig, allowUnsafe bool) 
 			continue
 		}
 		node.PublicGateway = true
+		// `key` stores the key used to access the related value.
 		key := strings.ToLower(node.RPCURL)
+		// `ok` stores whether the related condition is satisfied.
 		if _, ok := seen[key]; ok {
 			continue
 		}
@@ -178,12 +269,16 @@ func normalizeConfiguredPublicNodes(nodes []PublicNodeConfig, allowUnsafe bool) 
 	return out
 }
 
+// configuredPublicNodes implements the configured public nodes helper.
 func configuredPublicNodes() []PublicNodeConfig {
+	// `nodes` stores the value produced by this operation.
 	nodes := make([]PublicNodeConfig, 0, len(ConfigPublicNodes)+4)
 	nodes = append(nodes, ConfigPublicNodes...)
 	nodes = append(nodes, parsePublicNodesEnv(os.Getenv("MSC_PUBLIC_NODES"))...)
 	nodes = append(nodes, parsePublicNodesEnv(os.Getenv("MSC_PUBLIC_NODE_REGISTRY"))...)
+	// `endpoints` stores the value produced by this operation.
 	if endpoints := splitCommaList(os.Getenv("MSC_PUBLIC_RPC_ENDPOINTS")); len(endpoints) > 0 {
+		// `i` and `endpoint` track the current position in the related collection.
 		for i, endpoint := range endpoints {
 			nodes = append(nodes, PublicNodeConfig{
 				ID:            fmt.Sprintf("ENV%d", i+1),
@@ -196,7 +291,7 @@ func configuredPublicNodes() []PublicNodeConfig {
 	if len(nodes) == 0 {
 		nodes = append(nodes, PublicNodeConfig{
 			ID:            "F",
-			RPCURL:        defaultPublicNodeRPC,
+			RPCURL:        defaultPublicNodeRPCURL(),
 			Role:          "full",
 			PublicGateway: true,
 		})
@@ -204,27 +299,35 @@ func configuredPublicNodes() []PublicNodeConfig {
 	return normalizeConfiguredPublicNodes(nodes, publicNodesAllowUnsafeForTesting())
 }
 
+// parsePublicNodesEnv parses public nodes env.
 func parsePublicNodesEnv(raw string) []PublicNodeConfig {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
 	}
 	if strings.HasPrefix(raw, "[") {
+		// `nodes` stores the value used by this operation.
 		var nodes []PublicNodeConfig
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal([]byte(raw), &nodes); err == nil {
 			return nodes
 		}
 	}
+	// `parts` stores the value produced by this operation.
 	parts := strings.FieldsFunc(raw, func(r rune) bool {
 		return r == ';' || r == '\n'
 	})
+	// `nodes` stores the value produced by this operation.
 	nodes := make([]PublicNodeConfig, 0, len(parts))
+	// `i` and `part` track the current position in the related collection.
 	for i, part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
+		// `fields` stores the value produced by this operation.
 		fields := strings.Split(part, "|")
+		// `i` tracks the current position in the related collection.
 		for i := range fields {
 			fields[i] = strings.TrimSpace(fields[i])
 		}
@@ -232,6 +335,7 @@ func parsePublicNodesEnv(raw string) []PublicNodeConfig {
 			nodes = append(nodes, PublicNodeConfig{ID: fmt.Sprintf("ENV%d", i+1), RPCURL: fields[0], Role: "full", PublicGateway: true})
 			continue
 		}
+		// `node` stores the value produced by this operation.
 		node := PublicNodeConfig{ID: fields[0], RPCURL: fields[1], Role: "full", PublicGateway: true}
 		if len(fields) > 2 && fields[2] != "" {
 			node.Role = fields[2]
@@ -253,11 +357,14 @@ func parsePublicNodesEnv(raw string) []PublicNodeConfig {
 	return nodes
 }
 
+// publicNodesAllowUnsafeForTesting implements the public nodes allow unsafe for testing helper.
 func publicNodesAllowUnsafeForTesting() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("MSC_PUBLIC_NODES_ALLOW_UNSAFE")), "1")
 }
 
+// normalizePublicNodeRPCURL normalizes public node rpcurl.
 func normalizePublicNodeRPCURL(raw string) string {
+	// `value` stores the value currently being processed.
 	value := strings.TrimSpace(raw)
 	if value == "" {
 		return ""
@@ -265,6 +372,7 @@ func normalizePublicNodeRPCURL(raw string) string {
 	if !strings.Contains(value, "://") {
 		value = "https://" + value
 	}
+	// `u` and `err` store the error produced by this operation.
 	u, err := url.Parse(value)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return ""
@@ -275,9 +383,12 @@ func normalizePublicNodeRPCURL(raw string) string {
 	return strings.TrimRight(u.String(), "/")
 }
 
+// publicNodeIDFromRPC implements the public node id from rpc helper.
 func publicNodeIDFromRPC(rpc string) string {
+	// `u` and `err` store the error produced by this operation.
 	u, err := url.Parse(rpc)
 	if err == nil && u.Hostname() != "" {
+		// `host` stores the value produced by this operation.
 		host := strings.Split(u.Hostname(), ".")[0]
 		host = strings.TrimSpace(host)
 		if host != "" {
@@ -287,21 +398,26 @@ func publicNodeIDFromRPC(rpc string) string {
 	return "PUBLIC"
 }
 
+// publicNodeRPCUnsafeDefault implements the public node rpc unsafe default helper.
 func publicNodeRPCUnsafeDefault(rpc string) bool {
+	// `u` and `err` store the error produced by this operation.
 	u, err := url.Parse(strings.TrimSpace(rpc))
 	if err != nil {
 		return true
 	}
+	// `host` stores the value produced by this operation.
 	host := strings.Trim(strings.ToLower(u.Hostname()), "[]")
 	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
 		return true
 	}
+	// `ip` stores the current position in the related collection.
 	ip := net.ParseIP(host)
 	if ip != nil {
 		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
 			return true
 		}
 	}
+	// `port` stores the value produced by this operation.
 	port, _ := strconv.Atoi(u.Port())
 	if port >= 26657 && port <= 26666 {
 		return true
@@ -309,34 +425,49 @@ func publicNodeRPCUnsafeDefault(rpc string) bool {
 	return false
 }
 
+// publicNodesSourceKey implements the public nodes source key helper.
 func publicNodesSourceKey(nodes []PublicNodeConfig) string {
+	// `parts` stores the value produced by this operation.
 	parts := make([]string, 0, len(nodes))
+	// `node` tracks the current values while iterating.
 	for _, node := range nodes {
 		parts = append(parts, strings.Join([]string{node.ID, node.RPCURL, node.Role, node.Country, node.ASN, node.Cloud, node.Region}, "|"))
 	}
 	return strings.Join(parts, ";")
 }
 
+// publicNodesSnapshot implements the public nodes snapshot helper.
 func publicNodesSnapshot(node *Node, force bool) publicNodesPayload {
+	// `nodes` stores the value produced by this operation.
 	nodes := configuredPublicNodes()
-	if len(nodes) == 1 && strings.EqualFold(nodes[0].ID, "F") && strings.EqualFold(nodes[0].RPCURL, defaultPublicNodeRPC) && node != nil {
+	if len(nodes) == 1 &&
+		strings.EqualFold(nodes[0].ID, "F") &&
+		strings.EqualFold(nodes[0].RPCURL, normalizePublicNodeRPCURL(defaultPublicNodeRPCURL())) &&
+		node != nil {
+		// `nodeID` stores the value produced by this operation.
 		nodeID := strings.TrimSpace(node.ID)
+		// `nodeRole` stores the value produced by this operation.
 		nodeRole := strings.ToLower(strings.TrimSpace(node.Role))
 		if nodeID != "" && nodeRole != "validator" && !isCoreValidator(nodeID) {
 			nodes[0].ID = nodeID
 		}
 	}
+	// `sourceKey` stores the key used to access the related value.
 	sourceKey := publicNodesSourceKey(nodes)
 	publicNodeRegistryMu.Lock()
 	if !force && sourceKey == publicNodeRegistryCachedKey && !publicNodeRegistryCheckedAt.IsZero() && time.Since(publicNodeRegistryCheckedAt) < publicNodeProbeTTL {
+		// `cached` stores the value produced by this operation.
 		cached := publicNodeRegistryCached
 		publicNodeRegistryMu.Unlock()
 		return cached
 	}
 	publicNodeRegistryMu.Unlock()
 
+	// `views` stores the value produced by this operation.
 	views := make([]publicNodeHealthView, 0, len(nodes))
+	// `cfg` tracks the configuration used by this operation.
 	for _, cfg := range nodes {
+		// `view` stores the value produced by this operation.
 		view := probePublicNode(cfg)
 		if strings.EqualFold(view.Role, "validator") || view.SuspiciousReason == "validator_rpc_not_allowed" {
 			continue
@@ -345,8 +476,11 @@ func publicNodesSnapshot(node *Node, force bool) publicNodesPayload {
 	}
 	annotatePublicNodeHeightLag(views)
 	assignPublicNodeActiveGateway(views)
+	// `healthy`, `stable`, `warning`, `unhealthy`, and `active` store the value produced by this operation.
 	healthy, stable, warning, unhealthy, active := 0, 0, 0, 0, 0
+	// `activeBest` stores the value used by this operation.
 	var activeBest *publicNodeHealthView
+	// `view` tracks the current values while iterating.
 	for _, view := range views {
 		if view.Healthy {
 			healthy++
@@ -367,19 +501,22 @@ func publicNodesSnapshot(node *Node, force bool) publicNodesPayload {
 		}
 		if view.ActiveGateway {
 			active++
+			// `copyView` stores the value produced by this operation.
 			copyView := view
 			activeBest = &copyView
 		}
 	}
+	// `status` stores the value produced by this operation.
 	status := "down"
 	if stable == len(views) && stable > 0 {
 		status = "healthy"
 	} else if healthy > 0 || warning > 0 {
 		status = "degraded"
 	}
+	// `payload` stores the value produced by this operation.
 	payload := publicNodesPayload{
 		Status:      status,
-		ChainID:     ChainID,
+		ChainID:     protocolChainID(),
 		GenesisHash: expectedPublicNodeGenesisHash(),
 		Healthy:     healthy,
 		Stable:      stable,
@@ -390,12 +527,14 @@ func publicNodesSnapshot(node *Node, force bool) publicNodesPayload {
 		Nodes:       views,
 		TS:          time.Now().Unix(),
 	}
+	// `best` stores the value produced by this operation.
 	best := activeBest
 	if best == nil {
 		best = publicNodeBest(views)
 	}
 	if best != nil {
 		payload.Best = best.RPCURL
+		// `copyBest` stores the value produced by this operation.
 		copyBest := *best
 		payload.BestNode = &copyBest
 	}
@@ -408,13 +547,17 @@ func publicNodesSnapshot(node *Node, force bool) publicNodesPayload {
 	return payload
 }
 
+// annotatePublicNodeHeightLag implements the annotate public node height lag helper.
 func annotatePublicNodeHeightLag(views []publicNodeHealthView) {
+	// `maxHeight` stores the value produced by this operation.
 	maxHeight := uint64(0)
+	// `view` tracks the current values while iterating.
 	for _, view := range views {
 		if view.Height > maxHeight {
 			maxHeight = view.Height
 		}
 	}
+	// `i` tracks the current position in the related collection.
 	for i := range views {
 		if maxHeight > 0 && views[i].Height > 0 && maxHeight >= views[i].Height {
 			views[i].HeightLagBlocks = maxHeight - views[i].Height
@@ -424,7 +567,9 @@ func annotatePublicNodeHeightLag(views []publicNodeHealthView) {
 	}
 }
 
+// publicNodeHealthKey implements the public node health key helper.
 func publicNodeHealthKey(view publicNodeHealthView) string {
+	// `key` stores the key used to access the related value.
 	key := strings.TrimSpace(view.ID) + "|" + strings.TrimSpace(view.RPCURL)
 	if strings.TrimSpace(key) == "|" {
 		return strings.TrimSpace(view.RPCURL)
@@ -432,6 +577,7 @@ func publicNodeHealthKey(view publicNodeHealthView) string {
 	return key
 }
 
+// publicNodeHardFailReason implements the public node hard fail reason helper.
 func publicNodeHardFailReason(view publicNodeHealthView) string {
 	if strings.TrimSpace(view.SuspiciousReason) != "" {
 		switch view.SuspiciousReason {
@@ -449,6 +595,7 @@ func publicNodeHardFailReason(view publicNodeHealthView) string {
 	return ""
 }
 
+// publicNodeBadReason implements the public node bad reason helper.
 func publicNodeBadReason(view publicNodeHealthView) string {
 	if view.Error != "" || view.StatusCode == 0 {
 		return "timeout"
@@ -465,6 +612,7 @@ func publicNodeBadReason(view publicNodeHealthView) string {
 	return ""
 }
 
+// publicNodeWarningReason implements the public node warning reason helper.
 func publicNodeWarningReason(view publicNodeHealthView) string {
 	if view.HeightLagBlocks > 2 {
 		return "height_lag"
@@ -488,6 +636,7 @@ func publicNodeWarningReason(view publicNodeHealthView) string {
 	return ""
 }
 
+// publicNodeBadThreshold implements the public node bad threshold helper.
 func publicNodeBadThreshold(reason string) int {
 	switch reason {
 	case "height_lag":
@@ -499,17 +648,24 @@ func publicNodeBadThreshold(reason string) int {
 	}
 }
 
+// applyPublicNodeHealthHysteresis applies public node health hysteresis.
 func applyPublicNodeHealthHysteresis(view *publicNodeHealthView) {
 	if view == nil {
 		return
 	}
+	// `key` stores the key used to access the related value.
 	key := publicNodeHealthKey(*view)
+	// `now` stores the value produced by this operation.
 	now := time.Now().Unix()
+	// `hardReason` stores the value produced by this operation.
 	hardReason := publicNodeHardFailReason(*view)
+	// `badReason` stores the value produced by this operation.
 	badReason := publicNodeBadReason(*view)
+	// `warnReason` stores the value produced by this operation.
 	warnReason := publicNodeWarningReason(*view)
 
 	publicNodeRegistryMu.Lock()
+	// `sample` stores the value produced by this operation.
 	sample := publicNodeHealthMemory[key]
 	if hardReason != "" {
 		sample.GoodSamples = 0
@@ -532,7 +688,9 @@ func applyPublicNodeHealthHysteresis(view *publicNodeHealthView) {
 	if badReason != "" {
 		sample.GoodSamples = 0
 		sample.BadSamples++
+		// `threshold` stores the value produced by this operation.
 		threshold := publicNodeBadThreshold(badReason)
+		// `unhealthy` stores the value produced by this operation.
 		unhealthy := sample.BadSamples >= threshold
 		if badReason == "height_lag" && view.HeightLagBlocks > 64 {
 			unhealthy = true
@@ -576,6 +734,7 @@ func applyPublicNodeHealthHysteresis(view *publicNodeHealthView) {
 
 	sample.BadSamples = 0
 	sample.GoodSamples++
+	// `healthy` stores the value produced by this operation.
 	healthy := sample.LastState == "healthy" || sample.GoodSamples >= 2
 	if healthy {
 		sample.LastState = "healthy"
@@ -598,14 +757,16 @@ func applyPublicNodeHealthHysteresis(view *publicNodeHealthView) {
 	view.Healthy = true
 }
 
+// probePublicNode implements the probe public node helper.
 func probePublicNode(cfg PublicNodeConfig) publicNodeHealthView {
+	// `view` stores the value produced by this operation.
 	view := publicNodeHealthView{
 		ID:            cfg.ID,
 		RPCURL:        cfg.RPCURL,
 		GatewayRPCURL: publicNodeGatewayRPCURL(cfg.ID),
 		Role:          cfg.Role,
 		PublicGateway: true,
-		ChainID:       ChainID,
+		ChainID:       protocolChainID(),
 		GenesisHash:   expectedPublicNodeGenesisHash(),
 		Version:       cfg.Version,
 		Country:       cfg.Country,
@@ -614,8 +775,11 @@ func probePublicNode(cfg PublicNodeConfig) publicNodeHealthView {
 		Region:        cfg.Region,
 		LastChecked:   time.Now().Unix(),
 	}
+	// `started` stores the value produced by this operation.
 	started := time.Now()
+	// `client` stores the value produced by this operation.
 	client := &http.Client{Timeout: 8 * time.Second}
+	// `statusCode`, `statusData`, and `err` store the error produced by this operation.
 	statusCode, statusData, err := publicNodeFetchJSON(client, cfg.RPCURL+"/status")
 	view.StatusCode = statusCode
 	view.LatencyMS = int64(time.Since(started) / time.Millisecond)
@@ -640,20 +804,25 @@ func probePublicNode(cfg PublicNodeConfig) publicNodeHealthView {
 	view.PeerCount = int(uint64FromAny(firstNonNil(statusData["peers"], statusData["peer_count"])))
 	view.NetworkHealth = stringFromAny(statusData["network_health"])
 	view.Syncing = boolFromAny(statusData["syncing"])
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := statusData["sync_complete"]; ok {
 		view.SyncComplete = boolFromAny(statusData["sync_complete"])
 	} else {
 		view.SyncComplete = !view.Syncing
 	}
+	// `role` stores the value produced by this operation.
 	if role := strings.ToLower(strings.TrimSpace(stringFromAny(statusData["role"]))); role != "" {
 		view.Role = role
 	}
+	// `chainID` stores the value produced by this operation.
 	if chainID := strings.TrimSpace(stringFromAny(statusData["chain_id"])); chainID != "" {
 		view.ChainID = chainID
 	}
+	// `genesis` stores the value produced by this operation.
 	if genesis := strings.TrimSpace(stringFromAny(firstNonNil(statusData["genesis_hash"], statusData["expected_genesis_hash"]))); genesis != "" {
 		view.GenesisHash = strings.ToLower(strings.TrimPrefix(genesis, "0x"))
 	}
+	// `version` stores the value produced by this operation.
 	if version := strings.TrimSpace(stringFromAny(statusData["version"])); version != "" {
 		view.Version = version
 	}
@@ -662,19 +831,23 @@ func probePublicNode(cfg PublicNodeConfig) publicNodeHealthView {
 		view.Score = 0
 		return view
 	}
-	if want := strings.TrimSpace(ChainID); want != "" && strings.TrimSpace(view.ChainID) != "" && !strings.EqualFold(want, view.ChainID) {
+	// `want` stores the value produced by this operation.
+	if strings.TrimSpace(view.ChainID) != "" && !isProtocolChainID(view.ChainID) {
 		view.SuspiciousReason = "chain_id_mismatch"
 		view.Score = 0
 		return view
 	}
+	// `want` stores the value produced by this operation.
 	if want := expectedPublicNodeGenesisHash(); want != "" && view.GenesisHash != "" && !strings.EqualFold(want, view.GenesisHash) {
 		view.SuspiciousReason = "genesis_hash_mismatch"
 		view.Score = 0
 		return view
 	}
+	// `cmdStatus`, `cmdData`, and `cmdErr` store the error produced by this operation.
 	cmdStatus, cmdData, cmdErr := publicNodeFetchJSON(client, cfg.RPCURL+"/consensus/mode")
 	if cmdErr == nil && cmdStatus == http.StatusOK {
 		view.ConsensusMode = strings.ToUpper(strings.TrimSpace(stringFromAny(cmdData["mode"])))
+		// `lag` stores the value produced by this operation.
 		if lag := uint64FromAny(firstNonNil(cmdData["finality_lag"], cmdData["finality_lag_blocks"])); lag > view.FinalityLag {
 			view.FinalityLag = lag
 		}
@@ -686,6 +859,7 @@ func probePublicNode(cfg PublicNodeConfig) publicNodeHealthView {
 	return view
 }
 
+// publicNodeGatewayRPCURL implements the public node gateway rpcurl helper.
 func publicNodeGatewayRPCURL(id string) string {
 	id = strings.Trim(strings.TrimSpace(id), "/")
 	if id == "" {
@@ -694,28 +868,35 @@ func publicNodeGatewayRPCURL(id string) string {
 	return strings.TrimRight(defaultPublicNodeRPC, "/") + "/public-rpc/" + url.PathEscape(id)
 }
 
+// publicNodeFetchJSON implements the public node fetch json helper.
 func publicNodeFetchJSON(client *http.Client, rawURL string) (int, map[string]any, error) {
+	// `req` and `err` store the error produced by this operation.
 	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
 	if err != nil {
 		return 0, nil, err
 	}
 	req.Header.Set("User-Agent", "msc-public-node-registry/1")
+	// `res` and `err` store the error produced by this operation.
 	res, err := client.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}
 	defer res.Body.Close()
+	// `data` stores the value used by this operation.
 	var data map[string]any
+	// `err` stores the error produced by this operation.
 	if err := json.NewDecoder(res.Body).Decode(&data); err != nil {
 		return res.StatusCode, nil, err
 	}
 	return res.StatusCode, data, nil
 }
 
+// publicNodeScore implements the public node score helper.
 func publicNodeScore(view publicNodeHealthView) int {
 	if view.SuspiciousReason != "" || view.StatusCode != http.StatusOK {
 		return 0
 	}
+	// `score` stores the value produced by this operation.
 	score := 35
 	if view.Height > 0 {
 		score += 15
@@ -772,10 +953,12 @@ func publicNodeScore(view publicNodeHealthView) int {
 	return score
 }
 
+// publicNodeBest implements the public node best helper.
 func publicNodeBest(nodes []publicNodeHealthView) *publicNodeHealthView {
 	if len(nodes) == 0 {
 		return nil
 	}
+	// `sorted` stores the value produced by this operation.
 	sorted := append([]publicNodeHealthView(nil), nodes...)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		if sorted[i].Healthy != sorted[j].Healthy {
@@ -792,9 +975,13 @@ func publicNodeBest(nodes []publicNodeHealthView) *publicNodeHealthView {
 	return &sorted[0]
 }
 
+// assignPublicNodeActiveGateway implements the assign public node active gateway helper.
 func assignPublicNodeActiveGateway(nodes []publicNodeHealthView) {
+	// `bestIndex` stores the current position in the related collection.
 	bestIndex := -1
+	// `i` tracks the current position in the related collection.
 	for i := range nodes {
+		// `reason` stores the value produced by this operation.
 		reason := publicNodeActiveGatewayExcludedReason(nodes[i])
 		if reason != "" {
 			nodes[i].ActiveGateway = false
@@ -811,6 +998,7 @@ func assignPublicNodeActiveGateway(nodes []publicNodeHealthView) {
 		}
 	}
 	if bestIndex >= 0 {
+		// `i` tracks the current position in the related collection.
 		for i := range nodes {
 			if i == bestIndex {
 				nodes[i].ActiveGateway = true
@@ -826,10 +1014,12 @@ func assignPublicNodeActiveGateway(nodes []publicNodeHealthView) {
 		}
 		return
 	}
+	// `fallback` stores the value produced by this operation.
 	fallback := publicNodeBest(nodes)
 	if fallback == nil {
 		return
 	}
+	// `i` tracks the current position in the related collection.
 	for i := range nodes {
 		if nodes[i].ID == fallback.ID && nodes[i].RPCURL == fallback.RPCURL {
 			nodes[i].ActiveGateway = true
@@ -840,6 +1030,7 @@ func assignPublicNodeActiveGateway(nodes []publicNodeHealthView) {
 	}
 }
 
+// publicNodeActiveGatewayExcludedReason implements the public node active gateway excluded reason helper.
 func publicNodeActiveGatewayExcludedReason(view publicNodeHealthView) string {
 	if !view.Healthy || strings.EqualFold(view.HealthState, "unhealthy") {
 		if view.HealthReason != "" {
@@ -875,7 +1066,9 @@ func publicNodeActiveGatewayExcludedReason(view publicNodeHealthView) string {
 	return ""
 }
 
+// expectedPublicNodeGenesisHash implements the expected public node genesis hash helper.
 func expectedPublicNodeGenesisHash() string {
+	// `v` tracks the current values while iterating.
 	for _, v := range []string{ConfigGenesisHash, GenesisHashExpected, GenesisHash} {
 		v = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(v), "0x"))
 		if v != "" {
@@ -885,7 +1078,9 @@ func expectedPublicNodeGenesisHash() string {
 	return ""
 }
 
+// firstNonNil implements the first non nil helper.
 func firstNonNil(values ...any) any {
+	// `value` tracks the value currently being processed.
 	for _, value := range values {
 		if value != nil {
 			return value
@@ -894,7 +1089,9 @@ func firstNonNil(values ...any) any {
 	return nil
 }
 
+// uint64FromAny implements the uint64 from any helper.
 func uint64FromAny(value any) uint64 {
+	// `v` stores the value produced by this operation.
 	switch v := value.(type) {
 	case uint64:
 		return v
@@ -913,13 +1110,16 @@ func uint64FromAny(value any) uint64 {
 			return uint64(v)
 		}
 	case string:
+		// `n` stores the value produced by this operation.
 		n, _ := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
 		return n
 	}
 	return 0
 }
 
+// boolFromAny implements the bool from any helper.
 func boolFromAny(value any) bool {
+	// `v` stores the value produced by this operation.
 	switch v := value.(type) {
 	case bool:
 		return v
@@ -938,7 +1138,9 @@ func boolFromAny(value any) bool {
 	return false
 }
 
+// stringFromAny implements the string from any helper.
 func stringFromAny(value any) string {
+	// `v` stores the value produced by this operation.
 	switch v := value.(type) {
 	case string:
 		return v
@@ -951,6 +1153,7 @@ func stringFromAny(value any) string {
 	}
 }
 
+// maxInt returns the maximum int.
 func maxInt(a, b int) int {
 	if a > b {
 		return a
@@ -958,6 +1161,7 @@ func maxInt(a, b int) int {
 	return b
 }
 
+// handlePublicNodes handles public nodes.
 func (s *Server) handlePublicNodes(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeV1Error(w, http.StatusMethodNotAllowed, "", "method not allowed")
@@ -971,6 +1175,7 @@ func (s *Server) handlePublicNodes(w http.ResponseWriter, r *http.Request) {
 		writeV1Error(w, http.StatusServiceUnavailable, "", "node unavailable")
 		return
 	}
+	// `payload` stores the value produced by this operation.
 	payload := publicNodesSnapshot(s.Node, strings.TrimSpace(r.URL.Query().Get("refresh")) == "1")
 	writeV1Data(w, http.StatusOK, payload)
 }

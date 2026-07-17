@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /dtl_ide.html
+
+Sitemap: https://mscblockexplorer.in/sitemap.xml
+Feed: https://mscblockexplorer.in/feed.xml
+Feed: https://mscblockexplorer.in/feed.json

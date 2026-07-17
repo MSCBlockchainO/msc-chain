@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSC Transactions - Search Transfers and Receipts</title>
+  <meta name="description" content="Browse and search MSC Chain transactions, transfer details, execution results, confirmations, and receipts." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://explorer.mscblockexplorer.in/explorer-transactions.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Transactions - Search Transfers and Receipts" />
+  <meta property="og:description" content="Browse and search MSC Chain transactions, transfer details, execution results, confirmations, and receipts." />
+  <meta property="og:url" content="https://explorer.mscblockexplorer.in/explorer-transactions.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Transactions - Search Transfers and Receipts" />
+  <meta name="twitter:description" content="Browse and search MSC Chain transactions, transfer details, execution results, confirmations, and receipts." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="explorer.css?v=20260713b" />
+</head>
+<body data-explorer-page="transactions">
+  <main class="explorer-content">
+    <section class="page-heading">
+      <div><div class="eyebrow">Activity</div><h1>Transactions</h1><p>Look up a transaction ID or wallet address and inspect confirmed activity directly from the chain.</p></div>
+      <a class="button primary" href="https://wallet.mscblockexplorer.in/send.html"><i data-lucide="send"></i>Send MSC</a>
+    </section>
+
+    <nav class="page-tabs" aria-label="Transaction sections"><a href="#latest-transactions">Latest transactions</a><a href="#transaction-details">Transaction details</a><a href="#transaction-status">Transaction status</a></nav>
+
+    <section class="metric-grid">
+      <article class="metric"><div class="metric-top"><span>Current height</span><span class="metric-icon"><i data-lucide="chart-no-axes-column-increasing"></i></span></div><div id="metricHeight" class="metric-value">-</div><div class="metric-foot">Transaction confirmation tip</div></article>
+      <article class="metric"><div class="metric-top"><span>Mempool</span><span class="metric-icon"><i data-lucide="list-start"></i></span></div><div id="metricMempool" class="metric-value">-</div><div class="metric-foot">Pending transactions</div></article>
+      <article class="metric"><div class="metric-top"><span>Last block age</span><span class="metric-icon"><i data-lucide="timer"></i></span></div><div id="metricBlockAge" class="metric-value">-</div><div class="metric-foot">Time since latest block</div></article>
+      <article class="metric"><div class="metric-top"><span>Consensus</span><span class="metric-icon"><i data-lucide="shield-check"></i></span></div><div id="metricMode" class="metric-value">-</div><div class="metric-foot">Current detector mode</div></article>
+    </section>
+
+    <form id="txLookupForm" class="search-panel">
+      <input id="txQuery" type="search" placeholder="Enter transaction ID or MSC wallet address" autocomplete="off" />
+      <button class="button primary" type="submit"><i data-lucide="search"></i>Search activity</button>
+    </form>
+
+    <section class="chart-grid compact">
+      <div id="txFlowChart" class="chart-card wide"></div>
+      <div id="mempoolChart" class="chart-card"></div>
+    </section>
+
+    <section id="latest-transactions" class="panel">
+      <div class="panel-head"><h2>Latest transactions</h2><span class="table-meta">Observed in recent blocks</span></div>
+      <div class="table-shell"><table><thead><tr><th>Transaction</th><th>Type</th><th>From</th><th>To</th><th>Amount</th><th>Block</th></tr></thead><tbody id="latestTransactionsTable"><tr><td colspan="6">Loading transactions...</td></tr></tbody></table></div>
+    </section>
+
+    <section id="transaction-details" class="panel">
+      <div class="panel-head"><h2>Activity inspector</h2><span id="txDetailMeta" class="table-meta">Enter a transaction or address</span></div>
+      <div id="txDetailGrid" class="detail-grid"><div class="empty-state">Search chain activity to view details.</div></div>
+    </section>
+
+    <section id="transaction-status" class="panel">
+      <div class="panel-head"><h2>Raw transaction data</h2><span class="table-meta">Canonical API response</span></div>
+      <pre id="txRaw" class="json-view">No activity selected.</pre>
+    </section>
+  </main>
+  <script defer src="vendor/lucide.min.js?v=20260618a"></script>
+  <script defer src="explorer.js?v=20260716a"></script>
+</body>
+</html>

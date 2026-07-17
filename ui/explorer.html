@@ -3,354 +3,78 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script>
-    (function () {
-      "use strict";
-      try {
-        var params = new URLSearchParams(window.location.search);
-        if (params.get("keep_origin") === "1") return;
-        var host = String(window.location.hostname || "").toLowerCase();
-        var isLocal =
-          host === "localhost" ||
-          host === "::1" ||
-          /^127(?:\.\d{1,3}){1,3}$/.test(host);
-        var canonicalPort = "26657";
-        var currentPort = String(window.location.port || "");
-        if (!isLocal || !currentPort) return;
-        if (host === "127.0.0.1" && currentPort === canonicalPort) return;
-        var target = new URL(window.location.href);
-        target.hostname = "127.0.0.1";
-        target.port = canonicalPort;
-        if (target.href !== window.location.href) {
-          window.location.replace(target.toString());
-        }
-      } catch (_) {
-        // Keep page usable even if URL parsing fails.
-      }
-    })();
-  </script>
-  <title>MSC Chain Explorer</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="explorer.css?v=20260602h" />
+  <title>MSC Block Explorer - Live Blocks, Transactions and Validators</title>
+  <meta name="description" content="Explore live MSC Chain blocks, transactions, addresses, validators, finality, network health, and governance data." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://explorer.mscblockexplorer.in/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Block Explorer - Live Blocks, Transactions and Validators" />
+  <meta property="og:description" content="Explore live MSC Chain blocks, transactions, addresses, validators, finality, network health, and governance data." />
+  <meta property="og:url" content="https://explorer.mscblockexplorer.in/" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Block Explorer - Live Blocks, Transactions and Validators" />
+  <meta name="twitter:description" content="Explore live MSC Chain blocks, transactions, addresses, validators, finality, network health, and governance data." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="explorer.css?v=20260713b" />
 </head>
-<body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="logo">MSC</div>
-        <div>
-          <div class="title">MSC Explorer</div>
-          <div class="subtitle">Mainnet visibility</div>
-        </div>
-      </div>
-      <nav class="nav" aria-label="Explorer navigation">
-        <a href="dashboard.html">Dashboard</a>
-        <a href="wallet.html">Wallet</a>
-        <a href="send.html">Send</a>
-        <a href="receive.html">Receive</a>
-        <a href="transactions.html">Transactions</a>
-        <a href="staking.html">Staking</a>
-        <a href="validators.html">Validators</a>
-        <a href="governance.html">Governance</a>
-        <a href="bridge.html">Bridge</a>
-        <a href="security.html">Security</a>
-        <a href="settings.html">Settings</a>
-        <a class="active" href="explorer.html">Explorer</a>
-        <a href="dtl_ide.html">DTL IDE</a>
-      </nav>
-    </aside>
-
-    <div class="main">
-      <header class="topbar">
-        <div class="topline">
-          <div class="brand">
-            <div class="logo">MSC</div>
-            <div>
-              <div class="title">Explorer 3.0</div>
-              <div class="subtitle">Blocks, transactions, validators, and peer health</div>
-            </div>
-          </div>
-          <form id="quickSearchForm" class="quick-search">
-            <input id="quickSearchInput" type="search" placeholder="Search tx / block / hash" />
-            <button class="btn-primary" type="submit">Search</button>
-          </form>
-        </div>
-        <div class="status-row">
-          <span id="connState" class="pill">Disconnected</span>
-          <span class="pill">Height <strong id="topHeight">-</strong></span>
-          <span class="pill">Last block <strong id="topLastBlockAge">-</strong></span>
-          <span class="pill">Event <strong id="topEventDelay">-</strong></span>
-          <span class="pill">CMD <strong id="topCmd">-</strong></span>
-          <span class="pill">Peers <strong id="topPeers">-</strong></span>
-          <span class="pill">State <strong id="topState">-</strong></span>
-        </div>
-        <div id="connControls" class="conn">
-          <label>
-            RPC
-            <input id="rpcUrl" type="text" placeholder="https://127.0.0.1:26657" />
-          </label>
-          <label id="apiTokenField" class="admin-field">
-            API Token
-            <input id="apiToken" type="password" placeholder="Read token (optional)" />
-          </label>
-          <label>
-            Refresh (ms)
-            <input id="refreshMs" type="number" min="500" step="100" value="3000" />
-          </label>
-          <button id="connectBtn" class="btn-primary">Connect</button>
-          <button id="refreshBtn" class="btn-ghost">Refresh</button>
-          <button id="adminToggleBtn" class="btn-ghost" type="button">Admin</button>
-        </div>
-      </header>
-
-  <main class="layout content">
-    <section class="page-hero">
-      <div class="eyebrow">MSC Mainnet</div>
-      <h1>Chain Explorer</h1>
-      <p class="muted">Live blocks, finality, block age, validator readiness, and peer health.</p>
-    </section>
-
-    <section class="card status-grid">
+<body data-explorer-page="overview">
+  <main class="explorer-content">
+    <section class="page-heading">
       <div>
-        <div class="label">Node</div>
-        <div id="nodeId" class="mono value">-</div>
+        <div class="eyebrow">MSC Mainnet</div>
+        <h1>Network overview</h1>
+        <p>Live chain progress, finality, validator readiness, and public infrastructure health.</p>
       </div>
-      <div>
-        <div class="label">Chain</div>
-        <div id="chainId" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Role</div>
-        <div id="nodeRole" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Height</div>
-        <div id="height" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Finalized</div>
-        <div id="finalized" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Last Block Age</div>
-        <div id="lastBlockAge" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Peers</div>
-        <div id="peerCount" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Validators (live/required)</div>
-        <div id="quorum" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">State</div>
-        <div id="state" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Consensus Mode</div>
-        <div id="consensusDetectorMode" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Wait Reason</div>
-        <div id="waitReason" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Liveness Mode</div>
-        <div id="livenessMode" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Drift Limit</div>
-        <div id="livenessDriftLimit" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Live (strict/hb/out)</div>
-        <div id="livenessCounts" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Autoheal State</div>
-        <div id="autohealState" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Autoheal Reason</div>
-        <div id="autohealReason" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Autoheal Mismatch</div>
-        <div id="autohealMismatch" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Autoheal Last Success</div>
-        <div id="autohealSuccess" class="mono value">-</div>
-      </div>
-      <div>
-        <div class="label">Bootstrap Lane</div>
-        <div id="bootstrapLane" class="mono value">-</div>
+      <div class="heading-actions">
+        <a class="button" href="explorer-blocks.html"><i data-lucide="box"></i>Browse blocks</a>
+        <a class="button primary" href="https://wallet.mscblockexplorer.in"><i data-lucide="wallet-cards"></i>Open wallet</a>
       </div>
     </section>
 
-    <section class="card search-grid">
-      <form id="blockSearchForm">
-        <h3>Block Search</h3>
-        <div class="row">
-          <input id="blockHeightInput" type="number" min="0" placeholder="Height" />
-          <input id="blockHashInput" type="text" placeholder="Block hash" />
-          <button type="submit" class="btn-primary">Find Block</button>
-        </div>
-      </form>
-      <form id="txSearchForm">
-        <h3>Transaction Search</h3>
-        <div class="row">
-          <input id="txIdInput" type="text" placeholder="Transaction ID" />
-          <button type="submit" class="btn-primary">Find Tx</button>
-        </div>
-      </form>
+    <section id="supplyAuditAlert" class="supply-audit-alert" hidden></section>
+
+    <nav class="page-tabs" aria-label="Dashboard sections"><a href="#network-overview">Network overview</a><a href="#latest-blocks">Latest blocks</a><a href="#dashboard-tps">TPS</a><a href="#validator-status">Validators status</a></nav>
+
+    <section id="network-overview" class="metric-grid" aria-label="Network metrics">
+      <article class="metric"><div class="metric-top"><span>Current height</span><span class="metric-icon"><i data-lucide="chart-no-axes-column-increasing"></i></span></div><div id="metricHeight" class="metric-value">-</div><div class="metric-foot">Latest available block</div></article>
+      <article class="metric"><div class="metric-top"><span>Finalized height</span><span class="metric-icon"><i data-lucide="badge-check"></i></span></div><div id="metricFinalized" class="metric-value">-</div><div class="metric-foot">Consensus confirmed</div></article>
+      <article class="metric"><div class="metric-top"><span>Active validator set</span><span class="metric-icon"><i data-lucide="shield-check"></i></span></div><div id="metricValidators" class="metric-value">-</div><div class="metric-foot">Frozen for the current epoch</div></article>
+      <article class="metric"><div class="metric-top"><span>Connected peers</span><span class="metric-icon"><i data-lucide="network"></i></span></div><div id="metricPeers" class="metric-value">-</div><div class="metric-foot">Direct network links</div></article>
+      <article class="metric"><div class="metric-top"><span>Last block age</span><span class="metric-icon"><i data-lucide="timer-reset"></i></span></div><div id="metricBlockAge" class="metric-value">-</div><div class="metric-foot">Updates every second</div></article>
+      <article class="metric" id="dashboard-tps"><div class="metric-top"><span>Recent TPS</span><span class="metric-icon"><i data-lucide="gauge"></i></span></div><div id="metricTPS" class="metric-value">-</div><div class="metric-foot">Average tx per recent block</div></article>
     </section>
 
-    <section class="split two">
-      <article class="card">
-        <div class="card-head">
-          <h2>Recent Blocks</h2>
-          <span id="blocksMeta" class="meta">-</span>
-        </div>
-        <div class="table-wrap tall">
+    <section id="latest-blocks" class="workspace">
+      <div class="panel">
+        <div class="panel-head"><h2>Recent blocks</h2><a class="button" href="explorer-blocks.html">View all</a></div>
+        <div class="table-shell">
           <table>
-            <thead>
-              <tr>
-                <th>Height</th>
-                <th>Type</th>
-                <th>Proposer</th>
-                <th>Tx</th>
-                <th>Exec</th>
-                <th>Time</th>
-                <th>Hash</th>
-              </tr>
-            </thead>
-            <tbody id="blocksBody"></tbody>
+            <thead><tr><th>Height</th><th>Kind</th><th>Proposer</th><th>Tx</th><th>Exec</th><th>Quorum</th><th>Hash</th></tr></thead>
+            <tbody id="overviewBlocks"><tr><td colspan="7">Loading blocks...</td></tr></tbody>
           </table>
         </div>
-      </article>
-
-      <article class="card">
-        <div class="card-head">
-          <h2>Validators</h2>
-          <span id="validatorMeta" class="meta">-</span>
-        </div>
-        <div class="helper-note">Online = liveness heartbeat. Connected Healthy = direct peer with hello + hash match on this node.</div>
-        <div class="validator-grid">
-          <div>
-            <h4>Online</h4>
-            <div id="validatorsOnline" class="chips"></div>
-          </div>
-          <div>
-            <h4>Offline</h4>
-            <div id="validatorsOffline" class="chips"></div>
-          </div>
-          <div>
-            <h4>Pending Add</h4>
-            <div id="validatorsPendingAdd" class="chips"></div>
-          </div>
-          <div>
-            <h4>Pending Remove</h4>
-            <div id="validatorsPendingRemove" class="chips"></div>
-          </div>
-          <div>
-            <h4>Connected Validators (Healthy)</h4>
-            <div id="validatorsConnected" class="chips"></div>
-          </div>
-          <div>
-            <h4>Connected but Unhealthy</h4>
-            <div id="validatorsConnectedUnhealthy" class="chips"></div>
-          </div>
-          <div>
-            <h4>Online but Not Directly Connected</h4>
-            <div id="validatorsGap" class="chips"></div>
-          </div>
-        </div>
-      </article>
+      </div>
+      <aside id="validator-status" class="panel">
+        <div class="panel-head"><h2>Network summary</h2><span class="badge good">Live</span></div>
+        <div id="overviewSummary" class="side-stack"><div class="empty-state">Loading network...</div></div>
+      </aside>
     </section>
 
-    <section class="split two">
-      <article class="card">
-        <div class="card-head">
-          <h2>Block Detail</h2>
-          <span id="blockDetailMeta" class="meta">-</span>
-        </div>
-        <pre id="blockDetail" class="json-view">Select a block from recent list or search above.</pre>
-      </article>
-
-      <article class="card">
-        <div class="card-head">
-          <h2>Tx Detail</h2>
-          <div class="card-head-actions">
-            <button id="txRawToggle" type="button" class="btn-ghost btn-small">Show Raw JSON</button>
-            <span id="txDetailMeta" class="meta">-</span>
-          </div>
-        </div>
-        <pre id="txDetail" class="json-view">Search tx by id to inspect full detail.</pre>
-      </article>
-    </section>
-
-    <section class="card">
-      <div class="card-head">
-        <h2>Peers</h2>
-        <span id="peersMeta" class="meta">-</span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Peer ID</th>
-              <th>Role</th>
-              <th>Validator</th>
-              <th>Connected</th>
-              <th>Hello</th>
-              <th>Hash Match</th>
-              <th>Ack Height</th>
-              <th>Dial Fails</th>
-              <th>Suspect</th>
-            </tr>
-          </thead>
-          <tbody id="peersBody"></tbody>
-        </table>
-      </div>
-    </section>
-    <section class="card">
-      <div class="card-head">
-        <h2>Public Full Nodes</h2>
-        <span id="publicNodesMeta" class="meta">-</span>
-      </div>
-      <div class="helper-note">Trusted public full/archive nodes only. Validator RPCs are excluded from wallet defaults.</div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>RPC</th>
-              <th>Status</th>
-              <th>Gateway</th>
-              <th>Height</th>
-              <th>Height Lag</th>
-              <th>Finality Lag</th>
-              <th>Age</th>
-              <th>Peers</th>
-              <th>Latency</th>
-              <th>CMD</th>
-              <th>Score</th>
-              <th>Uptime</th>
-              <th>Reason</th>
-            </tr>
-          </thead>
-          <tbody id="publicNodesBody"></tbody>
-        </table>
-      </div>
+    <section class="chart-grid">
+      <div id="activityVisual" class="chart-card wide"></div>
+      <div id="proposerChart" class="chart-card"></div>
+      <div id="quorumChart" class="chart-card"></div>
+      <div id="finalityChart" class="chart-card"></div>
     </section>
   </main>
-    </div>
-  </div>
-
-  <script src="explorer.js?v=20260603a"></script>
+  <script defer src="vendor/lucide.min.js?v=20260618a"></script>
+  <script defer src="explorer.js?v=20260716a"></script>
 </body>
 </html>

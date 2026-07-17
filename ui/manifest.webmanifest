@@ -1,0 +1,22 @@
+{
+  "name": "MSC Network",
+  "short_name": "MSC",
+  "start_url": "/landing.html",
+  "display": "standalone",
+  "background_color": "#050712",
+  "theme_color": "#8b5cf6",
+  "icons": [
+    {
+      "src": "/assets/msc-app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/msc-app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

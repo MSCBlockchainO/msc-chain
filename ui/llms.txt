@@ -1,0 +1,49 @@
+# MSC Chain
+
+> Official documentation and public verification surfaces for MSC Chain.
+
+## Canonical sites
+- Main portal: https://mscblockexplorer.in/
+- Explorer: https://explorer.mscblockexplorer.in/
+- Wallet: https://wallet.mscblockexplorer.in/
+- Documentation: https://mscblockexplorer.in/docs/
+- Blog: https://mscblockexplorer.in/blog/
+- RSS feed: https://mscblockexplorer.in/feed.xml
+- JSON feed: https://mscblockexplorer.in/feed.json
+
+## Documentation
+- [What Is MSC Chain? A Practical Network Overview](https://mscblockexplorer.in/docs/what-is-msc-chain.html): Understand MSC Chain as a Layer-1 blockchain, including its validators, native MSC coin, explorer, wallet, governance, APIs, and verification model.
+- [MSC Tokenomics: Supply, Fees, Rewards and Burn](https://mscblockexplorer.in/docs/msc-tokenomics.html): Learn how MSC supply, transaction fees, validator rewards, staking, treasury flows, and burn policy fit into the network economy.
+- [How to Run an MSC Validator](https://mscblockexplorer.in/docs/run-msc-validator.html): Plan, install, secure, monitor, and maintain an MSC validator with reliable keys, peers, storage, backups, and upgrade procedures.
+- [How to Run an MSC Full Node](https://mscblockexplorer.in/docs/run-msc-node.html): Install and operate an MSC full node for independent verification, wallet access, RPC service, explorer support, or network resilience.
+- [MSC Wallet Guide: Create, Receive and Send Safely](https://mscblockexplorer.in/docs/msc-wallet-guide.html): Use the official MSC self-custody wallet to create an account, protect recovery material, receive MSC, send transactions, and review activity.
+- [MSC RPC API Documentation and Integration Guide](https://mscblockexplorer.in/docs/msc-rpc-api.html): Integrate with MSC Chain through public JSON-RPC, REST, explorer, balance, status, validator, governance, and WebSocket endpoints.
+- [MSC Explorer Guide: Verify Blocks and Transactions](https://mscblockexplorer.in/docs/msc-explorer-guide.html): Learn how to use MSC Explorer to verify blocks, transactions, addresses, validators, network health, tokenomics, and governance.
+- [MSC Governance: Proposals, Voting and Upgrades](https://mscblockexplorer.in/docs/msc-governance.html): Understand MSC Chain proposals, voting, treasury context, council boundaries, upgrade activation, and transparent decision evidence.
+- [MSC Chain Roadmap: Network, Ecosystem and Operations](https://mscblockexplorer.in/docs/msc-roadmap.html): Review the MSC Chain roadmap across consensus reliability, validators, wallets, developer tooling, governance, interoperability, and ecosystem growth.
+- [MSC Chain Whitepaper: Architecture and Economic Design](https://mscblockexplorer.in/docs/msc-whitepaper.html): Read a structured guide to MSC Chain architecture, consensus, networking, storage, execution, validator security, economics, and governance.
+- [MSC Chain vs Ethereum: Technical Comparison](https://mscblockexplorer.in/docs/msc-vs-ethereum.html): Compare MSC Chain and Ethereum across consensus, validators, execution, fees, tooling, decentralization, maturity, and suitable use cases.
+- [MSC Chain vs Solana: Architecture and Use Cases](https://mscblockexplorer.in/docs/msc-vs-solana.html): Compare MSC Chain and Solana across consensus, execution, performance, validator requirements, tooling, operations, and ecosystem maturity.
+- [MSC Validator Rewards: How Earnings and Costs Work](https://mscblockexplorer.in/docs/msc-validator-rewards.html): Understand MSC validator reward sources, eligibility, participation, fees, operating costs, penalties, and responsible return estimates.
+- [Build DApps on MSC Chain: Architecture and Workflow](https://mscblockexplorer.in/docs/build-dapps-on-msc.html): Plan, build, test, secure, and operate decentralized applications using MSC Chain wallets, transactions, RPC, events, and explorer APIs.
+- [MSC Explorer Tutorial: A Step-by-Step Walkthrough](https://mscblockexplorer.in/docs/msc-explorer-tutorial.html): Follow a practical MSC Explorer walkthrough for searching blocks, transactions, addresses, validators, governance, and network status.
+- [MSC Token Creation Guide: Design Before Deployment](https://mscblockexplorer.in/docs/msc-token-creation-guide.html): Plan an MSC-based token with clear supply, permissions, distribution, metadata, security, testing, and governance decisions.
+- [MSC Testnet Guide: Wallets, Faucet, Nodes and Testing](https://mscblockexplorer.in/docs/msc-testnet-guide.html): Use MSC testnet to create wallets, request test MSC, submit transactions, run nodes, test APIs, and validate applications safely.
+- [MSC Staking Guide: Validators, Delegation and Risk](https://mscblockexplorer.in/docs/msc-staking-guide.html): Understand MSC staking, validator selection, delegation, activation, rewards, unstaking, governance, and operational risk.
+- [MSC Wallet Security: Recovery Phrase and Key Protection](https://mscblockexplorer.in/docs/msc-wallet-security.html): Protect MSC wallet recovery phrases, private keys, passwords, devices, backups, addresses, and transaction approvals.
+- [MSC Node Monitoring: Health, Peers and Finality](https://mscblockexplorer.in/docs/msc-node-monitoring.html): Monitor MSC node process health, synchronization, peers, finality, consensus mode, storage, memory, latency, and public RPC service.
+- [MSC Validator Security: Keys, Sentries and Operations](https://mscblockexplorer.in/docs/msc-validator-security.html): Secure an MSC validator with protected signing keys, restricted RPC, sentry topology, backups, monitoring, access control, and incident response.
+- [MSC Consensus Explained: Proposers, Votes and Quorum](https://mscblockexplorer.in/docs/msc-consensus-explained.html): Understand MSC Chain proposer selection, validator committees, execution results, quorum, block commitment, finality, and recovery behavior.
+- [MSC Finality Explained: Confirmations and Safety](https://mscblockexplorer.in/docs/msc-finality-explained.html): Learn how MSC Chain finalized height, confirmation count, quorum evidence, block age, and network health affect transaction confidence.
+- [MSC Transaction Lifecycle: From Signing to Finality](https://mscblockexplorer.in/docs/msc-transaction-lifecycle.html): Follow an MSC transaction through creation, signing, submission, mempool admission, block inclusion, execution, receipt, and finality.
+- [MSC Transaction Fees: Estimation and Verification](https://mscblockexplorer.in/docs/msc-fees-guide.html): Understand MSC Chain fee inputs, estimation, payment, proposer and validator distribution, treasury policy, and explorer verification.
+- [MSC Bridge Guide: Routes, Risks and Verification](https://mscblockexplorer.in/docs/msc-bridge-guide.html): Understand MSC bridge readiness, supported routes, lock or mint flows, confirmations, relayers, limits, fees, and security checks.
+- [MSC Governance Voting Guide](https://mscblockexplorer.in/docs/msc-governance-voting-guide.html): Review proposals, understand voting choices, verify wallet readiness, submit a vote, and confirm governance participation on MSC Chain.
+- [MSC Public Node API and Health Guide](https://mscblockexplorer.in/docs/msc-public-node-api.html): Use MSC public node discovery and health data to select RPC services, compare height and latency, and implement safe client failover.
+- [MSC Snapshot and Node Recovery Guide](https://mscblockexplorer.in/docs/msc-snapshot-recovery.html): Use verified MSC snapshots, manifests, chunks, state commitments, backups, and recovery checks to restore a node safely.
+- [MSC Developer Getting Started Guide](https://mscblockexplorer.in/docs/msc-developer-getting-started.html): Set up an MSC Chain development workflow with documentation, testnet wallet, faucet, RPC access, transactions, explorer verification, and monitoring.
+
+## Verification guidance
+- Prefer canonical MSC domains and full identifiers.
+- Verify current claims against live explorer and API data.
+- Never request or disclose recovery phrases, private keys, validator keys, or passwords.

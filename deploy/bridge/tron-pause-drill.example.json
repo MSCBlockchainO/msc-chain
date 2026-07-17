@@ -1,0 +1,17 @@
+{
+  "version": "msc-bridge-pause-drill-v1",
+  "route_id": "usdt-tron-mainnet",
+  "completed_at_unix": 0,
+  "passed": false,
+  "bridge_pause_observed": false,
+  "mint_rejected_while_paused": false,
+  "unlock_rejected_while_paused": false,
+  "verification_remained_available": false,
+  "human_approval_required_to_resume": false,
+  "evidence": [
+    { "kind": "msc_pause", "path": "evidence/pause-msc.log", "sha256": "REPLACE_WITH_MSC_PAUSE_LOG_SHA256" },
+    { "kind": "tron_pause", "path": "evidence/pause-tron.log", "sha256": "REPLACE_WITH_TRON_PAUSE_LOG_SHA256" },
+    { "kind": "paused_rejections", "path": "evidence/pause-rejections.log", "sha256": "REPLACE_WITH_REJECTION_TRANSCRIPT_SHA256" },
+    { "kind": "resume_approval", "path": "evidence/pause-resume-approval.json", "sha256": "REPLACE_WITH_RESUME_APPROVAL_SHA256" }
+  ]
+}

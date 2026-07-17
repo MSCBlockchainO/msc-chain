@@ -29,7 +29,7 @@ const METADATA_FETCH_TIMEOUT_MS = 5000;
 const METADATA_MAX_BYTES = 256 * 1024;
 const IPFS_GATEWAY = "https://ipfs.io/ipfs/";
 const DEFAULT_BASE_COIN_LOGOS = Object.freeze({
-  MSC: "https://ipfs.io/ipfs/bafybeifywdc2qj4zbdbcjyxs27mokq5knwf7uki6wm32yzg5fshbnjvyjy",
+  MSC: "assets/msc-logo-64.png",
 });
 const DEFAULT_FEE_POLICY = Object.freeze({
   min_bps: 20,
@@ -203,8 +203,7 @@ const state = {
   authInFlight: false,
   walletStatus: null,
   walletStatusError: "",
-  walletEVMAddress: "",
-  baseCoinsBySymbol: Object.create(null),
+	baseCoinsBySymbol: Object.create(null),
   dtlTokensBySymbol: Object.create(null),
   metadataCache: new Map(),
   nftTab: "721",
@@ -212,22 +211,12 @@ const state = {
   nft1155Items: [],
   dexPools: [],
   dexLastQuote: null,
-  bridgeApprovalQueue: [],
-  bridgeApprovalActive: null,
-  bridgeApprovalTimer: null,
   walletBalance: null,
   walletBalanceCoin: "MSC",
+  walletBalanceHeight: 0,
+  walletBalanceVerified: false,
 };
 
-let mscInjectedProvider = null;
-let mscProviderLastAccounts = [];
-let mscProviderLastChainIdHex = "";
-const MSC_PROVIDER_BRIDGE_NAMESPACE = "msc-wallet-bridge-v1";
-const MSC_PROVIDER_BRIDGE_EXTRA_ORIGINS_KEY = "msc_bridge_allowed_origins";
-const MSC_PROVIDER_BRIDGE_ALLOW_ALL_KEY = "msc_bridge_allow_all";
-let mscBridgeClients = [];
-
-const EVM_WEI_PER_MSC = 1000000000000000000n;
 const API_REQUEST_TIMEOUT_MS = 15000;
 
 const el = (id) => document.getElementById(id);
@@ -239,15 +228,11 @@ const setStatus = (element, message, tone = "info") => {
 
 const buildWalletQrPayload = () => {
   if (!state.wallet || !state.wallet.address) return "";
-  const chain = state.chainId || MSC_ONLY_CHAIN_ID;
-  const pubkey = state.wallet.publicKey || "";
-  const evm = String(el("walletEvmAddress")?.textContent || "").trim();
-  const parts = [`address=${encodeURIComponent(state.wallet.address)}`];
+	const chain = state.chainId || MSC_ONLY_CHAIN_ID;
+	const pubkey = state.wallet.publicKey || "";
+	const parts = [`address=${encodeURIComponent(state.wallet.address)}`];
   if (pubkey) {
     parts.push(`pubkey=${encodeURIComponent(pubkey)}`);
-  }
-  if (evm && evm !== "—") {
-    parts.push(`evm=${encodeURIComponent(evm)}`);
   }
   parts.push(`chain=${encodeURIComponent(chain)}`);
   return `msc://wallet?${parts.join("&")}`;
@@ -284,8 +269,7 @@ const parseQrPayload = (payload) => {
     const coin = normalizeCoinSymbolInput(url.searchParams.get("coin") || "MSC") || "MSC";
     const chain = String(url.searchParams.get("chain") || "").trim();
     const pubkey = String(url.searchParams.get("pubkey") || "").trim();
-    const evm = String(url.searchParams.get("evm") || "").trim();
-    return { kind, address, amount, coin, chain, pubkey, evm, raw };
+		return { kind, address, amount, coin, chain, pubkey, raw };
   } catch (err) {
     if (QR_DEBUG) console.log("QR PARSE FAILED: invalid URL", raw, err);
     return null;
@@ -315,14 +299,7 @@ const applyQrPayloadToSend = (parsed) => {
   }
   el("sendAmount").focus();
 
-  const autoSubmit = String(localStorage.getItem("msc_qr_auto_submit") || "1").trim();
-  if (parsed.kind === "pay" && parsed.amount > 0 && autoSubmit === "1") {
-    setTimeout(() => {
-      if (!state.sending && sendForm && typeof sendForm.requestSubmit === "function") {
-        sendForm.requestSubmit();
-      }
-    }, 600);
-  }
+  // Scanned payment details always require the user's explicit send action.
 };
 
 const openQrModal = (title, payload) => {
@@ -352,11 +329,10 @@ const openQrModal = (title, payload) => {
     });
     const parsed = parseQrPayload(payload);
     if (parsed && parsed.kind === "wallet") {
-      payloadEl.textContent =
-        `address: ${parsed.address}\n` +
-        `chain: ${parsed.chain || "—"}\n` +
-        `pubkey: ${parsed.pubkey || "—"}\n` +
-        `evm: ${parsed.evm || "—"}`;
+		payloadEl.textContent =
+			`address: ${parsed.address}\n` +
+			`chain: ${parsed.chain || "—"}\n` +
+			`pubkey: ${parsed.pubkey || "—"}`;
     } else {
       payloadEl.textContent = payload;
     }
@@ -369,11 +345,10 @@ const openQrModal = (title, payload) => {
     img.src = window.MSCQRCode.toDataURL(payload, 320);
     const parsed = parseQrPayload(payload);
     if (parsed && parsed.kind === "wallet") {
-      payloadEl.textContent =
-        `address: ${parsed.address}\n` +
-        `chain: ${parsed.chain || "—"}\n` +
-        `pubkey: ${parsed.pubkey || "—"}\n` +
-        `evm: ${parsed.evm || "—"}`;
+		payloadEl.textContent =
+			`address: ${parsed.address}\n` +
+			`chain: ${parsed.chain || "—"}\n` +
+			`pubkey: ${parsed.pubkey || "—"}`;
     } else {
       payloadEl.textContent = payload;
     }
@@ -686,20 +661,6 @@ const autoSyncMsInput = el("autoSyncMs");
 const broadcastSelect = el("broadcastMode");
 const netControls = el("netControls");
 const toggleAdminSettingsBtn = el("toggleAdminSettings");
-const bridgeApprovalOverlay = el("bridgeApprovalOverlay");
-const bridgeApprovalStatus = el("bridgeApprovalStatus");
-const bridgeApprovalTitle = el("bridgeApprovalTitle");
-const bridgeApprovalSubtitle = el("bridgeApprovalSubtitle");
-const bridgeApprovalNetwork = el("bridgeApprovalNetwork");
-const bridgeApprovalOrigin = el("bridgeApprovalOrigin");
-const bridgeApprovalAccount = el("bridgeApprovalAccount");
-const bridgeApprovalTo = el("bridgeApprovalTo");
-const bridgeApprovalAmount = el("bridgeApprovalAmount");
-const bridgeApprovalGas = el("bridgeApprovalGas");
-const bridgeApprovalFee = el("bridgeApprovalFee");
-const bridgeApprovalSpeed = el("bridgeApprovalSpeed");
-const bridgeApproveBtn = el("bridgeApproveBtn");
-const bridgeRejectBtn = el("bridgeRejectBtn");
 const walletBridgeStatus = el("walletBridgeStatus");
 const walletBridgeMode = el("walletBridgeMode");
 const walletBridgeChains = el("walletBridgeChains");
@@ -929,21 +890,6 @@ const sha256 = async (bytes) => {
   return new Uint8Array(hash);
 };
 
-const normalizeHexData = (value) => {
-  const raw = String(value || "").trim().replace(/^0x/i, "");
-  if (!raw) return "0x";
-  const padded = raw.length % 2 === 0 ? raw : `0${raw}`;
-  return `0x${padded.toLowerCase()}`;
-};
-
-const normalizeHexHash = (value) => normalizeHexData(value);
-
-const isHexAddress = (value) => /^0x[0-9a-fA-F]{40}$/.test(String(value || "").trim());
-
-const normalizeHexAddress = (value) => {
-  if (!isHexAddress(value)) return "";
-  return `0x${String(value).trim().slice(2).toLowerCase()}`;
-};
 
 const isLikelyMSCWalletAddress = (raw) => {
   const value = String(raw || "").trim();
@@ -964,15 +910,6 @@ const parseRPCQuantityBigInt = (value, fieldName = "value") => {
   throw new Error(`invalid ${fieldName}`);
 };
 
-const encodeRPCQuantityBigInt = (value) => {
-  const bi = typeof value === "bigint" ? value : BigInt(value || 0);
-  const safe = bi < 0n ? 0n : bi;
-  return `0x${safe.toString(16)}`;
-};
-
-const chainIdHex = () => {
-  return MSC_ONLY_CHAIN_ID_HEX;
-};
 
 const isMSCChainID = (value) => {
   const parsed = Number.parseInt(String(value || "").trim(), 10);
@@ -988,36 +925,6 @@ const enforceMSCChainID = () => {
   localStorage.setItem("msc_chain", MSC_ONLY_CHAIN_ID);
 };
 
-const weiToWholeMSCAmount = (weiValue) => {
-  if (weiValue < 0n) {
-    throw new Error("value must be non-negative");
-  }
-  if (weiValue === 0n) return 0;
-  const whole = weiValue / EVM_WEI_PER_MSC;
-  const remainder = weiValue % EVM_WEI_PER_MSC;
-  if (remainder !== 0n) {
-    // Compatibility: some tools occasionally attach tiny wei dust on deploy/call.
-    // Native MSC accounting is whole-unit only, so sub-1 MSC gets treated as zero.
-    if (whole === 0n) return 0;
-    throw new Error("value must be in whole MSC units (18 decimals)");
-  }
-  const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
-  if (whole > maxSafe) {
-    throw new Error("value too large");
-  }
-  return Number(whole);
-};
-
-const evmAliasFromAddressLocal = async (addr) => {
-  let value = String(addr || "").trim();
-  if (!value) return "";
-  if (isHexAddress(value)) return normalizeHexAddress(value);
-  if (isLikelyMSCWalletAddress(value) && !/^MSC/i.test(value)) {
-    value = `MSC${value}`;
-  }
-  const hash = await sha256(enc.encode(value.toLowerCase()));
-  return `0x${bytesToHex(hash.slice(12))}`;
-};
 
 const HD_SCHEME = "bip39-slip10-ed25519";
 const HD_PURPOSE = 44;
@@ -1645,61 +1552,6 @@ const rpcRequest = async (method, params = [], { useFallback = true } = {}) => {
   return res ? res.result : null;
 };
 
-const parseRPCAddressAliasResult = (payload, fallbackInput) => {
-  if (payload && typeof payload === "object") {
-    if (typeof payload.evm_address === "string" && payload.evm_address.trim()) {
-      return normalizeHexAddress(payload.evm_address);
-    }
-    if (typeof payload.result === "string" && payload.result.trim()) {
-      return normalizeHexAddress(payload.result);
-    }
-  }
-  if (typeof payload === "string" && payload.trim()) {
-    return normalizeHexAddress(payload);
-  }
-  if (isHexAddress(fallbackInput)) {
-    return normalizeHexAddress(fallbackInput);
-  }
-  return "";
-};
-
-const fetchEVMAddressAlias = async (addressLike) => {
-  const input = String(addressLike || "").trim();
-  if (!input) return "";
-  if (isHexAddress(input)) return normalizeHexAddress(input);
-
-  try {
-    const resolved = await rpcRequest("msc_getEvmAddress", [input]);
-    const alias = parseRPCAddressAliasResult(resolved, input);
-    if (alias) return alias;
-  } catch (err) {
-    // Fallback to local deterministic derivation if RPC alias registration fails.
-  }
-  return evmAliasFromAddressLocal(input);
-};
-
-const ensureWalletEVMAddress = async () => {
-  if (!state.wallet || !state.wallet.address) {
-    state.walletEVMAddress = "";
-    return "";
-  }
-  if (state.walletEVMAddress && isHexAddress(state.walletEVMAddress)) {
-    return normalizeHexAddress(state.walletEVMAddress);
-  }
-  const alias = await fetchEVMAddressAlias(state.wallet.address);
-  state.walletEVMAddress = alias || "";
-  return state.walletEVMAddress;
-};
-
-const resolveEVMRecipientAddress = async (value) => {
-  const input = String(value || "").trim();
-  if (!input) return "";
-  if (isHexAddress(input)) return normalizeHexAddress(input);
-  if (isLikelyMSCWalletAddress(input)) {
-    return fetchEVMAddressAlias(input);
-  }
-  throw new Error("invalid recipient address");
-};
 
 const setMetricText = (node, text) => {
   if (node) node.textContent = text;
@@ -2397,8 +2249,7 @@ const connectToRPC = async ({ persist = false } = {}) => {
   setStatus(statusEls.connection, "Connecting", "info");
   await syncAll();
   scheduleAutoSync();
-  await syncInjectedProviderState({ emitAccounts: false, emitChain: true });
-  loadWalletBridgeStatus().catch(() => {});
+	loadWalletBridgeStatus().catch(() => {});
   updateWalletSecurityPanel();
 };
 
@@ -2479,155 +2330,6 @@ const verifyWalletBridgeProof = async () => {
   }
 };
 
-const clearBridgeApprovalTimer = () => {
-  if (state.bridgeApprovalTimer) {
-    clearTimeout(state.bridgeApprovalTimer);
-    state.bridgeApprovalTimer = null;
-  }
-};
-
-const formatBridgeRequestOrigin = (value) => {
-  const raw = String(value || "").trim();
-  if (!raw) return "unknown dapp";
-  try {
-    const parsed = new URL(raw);
-    return parsed.hostname || raw;
-  } catch (err) {
-    return raw.replace(/^https?:\/\//i, "");
-  }
-};
-
-const describeBridgeTx = (details) => {
-  if (!details) {
-    return {
-      title: "Approve transaction",
-      subtitle: "This site wants to submit a transaction.",
-    };
-  }
-  if (details.kind === "deploy") {
-    return {
-      title: "Deploy a contract",
-      subtitle: "This site wants you to deploy a contract.",
-    };
-  }
-  if (details.kind === "call") {
-    return {
-      title: "Contract interaction",
-      subtitle: "This site wants to execute a contract function.",
-    };
-  }
-  if (details.kind === "connect") {
-    return {
-      title: "Connect wallet",
-      subtitle: "This site wants access to your wallet account.",
-    };
-  }
-  if (details.kind === "stake") {
-    return {
-      title: "Stake transaction",
-      subtitle: "Confirm staking transaction from your wallet.",
-    };
-  }
-  if (details.kind === "unstake") {
-    return {
-      title: "Unstake transaction",
-      subtitle: "Confirm unstake transaction from your wallet.",
-    };
-  }
-  return {
-    title: "Send transaction",
-    subtitle: "This site wants to send a transaction.",
-  };
-};
-
-const hideBridgeApprovalOverlay = () => {
-  if (!bridgeApprovalOverlay) return;
-  bridgeApprovalOverlay.classList.add("hidden");
-  bridgeApprovalOverlay.setAttribute("aria-hidden", "true");
-};
-
-const showBridgeApprovalOverlay = (details) => {
-  if (!bridgeApprovalOverlay) return;
-  const txUi = describeBridgeTx(details);
-  if (bridgeApprovalTitle) bridgeApprovalTitle.textContent = txUi.title;
-  if (bridgeApprovalSubtitle) bridgeApprovalSubtitle.textContent = txUi.subtitle;
-  if (bridgeApprovalNetwork) {
-    bridgeApprovalNetwork.textContent = `${MSC_COIN_FULL_NAME} (${MSC_ONLY_CHAIN_ID_DEC})`;
-  }
-  if (bridgeApprovalOrigin) {
-    bridgeApprovalOrigin.textContent = formatBridgeRequestOrigin(details.origin);
-  }
-  if (bridgeApprovalAccount) {
-    bridgeApprovalAccount.textContent = state.walletEVMAddress || state.wallet?.address || "—";
-  }
-  if (details.kind === "connect") {
-    if (bridgeApprovalTo) bridgeApprovalTo.textContent = "Account access";
-    if (bridgeApprovalAmount) bridgeApprovalAmount.textContent = "0 MSC";
-    if (bridgeApprovalGas) bridgeApprovalGas.textContent = "0";
-    if (bridgeApprovalFee) bridgeApprovalFee.textContent = "0 MSC";
-    if (bridgeApprovalSpeed) bridgeApprovalSpeed.textContent = "Instant";
-  } else {
-    const amountText = String(details.amountLabel || `${details.amount} MSC`);
-    const feeText = String(details.feeLabel || `${details.fee} MSC`);
-    if (bridgeApprovalTo) bridgeApprovalTo.textContent = details.to || "(contract deployment)";
-    if (bridgeApprovalAmount) bridgeApprovalAmount.textContent = amountText;
-    if (bridgeApprovalGas) bridgeApprovalGas.textContent = `${details.gasLimit}`;
-    if (bridgeApprovalFee) bridgeApprovalFee.textContent = feeText;
-    if (bridgeApprovalSpeed) bridgeApprovalSpeed.textContent = "Market ~1 sec";
-  }
-  if (bridgeApprovalStatus) setStatus(bridgeApprovalStatus, "Waiting", "info");
-  bridgeApprovalOverlay.classList.remove("hidden");
-  bridgeApprovalOverlay.setAttribute("aria-hidden", "false");
-  try {
-    window.focus();
-  } catch (err) {
-    // ignore focus restrictions
-  }
-};
-
-const settleBridgeApproval = (approved) => {
-  const active = state.bridgeApprovalActive;
-  clearBridgeApprovalTimer();
-  hideBridgeApprovalOverlay();
-  state.bridgeApprovalActive = null;
-  if (!active) return;
-  if (approved) {
-    active.resolve();
-  } else {
-    const reason = active.details && active.details.kind === "connect"
-      ? "user rejected wallet connection"
-      : "user rejected transaction";
-    active.reject(new Error(reason));
-  }
-  if (state.bridgeApprovalQueue.length > 0) {
-    setTimeout(() => {
-      pumpBridgeApprovalQueue();
-    }, 0);
-  }
-};
-
-const pumpBridgeApprovalQueue = () => {
-  if (state.bridgeApprovalActive) return;
-  if (!state.bridgeApprovalQueue.length) return;
-  const next = state.bridgeApprovalQueue.shift();
-  if (!next) return;
-  state.bridgeApprovalActive = next;
-  showBridgeApprovalOverlay(next.details);
-  if (bridgeApprovalStatus) setStatus(bridgeApprovalStatus, "Approve or reject", "info");
-  logActivity(
-    `Approval requested: ${describeBridgeTx(next.details).title} from=${formatBridgeRequestOrigin(next.details.origin)} fee=${next.details.fee} MSC`
-  );
-  state.bridgeApprovalTimer = setTimeout(() => {
-    if (bridgeApprovalStatus) setStatus(bridgeApprovalStatus, "Timed out", "error");
-    settleBridgeApproval(false);
-  }, 170000);
-};
-
-const enqueueBridgeApproval = (details) =>
-  new Promise((resolve, reject) => {
-    state.bridgeApprovalQueue.push({ details, resolve, reject });
-    pumpBridgeApprovalQueue();
-  });
 
 const getErrorText = (err) => {
   if (!err) return "";
@@ -4654,10 +4356,10 @@ const loadTxHistory = async ({ force = false } = {}) => {
           let typeLabel = "Transfer";
           if (tx.type === 2) {
             typeLabel = "Stake";
-          } else if (tx.type === 6) {
-            typeLabel = "Unstake";
-          } else if (tx.type === 7) {
-            typeLabel = "EVM";
+			} else if (tx.type === 6) {
+				typeLabel = "Unstake";
+			} else if (tx.type === 7) {
+				typeLabel = "Removed VM (legacy)";
           }
           const peer = tx.from === state.wallet.address ? tx.to : tx.from;
           const item = document.createElement("div");
@@ -4687,10 +4389,6 @@ const updateWalletUI = () => {
   if (authWalletPublicKeyEl) {
     authWalletPublicKeyEl.textContent = wallet ? wallet.publicKey : "—";
   }
-  const evmAddressEl = el("walletEvmAddress");
-  if (evmAddressEl) {
-    evmAddressEl.textContent = "—";
-  }
   if (wallet) {
     el("balanceAddress").value = wallet.address;
     el("faucetAddress").value = wallet.address;
@@ -4716,30 +4414,17 @@ const updateWalletUI = () => {
     }
   }
 
-  if (!wallet) {
-    state.walletStatus = null;
-    state.walletStatusError = "";
-    state.walletEVMAddress = "";
-  } else if (state.walletStatus?.wallet && state.walletStatus.wallet !== wallet.address) {
-    state.walletStatus = null;
-    state.walletStatusError = "";
-    state.walletEVMAddress = "";
-  }
-  applyWalletStatusUI();
+	if (!wallet) {
+		state.walletStatus = null;
+		state.walletStatusError = "";
+	} else if (state.walletStatus?.wallet && state.walletStatus.wallet !== wallet.address) {
+		state.walletStatus = null;
+		state.walletStatusError = "";
+	}
+	applyWalletStatusUI();
 
-  if (wallet && evmAddressEl) {
-    ensureWalletEVMAddress()
-      .then((alias) => {
-        evmAddressEl.textContent = alias || "—";
-      })
-      .catch(() => {
-        evmAddressEl.textContent = "—";
-      });
-  }
-
-  updateWallet3Chrome();
-  updateWalletSecurityPanel();
-  syncInjectedProviderState({ emitAccounts: true, emitChain: false });
+	updateWallet3Chrome();
+	updateWalletSecurityPanel();
 };
 
 const autoFillReceiveAddress = () => {
@@ -4785,8 +4470,7 @@ const computeTxFee = (amount) => {
 };
 
 const buildTxPayload = (tx, chainId) => {
-  const parts = [];
-  const stripHexPrefix = (value) => String(value || "").trim().replace(/^0x/i, "");
+	const parts = [];
   const txType = Number.parseInt(tx.type ?? tx.Type ?? 0, 10) || 0;
   const normalizedValidatorPubKey = normalizeValidatorPubKeyHex(
     tx.validator_pubkey || tx.ValidatorPubKey || "",
@@ -4814,11 +4498,13 @@ const buildTxPayload = (tx, chainId) => {
   if (txType === 2 && normalizedValidatorPubKey) {
     pushString(normalizedValidatorPubKey);
   }
-  pushInt64(tx.evm_gas_limit || tx.evmGasLimit || 0);
-  pushString(stripHexPrefix(tx.evm_code || tx.evmCode || ""));
-  pushString(stripHexPrefix(tx.evm_input || tx.evmInput || ""));
-  pushString(stripHexPrefix(tx.evm_raw_tx || tx.evmRawTx || ""));
-  pushString(stripHexPrefix(tx.evm_tx_hash || tx.evmTxHash || ""));
+	// Historical wire slots remain fixed and empty; the removed VM cannot be
+	// smuggled back into a native wallet signature.
+	pushInt64(0);
+	pushString("");
+	pushString("");
+	pushString("");
+	pushString("");
   if (txType === 8) {
     pushString(String(tx.dtl_tx_type || tx.DTLTxType || "").trim());
     pushString(String(tx.dtl_token_id || tx.DTLTokenID || "").trim());
@@ -5020,11 +4706,7 @@ const unlockWallet = async (event) => {
 };
 
 const lockWallet = () => {
-  if (state.bridgeApprovalActive) {
-    logActivity("Bridge approval cancelled (wallet locked)");
-    settleBridgeApproval(false);
-  }
-  state.secretKey = null;
+	state.secretKey = null;
   state.pendingNonces = {};
   setExportedPrivateKey("");
   updateWalletUI();
@@ -5127,24 +4809,6 @@ const copyPublicKey = async () => {
   }
 };
 
-const copyEVMAddress = async () => {
-  const evmAddressEl = el("walletEvmAddress");
-  if (!evmAddressEl) return;
-  let address = evmAddressEl.textContent.trim();
-  if (!isHexAddress(address)) {
-    address = await ensureWalletEVMAddress();
-  }
-  if (!isHexAddress(address)) {
-    setStatus(el("walletState"), "No EVM address", "error");
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(address);
-    logActivity("EVM address copied");
-  } catch (err) {
-    setStatus(el("walletState"), "Copy failed", "error");
-  }
-};
 
 const updateFeeLabels = () => {
   const sendAmount = parseInt(el("sendAmount").value, 10) || 0;
@@ -5162,6 +4826,136 @@ const updateFeeLabels = () => {
   setMetricText(el("sendPreviewAmount"), `${formatNumber(sendAmount)} ${sendCoin}`);
   setMetricText(el("sendPreviewFee"), `${formatNumber(sendFee)} ${sendCoin}`);
   setMetricText(el("sendPreviewTotal"), `${formatNumber(sendAmount + sendFee)} ${sendCoin}`);
+};
+
+const balanceSnapshotHeight = (snapshot) => {
+  const value = Number(
+    snapshot?.height ??
+      snapshot?.finalized_height ??
+      snapshot?.finalizedHeight ??
+      snapshot?.Height ??
+      snapshot?.FinalizedHeight ??
+      0,
+  );
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+};
+
+const balanceSnapshotKey = (snapshot) =>
+  JSON.stringify({
+    balance: snapshot?.balance ?? snapshot?.Balance ?? null,
+    coin: String(snapshot?.coin || snapshot?.Coin || "MSC").toUpperCase(),
+  });
+
+const groupedBalanceMajority = (items) => {
+  const groups = new Map();
+  items.forEach((item) => {
+    const key = balanceSnapshotKey(item);
+    const group = groups.get(key) || [];
+    group.push(item);
+    groups.set(key, group);
+  });
+  return Array.from(groups.values()).sort((a, b) => b.length - a.length)[0] || [];
+};
+
+const selectStableBalanceSnapshot = (snapshots) => {
+  const valid = (snapshots || []).filter((item) => item && item.balance !== undefined);
+  if (valid.length === 1) {
+    return {
+      ...valid[0],
+      height: balanceSnapshotHeight(valid[0]),
+      matches: 1,
+      checked: 1,
+      verified: false,
+    };
+  }
+
+  const byHeight = new Map();
+  valid.forEach((item) => {
+    const height = balanceSnapshotHeight(item);
+    const group = byHeight.get(height) || [];
+    group.push(item);
+    byHeight.set(height, group);
+  });
+
+  const heights = Array.from(byHeight.keys()).sort((a, b) => b - a);
+  for (const height of heights) {
+    const comparable = byHeight.get(height) || [];
+    const majority = groupedBalanceMajority(comparable);
+    if (height > 0 && majority.length >= 2) {
+      return {
+        ...majority[0],
+        height,
+        matches: majority.length,
+        checked: comparable.length,
+        verified: true,
+      };
+    }
+  }
+
+  const byBalance = new Map();
+  valid.forEach((item) => {
+    const key = balanceSnapshotKey(item);
+    const group = byBalance.get(key) || [];
+    group.push(item);
+    byBalance.set(key, group);
+  });
+  const stableFloor = Array.from(byBalance.values())
+    .filter((group) => group.length >= 2)
+    .map((group) => {
+      const heightsForGroup = group.map(balanceSnapshotHeight).filter((height) => height > 0);
+      const height = heightsForGroup.length ? Math.min(...heightsForGroup) : 0;
+      return { group, height };
+    })
+    .filter((item) => item.height > 0)
+    .sort((a, b) => {
+      if (b.height !== a.height) return b.height - a.height;
+      return b.group.length - a.group.length;
+    })[0];
+  if (stableFloor) {
+    const source = stableFloor.group.find((item) => balanceSnapshotHeight(item) === stableFloor.height) || stableFloor.group[0];
+    return {
+      ...source,
+      height: stableFloor.height,
+      matches: stableFloor.group.length,
+      checked: stableFloor.group.length,
+      verified: true,
+    };
+  }
+  return null;
+};
+
+const canApplyWalletBalanceSnapshot = (snapshot) => {
+  if (!snapshot || snapshot.balance === undefined) return false;
+  const incomingHeight = balanceSnapshotHeight(snapshot);
+  const currentHeight = Number(state.walletBalanceHeight || 0);
+  const incomingVerified = !!snapshot.verified;
+  const currentVerified = !!state.walletBalanceVerified;
+  if (currentHeight > 0) {
+    if (!incomingHeight || incomingHeight < currentHeight) return false;
+    if (!incomingVerified && currentVerified) return false;
+    if (
+      incomingHeight === currentHeight &&
+      String(snapshot.balance) !== String(state.walletBalance) &&
+      currentVerified
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const applyWalletBalanceSnapshot = (snapshot, resultHTML = "") => {
+  if (!canApplyWalletBalanceSnapshot(snapshot)) return false;
+  const height = balanceSnapshotHeight(snapshot);
+  state.walletBalance = snapshot.balance;
+  state.walletBalanceCoin = snapshot.coin || state.walletBalanceCoin || "MSC";
+  state.walletBalanceHeight = height || state.walletBalanceHeight || 0;
+  state.walletBalanceVerified = !!snapshot.verified || state.walletBalanceVerified;
+  if (resultHTML && el("balanceResult")) {
+    el("balanceResult").innerHTML = resultHTML;
+  }
+  updateWallet3Chrome();
+  return true;
 };
 
 const refreshBalance = async ({ quick = false, force = false } = {}) => {
@@ -5192,15 +4986,24 @@ const refreshBalance = async ({ quick = false, force = false } = {}) => {
   return runWithInFlight(key, async () => {
     try {
 	      if (quick) {
-	        const bal = await apiWithFallback(
-	          `/balance?address=${encodeURIComponent(address)}&coin=${encodeURIComponent(coin)}&state=finalized`,
-	        );
+	        const [bal, status] = await Promise.all([
+	          apiWithFallback(
+	            `/balance?address=${encodeURIComponent(address)}&coin=${encodeURIComponent(coin)}&state=finalized`,
+	          ),
+	          apiWithFallback("/status").catch(() => null),
+	        ]);
 	        state.lastQuickBalanceSyncAt = Date.now();
-	        state.walletBalance = bal.balance;
-	        state.walletBalanceCoin = bal.coin || coin;
-	        el("balanceResult").innerHTML = `<div class="log-item">Finalized: ${bal.balance} ${bal.coin || coin}</div>`;
-	        setStatus(statusEl, "Balance updated", "success");
-	        updateWallet3Chrome();
+	        const snapshot = {
+	          balance: bal.balance,
+	          coin: bal.coin || coin,
+	          height: Number(bal.height || bal.finalized_height || status?.finalized_height || status?.height || 0),
+	          verified: false,
+	        };
+	        const applied = applyWalletBalanceSnapshot(
+	          snapshot,
+	          `<div class="log-item">Finalized${snapshot.height ? `@h=${snapshot.height}` : ""}: ${bal.balance} ${bal.coin || coin}</div>`,
+	        );
+	        setStatus(statusEl, applied ? "Balance updated" : "Ignored stale balance response", applied ? "success" : "info");
 	        return;
 	      }
 
@@ -5219,7 +5022,6 @@ const refreshBalance = async ({ quick = false, force = false } = {}) => {
       );
 
       const rows = [];
-      const counts = new Map();
       let successCount = 0;
       let maxHeight = 0;
 
@@ -5233,9 +5035,6 @@ const refreshBalance = async ({ quick = false, force = false } = {}) => {
       results.forEach((res, index) => {
         if (res.status === "fulfilled") {
           const { rpc, balance, height } = res.value;
-          const keyValue = String(balance);
-          const eligible = height === maxHeight;
-          counts.set(keyValue, (counts.get(keyValue) || 0) + (eligible ? 1 : 0));
           const lag = maxHeight > 0 ? ` (h=${height}${height < maxHeight ? `, -${maxHeight - height}` : ""})` : "";
           rows.push(`<div class="log-item">${rpc} ? ${balance} ${coin}${lag}</div>`);
         } else {
@@ -5245,30 +5044,35 @@ const refreshBalance = async ({ quick = false, force = false } = {}) => {
       });
 
       let consensus = null;
-      let consensusCount = 0;
-      counts.forEach((count, value) => {
-        if (count > consensusCount) {
-          consensusCount = count;
-          consensus = value;
-        }
+      const successfulSnapshots = [];
+      results.forEach((res) => {
+        if (res.status === "fulfilled") successfulSnapshots.push(res.value);
       });
+      const selected = selectStableBalanceSnapshot(successfulSnapshots);
+      let consensusCount = Number(selected?.matches || 0);
+      if (selected) consensus = String(selected.balance);
 
       const total = rpcTargets.length;
       const consensusLine =
-        consensus !== null
-          ? `Consensus@h=${maxHeight}: ${consensus} ${coin} (${consensusCount}/${total})`
+        selected
+          ? `${selected.verified ? "Verified" : "Pending"}@h=${selected.height || maxHeight}: ${consensus} ${coin} (${consensusCount}/${selected.checked || total})`
           : "Consensus: unavailable";
 
       state.lastFullBalanceSyncAt = Date.now();
       state.lastQuickBalanceSyncAt = state.lastFullBalanceSyncAt;
-      state.walletBalance = consensus;
-      state.walletBalanceCoin = coin;
-      el("balanceResult").innerHTML = `<div class="log-item">${consensusLine}</div>${rows.join("")}`;
-      updateWallet3Chrome();
+      let applied = false;
+      if (selected) {
+        applied = applyWalletBalanceSnapshot(
+          { ...selected, coin },
+          `<div class="log-item">${consensusLine}</div>${rows.join("")}`,
+        );
+      } else if (el("balanceResult")) {
+        el("balanceResult").innerHTML = `<div class="log-item">${consensusLine}</div>${rows.join("")}`;
+      }
       setStatus(
         statusEl,
-        successCount ? "Balance updated" : "Balance failed",
-        successCount ? "success" : "error",
+        selected ? applied ? "Balance updated" : "Ignored stale balance response" : successCount ? "Waiting for finalized quorum" : "Balance failed",
+        selected ? applied ? "success" : "info" : successCount ? "info" : "error",
       );
       logActivity("Balance checked (multi-node)");
     } catch (err) {
@@ -5376,709 +5180,10 @@ const submitUserTx = async (buildTx) => {
   }
 };
 
-const providerAccounts = async (requireUnlock) => {
-  if (!state.wallet) {
-    if (requireUnlock) {
-      throw new Error("MSC wallet not loaded");
-    }
-    return [];
-  }
-  if (!state.secretKey) {
-    if (requireUnlock) {
-      throw new Error("MSC wallet is locked");
-    }
-    return [];
-  }
-  const alias = await ensureWalletEVMAddress();
-  return alias ? [alias] : [];
-};
 
-const confirmBridgeEVMTransaction = async ({ to, amount, gasLimit, fee, origin, kind }) => {
-  // msc_bridge_tx_confirm:
-  // - "0" => auto-approve bridge tx (no prompt)
-  // - "1" => show in-app approval sheet (MetaMask-like popup)
-  const mode = String(localStorage.getItem("msc_bridge_tx_confirm") || "1").trim();
-  if (mode === "0") return;
 
-  const details = {
-    to: to || "",
-    amount,
-    gasLimit,
-    fee,
-    origin: origin || "",
-    kind: kind || "send",
-  };
 
-  if (bridgeApprovalOverlay && bridgeApproveBtn && bridgeRejectBtn) {
-    await enqueueBridgeApproval(details);
-    return;
-  }
 
-  // If approval UI is unavailable, fail open for bridge compatibility.
-  logActivity("Bridge approval UI unavailable, auto-approving request");
-};
-
-const confirmWalletTransaction = async ({ to, amount, coin, fee, kind }) => {
-  // msc_wallet_tx_confirm:
-  // - "0" => auto-approve local wallet tx (no prompt)
-  // - "1" => show in-app approval sheet (same as wallet connect)
-  const mode = String(localStorage.getItem("msc_wallet_tx_confirm") || "1").trim();
-  if (mode === "0") return;
-
-  const normalizedCoin = normalizeCoinSymbolKey(coin) || "MSC";
-  const amountText = `${String(amount)} ${normalizedCoin}`;
-  const details = {
-    to: to || "",
-    amount: Number.isFinite(Number(amount)) ? Number(amount) : 0,
-    amountLabel: amountText,
-    gasLimit: 0,
-    fee: Number.isFinite(Number(fee)) ? Number(fee) : 0,
-    feeLabel: `${Number.isFinite(Number(fee)) ? Number(fee) : 0} MSC`,
-    origin: "MSC Wallet",
-    kind: kind || "send",
-  };
-
-  if (bridgeApprovalOverlay && bridgeApproveBtn && bridgeRejectBtn) {
-    await enqueueBridgeApproval(details);
-    return;
-  }
-
-  logActivity("Approval UI unavailable, auto-approving wallet transaction");
-};
-
-const confirmBridgeWalletConnect = async ({ origin }) => {
-  // msc_bridge_connect_confirm:
-  // - "0" => auto-approve wallet connect
-  // - "1" => show in-app approval sheet
-  const mode = String(localStorage.getItem("msc_bridge_connect_confirm") || "1").trim();
-  if (mode === "0") return;
-
-  const details = {
-    to: "Account access",
-    amount: 0,
-    gasLimit: 0,
-    fee: 0,
-    origin: origin || "",
-    kind: "connect",
-  };
-
-  if (bridgeApprovalOverlay && bridgeApproveBtn && bridgeRejectBtn) {
-    await enqueueBridgeApproval(details);
-    return;
-  }
-
-  logActivity("Bridge connect approval UI unavailable, auto-approving request");
-};
-
-const defaultEVMGasLimit = (hasData) => (hasData ? 3_000_000 : 21_000);
-
-const sendEVMTransactionViaWallet = async (txObject) => {
-  if (!txObject || typeof txObject !== "object") {
-    throw new Error("invalid transaction object");
-  }
-  if (!state.wallet || !state.secretKey) {
-    throw new Error("unlock MSC wallet first");
-  }
-
-  const walletAlias = await ensureWalletEVMAddress();
-  if (!walletAlias) {
-    throw new Error("failed to derive wallet EVM address");
-  }
-
-  const fromInput = String(txObject.from || "").trim();
-  if (fromInput) {
-    const fromAlias = await resolveEVMRecipientAddress(fromInput);
-    if (!fromAlias || fromAlias !== walletAlias) {
-      throw new Error("from address does not match unlocked MSC wallet");
-    }
-  }
-
-  const to = await resolveEVMRecipientAddress(txObject.to);
-  const data = normalizeHexData(txObject.input || txObject.data || "0x");
-  const requestOrigin = String(txObject.__bridgeOrigin || txObject.origin || "").trim();
-  const valueWei = parseRPCQuantityBigInt(txObject.value || "0x0", "value");
-  const amount = weiToWholeMSCAmount(valueWei);
-
-  const gasField = txObject.gas ?? txObject.gasLimit;
-  const hasData = data !== "0x";
-  const gasBig = gasField === undefined
-    ? BigInt(defaultEVMGasLimit(hasData))
-    : parseRPCQuantityBigInt(gasField, "gas");
-  if (gasBig <= 0n) {
-    throw new Error("gas must be greater than zero");
-  }
-  if (gasBig > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error("gas too large");
-  }
-  const gasLimit = Number(gasBig);
-
-  if (!to && data === "0x") {
-    throw new Error("contract deployment requires bytecode in data");
-  }
-
-  let kind = "send";
-  if (!to && data !== "0x") kind = "deploy";
-  else if (to && data !== "0x") kind = "call";
-
-  const fee = Math.max(1, Math.floor(gasLimit / 1000));
-  await confirmBridgeEVMTransaction({ to, amount, gasLimit, fee, origin: requestOrigin, kind });
-  const { txId, retried } = await submitUserTx((nonce) => ({
-    from: state.wallet.address,
-    to: to || "",
-    amount,
-    nonce,
-    publicKey: state.wallet.publicKey,
-    signature: "",
-    fee,
-    expiry: Math.floor(Date.now() / 1000) + 120,
-    type: 7,
-    coin: "MSC",
-    evm_gas_limit: gasLimit,
-    evm_code: to ? "0x00" : data,
-    evm_input: to ? data : "",
-  }));
-
-  const outHash = normalizeHexHash(txId);
-  if (!outHash || outHash === "0x") {
-    throw new Error("transaction submitted but hash unavailable");
-  }
-
-  const retryMsg = retried ? " (nonce synced)" : "";
-  setStatus(el("sendStatus"), `EVM tx submitted${retryMsg}`, "success");
-  logActivity(`EVM tx sent ${outHash.slice(0, 10)}...`);
-  loadTxHistory({ force: true });
-  refreshBalance({ force: true });
-  loadWalletStatus({ force: true });
-  return outHash;
-};
-
-const normalizeBridgeOrigin = (value) => {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  if (raw === "null") return "null";
-  try {
-    return new URL(raw).origin.toLowerCase();
-  } catch (err) {
-    return "";
-  }
-};
-
-const isLoopbackOrigin = (origin) =>
-  /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(String(origin || ""));
-
-const extraBridgeOrigins = () => {
-  const raw = localStorage.getItem(MSC_PROVIDER_BRIDGE_EXTRA_ORIGINS_KEY);
-  if (!raw) return new Set();
-  const out = new Set();
-  const parts = raw
-    .split(/[,\s]+/)
-    .map((item) => normalizeBridgeOrigin(item))
-    .filter(Boolean);
-  parts.forEach((item) => out.add(item));
-  return out;
-};
-
-const isAllowedBridgeOrigin = (origin) => {
-  const normalized = normalizeBridgeOrigin(origin);
-  if (!normalized) return false;
-  if (localStorage.getItem(MSC_PROVIDER_BRIDGE_ALLOW_ALL_KEY) === "1") return true;
-  if (normalized === normalizeBridgeOrigin(window.location.origin)) return true;
-  if (isLoopbackOrigin(normalized)) return true;
-  return extraBridgeOrigins().has(normalized);
-};
-
-const compactBridgeClients = () => {
-  mscBridgeClients = mscBridgeClients.filter((client) => {
-    if (!client || !client.source) return false;
-    if ("closed" in client.source && client.source.closed) return false;
-    return true;
-  });
-};
-
-const upsertBridgeClient = (source, origin) => {
-  if (!source || typeof source.postMessage !== "function") return;
-  const normalized = normalizeBridgeOrigin(origin);
-  if (!normalized) return;
-  compactBridgeClients();
-  const existing = mscBridgeClients.find(
-    (client) => client.source === source && client.origin === normalized
-  );
-  if (!existing) {
-    mscBridgeClients.push({ source, origin: normalized });
-  }
-};
-
-const sendBridgeResponse = (source, origin, payload) => {
-  if (!source || typeof source.postMessage !== "function") return;
-  try {
-    source.postMessage(
-      {
-        namespace: MSC_PROVIDER_BRIDGE_NAMESPACE,
-        ...payload,
-      },
-      origin
-    );
-  } catch (err) {
-    // Best-effort bridge response.
-  }
-};
-
-const broadcastBridgeEvent = (eventName, payload) => {
-  compactBridgeClients();
-  mscBridgeClients.forEach((client) => {
-    sendBridgeResponse(client.source, client.origin, {
-      type: "event",
-      event: eventName,
-      payload,
-      ts: Date.now(),
-    });
-  });
-};
-
-const installMSCProviderWindowBridge = () => {
-  if (typeof window === "undefined") return;
-  if (window.__mscBridgeInstalled) return;
-  window.__mscBridgeInstalled = true;
-
-  window.addEventListener("message", async (event) => {
-    const data = event?.data;
-    if (!data || typeof data !== "object") return;
-    if (data.namespace !== MSC_PROVIDER_BRIDGE_NAMESPACE || data.type !== "request") return;
-
-    const source = event.source;
-    const origin = normalizeBridgeOrigin(event.origin);
-    const requestID = data.id === undefined || data.id === null ? null : String(data.id);
-    const rejectUnauthorized = () => {
-      sendBridgeResponse(source, event.origin, {
-        type: "response",
-        id: requestID,
-        error: {
-          code: 4100,
-          message: `origin not allowed: ${event.origin || "unknown"}`,
-        },
-      });
-    };
-
-    if (!isAllowedBridgeOrigin(origin)) {
-      rejectUnauthorized();
-      return;
-    }
-    upsertBridgeClient(source, origin);
-
-    const methodRaw = String(data.method || "").trim();
-    const method = methodRaw.toLowerCase();
-    const params = Array.isArray(data.params) ? data.params : [];
-    if (!methodRaw) {
-      sendBridgeResponse(source, event.origin, {
-        type: "response",
-        id: requestID,
-        error: { code: -32600, message: "missing request method" },
-      });
-      return;
-    }
-    if (method === "msc_sendtransaction") {
-      logActivity(`Bridge tx request from ${origin || "unknown"}`);
-    }
-
-    let bridgeParams = params;
-    if (method === "msc_sendtransaction") {
-      bridgeParams = [
-        {
-          ...(params[0] && typeof params[0] === "object" ? params[0] : {}),
-          __bridgeOrigin: origin || "",
-        },
-      ];
-    } else if (method === "msc_requestaccounts") {
-      bridgeParams = [
-        {
-          ...(params[0] && typeof params[0] === "object" ? params[0] : {}),
-          __bridgeOrigin: origin || "",
-        },
-      ];
-    }
-
-    if (method === "msc_bridge_ping") {
-      sendBridgeResponse(source, event.origin, {
-        type: "response",
-        id: requestID,
-        result: {
-          ok: true,
-          chainId: chainIdHex(),
-          walletLoaded: !!state.wallet,
-          unlocked: !!state.secretKey,
-        },
-      });
-      return;
-    }
-    if (method === "msc_accounts") {
-      try {
-        const accounts = await providerAccounts(false);
-        if (mscInjectedProvider) {
-          mscInjectedProvider.selectedAddress = accounts[0] || null;
-        }
-        sendBridgeResponse(source, event.origin, {
-          type: "response",
-          id: requestID,
-          result: accounts,
-        });
-      } catch (err) {
-        sendBridgeResponse(source, event.origin, {
-          type: "response",
-          id: requestID,
-          error: {
-            code: -32000,
-            message: String(err?.message || "request failed"),
-          },
-        });
-      }
-      return;
-    }
-    if (method === "msc_requestaccounts" || method === "msc_request_accounts") {
-      try {
-        const meta = bridgeParams[0] && typeof bridgeParams[0] === "object" ? bridgeParams[0] : {};
-        const requestOrigin = String(meta.__bridgeOrigin || "").trim();
-        if (requestOrigin) {
-          await confirmBridgeWalletConnect({ origin: requestOrigin });
-        }
-        const accounts = await providerAccounts(true);
-        if (mscInjectedProvider) {
-          mscInjectedProvider.selectedAddress = accounts[0] || null;
-          if (typeof mscInjectedProvider._syncState === "function") {
-            await mscInjectedProvider._syncState({ emitAccounts: true, emitChain: false });
-          }
-        }
-        sendBridgeResponse(source, event.origin, {
-          type: "response",
-          id: requestID,
-          result: accounts,
-        });
-      } catch (err) {
-        sendBridgeResponse(source, event.origin, {
-          type: "response",
-          id: requestID,
-          error: {
-            code: -32000,
-            message: String(err?.message || "request failed"),
-          },
-        });
-      }
-      return;
-    }
-
-    try {
-      if (!mscInjectedProvider || typeof mscInjectedProvider.request !== "function") {
-        throw new Error("MSC wallet provider unavailable");
-      }
-      const result = await mscInjectedProvider.request({ method: methodRaw, params: bridgeParams });
-      sendBridgeResponse(source, event.origin, {
-        type: "response",
-        id: requestID,
-        result,
-      });
-    } catch (err) {
-      if (method === "msc_sendtransaction") {
-        logActivity(`Bridge tx failed: ${String(err?.message || "request failed")}`);
-      }
-      sendBridgeResponse(source, event.origin, {
-        type: "response",
-        id: requestID,
-        error: {
-          code: -32000,
-          message: String(err?.message || "request failed"),
-        },
-      });
-    }
-  });
-};
-
-const createMSCInjectedProvider = () => {
-  const listeners = new Map();
-
-  const emit = (event, payload) => {
-    const handlers = listeners.get(event);
-    if (!handlers || !handlers.size) return;
-    handlers.forEach((handler) => {
-      try {
-        handler(payload);
-      } catch (err) {
-        // Ignore consumer handler errors.
-      }
-    });
-  };
-
-  const on = (event, handler) => {
-    if (!event || typeof handler !== "function") return provider;
-    const key = String(event);
-    if (!listeners.has(key)) listeners.set(key, new Set());
-    listeners.get(key).add(handler);
-    return provider;
-  };
-
-  const removeListener = (event, handler) => {
-    const key = String(event || "");
-    const handlers = listeners.get(key);
-    if (!handlers) return provider;
-    handlers.delete(handler);
-    if (!handlers.size) listeners.delete(key);
-    return provider;
-  };
-
-  const normalizeParams = (params) => (Array.isArray(params) ? params : []);
-
-  const syncState = async ({ emitAccounts = false, emitChain = false } = {}) => {
-    const accounts = await providerAccounts(false);
-    provider.selectedAddress = accounts[0] || null;
-    provider.isConnected = () => true;
-
-    if (emitAccounts) {
-      const changed =
-        accounts.length !== mscProviderLastAccounts.length ||
-        accounts.some((v, i) => v !== mscProviderLastAccounts[i]);
-      if (changed) {
-        mscProviderLastAccounts = accounts.slice();
-        emit("accountsChanged", accounts);
-      }
-    } else {
-      mscProviderLastAccounts = accounts.slice();
-    }
-
-    const currentChainHex = chainIdHex();
-    if (emitChain && currentChainHex !== mscProviderLastChainIdHex) {
-      mscProviderLastChainIdHex = currentChainHex;
-      emit("chainChanged", currentChainHex);
-    } else if (!mscProviderLastChainIdHex) {
-      mscProviderLastChainIdHex = currentChainHex;
-    }
-  };
-
-  const request = async (args) => {
-    const methodRaw = String(args?.method || "").trim();
-    const method = methodRaw.toLowerCase();
-    const params = normalizeParams(args?.params);
-    if (!method) {
-      throw new Error("missing request method");
-    }
-
-    switch (method) {
-      case "msc_chainid":
-        return chainIdHex();
-      case "net_version":
-        return MSC_ONLY_CHAIN_ID;
-      case "wallet_getPermissions":
-        return [{ parentCapability: "msc_accounts" }];
-      case "wallet_requestPermissions":
-        await providerAccounts(true);
-        return [{ parentCapability: "msc_accounts" }];
-      case "msc_accounts": {
-        const accounts = await providerAccounts(false);
-        provider.selectedAddress = accounts[0] || null;
-        return accounts;
-      }
-      case "msc_requestaccounts": {
-        const meta = params[0] && typeof params[0] === "object" ? params[0] : {};
-        const requestOrigin = String(meta.__bridgeOrigin || "").trim();
-        if (requestOrigin) {
-          await confirmBridgeWalletConnect({ origin: requestOrigin });
-        }
-        const accounts = await providerAccounts(true);
-        provider.selectedAddress = accounts[0] || null;
-        await syncState({ emitAccounts: true, emitChain: false });
-        return accounts;
-      }
-      case "msc_request_accounts": {
-        const meta = params[0] && typeof params[0] === "object" ? params[0] : {};
-        const requestOrigin = String(meta.__bridgeOrigin || "").trim();
-        if (requestOrigin) {
-          await confirmBridgeWalletConnect({ origin: requestOrigin });
-        }
-        const accounts = await providerAccounts(true);
-        provider.selectedAddress = accounts[0] || null;
-        await syncState({ emitAccounts: true, emitChain: false });
-        return accounts;
-      }
-      case "msc_coinbase": {
-        const accounts = await providerAccounts(false);
-        return accounts[0] || null;
-      }
-      case "wallet_switchethereumchain": {
-        const cfg = params[0];
-        if (!cfg || typeof cfg !== "object") {
-          throw new Error("invalid switchEthereumChain params");
-        }
-        const nextChain = parseRPCQuantityBigInt(cfg.chainId, "chainId");
-        if (nextChain !== BigInt(MSC_ONLY_CHAIN_ID_DEC)) {
-          throw new Error(`Only ${MSC_COIN_FULL_NAME} chain (${MSC_ONLY_CHAIN_ID_DEC}) supported`);
-        }
-        enforceMSCChainID();
-        await connectToRPC({ persist: true });
-        await syncState({ emitAccounts: false, emitChain: true });
-        return null;
-      }
-      case "wallet_addethereumchain": {
-        const cfg = params[0];
-        if (!cfg || typeof cfg !== "object") {
-          throw new Error("invalid addEthereumChain params");
-        }
-        if (cfg.chainId) {
-          const nextChain = parseRPCQuantityBigInt(cfg.chainId, "chainId");
-          if (nextChain !== BigInt(MSC_ONLY_CHAIN_ID_DEC)) {
-            throw new Error(`Only ${MSC_COIN_FULL_NAME} chain (${MSC_ONLY_CHAIN_ID_DEC}) supported`);
-          }
-        }
-        if (Array.isArray(cfg.rpcUrls) && cfg.rpcUrls.length) {
-          const rpcInput = el("rpcUrl");
-          if (rpcInput) {
-            rpcInput.value = cfg.rpcUrls.join(", ");
-          }
-        }
-        enforceMSCChainID();
-        await connectToRPC({ persist: true });
-        await syncState({ emitAccounts: false, emitChain: true });
-        return null;
-      }
-      case "msc_sendtransaction": {
-        const txObject = params[0];
-        return sendEVMTransactionViaWallet(txObject);
-      }
-      case "msc_sign":
-      case "personal_sign":
-      case "msc_signtypeddata":
-      case "msc_signtypeddata_v4":
-        throw new Error(`${methodRaw} is not supported by MSC Wallet`);
-      default:
-        return rpcRequest(methodRaw, params);
-    }
-  };
-
-  const provider = {
-    isMSCWallet: true,
-    isMetaMask: false,
-    selectedAddress: null,
-    request,
-    on,
-    addListener: on,
-    once: (event, handler) => {
-      if (!event || typeof handler !== "function") return provider;
-      const wrapped = (payload) => {
-        try {
-          handler(payload);
-        } finally {
-          removeListener(event, wrapped);
-        }
-      };
-      return on(event, wrapped);
-    },
-    removeListener,
-    off: removeListener,
-    removeAllListeners: (event) => {
-      if (event === undefined || event === null) {
-        listeners.clear();
-        return provider;
-      }
-      listeners.delete(String(event));
-      return provider;
-    },
-    enable: async () => request({ method: "msc_requestAccounts", params: [] }),
-    send: (payloadOrMethod, paramsOrCallback) => {
-      if (typeof payloadOrMethod === "string") {
-        return request({ method: payloadOrMethod, params: normalizeParams(paramsOrCallback) });
-      }
-      const payload = payloadOrMethod || {};
-      const callback = typeof paramsOrCallback === "function" ? paramsOrCallback : null;
-      const promise = request({ method: payload.method, params: normalizeParams(payload.params) })
-        .then((result) => ({
-          jsonrpc: "2.0",
-          id: payload.id ?? null,
-          result,
-        }))
-        .catch((error) => ({
-          jsonrpc: "2.0",
-          id: payload.id ?? null,
-          error: { code: -32000, message: String(error?.message || "request failed") },
-        }));
-      if (callback) {
-        promise.then((res) => callback(null, res));
-        return undefined;
-      }
-      return promise;
-    },
-    sendAsync: (payload, callback) => {
-      const cb = typeof callback === "function" ? callback : () => {};
-      provider.send(payload, cb);
-    },
-    _syncState: syncState,
-    _emit: emit,
-  };
-
-  return provider;
-};
-
-const announceMSCProviderEIP6963 = (provider) => {
-  if (typeof window === "undefined" || typeof CustomEvent === "undefined") return;
-  try {
-    window.dispatchEvent(
-      new CustomEvent("eip6963:announceProvider", {
-        detail: {
-          info: {
-            uuid: "msc-wallet-provider",
-            name: "MSC Wallet",
-            icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230b5fff'/%3E%3Ctext x='32' y='40' text-anchor='middle' font-size='24' fill='white' font-family='Arial'%3EM%3C/text%3E%3C/svg%3E",
-            rdns: "msc.wallet.local",
-          },
-          provider,
-        },
-      })
-    );
-  } catch (err) {
-    // Best-effort event announce.
-  }
-};
-
-const installMSCInjectedProvider = () => {
-  if (mscInjectedProvider) return mscInjectedProvider;
-  mscInjectedProvider = createMSCInjectedProvider();
-  window.mscEthereum = mscInjectedProvider;
-
-  const params = new URLSearchParams(window.location.search);
-  const forceInject = params.get("mscInjectEthereum") === "1" || localStorage.getItem("msc_force_ethereum") === "1";
-  if (!window.ethereum || forceInject) {
-    window.ethereum = mscInjectedProvider;
-    window.dispatchEvent(new Event("ethereum#initialized"));
-  }
-  if (window.ethereum === mscInjectedProvider) {
-    if (!Array.isArray(window.ethereum.providers)) {
-      window.ethereum.providers = [mscInjectedProvider];
-    } else if (!window.ethereum.providers.includes(mscInjectedProvider)) {
-      window.ethereum.providers.push(mscInjectedProvider);
-    }
-  }
-  if (!window.__mscEip6963Handler) {
-    window.__mscEip6963Handler = () => announceMSCProviderEIP6963(mscInjectedProvider);
-    window.addEventListener("eip6963:requestProvider", window.__mscEip6963Handler);
-  }
-  announceMSCProviderEIP6963(mscInjectedProvider);
-  installMSCProviderWindowBridge();
-  if (!window.__mscBridgeProviderEventsAttached && typeof mscInjectedProvider.on === "function") {
-    window.__mscBridgeProviderEventsAttached = true;
-    mscInjectedProvider.on("accountsChanged", (accounts) =>
-      broadcastBridgeEvent("accountsChanged", Array.isArray(accounts) ? accounts : [])
-    );
-    mscInjectedProvider.on("chainChanged", (nextChain) =>
-      broadcastBridgeEvent("chainChanged", String(nextChain || chainIdHex()))
-    );
-  }
-  mscInjectedProvider
-    ._syncState({ emitAccounts: false, emitChain: false })
-    .catch(() => {});
-  return mscInjectedProvider;
-};
-
-const syncInjectedProviderState = ({ emitAccounts = true, emitChain = true } = {}) => {
-  if (!mscInjectedProvider || typeof mscInjectedProvider._syncState !== "function") {
-    return Promise.resolve();
-  }
-  return mscInjectedProvider._syncState({ emitAccounts, emitChain }).catch(() => {});
-};
 
 const submitPoolTransfer = async (event) => {
   event.preventDefault();
@@ -6407,17 +5512,6 @@ const handlePoolAction = (event) => {
   }
 };
 
-const handleBridgeApprove = () => {
-  if (bridgeApprovalStatus) setStatus(bridgeApprovalStatus, "Approved", "success");
-  logActivity("Bridge approval accepted");
-  settleBridgeApproval(true);
-};
-
-const handleBridgeReject = () => {
-  if (bridgeApprovalStatus) setStatus(bridgeApprovalStatus, "Rejected", "error");
-  logActivity("Bridge approval rejected");
-  settleBridgeApproval(false);
-};
 
 const init = () => {
   const savedRPCs = savedRPCListForCurrentPage();
@@ -6438,9 +5532,8 @@ const init = () => {
     broadcastSelect.value = state.broadcastMode || "auto";
   }
 
-  state.wallet = loadWallet();
-  installMSCInjectedProvider();
-  updateWalletUI();
+	state.wallet = loadWallet();
+	updateWalletUI();
   setActiveNFTTab(state.nftTab);
   updateFeeLabels();
   initWallet3Navigation();
@@ -6554,12 +5647,6 @@ const init = () => {
         await scanQrFromFile(file);
         event.target.value = "";
       }
-    });
-  }
-  const copyEvmBtn = el("copyEvmAddress");
-  if (copyEvmBtn) {
-    copyEvmBtn.addEventListener("click", () => {
-      copyEVMAddress();
     });
   }
   if (authConnect) {
@@ -6690,25 +5777,6 @@ const init = () => {
   if (dexPoolList) {
     dexPoolList.addEventListener("click", handleDEXPoolAction);
   }
-  if (bridgeApproveBtn) {
-    bridgeApproveBtn.addEventListener("click", handleBridgeApprove);
-  }
-  if (bridgeRejectBtn) {
-    bridgeRejectBtn.addEventListener("click", handleBridgeReject);
-  }
-  if (bridgeApprovalOverlay) {
-    bridgeApprovalOverlay.addEventListener("click", (event) => {
-      if (event.target === bridgeApprovalOverlay) {
-        handleBridgeReject();
-      }
-    });
-  }
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && state.bridgeApprovalActive) {
-      handleBridgeReject();
-    }
-  });
-
   document.addEventListener("visibilitychange", () => {
     if (!state.autoSync) return;
     if (document.hidden) {

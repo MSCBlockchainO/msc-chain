@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSC Testnet Faucet - Request Test MSC</title>
+  <meta name="description" content="Request test MSC for wallet, transaction, staking, and application testing with cooldown and network safety limits." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/faucet.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Testnet Faucet - Request Test MSC" />
+  <meta property="og:description" content="Request test MSC for wallet, transaction, staking, and application testing with cooldown and network safety limits." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/faucet.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Testnet Faucet - Request Test MSC" />
+  <meta name="twitter:description" content="Request test MSC for wallet, transaction, staking, and application testing with cooldown and network safety limits." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
+</head>
+<body data-page="faucet">
+  <main class="content">
+    <section class="page-hero">
+      <div class="eyebrow">Test Network</div>
+      <h1>MSC Testnet Faucet</h1>
+      <p class="muted">Request test MSC for wallet, transfer, staking, and explorer testing.</p>
+    </section>
+
+    <section class="faucet-layout">
+      <form id="faucetForm" class="card faucet-card">
+        <div class="section-title">
+          <div>
+            <div class="label">Request Tokens</div>
+            <h2>100 Test MSC</h2>
+          </div>
+          <span id="faucetStatus" class="pill">Ready</span>
+        </div>
+        <div class="field">
+          <label for="faucetAddress">Address</label>
+          <input id="faucetAddress" placeholder="MSC..." autocomplete="off" />
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Amount</label>
+            <input id="faucetAmount" value="100 MSC" readonly />
+          </div>
+          <div class="field">
+            <label>Cooldown</label>
+            <input id="faucetCooldown" value="24 Hours" readonly />
+          </div>
+        </div>
+        <div class="field">
+          <label for="faucetHumanCheck">Human Check</label>
+          <input id="faucetHumanCheck" placeholder="Type MSC" autocomplete="off" />
+        </div>
+        <button id="requestFaucet" class="primary" type="submit"><i data-lucide="droplets"></i>Request Tokens</button>
+        <div id="faucetResult" class="result mono">Explorer link appears after the faucet transaction is submitted.</div>
+      </form>
+
+      <aside class="card faucet-policy">
+        <div class="label">Policy</div>
+        <div class="simple-status-grid">
+          <div><span>Network</span><strong id="faucetNetwork">Checking</strong></div>
+          <div><span>Limit</span><strong>100 MSC</strong></div>
+          <div><span>Window</span><strong>24 Hours</strong></div>
+          <div><span>Mainnet</span><strong>Disabled</strong></div>
+          <div><span>Ambassador</span><strong id="ambassadorReferralCode">No code</strong></div>
+        </div>
+        <div id="ambassadorReferralStatus" class="safe-note">Open the wallet from an ambassador link to attach a code.</div>
+        <div class="safe-note">Faucet transactions are normal chain transactions and appear in the explorer after confirmation.</div>
+      </aside>
+    </section>
+  </main>
+  <script src="vendor/nacl.min.js"></script>
+  <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
+  <script src="wallet_pages.js?v=20260714-vmremoved"></script>
+</body>
+</html>

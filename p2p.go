@@ -50,67 +50,124 @@ import (
 )
 
 const (
-	peerSuspectTimeout              = 2 * time.Minute
-	peerFlapWindow                  = 5 * time.Minute
-	peerFlapThreshold               = 5
-	peerQuarantineFor               = 5 * time.Minute
-	peerQuarantineForFlap           = 45 * time.Second
-	peerQuarantineForProtocol       = 30 * time.Minute
+	// `peerSuspectTimeout` defines the result produced by this operation.
+	peerSuspectTimeout = 2 * time.Minute
+	// `peerFlapWindow` defines the constant value used by this package.
+	peerFlapWindow = 5 * time.Minute
+	// `peerFlapThreshold` defines the constant value used by this package.
+	peerFlapThreshold = 5
+	// `peerQuarantineFor` defines the constant value used by this package.
+	peerQuarantineFor = 5 * time.Minute
+	// `peerQuarantineForFlap` defines the constant value used by this package.
+	peerQuarantineForFlap = 45 * time.Second
+	// `peerQuarantineForProtocol` defines the constant value used by this package.
+	peerQuarantineForProtocol = 30 * time.Minute
+	// `peerQuarantineForPeerInfoStream` defines the constant value used by this package.
 	peerQuarantineForPeerInfoStream = 20 * time.Second
-	peerQuarantineForMismatch       = 1 * time.Hour
-	peerHelloCooldown               = 30 * time.Second
-	peerHelloMaxClockSkew           = 5 * time.Minute
-	peerHelloNonceTTL               = 15 * time.Minute
-	peerHelloNonceSweepInterval     = time.Minute
-	peerHelloNonceStoreFile         = "peer_hello_nonces.json"
-	peerSuspectInterval             = 20 * time.Second
-	syncCooldown                    = 30 * time.Second
-	peerMinHold                     = 30 * time.Second
-	peerGraftCooldown               = 30 * time.Second
-	dialBackoffStep1                = 5 * time.Second
-	dialBackoffStep2                = 30 * time.Second
-	dialBackoffStep3                = 2 * time.Minute
-	dialBackoffMax                  = 5 * time.Minute
-	validatorDialBackoffStep1       = 5 * time.Second
-	validatorDialBackoffStep2       = 10 * time.Second
-	validatorDialBackoffStep3       = 20 * time.Second
-	validatorDialBackoffMax         = 40 * time.Second
-	execVoteReplayTTL               = 2 * time.Minute
-	execVoteStaleIngressTTL         = 30 * time.Second
-	execVoteRebroadcastCooldown     = 5 * time.Second
-	execVoteRatePerSigner           = 8
-	execVoteRateBurst               = 8
-	execMismatchStrikeWindow        = 3 * time.Minute
-	execMismatchQuarantineAt        = 2
-	execMismatchSlashAt             = 3
-	invalidProposerStrikeWindow     = 3 * time.Minute
+	// `peerQuarantineForMismatch` defines the constant value used by this package.
+	peerQuarantineForMismatch = 1 * time.Hour
+	// `peerHelloCooldown` defines the constant value used by this package.
+	peerHelloCooldown = 30 * time.Second
+	// `peerHelloMaxClockSkew` defines the constant value used by this package.
+	peerHelloMaxClockSkew = 5 * time.Minute
+	// `peerHelloNonceTTL` defines the constant value used by this package.
+	peerHelloNonceTTL = 15 * time.Minute
+	// `peerHelloNonceSweepInterval` defines the value currently being processed.
+	peerHelloNonceSweepInterval = time.Minute
+	// `peerHelloNonceStoreFile` defines the constant value used by this package.
+	peerHelloNonceStoreFile = "peer_hello_nonces.json"
+	// `peerSuspectInterval` defines the value currently being processed.
+	peerSuspectInterval = 20 * time.Second
+	// `syncCooldown` defines the constant value used by this package.
+	syncCooldown = 30 * time.Second
+	// `peerMinHold` defines the constant value used by this package.
+	peerMinHold = 30 * time.Second
+	// `peerGraftCooldown` defines the constant value used by this package.
+	peerGraftCooldown = 30 * time.Second
+	// `dialBackoffStep1` defines the constant value used by this package.
+	dialBackoffStep1 = 5 * time.Second
+	// `dialBackoffStep2` defines the constant value used by this package.
+	dialBackoffStep2 = 30 * time.Second
+	// `dialBackoffStep3` defines the constant value used by this package.
+	dialBackoffStep3 = 2 * time.Minute
+	// `dialBackoffMax` defines the constant value used by this package.
+	dialBackoffMax = 5 * time.Minute
+	// `validatorDialBackoffStep1` defines whether the related condition is satisfied.
+	validatorDialBackoffStep1 = 5 * time.Second
+	// `validatorDialBackoffStep2` defines whether the related condition is satisfied.
+	validatorDialBackoffStep2 = 10 * time.Second
+	// `validatorDialBackoffStep3` defines whether the related condition is satisfied.
+	validatorDialBackoffStep3 = 20 * time.Second
+	// `validatorDialBackoffMax` defines whether the related condition is satisfied.
+	validatorDialBackoffMax = 40 * time.Second
+	// `execVoteReplayTTL` defines the constant value used by this package.
+	execVoteReplayTTL = 2 * time.Minute
+	// `execVoteStaleIngressTTL` defines the constant value used by this package.
+	execVoteStaleIngressTTL = 30 * time.Second
+	// `execVoteRebroadcastCooldown` defines the constant value used by this package.
+	execVoteRebroadcastCooldown = 5 * time.Second
+	// `execVoteRatePerSigner` defines the constant value used by this package.
+	execVoteRatePerSigner = 8
+	// `execVoteRateBurst` defines the constant value used by this package.
+	execVoteRateBurst = 8
+	// `execMismatchStrikeWindow` defines the constant value used by this package.
+	execMismatchStrikeWindow = 3 * time.Minute
+	// `execMismatchQuarantineAt` defines the constant value used by this package.
+	execMismatchQuarantineAt = 2
+	// `execMismatchSlashAt` defines the constant value used by this package.
+	execMismatchSlashAt = 3
+	// `invalidProposerStrikeWindow` defines the current position in the related collection.
+	invalidProposerStrikeWindow = 3 * time.Minute
+	// `invalidProposerStrikeDecayEvery` defines the current position in the related collection.
 	invalidProposerStrikeDecayEvery = time.Hour
-	invalidProposerQuarantineAt     = 2
+	// `invalidProposerQuarantineAt` defines the current position in the related collection.
+	invalidProposerQuarantineAt = 2
+	// `invalidProposerPeerQuarantineAt` defines the current position in the related collection.
 	invalidProposerPeerQuarantineAt = 3
-	execVoteStaleLagBlocks          = 2
-	finalizedDriftThreshold         = 20
+	// `execVoteStaleLagBlocks` defines the constant value used by this package.
+	execVoteStaleLagBlocks = 2
+	// `finalizedDriftThreshold` defines the constant value used by this package.
+	finalizedDriftThreshold = 20
+	// `finalizedDriftEscalateThreshold` defines the constant value used by this package.
 	finalizedDriftEscalateThreshold = 200
-	finalizedDriftWindow            = 10 * time.Minute
-	finalizedDriftCooldown          = 10 * time.Minute
-	finalizedDriftDropLogInterval   = 30 * time.Second
-	finalizedDriftNearTipSlack      = 16
-	finalizedDriftMaxServeRange     = 64
-	finalizedDriftSnapshotCooldown  = 30 * time.Second
-	blockSyncServeMaxBlocks         = 512
+	// `finalizedDriftWindow` defines the constant value used by this package.
+	finalizedDriftWindow = 10 * time.Minute
+	// `finalizedDriftCooldown` defines the constant value used by this package.
+	finalizedDriftCooldown = 10 * time.Minute
+	// `finalizedDriftDropLogInterval` defines the value currently being processed.
+	finalizedDriftDropLogInterval = 30 * time.Second
+	// `finalizedDriftNearTipSlack` defines the constant value used by this package.
+	finalizedDriftNearTipSlack = 16
+	// `finalizedDriftMaxServeRange` defines the constant value used by this package.
+	finalizedDriftMaxServeRange = 64
+	// `finalizedDriftSnapshotCooldown` defines the constant value used by this package.
+	finalizedDriftSnapshotCooldown = 30 * time.Second
+	// `blockSyncServeMaxBlocks` defines the block data handled by this operation.
+	blockSyncServeMaxBlocks = 512
+	// `blockRequestServeMinConcurrency` defines the block data handled by this operation.
 	blockRequestServeMinConcurrency = 64
-	blockRequestServeSlotsPerPeer   = 4
-	snapshotServeRetryAttempts      = 6
-	snapshotServeRetryBackoff       = 25 * time.Millisecond
-	consensusPublishTimeout         = 500 * time.Millisecond
+	// `blockRequestServeSlotsPerPeer` defines the block data handled by this operation.
+	blockRequestServeSlotsPerPeer = 4
+	// `snapshotServeRetryAttempts` defines the constant value used by this package.
+	snapshotServeRetryAttempts = 6
+	// `snapshotServeRetryBackoff` defines the constant value used by this package.
+	snapshotServeRetryBackoff = 25 * time.Millisecond
+	// `consensusPublishTimeout` defines the result produced by this operation.
+	consensusPublishTimeout = 500 * time.Millisecond
 )
 
+// `blockRequestServeSem` stores the block data handled by this operation.
 var blockRequestServeSem = make(chan struct{}, blockRequestServeConcurrencyLimit(MaxPeers))
+
+// `syncPeerRequestTimeoutOverride` stores the value used by this operation.
 var syncPeerRequestTimeoutOverride time.Duration
 
+// blockRequestServeConcurrencyLimit implements the block request serve concurrency limit helper.
 func blockRequestServeConcurrencyLimit(maxPeers int) int {
 	if maxPeers <= 0 {
 		return blockRequestServeMinConcurrency
 	}
+	// `limit` stores the value produced by this operation.
 	limit := maxPeers * blockRequestServeSlotsPerPeer
 	if limit < blockRequestServeMinConcurrency {
 		return blockRequestServeMinConcurrency
@@ -119,23 +176,33 @@ func blockRequestServeConcurrencyLimit(maxPeers int) int {
 }
 
 type blockRequestPhaseError struct {
-	Stage   string
-	Peer    string
-	From    uint64
-	To      uint64
-	After   time.Duration
+	// `Stage` stores the value associated with this record.
+	Stage string
+	// `Peer` stores the value associated with this record.
+	Peer string
+	// `From` stores the value associated with this record.
+	From uint64
+	// `To` stores the value associated with this record.
+	To uint64
+	// `After` stores the value associated with this record.
+	After time.Duration
+	// `Timeout` stores the result produced by this operation.
 	Timeout bool
-	Err     error
+	// `Err` stores the error produced by this operation.
+	Err error
 }
 
+// Error implements the error helper.
 func (e *blockRequestPhaseError) Error() string {
 	if e == nil {
 		return ""
 	}
+	// `status` stores the value produced by this operation.
 	status := "failed"
 	if e.Timeout {
 		status = "timeout"
 	}
+	// `msg` stores the value produced by this operation.
 	msg := fmt.Sprintf("block_request_%s_%s peer=%s range=%d-%d", strings.TrimSpace(e.Stage), status, strings.TrimSpace(e.Peer), e.From, e.To)
 	if e.After > 0 {
 		msg += fmt.Sprintf(" after=%s", e.After)
@@ -146,6 +213,7 @@ func (e *blockRequestPhaseError) Error() string {
 	return msg
 }
 
+// Unwrap implements the unwrap helper.
 func (e *blockRequestPhaseError) Unwrap() error {
 	if e == nil {
 		return nil
@@ -153,6 +221,7 @@ func (e *blockRequestPhaseError) Unwrap() error {
 	return e.Err
 }
 
+// newBlockRequestPhaseError implements the new block request phase error helper.
 func newBlockRequestPhaseError(stage string, pid peer.ID, from, to uint64, after time.Duration, timeout bool, err error) error {
 	return &blockRequestPhaseError{
 		Stage:   strings.TrimSpace(stage),
@@ -165,6 +234,7 @@ func newBlockRequestPhaseError(stage string, pid peer.ID, from, to uint64, after
 	}
 }
 
+// isNetTimeout implements the is net timeout helper.
 func isNetTimeout(err error) bool {
 	if err == nil {
 		return false
@@ -172,10 +242,12 @@ func isNetTimeout(err error) bool {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded) {
 		return true
 	}
+	// `netErr` stores the error produced by this operation.
 	var netErr net.Error
 	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
+// syncBlockRequestMaxBlocks implements the sync block request max blocks helper.
 func syncBlockRequestMaxBlocks(batchMax uint64) uint64 {
 	if batchMax == 0 || batchMax > blockSyncServeMaxBlocks {
 		return blockSyncServeMaxBlocks
@@ -183,7 +255,9 @@ func syncBlockRequestMaxBlocks(batchMax uint64) uint64 {
 	return batchMax
 }
 
+// clampBlockSyncRangeToServeLimit implements the clamp block sync range to serve limit helper.
 func clampBlockSyncRangeToServeLimit(from, to uint64, batchMax uint64) uint64 {
+	// `maxBlocks` stores the value produced by this operation.
 	maxBlocks := syncBlockRequestMaxBlocks(batchMax)
 	if maxBlocks == 0 || to < from {
 		return to
@@ -197,45 +271,66 @@ func clampBlockSyncRangeToServeLimit(from, to uint64, batchMax uint64) uint64 {
 type PeerDriftClass string
 
 const (
-	PeerDriftClassStale     PeerDriftClass = "STALE_DRIFT"
+	// `PeerDriftClassStale` defines the constant value used by this package.
+	PeerDriftClassStale PeerDriftClass = "STALE_DRIFT"
+	// `PeerDriftClassDangerous` defines the constant value used by this package.
 	PeerDriftClassDangerous PeerDriftClass = "DANGEROUS_DRIFT"
-	PeerDriftClassAhead     PeerDriftClass = "AHEAD_DRIFT"
+	// `PeerDriftClassAhead` defines the constant value used by this package.
+	PeerDriftClassAhead PeerDriftClass = "AHEAD_DRIFT"
 )
 
 type PeerDriftState struct {
-	Count         int
-	FirstSeen     time.Time
-	LastSeen      time.Time
-	From          uint64
-	To            uint64
-	Expected      string
-	Got           string
-	RecomputedAt  time.Time
+	// `Count` stores the measured quantity used by this operation.
+	Count int
+	// `FirstSeen` stores the value associated with this record.
+	FirstSeen time.Time
+	// `LastSeen` stores the value associated with this record.
+	LastSeen time.Time
+	// `From` stores the value associated with this record.
+	From uint64
+	// `To` stores the value associated with this record.
+	To uint64
+	// `Expected` stores the value associated with this record.
+	Expected string
+	// `Got` stores the value associated with this record.
+	Got string
+	// `RecomputedAt` stores the value associated with this record.
+	RecomputedAt time.Time
+	// `SyncOnlyUntil` stores the value associated with this record.
 	SyncOnlyUntil time.Time
-	LastClass     PeerDriftClass
+	// `LastClass` stores the value associated with this record.
+	LastClass PeerDriftClass
 }
 
+// configPeerListsSnapshot implements the config peer lists snapshot helper.
 func (n *Node) configPeerListsSnapshot() ([]string, []string) {
 	if n == nil || n.Config == nil {
 		return nil, nil
 	}
 	n.configMu.RLock()
+	// `persistent` stores the value produced by this operation.
 	persistent := append([]string{}, n.Config.PersistentPeers...)
+	// `seeds` stores the value produced by this operation.
 	seeds := append([]string{}, n.Config.Seeds...)
 	n.configMu.RUnlock()
 	return persistent, seeds
 }
 
+// persistentPeersSnapshot implements the persistent peers snapshot helper.
 func (n *Node) persistentPeersSnapshot() []string {
+	// `persistent` stores the value produced by this operation.
 	persistent, _ := n.configPeerListsSnapshot()
 	return persistent
 }
 
+// seedsSnapshot implements the seeds snapshot helper.
 func (n *Node) seedsSnapshot() []string {
+	// `seeds` stores the value produced by this operation.
 	_, seeds := n.configPeerListsSnapshot()
 	return seeds
 }
 
+// setPersistentPeers implements the set persistent peers helper.
 func (n *Node) setPersistentPeers(peers []string) {
 	if n == nil || n.Config == nil {
 		return
@@ -245,6 +340,7 @@ func (n *Node) setPersistentPeers(peers []string) {
 	n.configMu.Unlock()
 }
 
+// setSeedPeers implements the set seed peers helper.
 func (n *Node) setSeedPeers(peers []string) {
 	if n == nil || n.Config == nil {
 		return
@@ -254,6 +350,7 @@ func (n *Node) setSeedPeers(peers []string) {
 	n.configMu.Unlock()
 }
 
+// setConfigPeerLists implements the set config peer lists helper.
 func (n *Node) setConfigPeerLists(persistent []string, seeds []string) {
 	if n == nil || n.Config == nil {
 		return
@@ -264,24 +361,30 @@ func (n *Node) setConfigPeerLists(persistent []string, seeds []string) {
 	n.configMu.Unlock()
 }
 
+// logPubSubStatus implements the log pub sub status helper.
 func (n *Node) logPubSubStatus() {
 	if n.PubSub == nil {
 		fmt.Println("PubSub: Not initialized")
 		return
 	}
 
+	// `topics` stores the value produced by this operation.
 	topics := []string{TopicBlock, TopicTx, TopicConsensus, TopicValidator, TopicSnapshotMeta, TopicSnapshotChunk, TopicSnapshotProof}
 
 	fmt.Println("PubSub Mesh Status:")
+	// `hasConnections` stores the value produced by this operation.
 	hasConnections := false
 
+	// `topicName` tracks the current values while iterating.
 	for _, topicName := range topics {
+		// `peers` stores the value produced by this operation.
 		peers := n.PubSub.ListPeers(topicName)
 		fmt.Printf("  %s: %d peers\n", topicName, len(peers))
 
 		if len(peers) > 0 {
 			hasConnections = true
 			if DebugConsensus {
+				// `i` and `pid` track the current position in the related collection.
 				for i, pid := range peers {
 					if i >= 3 {
 						break
@@ -296,6 +399,7 @@ func (n *Node) logPubSubStatus() {
 	}
 
 	if n.Host != nil {
+		// `allPeers` stores the value produced by this operation.
 		allPeers := n.Host.Network().Peers()
 		fmt.Printf("Network: %d total peers connected\n", len(allPeers))
 		if !hasConnections && len(allPeers) > 0 {
@@ -321,35 +425,43 @@ func (n *Node) BroadcastLeaderBlock(block Block) {
 	n.broadcastLeaderBlockUnchecked(block)
 }
 
+// publishConsensusTopicWithTimeout implements the publish consensus topic with timeout helper.
 func (n *Node) publishConsensusTopicWithTimeout(topic *pubsub.Topic, data []byte) error {
 	if topic == nil {
 		return nil
 	}
+	// `ctx` stores the context controlling this operation.
 	ctx := context.Background()
 	if n != nil {
+		// `rootCtx` stores the context controlling this operation.
 		if rootCtx := n.RootContext(); rootCtx != nil {
 			ctx = rootCtx
 		}
 	}
+	// `publishCtx` and `cancel` store the context controlling this operation.
 	publishCtx, cancel := context.WithTimeout(ctx, consensusPublishTimeout)
 	defer cancel()
 	return topic.Publish(publishCtx, data)
 }
 
+// broadcastLeaderBlockUnchecked implements the broadcast leader block unchecked helper.
 func (n *Node) broadcastLeaderBlockUnchecked(block Block) {
 	if n == nil || (n.BlockTopic == nil && n.TopicBlocks == nil && n.PubSub == nil) {
 		return
 	}
+	// `msg` stores the value produced by this operation.
 	msg := Message{
 		Type: MsgLeaderBlock,
 		Data: MustJSON(block),
 	}
+	// `data` and `err` store the error produced by this operation.
 	data, err := MarshalP2PMessage(msg)
 	if err != nil {
 		return
 	}
 	n.fanoutConsensusMessageToPeers(msg)
 
+	// `published` stores the value produced by this operation.
 	published := false
 	if n.BlockTopic != nil {
 		_ = n.publishConsensusTopicWithTimeout(n.BlockTopic, data)
@@ -368,6 +480,7 @@ func (n *Node) broadcastLeaderBlockUnchecked(block Block) {
 	}
 
 	n.SafeGo(fmt.Sprintf("leader_block_publish_%d_%d", block.ID, block.Round), func() {
+		// `err` stores the error produced by this operation.
 		if err := n.PubSub.Publish(TopicBlock, data); err != nil {
 			_ = n.PubSub.Publish(TopicBlocksLegacy, data)
 		}
@@ -375,8 +488,10 @@ func (n *Node) broadcastLeaderBlockUnchecked(block Block) {
 	})
 }
 
+// handleTransactionGossip handles transaction gossip.
 func (n *Node) handleTransactionGossip(sub *pubsub.Subscription) {
 	for {
+		// `err` stores the error produced by this operation.
 		_, err := sub.Next(n.RootContext())
 		if err != nil {
 			return
@@ -384,9 +499,12 @@ func (n *Node) handleTransactionGossip(sub *pubsub.Subscription) {
 	}
 }
 
+// handleValidatorGossip handles validator gossip.
 func (n *Node) handleValidatorGossip(sub *pubsub.Subscription) {
+	// `ctx` stores the context controlling this operation.
 	ctx := n.RootContext()
 	for {
+		// `msg` and `err` store the error produced by this operation.
 		msg, err := sub.Next(ctx)
 		if err != nil {
 			return
@@ -394,6 +512,7 @@ func (n *Node) handleValidatorGossip(sub *pubsub.Subscription) {
 		if n.Host != nil && msg.ReceivedFrom == n.Host.ID() {
 			continue
 		}
+		// `peerID` stores the value produced by this operation.
 		peerID := ""
 		if msg.ReceivedFrom != "" {
 			peerID = msg.ReceivedFrom.String()
@@ -402,13 +521,17 @@ func (n *Node) handleValidatorGossip(sub *pubsub.Subscription) {
 			continue
 		}
 
+		// `wrapped` stores the value used by this operation.
 		var wrapped Message
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &wrapped); err == nil && wrapped.Type != "" {
 			switch wrapped.Type {
 			case MsgValidatorAnnounce:
 				n.handleValidatorAnnouncement(wrapped.Data)
 			case MsgValidatorSetUpdate:
+				// `update` stores the value used by this operation.
 				var update ValidatorSetUpdate
+				// `err` stores the error produced by this operation.
 				if err := json.Unmarshal(wrapped.Data, &update); err == nil {
 					n.handleValidatorSetUpdate(update)
 				}
@@ -416,7 +539,9 @@ func (n *Node) handleValidatorGossip(sub *pubsub.Subscription) {
 			continue
 		}
 
+		// `info` stores the current position in the related collection.
 		var info ValidatorInfo
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &info); err != nil {
 			continue
 		}
@@ -426,6 +551,7 @@ func (n *Node) handleValidatorGossip(sub *pubsub.Subscription) {
 		}
 
 		n.validatorMu.Lock()
+		// `st` and `ok` store whether the related condition is satisfied.
 		st, ok := n.validatorStatus[info.ID]
 		if !ok {
 			st = &ValidatorStatus{}
@@ -436,6 +562,7 @@ func (n *Node) handleValidatorGossip(sub *pubsub.Subscription) {
 		n.validatorMu.Unlock()
 
 		participationMu.Lock()
+		// `ok` stores whether the related condition is satisfied.
 		if _, ok := Participation[info.ID]; !ok {
 			Participation[info.ID] = &ParticipationScore{
 				ValidBlocks:   1,
@@ -449,9 +576,12 @@ func (n *Node) handleValidatorGossip(sub *pubsub.Subscription) {
 	}
 }
 
+// handleConsensusGossip handles consensus gossip.
 func (n *Node) handleConsensusGossip(sub *pubsub.Subscription) {
+	// `ctx` stores the context controlling this operation.
 	ctx := n.RootContext()
 	for {
+		// `msg` and `err` store the error produced by this operation.
 		msg, err := sub.Next(ctx)
 		if err != nil {
 			return
@@ -463,10 +593,13 @@ func (n *Node) handleConsensusGossip(sub *pubsub.Subscription) {
 	}
 }
 
+// handleBlockGossip handles block gossip.
 func (n *Node) handleBlockGossip(sub *pubsub.Subscription) {
+	// `ctx` stores the context controlling this operation.
 	ctx := n.RootContext()
 
 	for {
+		// `msg` and `err` store the error produced by this operation.
 		msg, err := sub.Next(ctx)
 		if err != nil {
 			if DebugNet {
@@ -487,9 +620,12 @@ func (n *Node) handleBlockGossip(sub *pubsub.Subscription) {
 
 		// Leader blocks are wrapped in Message
 		var wrapped Message
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &wrapped); err == nil && wrapped.Type != "" {
 			if wrapped.Type == MsgLeaderBlock {
+				// `block` stores the synchronization state protecting shared data.
 				var block Block
+				// `err` stores the error produced by this operation.
 				if err := json.Unmarshal(wrapped.Data, &block); err == nil {
 					_ = n.submitLeaderBlockOnConsensusLane(block, msg.ReceivedFrom.String())
 				}
@@ -503,7 +639,9 @@ func (n *Node) handleBlockGossip(sub *pubsub.Subscription) {
 			continue
 		}
 
+		// `block` stores the synchronization state protecting shared data.
 		var block Block
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &block); err != nil {
 			if DebugNet {
 				fmt.Println("Ã¢ÂÅ’ Invalid block gossip payload")
@@ -524,13 +662,28 @@ func (n *Node) handleBlockGossip(sub *pubsub.Subscription) {
 	}
 }
 
+// requestBlocksFromPeer implements the request blocks from peer helper.
 func (n *Node) requestBlocksFromPeer(
 	pid peer.ID,
 	from, to uint64,
 	wantSnapshot bool,
 	snapshotHeight uint64,
 ) ([]Block, *StateSnapshot, *ExecPoolSnapshot, error) {
+	return n.requestBlocksFromPeerWithContext(context.Background(), pid, from, to, wantSnapshot, snapshotHeight)
+}
+
+func (n *Node) requestBlocksFromPeerWithContext(
+	ctx context.Context,
+	pid peer.ID,
+	from, to uint64,
+	wantSnapshot bool,
+	snapshotHeight uint64,
+) ([]Block, *StateSnapshot, *ExecPoolSnapshot, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if !wantSnapshot {
+		// `blocks` and `ok` store whether the related condition is satisfied.
 		if blocks, ok := n.localBlocksForRange(from, to); ok {
 			if DebugSync || DebugConsensus {
 				fmt.Printf("[SYNC-REQUEST-SKIP] peer=%s range=%d-%d reason=local_blocks_present count=%d\n",
@@ -539,25 +692,48 @@ func (n *Node) requestBlocksFromPeer(
 			return blocks, nil, nil, nil
 		}
 	}
-	return n.requestBlocksFromPeerDirect(pid, from, to, wantSnapshot, snapshotHeight)
+	return n.requestBlocksFromPeerDirectWithContext(ctx, pid, from, to, wantSnapshot, snapshotHeight)
 }
 
+// runBlockRequestStreamPhase implements the run block request stream phase helper.
 func runBlockRequestStreamPhase(s network.Stream, timeout time.Duration, operation func() error) (error, bool) {
+	return runBlockRequestStreamPhaseContext(context.Background(), s, timeout, operation)
+}
+
+func runBlockRequestStreamPhaseContext(ctx context.Context, s network.Stream, timeout time.Duration, operation func() error) (error, bool) {
 	if operation == nil {
 		return errors.New("missing stream operation"), false
 	}
-	if timeout <= 0 {
-		return operation(), false
+	if ctx == nil {
+		ctx = context.Background()
 	}
+	if timeout <= 0 {
+		select {
+		case <-ctx.Done():
+			if s != nil {
+				_ = s.Reset()
+			}
+			return ctx.Err(), true
+		default:
+			return operation(), false
+		}
+	}
+	// `resultCh` stores the result produced by this operation.
 	resultCh := make(chan error, 1)
 	go func() {
 		resultCh <- operation()
 	}()
+	// `timer` stores the value produced by this operation.
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
 	case err := <-resultCh:
 		return err, false
+	case <-ctx.Done():
+		if s != nil {
+			_ = s.Reset()
+		}
+		return ctx.Err(), true
 	case <-timer.C:
 		if s != nil {
 			_ = s.Reset()
@@ -566,7 +742,18 @@ func runBlockRequestStreamPhase(s network.Stream, timeout time.Duration, operati
 	}
 }
 
+// requestBlocksFromPeerDirect implements the request blocks from peer direct helper.
 func (n *Node) requestBlocksFromPeerDirect(
+	pid peer.ID,
+	from, to uint64,
+	wantSnapshot bool,
+	snapshotHeight uint64,
+) ([]Block, *StateSnapshot, *ExecPoolSnapshot, error) {
+	return n.requestBlocksFromPeerDirectWithContext(context.Background(), pid, from, to, wantSnapshot, snapshotHeight)
+}
+
+func (n *Node) requestBlocksFromPeerDirectWithContext(
+	ctx context.Context,
 	pid peer.ID,
 	from, to uint64,
 	wantSnapshot bool,
@@ -575,27 +762,38 @@ func (n *Node) requestBlocksFromPeerDirect(
 	if n.Host == nil {
 		return nil, nil, nil, fmt.Errorf("host not initialized")
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	// `timeout` stores the result produced by this operation.
 	timeout := syncPeerRequestTimeout()
+	// `peerLabel` stores the value produced by this operation.
 	peerLabel := ShortID(pid.String())
+	// `traceRequest` stores the request data being processed.
 	traceRequest := DebugSync || DebugConsensus
 	if traceRequest {
 		fmt.Printf("[SYNC-REQUEST-START] peer=%s range=%d-%d snapshot=%t snapshot_height=%d timeout_ms=%d\n",
 			peerLabel, from, to, wantSnapshot, snapshotHeight, timeout.Milliseconds())
 	}
 
-	openCtx, cancelOpen := context.WithTimeout(context.Background(), timeout)
+	// `openCtx` and `cancelOpen` store the context controlling this operation.
+	openCtx, cancelOpen := context.WithTimeout(ctx, timeout)
 	defer cancelOpen()
+	// `openStarted` stores the value produced by this operation.
 	openStarted := time.Now()
 	if traceRequest {
 		fmt.Printf("[SYNC-REQUEST-OPEN] peer=%s range=%d-%d\n", peerLabel, from, to)
 	}
+	// `s` and `err` store the error produced by this operation.
 	s, err := n.openStream(openCtx, pid, BlockSyncProtocol)
 	if err != nil {
+		// `wrapped` stores the value produced by this operation.
 		wrapped := newBlockRequestPhaseError("open", pid, from, to, time.Since(openStarted), errors.Is(openCtx.Err(), context.DeadlineExceeded), err)
 		fmt.Printf("[SYNC-REQUEST-OPEN-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, wrapped)
 		return nil, nil, nil, wrapped
 	}
 	if s == nil {
+		// `err` stores the error produced by this operation.
 		err := newBlockRequestPhaseError("open", pid, from, to, time.Since(openStarted), false, fmt.Errorf("nil stream"))
 		fmt.Printf("[SYNC-REQUEST-OPEN-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, err)
 		return nil, nil, nil, err
@@ -610,6 +808,7 @@ func (n *Node) requestBlocksFromPeerDirect(
 		}
 	}()
 
+	// `req` stores the request data being processed.
 	req := BlockRequest{
 		From:           from,
 		To:             to,
@@ -618,16 +817,20 @@ func (n *Node) requestBlocksFromPeerDirect(
 		BypassAck:      true,
 	}
 	_ = s.SetWriteDeadline(time.Now().Add(timeout))
+	// `enc` stores the value produced by this operation.
 	enc := json.NewEncoder(s)
+	// `encodeStarted` stores the value produced by this operation.
 	encodeStarted := time.Now()
 	if traceRequest {
 		fmt.Printf("[SYNC-REQUEST-ENCODE] peer=%s range=%d-%d\n", peerLabel, from, to)
 	}
-	if err, timedOut := runBlockRequestStreamPhase(s, timeout, func() error { return enc.Encode(req) }); err != nil {
+	// `err` and `timedOut` store the error produced by this operation.
+	if err, timedOut := runBlockRequestStreamPhaseContext(ctx, s, timeout, func() error { return enc.Encode(req) }); err != nil {
 		if !timedOut {
 			_ = s.Reset()
 		}
 		s = nil
+		// `wrapped` stores the value produced by this operation.
 		wrapped := newBlockRequestPhaseError("encode", pid, from, to, time.Since(encodeStarted), timedOut || isNetTimeout(err), err)
 		fmt.Printf("[SYNC-REQUEST-ENCODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, wrapped)
 		return nil, nil, nil, wrapped
@@ -638,17 +841,22 @@ func (n *Node) requestBlocksFromPeerDirect(
 	}
 
 	_ = s.SetReadDeadline(time.Now().Add(timeout))
+	// `dec` stores the value produced by this operation.
 	dec := json.NewDecoder(s)
+	// `decodeStarted` stores the value produced by this operation.
 	decodeStarted := time.Now()
 	if traceRequest {
 		fmt.Printf("[SYNC-REQUEST-DECODE] peer=%s range=%d-%d\n", peerLabel, from, to)
 	}
+	// `resp` stores the response produced by this operation.
 	var resp BlockResponse
-	if err, timedOut := runBlockRequestStreamPhase(s, timeout, func() error { return dec.Decode(&resp) }); err != nil {
+	// `err` and `timedOut` store the error produced by this operation.
+	if err, timedOut := runBlockRequestStreamPhaseContext(ctx, s, timeout, func() error { return dec.Decode(&resp) }); err != nil {
 		if !timedOut {
 			_ = s.Reset()
 		}
 		s = nil
+		// `wrapped` stores the value produced by this operation.
 		wrapped := newBlockRequestPhaseError("decode", pid, from, to, time.Since(decodeStarted), timedOut || isNetTimeout(err), err)
 		fmt.Printf("[SYNC-REQUEST-DECODE-FAIL] peer=%s range=%d-%d err=%v\n", peerLabel, from, to, wrapped)
 		return nil, nil, nil, wrapped
@@ -660,12 +868,16 @@ func (n *Node) requestBlocksFromPeerDirect(
 	return resp.Blocks, resp.Snapshot, resp.ExecPool, nil
 }
 
+// localBlocksForRange implements the local blocks for range helper.
 func (n *Node) localBlocksForRange(from uint64, to uint64) ([]Block, bool) {
 	if n == nil || n.Blockchain == nil || from == 0 || to < from {
 		return nil, false
 	}
+	// `blocks` stores the block data handled by this operation.
 	blocks := make([]Block, 0, to-from+1)
+	// `height` stores the value produced by this operation.
 	for height := from; ; height++ {
+		// `block` and `ok` store whether the related condition is satisfied.
 		block, ok := n.Blockchain.GetBlock(height)
 		if !ok || block.ID != height || strings.TrimSpace(block.BlockHash) == "" {
 			return nil, false
@@ -678,14 +890,18 @@ func (n *Node) localBlocksForRange(from uint64, to uint64) ([]Block, bool) {
 	return blocks, true
 }
 
+// requestSnapshotMetaFromPeer implements the request snapshot meta from peer helper.
 func (n *Node) requestSnapshotMetaFromPeer(pid peer.ID, height uint64) (*SnapshotMetaResponse, error) {
 	if n.Host == nil {
 		return nil, fmt.Errorf("host not initialized")
 	}
+	// `timeout` stores the result produced by this operation.
 	timeout := syncPeerRequestTimeout()
+	// `ctx` and `cancel` store the context controlling this operation.
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	// `s` and `err` store the error produced by this operation.
 	s, err := n.openStream(ctx, pid, SnapshotMetaProtocol)
 	if err != nil {
 		return nil, err
@@ -693,14 +909,20 @@ func (n *Node) requestSnapshotMetaFromPeer(pid peer.ID, height uint64) (*Snapsho
 	defer s.Close()
 
 	_ = s.SetDeadline(time.Now().Add(timeout))
+	// `enc` stores the value produced by this operation.
 	enc := json.NewEncoder(s)
+	// `dec` stores the value produced by this operation.
 	dec := json.NewDecoder(s)
 
+	// `req` stores the request data being processed.
 	req := SnapshotMetaRequest{Height: height}
+	// `err` stores the error produced by this operation.
 	if err := enc.Encode(req); err != nil {
 		return nil, err
 	}
+	// `resp` stores the response produced by this operation.
 	var resp SnapshotMetaResponse
+	// `err` stores the error produced by this operation.
 	if err := dec.Decode(&resp); err != nil {
 		return nil, err
 	}
@@ -710,14 +932,18 @@ func (n *Node) requestSnapshotMetaFromPeer(pid peer.ID, height uint64) (*Snapsho
 	return &resp, nil
 }
 
+// requestSnapshotChunkFromPeer implements the request snapshot chunk from peer helper.
 func (n *Node) requestSnapshotChunkFromPeer(pid peer.ID, height uint64, index uint64) (*SnapshotChunkResponse, error) {
 	if n.Host == nil {
 		return nil, fmt.Errorf("host not initialized")
 	}
+	// `timeout` stores the result produced by this operation.
 	timeout := syncPeerRequestTimeout()
+	// `ctx` and `cancel` store the context controlling this operation.
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	// `s` and `err` store the error produced by this operation.
 	s, err := n.openStream(ctx, pid, SnapshotChunkProtocol)
 	if err != nil {
 		return nil, err
@@ -725,13 +951,19 @@ func (n *Node) requestSnapshotChunkFromPeer(pid peer.ID, height uint64, index ui
 	defer s.Close()
 
 	_ = s.SetDeadline(time.Now().Add(timeout))
+	// `enc` stores the value produced by this operation.
 	enc := json.NewEncoder(s)
+	// `dec` stores the value produced by this operation.
 	dec := json.NewDecoder(s)
+	// `req` stores the request data being processed.
 	req := SnapshotChunkRequest{Height: height, Index: index}
+	// `err` stores the error produced by this operation.
 	if err := enc.Encode(req); err != nil {
 		return nil, err
 	}
+	// `resp` stores the response produced by this operation.
 	var resp SnapshotChunkResponse
+	// `err` stores the error produced by this operation.
 	if err := dec.Decode(&resp); err != nil {
 		return nil, err
 	}
@@ -744,15 +976,19 @@ func (n *Node) requestSnapshotChunkFromPeer(pid peer.ID, height uint64, index ui
 	return &resp, nil
 }
 
+// sendBlockAck implements the send block ack helper.
 func (n *Node) sendBlockAck(pid peer.ID, height uint64) {
 	if n.Host == nil || height == 0 {
 		return
 	}
+	// `ctx` and `cancel` store the context controlling this operation.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	// `s` and `err` store the error produced by this operation.
 	s, err := n.openStream(ctx, pid, "/msc/consensus/1.0.0")
 	if err != nil {
 		n.recordDialFailure(pid.String())
+		// `errMsg` stores the error produced by this operation.
 		errMsg := strings.ToLower(err.Error())
 		if strings.Contains(errMsg, "protocols not supported") || strings.Contains(errMsg, "protocol not supported") {
 			n.disconnectPeerID(pid.String(), "consensus_protocol_mismatch")
@@ -761,24 +997,30 @@ func (n *Node) sendBlockAck(pid peer.ID, height uint64) {
 	}
 	defer s.Close()
 
+	// `msg` stores the value produced by this operation.
 	msg := Message{
 		Type: MsgBlockAck,
 		Data: MustJSON(BlockAck{Height: height}),
 	}
+	// `data` stores the value produced by this operation.
 	data, _ := json.Marshal(msg)
 	_, _ = s.Write(append(data, '\n'))
 }
 
+// sendConsensusMessage implements the send consensus message helper.
 func (n *Node) sendConsensusMessage(pid peer.ID, msg Message) {
 	if n == nil || n.Host == nil {
 		return
 	}
+	// `ctx` and `cancel` store the context controlling this operation.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// `s` and `err` store the error produced by this operation.
 	s, err := n.openStream(ctx, pid, "/msc/consensus/1.0.0")
 	if err != nil {
 		n.recordDialFailure(pid.String())
+		// `errMsg` stores the error produced by this operation.
 		errMsg := strings.ToLower(err.Error())
 		if strings.Contains(errMsg, "protocols not supported") || strings.Contains(errMsg, "protocol not supported") {
 			n.disconnectPeerID(pid.String(), "consensus_protocol_mismatch")
@@ -787,6 +1029,7 @@ func (n *Node) sendConsensusMessage(pid peer.ID, msg Message) {
 	}
 	defer s.Close()
 
+	// `data` and `err` store the error produced by this operation.
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return
@@ -795,15 +1038,19 @@ func (n *Node) sendConsensusMessage(pid peer.ID, msg Message) {
 	n.recordDialSuccess(pid.String())
 }
 
+// fanoutConsensusMessageToPeers implements the fanout consensus message to peers helper.
 func (n *Node) fanoutConsensusMessageToPeers(msg Message) {
 	if n == nil || n.Host == nil || n.isShuttingDown() {
 		return
 	}
+	// `peers` stores the value produced by this operation.
 	peers := n.Host.Network().Peers()
 	if len(peers) == 0 {
 		return
 	}
+	// `pid` tracks the current values while iterating.
 	for _, pid := range peers {
+		// `peerID` stores the value produced by this operation.
 		peerID := pid
 		n.SafeGo(fmt.Sprintf("consensus_fanout_%s_%d", msg.Type, time.Now().UnixNano()), func() {
 			n.sendConsensusMessage(peerID, msg)
@@ -811,52 +1058,82 @@ func (n *Node) fanoutConsensusMessageToPeers(msg Message) {
 	}
 }
 
+// broadcastExecutionResult implements the broadcast execution result helper.
 func (n *Node) broadcastExecutionResult(heightHint uint64, execHash string, txMerkle string) {
 	n.broadcastExecutionResultInternal(heightHint, execHash, txMerkle, false)
 }
 
 const (
+	// `execResultSigVersionV1` defines the constant value used by this package.
 	execResultSigVersionV1 uint8 = 1
+	// `execResultSigVersionV2` defines the constant value used by this package.
 	execResultSigVersionV2 uint8 = 2
-	execVoteModeDual             = "dual"
+	// `execVoteModeDual` defines the constant value used by this package.
+	execVoteModeDual = "dual"
 	// Keep a wider recent-proposal window so delayed execution votes can still
 	// resolve after long round-failover churn at the same height.
-	execRecentProposalWindow        = 64
-	execProposalSwitchRoundGap      = 4
+	execRecentProposalWindow = 64
+	// `execProposalSwitchRoundGap` defines the constant value used by this package.
+	execProposalSwitchRoundGap = 4
+	// `execProposalStickyVoteThreshold` defines the constant value used by this package.
 	execProposalStickyVoteThreshold = 2
-	maxEmbeddedProposalPerHeight    = 32
+	// `maxEmbeddedProposalPerHeight` defines the constant value used by this package.
+	maxEmbeddedProposalPerHeight = 32
 )
 
 type execProposalSnapshot struct {
-	Epoch       uint64
-	Round       uint32
-	BlockHash   string
-	TxMerkle    string
-	StateRoot   string
+	// `Epoch` stores the value associated with this record.
+	Epoch uint64
+	// `Round` stores the value associated with this record.
+	Round uint32
+	// `BlockHash` stores the block data handled by this operation.
+	BlockHash string
+	// `TxMerkle` stores the transaction data handled by this operation.
+	TxMerkle string
+	// `StateRoot` stores the digest used to identify or verify the related data.
+	StateRoot string
+	// `ProposalKey` stores the key used to access the related value.
 	ProposalKey string
 }
 
 type execBroadcastContext struct {
-	HeightHint          uint64
-	RoundHint           uint32
-	BlockHashHint       string
-	ProposalKey         string
-	Block               *Block
-	ExecHash            string
-	TxMerkle            string
-	TxCount             int
-	PrevHash            string
-	RuntimeLedgerHash   string
+	// `HeightHint` stores the value associated with this record.
+	HeightHint uint64
+	// `RoundHint` stores the value associated with this record.
+	RoundHint uint32
+	// `BlockHashHint` stores the block data handled by this operation.
+	BlockHashHint string
+	// `ProposalKey` stores the key used to access the related value.
+	ProposalKey string
+	// `Block` stores the synchronization state protecting shared data.
+	Block *Block
+	// `ExecHash` stores the digest used to identify or verify the related data.
+	ExecHash string
+	// `TxMerkle` stores the transaction data handled by this operation.
+	TxMerkle string
+	// `TxCount` stores the transaction data handled by this operation.
+	TxCount int
+	// `PrevHash` stores the digest used to identify or verify the related data.
+	PrevHash string
+	// `RuntimeLedgerHash` stores the digest used to identify or verify the related data.
+	RuntimeLedgerHash string
+	// `ExecutionLedgerHash` stores the digest used to identify or verify the related data.
 	ExecutionLedgerHash string
-	TipHeight           uint64
-	TipHash             string
+	// `TipHeight` stores the value associated with this record.
+	TipHeight uint64
+	// `TipHash` stores the digest used to identify or verify the related data.
+	TipHash string
 }
 
 type execVoteRebroadcastState struct {
-	ProposalKey    string
-	VoteCount      int
+	// `ProposalKey` stores the key used to access the related value.
+	ProposalKey string
+	// `VoteCount` stores the measured quantity used by this operation.
+	VoteCount int
+	// `LastObservedAt` stores the value associated with this record.
 	LastObservedAt time.Time
-	LastForcedAt   time.Time
+	// `LastForcedAt` stores the value associated with this record.
+	LastForcedAt time.Time
 }
 
 // Local execution vote markers must survive short retry churn, but once the
@@ -864,10 +1141,12 @@ type execVoteRebroadcastState struct {
 // so validators can join the higher-round failover proposal.
 const localExecVoteStaleRoundReleaseGap uint32 = execProposalSwitchRoundGap
 
+// legacyProposalVoteKey implements the legacy proposal vote key helper.
 func legacyProposalVoteKey(height uint64) string {
 	return fmt.Sprintf("legacy|%d", height)
 }
 
+// proposalVoteKey implements the proposal vote key helper.
 func proposalVoteKey(height uint64, round uint32, blockHash string, txMerkle string, stateRoot string) string {
 	// ProposalID / consensus identity must remain round-aware even when the
 	// underlying block hash stays stable across retries.
@@ -880,15 +1159,19 @@ func proposalVoteKey(height uint64, round uint32, blockHash string, txMerkle str
 	return fmt.Sprintf("%d|%d|%s|%s|", height, round, blockHash, txMerkle)
 }
 
+// proposalVoteKeyParts implements the proposal vote key parts helper.
 func proposalVoteKeyParts(proposalKey string) (uint64, uint32, string, string, string, bool) {
+	// `parts` stores the value produced by this operation.
 	parts := strings.SplitN(strings.TrimSpace(proposalKey), "|", 5)
 	if len(parts) != 5 {
 		return 0, 0, "", "", "", false
 	}
+	// `height` and `err` store the error produced by this operation.
 	height, err := strconv.ParseUint(strings.TrimSpace(parts[0]), 10, 64)
 	if err != nil {
 		return 0, 0, "", "", "", false
 	}
+	// `round64` and `err` store the error produced by this operation.
 	round64, err := strconv.ParseUint(strings.TrimSpace(parts[1]), 10, 32)
 	if err != nil {
 		return 0, 0, "", "", "", false
@@ -896,25 +1179,33 @@ func proposalVoteKeyParts(proposalKey string) (uint64, uint32, string, string, s
 	return height, uint32(round64), strings.TrimSpace(parts[2]), strings.TrimSpace(parts[3]), strings.TrimSpace(parts[4]), true
 }
 
+// canonicalExecutionResultHash returns canonical execution result hash.
 func canonicalExecutionResultHash(height uint64, blockHash string, execHash string, txMerkle string) string {
 	execHash = strings.TrimSpace(execHash)
 	if height == 0 || execHash == "" {
 		return ""
 	}
+	// `payload` stores the value produced by this operation.
 	payload := fmt.Sprintf("MSC_EXEC_RESULT_V1\x00%d\x00%s\x00%s\x00%s",
 		height,
 		strings.TrimSpace(blockHash),
 		strings.TrimSpace(txMerkle),
 		execHash,
 	)
+	// `sum` stores the value produced by this operation.
 	sum := sha256.Sum256([]byte(payload))
 	return hex.EncodeToString(sum[:])
 }
 
+// executionResultHashFromProposal implements the execution result hash from proposal helper.
 func executionResultHashFromProposal(epoch uint64, proposalKey string, blockHashHint string, execHash string, txMerkle string) string {
+	// `height` stores the value produced by this operation.
 	height := epoch
+	// `blockHash` stores the block data handled by this operation.
 	blockHash := strings.TrimSpace(blockHashHint)
+	// `merkle` stores the value produced by this operation.
 	merkle := strings.TrimSpace(txMerkle)
+	// `h`, `parsedBlockHash`, `parsedTxMerkle`, and `ok` store whether the related condition is satisfied.
 	if h, _, parsedBlockHash, parsedTxMerkle, _, ok := proposalVoteKeyParts(proposalKey); ok {
 		if height == 0 {
 			height = h
@@ -929,15 +1220,19 @@ func executionResultHashFromProposal(epoch uint64, proposalKey string, blockHash
 	return canonicalExecutionResultHash(height, blockHash, execHash, merkle)
 }
 
+// executionResultHashFromMessage implements the execution result hash from message helper.
 func executionResultHashFromMessage(res ExecutionResultMsg) string {
 	return canonicalExecutionResultHash(res.HeightHint, res.BlockHashHint, res.ExecHash, res.TxMerkle)
 }
 
+// executionResultHashFromBlockResult implements the execution result hash from block result helper.
 func executionResultHashFromBlockResult(result ExecutionResult, block Block) string {
+	// `height` stores the value produced by this operation.
 	height := result.Height
 	if height == 0 {
 		height = block.ID
 	}
+	// `blockHash` stores the block data handled by this operation.
 	blockHash := strings.TrimSpace(result.BlockHash)
 	if blockHash == "" {
 		blockHash = executionVoteProposalHashForFinalBlock(block)
@@ -945,6 +1240,7 @@ func executionResultHashFromBlockResult(result ExecutionResult, block Block) str
 	if blockHash == "" {
 		blockHash = strings.TrimSpace(block.BlockHash)
 	}
+	// `txMerkle` stores the transaction data handled by this operation.
 	txMerkle := strings.TrimSpace(result.TxMerkle)
 	if txMerkle == "" {
 		txMerkle = strings.TrimSpace(block.MempoolRoot)
@@ -952,6 +1248,7 @@ func executionResultHashFromBlockResult(result ExecutionResult, block Block) str
 	return canonicalExecutionResultHash(height, blockHash, result.ResultHash, txMerkle)
 }
 
+// executionResultHashMatches implements the execution result hash matches helper.
 func executionResultHashMatches(claimed string, expected string) bool {
 	claimed = strings.TrimSpace(claimed)
 	if claimed == "" {
@@ -961,11 +1258,14 @@ func executionResultHashMatches(claimed string, expected string) bool {
 	return expected != "" && strings.EqualFold(claimed, expected)
 }
 
+// proposalVoteKeyRound implements the proposal vote key round helper.
 func proposalVoteKeyRound(proposalKey string) (uint32, bool) {
+	// `round` and `ok` store whether the related condition is satisfied.
 	_, round, _, _, _, ok := proposalVoteKeyParts(proposalKey)
 	return round, ok
 }
 
+// execEpochChoiceSignerKey implements the exec epoch choice signer key helper.
 func execEpochChoiceSignerKey(signer string, proposalKey string) string {
 	signer = normalizeValidatorID(signer)
 	if signer == "" {
@@ -975,6 +1275,7 @@ func execEpochChoiceSignerKey(signer string, proposalKey string) string {
 	return signer
 }
 
+// proposalExecKey implements the proposal exec key helper.
 func proposalExecKey(proposalKey string, execHash string) string {
 	if proposalKey == "" {
 		return execHash
@@ -982,6 +1283,7 @@ func proposalExecKey(proposalKey string, execHash string) string {
 	return fmt.Sprintf("%s|%s", proposalKey, execHash)
 }
 
+// execPoolScopeKey implements the exec pool scope key helper.
 func execPoolScopeKey(epoch uint64, proposalKey string) string {
 	proposalKey = strings.TrimSpace(proposalKey)
 	if proposalKey == "" {
@@ -990,11 +1292,14 @@ func execPoolScopeKey(epoch uint64, proposalKey string) string {
 	if strings.HasPrefix(proposalKey, "legacy|") {
 		return proposalKey
 	}
+	// `parts` stores the value produced by this operation.
 	parts := strings.SplitN(proposalKey, "|", 5)
 	if len(parts) != 5 {
 		return proposalKey
 	}
+	// `heightPart` stores the value produced by this operation.
 	heightPart := strings.TrimSpace(parts[0])
+	// `blockHash` stores the block data handled by this operation.
 	blockHash := strings.TrimSpace(parts[2])
 	if blockHash == "" {
 		return proposalKey
@@ -1005,8 +1310,11 @@ func execPoolScopeKey(epoch uint64, proposalKey string) string {
 	return fmt.Sprintf("block|%s|%s", heightPart, blockHash)
 }
 
+// execPoolResultScopeKey implements the exec pool result scope key helper.
 func execPoolResultScopeKey(epoch uint64, proposalKey string, execHash string) string {
+	// `scope` stores the value produced by this operation.
 	scope := execPoolScopeKey(epoch, proposalKey)
+	// `execResultHash` stores the digest used to identify or verify the related data.
 	execResultHash := executionResultHashFromProposal(epoch, proposalKey, "", execHash, "")
 	if execResultHash == "" {
 		execResultHash = strings.TrimSpace(execHash)
@@ -1017,6 +1325,7 @@ func execPoolResultScopeKey(epoch uint64, proposalKey string, execHash string) s
 	return fmt.Sprintf("%s|%s", scope, execResultHash)
 }
 
+// commitVoteScopeKey implements the commit vote scope key helper.
 func commitVoteScopeKey(height uint64, proposalHash string) string {
 	proposalHash = strings.TrimSpace(proposalHash)
 	if height == 0 || proposalHash == "" {
@@ -1025,10 +1334,12 @@ func commitVoteScopeKey(height uint64, proposalHash string) string {
 	return fmt.Sprintf("block|%d|%s", height, proposalHash)
 }
 
+// execPoolResultKey implements the exec pool result key helper.
 func execPoolResultKey(epoch uint64, proposalKey string, execHash string) string {
 	return execPoolResultScopeKey(epoch, proposalKey, execHash)
 }
 
+// proposalSnapshotFromBlock implements the proposal snapshot from block helper.
 func proposalSnapshotFromBlock(block Block) execProposalSnapshot {
 	return execProposalSnapshot{
 		Epoch:       block.ID,
@@ -1040,10 +1351,12 @@ func proposalSnapshotFromBlock(block Block) execProposalSnapshot {
 	}
 }
 
+// acceptedProposalHeightKey implements the accepted proposal height key helper.
 func acceptedProposalHeightKey(height uint64) string {
 	return fmt.Sprintf("%d", height)
 }
 
+// acceptedProposalVoteCountLocked implements the accepted proposal vote count locked helper.
 func (n *Node) acceptedProposalVoteCountLocked(epoch uint64, proposalKey string) int {
 	if n == nil || epoch == 0 || proposalKey == "" {
 		return 0
@@ -1054,6 +1367,7 @@ func (n *Node) acceptedProposalVoteCountLocked(epoch uint64, proposalKey string)
 	return getExecCountForProposalScopeGlobal(epoch, proposalKey, "")
 }
 
+// execVoteCreditedGlobal implements the exec vote credited global helper.
 func execVoteCreditedGlobal(epoch uint64, proposalKey string, signer string, execHash string, txMerkle string) bool {
 	signer = normalizeValidatorID(signer)
 	if epoch == 0 || proposalKey == "" || signer == "" || execHash == "" {
@@ -1064,17 +1378,24 @@ func execVoteCreditedGlobal(epoch uint64, proposalKey string, signer string, exe
 	return execVoteCreditedGlobalLocked(epoch, proposalKey, signer, execHash, txMerkle)
 }
 
+// execVoteCreditedGlobalLocked implements the exec vote credited global locked helper.
 func execVoteCreditedGlobalLocked(epoch uint64, proposalKey string, signer string, execHash string, txMerkle string) bool {
 	signer = normalizeValidatorID(signer)
 	if epoch == 0 || proposalKey == "" || signer == "" || execHash == "" {
 		return false
 	}
+	// `poolScopeKey` stores the key used to access the related value.
 	poolScopeKey := execPoolScopeKey(epoch, proposalKey)
+	// `scopedExecKey` stores the key used to access the related value.
 	scopedExecKey := execPoolResultKey(epoch, proposalKey, execHash)
+	// `choice` stores the value produced by this operation.
 	choice := execBroadcastKey(execHash, txMerkle)
 
+	// `byHash` and `ok` store whether the related condition is satisfied.
 	if byHash, ok := ExecPool.pool[epoch]; ok {
+		// `bySigner` and `ok` store whether the related condition is satisfied.
 		if bySigner, ok := byHash[scopedExecKey]; ok {
+			// `existing` and `ok` store whether the related condition is satisfied.
 			if existing, ok := bySigner[signer]; ok {
 				if strings.TrimSpace(txMerkle) == "" || strings.TrimSpace(existing.TxMerkle) == strings.TrimSpace(txMerkle) {
 					return true
@@ -1082,9 +1403,13 @@ func execVoteCreditedGlobalLocked(epoch uint64, proposalKey string, signer strin
 			}
 		}
 	}
+	// `byScope` and `ok` store whether the related condition is satisfied.
 	if byScope, ok := ExecPool.signers[epoch]; ok {
+		// `signers` stores the value produced by this operation.
 		if signers := byScope[poolScopeKey]; signers != nil && signers[signer] {
+			// `byChoice` and `ok` store whether the related condition is satisfied.
 			if byChoice, ok := ExecPool.choice[epoch]; ok {
+				// `choices` stores the value produced by this operation.
 				if choices := byChoice[poolScopeKey]; choices != nil && strings.TrimSpace(choices[signer]) == choice {
 					return true
 				}
@@ -1094,10 +1419,12 @@ func execVoteCreditedGlobalLocked(epoch uint64, proposalKey string, signer strin
 	return false
 }
 
+// proposalVoteCount implements the proposal vote count helper.
 func (n *Node) proposalVoteCount(block Block) int {
 	if n == nil || block.ID == 0 {
 		return 0
 	}
+	// `execHash` stores the digest used to identify or verify the related data.
 	execHash := strings.TrimSpace(block.StateRoot)
 	if execHash == "" {
 		execHash = strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
@@ -1105,6 +1432,7 @@ func (n *Node) proposalVoteCount(block Block) int {
 	if execHash == "" {
 		return 0
 	}
+	// `proposalKey` stores the key used to access the related value.
 	proposalKey := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, execHash)
 	if proposalKey == "" {
 		return 0
@@ -1112,10 +1440,12 @@ func (n *Node) proposalVoteCount(block Block) int {
 	return getExecCountGlobal(block.ID, proposalKey, execHash, block.MempoolRoot)
 }
 
+// proposalHasExecutionQuorum implements the proposal has execution quorum helper.
 func (n *Node) proposalHasExecutionQuorum(block Block) bool {
 	if n == nil || block.ID == 0 {
 		return false
 	}
+	// `required` stores the request data being processed.
 	required := n.executionQuorumRequiredForEpoch(block.ID)
 	if required == 0 {
 		return false
@@ -1123,11 +1453,14 @@ func (n *Node) proposalHasExecutionQuorum(block Block) bool {
 	return n.proposalVoteCount(block) >= required
 }
 
+// proposalHasSignedCommitQuorum implements the proposal has signed commit quorum helper.
 func (n *Node) proposalHasSignedCommitQuorum(block Block) (int, int, bool) {
 	if n == nil || block.ID == 0 || strings.TrimSpace(block.BlockHash) == "" {
 		return 0, 0, false
 	}
+	// `execHash` stores the digest used to identify or verify the related data.
 	execHash := strings.TrimSpace(block.StateRoot)
+	// `count` and `required` store the measured quantity used by this operation.
 	var count, required int
 	if execHash != "" {
 		_, _, count, required = n.commitVoteEvidenceForResult(block.ID, block.BlockHash, execHash, block.MempoolRoot)
@@ -1137,37 +1470,75 @@ func (n *Node) proposalHasSignedCommitQuorum(block Block) (int, int, bool) {
 	return count, required, required > 0 && count >= required
 }
 
+// proposalHasLocalSignedExecutionQuorum reports whether this node has already
+// signed a commit for a proposal that has enough local execution votes.
+func (n *Node) proposalHasLocalSignedExecutionQuorum(block Block, voteCount int) bool {
+	if n == nil || block.ID == 0 || strings.TrimSpace(block.BlockHash) == "" {
+		return false
+	}
+	required := n.executionQuorumRequiredForEpoch(block.ID)
+	if required == 0 || voteCount < required {
+		return false
+	}
+	execHash := strings.TrimSpace(block.StateRoot)
+	if execHash == "" {
+		execHash = strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
+	}
+	if execHash == "" {
+		return false
+	}
+	scope := commitVoteResultScopeKey(block.ID, block.BlockHash, execHash, block.MempoolRoot)
+	return scope != "" && n.hasLocalSignedCommitScope(block.ID, scope)
+}
+
+// proposalAlreadySeenLocked implements the proposal already seen locked helper.
 func (n *Node) proposalAlreadySeenLocked(block Block) bool {
 	if n == nil || block.ID == 0 || n.acceptedProposalBlocks == nil {
 		return false
 	}
+	// `snap` stores the value produced by this operation.
 	snap := proposalSnapshotFromBlock(block)
 	if snap.ProposalKey == "" {
 		return false
 	}
+	// `ok` stores whether the related condition is satisfied.
 	_, ok := n.acceptedProposalBlocks[snap.ProposalKey]
 	return ok
 }
 
+// proposalShouldStayLocked implements the proposal should stay locked helper.
 func (n *Node) proposalShouldStayLocked(block Block, voteCount int) (bool, string) {
+	// `committed` stores the value produced by this operation.
 	if _, _, committed := n.proposalHasSignedCommitQuorum(block); committed {
 		return true, "signed_commit_quorum_locked"
+	}
+	if n.proposalHasLocalSignedExecutionQuorum(block, voteCount) {
+		return true, "local_signed_execution_quorum_locked"
+	}
+	// `required` stores the request data being processed.
+	required := n.executionQuorumRequiredForEpoch(block.ID)
+	if required > 0 && voteCount >= required {
+		return true, "execution_quorum_locked"
 	}
 	return false, ""
 }
 
+// proposalMatchesLocalExecution implements the proposal matches local execution helper.
 func (n *Node) proposalMatchesLocalExecution(block Block) (bool, string) {
 	if n == nil || block.ID == 0 {
 		return false, ""
 	}
+	// `expected` stores the value produced by this operation.
 	expected := strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
 	if expected == "" {
 		return false, ""
 	}
+	// `actual` stores the value produced by this operation.
 	actual := strings.TrimSpace(block.StateRoot)
 	return actual != "" && strings.EqualFold(actual, expected), expected
 }
 
+// acceptedProposalVoteLockForRound implements the accepted proposal vote lock for round helper.
 func (n *Node) acceptedProposalVoteLockForRound(epoch uint64, incomingRound uint32) (Block, int, bool, string) {
 	if n == nil || epoch == 0 {
 		return Block{}, 0, false, ""
@@ -1177,11 +1548,14 @@ func (n *Node) acceptedProposalVoteLockForRound(epoch uint64, incomingRound uint
 	if n.acceptedProposal == nil || n.acceptedProposalBlocks == nil {
 		return Block{}, 0, false, ""
 	}
+	// `heightKey` stores the key used to access the related value.
 	heightKey := acceptedProposalHeightKey(epoch)
+	// `currentKey` stores the key used to access the related value.
 	currentKey := strings.TrimSpace(n.acceptedProposal[heightKey])
 	if currentKey == "" {
 		return Block{}, 0, false, ""
 	}
+	// `block` and `ok` store whether the related condition is satisfied.
 	block, ok := n.acceptedProposalBlocks[currentKey]
 	if !ok || block.ID != epoch {
 		return Block{}, 0, false, ""
@@ -1189,17 +1563,22 @@ func (n *Node) acceptedProposalVoteLockForRound(epoch uint64, incomingRound uint
 	if incomingRound <= block.Round {
 		return Block{}, 0, false, ""
 	}
-	commitVotes, _, committed := n.proposalHasSignedCommitQuorum(block)
-	if !committed {
+	// `voteCount` stores the measured quantity used by this operation.
+	voteCount := n.acceptedProposalVoteCountLocked(epoch, currentKey)
+	// `keep` and `reason` store the value produced by this operation.
+	keep, reason := n.proposalShouldHoldAgainstIncomingLocked(epoch, currentKey, block, voteCount, incomingRound)
+	if !keep {
 		return Block{}, 0, false, ""
 	}
-	return block, commitVotes, true, "accepted_signed_commit_lock"
+	return block, voteCount, true, reason
 }
 
+// executionQuorumRequiredForEpoch implements the execution quorum required for epoch helper.
 func (n *Node) executionQuorumRequiredForEpoch(epoch uint64) int {
 	if n == nil || epoch == 0 {
 		return 0
 	}
+	// `validators` and `ok` store whether the related condition is satisfied.
 	validators, _, ok := n.deterministicCommitteeValidatorsForHeight(epoch)
 	if !ok || len(validators) == 0 {
 		return 0
@@ -1207,10 +1586,12 @@ func (n *Node) executionQuorumRequiredForEpoch(epoch uint64) int {
 	return execQuorumRequired(len(validators))
 }
 
-func (n *Node) proposalShouldHoldAgainstIncomingLocked(epoch uint64, proposalKey string, block Block, voteCount int, incomingRound uint32) (bool, string) {
+// proposalShouldHoldAgainstIncomingLocked implements the proposal should hold against incoming locked helper.
+func (n *Node) proposalShouldHoldAgainstIncomingLocked(_ uint64, _ string, block Block, voteCount int, _ uint32) (bool, string) {
 	return n.proposalShouldStayLocked(block, voteCount)
 }
 
+// acceptedProposalLockState implements the accepted proposal lock state helper.
 func (n *Node) acceptedProposalLockState(epoch uint64) (Block, int, bool, string) {
 	if n == nil || epoch == 0 {
 		return Block{}, 0, false, ""
@@ -1220,19 +1601,24 @@ func (n *Node) acceptedProposalLockState(epoch uint64) (Block, int, bool, string
 	if n.acceptedProposal == nil || n.acceptedProposalBlocks == nil {
 		return Block{}, 0, false, ""
 	}
+	// `key` stores the key used to access the related value.
 	key := strings.TrimSpace(n.acceptedProposal[acceptedProposalHeightKey(epoch)])
 	if key == "" {
 		return Block{}, 0, false, ""
 	}
+	// `block` and `ok` store whether the related condition is satisfied.
 	block, ok := n.acceptedProposalBlocks[key]
 	if !ok || block.ID != epoch {
 		return Block{}, 0, false, ""
 	}
+	// `voteCount` stores the measured quantity used by this operation.
 	voteCount := n.acceptedProposalVoteCountLocked(epoch, key)
+	// `keep` and `reason` store the value produced by this operation.
 	keep, reason := n.proposalShouldHoldAgainstIncomingLocked(epoch, key, block, voteCount, 0)
 	return block, voteCount, keep, reason
 }
 
+// acceptedProposalHoldStateForIncomingRound implements the accepted proposal hold state for incoming round helper.
 func (n *Node) acceptedProposalHoldStateForIncomingRound(epoch uint64, incomingRound uint32) (Block, int, bool, string) {
 	if n == nil || epoch == 0 {
 		return Block{}, 0, false, ""
@@ -1242,36 +1628,35 @@ func (n *Node) acceptedProposalHoldStateForIncomingRound(epoch uint64, incomingR
 	if n.acceptedProposal == nil || n.acceptedProposalBlocks == nil {
 		return Block{}, 0, false, ""
 	}
+	// `key` stores the key used to access the related value.
 	key := strings.TrimSpace(n.acceptedProposal[acceptedProposalHeightKey(epoch)])
 	if key == "" {
 		return Block{}, 0, false, ""
 	}
+	// `block` and `ok` store whether the related condition is satisfied.
 	block, ok := n.acceptedProposalBlocks[key]
 	if !ok || block.ID != epoch {
 		return Block{}, 0, false, ""
 	}
+	// `voteCount` stores the measured quantity used by this operation.
 	voteCount := n.acceptedProposalVoteCountLocked(epoch, key)
+	// `keep` and `reason` store the value produced by this operation.
 	keep, reason := n.proposalShouldHoldAgainstIncomingLocked(epoch, key, block, voteCount, incomingRound)
 	return block, voteCount, keep, reason
 }
 
+// quorumLockedProposalLockState implements the quorum locked proposal lock state helper.
 func (n *Node) quorumLockedProposalLockState(epoch uint64) (Block, int, bool, string) {
 	if n == nil || epoch == 0 {
 		return Block{}, 0, false, ""
 	}
 	n.execResultsMu.Lock()
-	defer n.execResultsMu.Unlock()
-	if n.quorumLockedProposal == nil || n.acceptedProposalBlocks == nil {
+	block, ok := n.quorumLockedProposalBlockLocked(epoch)
+	n.execResultsMu.Unlock()
+	if !ok {
 		return Block{}, 0, false, ""
 	}
-	key := strings.TrimSpace(n.quorumLockedProposal[acceptedProposalHeightKey(epoch)])
-	if key == "" {
-		return Block{}, 0, false, ""
-	}
-	block, ok := n.acceptedProposalBlocks[key]
-	if !ok || block.ID != epoch {
-		return Block{}, 0, false, ""
-	}
+	// `commitVotes` and `committed` store the value produced by this operation.
 	commitVotes, _, committed := n.proposalHasSignedCommitQuorum(block)
 	if !committed {
 		return block, commitVotes, false, ""
@@ -1279,10 +1664,30 @@ func (n *Node) quorumLockedProposalLockState(epoch uint64) (Block, int, bool, st
 	return block, commitVotes, true, "signed_commit_quorum_locked"
 }
 
-func (n *Node) quorumLockedProposalHoldStateForIncomingRound(epoch uint64, incoming Block, projectedVotes int) (Block, int, bool, string) {
+// quorumLockedProposalBlockLocked reads the quorum-locked block while execResultsMu is held.
+func (n *Node) quorumLockedProposalBlockLocked(epoch uint64) (Block, bool) {
+	if n == nil || epoch == 0 || n.quorumLockedProposal == nil || n.acceptedProposalBlocks == nil {
+		return Block{}, false
+	}
+	// `key` stores the key used to access the related value.
+	key := strings.TrimSpace(n.quorumLockedProposal[acceptedProposalHeightKey(epoch)])
+	if key == "" {
+		return Block{}, false
+	}
+	// `block` and `ok` store whether the related condition is satisfied.
+	block, ok := n.acceptedProposalBlocks[key]
+	if !ok || block.ID != epoch {
+		return Block{}, false
+	}
+	return block, true
+}
+
+// quorumLockedProposalHoldStateForIncomingRound implements the quorum locked proposal hold state for incoming round helper.
+func (n *Node) quorumLockedProposalHoldStateForIncomingRound(epoch uint64, incoming Block, _ int) (Block, int, bool, string) {
 	if n == nil || epoch == 0 {
 		return Block{}, 0, false, ""
 	}
+	// `block`, `voteCount`, `keep`, and `reason` store the synchronization state protecting shared data.
 	block, voteCount, keep, reason := n.quorumLockedProposalLockState(epoch)
 	if !keep {
 		return Block{}, 0, false, ""
@@ -1293,11 +1698,14 @@ func (n *Node) quorumLockedProposalHoldStateForIncomingRound(epoch uint64, incom
 	return block, voteCount, true, reason
 }
 
+// proposalConflictsWithAcceptedLock implements the proposal conflicts with accepted lock helper.
 func proposalConflictsWithAcceptedLock(locked Block, incoming Block) bool {
 	if locked.ID == 0 || incoming.ID == 0 {
 		return false
 	}
+	// `lockedHash` stores the synchronization state protecting shared data.
 	lockedHash := strings.TrimSpace(locked.BlockHash)
+	// `incomingHash` stores the digest used to identify or verify the related data.
 	incomingHash := strings.TrimSpace(incoming.BlockHash)
 	if lockedHash == "" || incomingHash == "" {
 		return false
@@ -1305,49 +1713,118 @@ func proposalConflictsWithAcceptedLock(locked Block, incoming Block) bool {
 	return !strings.EqualFold(lockedHash, incomingHash)
 }
 
+// commitPinnedProposalHashesForHeight implements the commit pinned proposal hashes for height helper.
+func (n *Node) commitPinnedProposalHashesForHeight(height uint64) map[string]struct{} {
+	if n == nil || height == 0 {
+		return nil
+	}
+	n.commitMu.Lock()
+	defer n.commitMu.Unlock()
+	// `byScope` stores the value produced by this operation.
+	byScope := n.commitVoteSignatures[height]
+	if len(byScope) == 0 {
+		return nil
+	}
+	// `pinned` stores the value produced by this operation.
+	pinned := make(map[string]struct{}, len(byScope))
+	// `scope` and `bySigner` track the current values while iterating.
+	for scope, bySigner := range byScope {
+		// `hasSignature` stores the value produced by this operation.
+		hasSignature := false
+		// `sig` tracks the current values while iterating.
+		for _, sig := range bySigner {
+			if strings.TrimSpace(sig) != "" {
+				hasSignature = true
+				break
+			}
+		}
+		if !hasSignature {
+			continue
+		}
+		// `proposalHash` stores the digest used to identify or verify the related data.
+		if proposalHash := commitVoteProposalHashFromScope(height, scope); proposalHash != "" {
+			pinned[proposalHash] = struct{}{}
+		}
+	}
+	return pinned
+}
+
+// pruneAcceptedProposalBlocksForEpochLocked implements the prune accepted proposal blocks for epoch locked helper.
 func (n *Node) pruneAcceptedProposalBlocksForEpochLocked(epoch uint64) {
 	if n == nil || epoch == 0 || n.acceptedProposalBlocks == nil {
 		return
 	}
 	type proposalEntry struct {
-		key   string
+		// `key` stores the key used to access the related value.
+		key string
+		// `blockHash` stores the block data handled by this operation.
+		blockHash string
+		// `round` stores the value associated with this record.
 		round uint32
 	}
+	// `entries` stores the value produced by this operation.
 	entries := make([]proposalEntry, 0, len(n.acceptedProposalBlocks))
+	// `currentKey` stores the key used to access the related value.
 	currentKey := ""
+	// `quorumLockedKey` stores the key used to access the related value.
 	quorumLockedKey := ""
+	// `commitPinnedHashes` stores the value produced by this operation.
+	commitPinnedHashes := n.commitPinnedProposalHashesForHeight(epoch)
 	if n.acceptedProposal != nil {
 		currentKey = strings.TrimSpace(n.acceptedProposal[acceptedProposalHeightKey(epoch)])
 	}
 	if n.quorumLockedProposal != nil {
 		quorumLockedKey = strings.TrimSpace(n.quorumLockedProposal[acceptedProposalHeightKey(epoch)])
 	}
+	// `key` and `block` track the synchronization state protecting shared data.
 	for key, block := range n.acceptedProposalBlocks {
 		if block.ID != epoch {
 			continue
 		}
-		entries = append(entries, proposalEntry{key: key, round: block.Round})
+		entries = append(entries, proposalEntry{key: key, blockHash: strings.TrimSpace(block.BlockHash), round: block.Round})
 	}
 	if len(entries) <= execRecentProposalWindow {
 		return
 	}
+	// `isCommitPinned` stores the current position in the related collection.
+	isCommitPinned := func(entry proposalEntry) bool {
+		if len(commitPinnedHashes) == 0 || entry.blockHash == "" {
+			return false
+		}
+		// `ok` stores whether the related condition is satisfied.
+		_, ok := commitPinnedHashes[entry.blockHash]
+		return ok
+	}
 	sort.Slice(entries, func(i, j int) bool {
+		// `iLocked` stores the current position in the related collection.
 		iLocked := entries[i].key == quorumLockedKey
+		// `jLocked` stores the current position in the related collection.
 		jLocked := entries[j].key == quorumLockedKey
 		if iLocked != jLocked {
 			return iLocked
 		}
+		// `iCurrent` stores the current position in the related collection.
 		iCurrent := entries[i].key == currentKey
+		// `jCurrent` stores the current position in the related collection.
 		jCurrent := entries[j].key == currentKey
 		if iCurrent != jCurrent {
 			return iCurrent
+		}
+		// `iCommitPinned` stores the current position in the related collection.
+		iCommitPinned := isCommitPinned(entries[i])
+		// `jCommitPinned` stores the current position in the related collection.
+		jCommitPinned := isCommitPinned(entries[j])
+		if iCommitPinned != jCommitPinned {
+			return iCommitPinned
 		}
 		if entries[i].round != entries[j].round {
 			return entries[i].round > entries[j].round
 		}
 		return entries[i].key < entries[j].key
 	})
+	// `keep` stores the value produced by this operation.
 	keep := make(map[string]bool, execRecentProposalWindow+1)
+	// `i` stores the current position in the related collection.
 	for i := 0; i < len(entries) && i < execRecentProposalWindow; i++ {
 		keep[entries[i].key] = true
 	}
@@ -1357,6 +1834,13 @@ func (n *Node) pruneAcceptedProposalBlocksForEpochLocked(epoch uint64) {
 	if quorumLockedKey != "" {
 		keep[quorumLockedKey] = true
 	}
+	// `entry` tracks the current values while iterating.
+	for _, entry := range entries {
+		if isCommitPinned(entry) {
+			keep[entry.key] = true
+		}
+	}
+	// `entry` tracks the current values while iterating.
 	for _, entry := range entries {
 		if !keep[entry.key] {
 			delete(n.acceptedProposalBlocks, entry.key)
@@ -1364,7 +1848,9 @@ func (n *Node) pruneAcceptedProposalBlocksForEpochLocked(epoch uint64) {
 	}
 }
 
+// registerAcceptedProposalBlockLocked implements the register accepted proposal block locked helper.
 func (n *Node) registerAcceptedProposalBlockLocked(block Block) execProposalSnapshot {
+	// `snap` stores the value produced by this operation.
 	snap := proposalSnapshotFromBlock(block)
 	if snap.ProposalKey == "" {
 		return snap
@@ -1377,10 +1863,12 @@ func (n *Node) registerAcceptedProposalBlockLocked(block Block) execProposalSnap
 	return snap
 }
 
+// setAcceptedProposalLocked implements the set accepted proposal locked helper.
 func (n *Node) setAcceptedProposalLocked(block Block, reason string, force bool) bool {
 	if n == nil || block.ID == 0 {
 		return false
 	}
+	// `snap` stores the value produced by this operation.
 	snap := n.registerAcceptedProposalBlockLocked(block)
 	if snap.ProposalKey == "" {
 		return false
@@ -1388,16 +1876,23 @@ func (n *Node) setAcceptedProposalLocked(block Block, reason string, force bool)
 	if n.acceptedProposal == nil {
 		n.acceptedProposal = make(map[string]string)
 	}
+	// `heightKey` stores the key used to access the related value.
 	heightKey := acceptedProposalHeightKey(block.ID)
+	// `currentKey` stores the key used to access the related value.
 	currentKey := strings.TrimSpace(n.acceptedProposal[heightKey])
 	if currentKey == snap.ProposalKey {
 		return false
 	}
+	// `prevRound` stores the value produced by this operation.
 	prevRound := uint32(0)
+	// `prevBlockHash` stores the digest used to identify or verify the related data.
 	prevBlockHash := ""
+	// `prevVotes` stores the value produced by this operation.
 	prevVotes := 0
+	// `prevBlock` stores the synchronization state protecting shared data.
 	prevBlock := Block{}
 	if currentKey != "" {
+		// `currentBlock` and `ok` store whether the related condition is satisfied.
 		if currentBlock, ok := n.acceptedProposalBlocks[currentKey]; ok {
 			prevBlock = currentBlock
 			prevRound = currentBlock.Round
@@ -1408,10 +1903,15 @@ func (n *Node) setAcceptedProposalLocked(block Block, reason string, force bool)
 			return false
 		}
 		if prevBlock.ID == block.ID && proposalConflictsWithAcceptedLock(prevBlock, block) {
-			commitVotes, required, committed := n.proposalHasSignedCommitQuorum(prevBlock)
-			if committed {
+			// `keepCurrent` and `keepReason` store the value produced by this operation.
+			if keepCurrent, keepReason := n.proposalShouldHoldAgainstIncomingLocked(block.ID, currentKey, prevBlock, prevVotes, block.Round); keepCurrent {
 				if DebugConsensus {
-					fmt.Printf("[EXEC-PROPOSAL-KEEP] height=%d locked_round=%d locked_block=%s incoming_round=%d incoming_block=%s commit_votes=%d required=%d reason=signed_commit_quorum_locked\n",
+					commitVotes, required, _ := n.proposalHasSignedCommitQuorum(prevBlock)
+					if keepReason == "local_signed_execution_quorum_locked" {
+						commitVotes = prevVotes
+						required = n.executionQuorumRequiredForEpoch(prevBlock.ID)
+					}
+					fmt.Printf("[EXEC-PROPOSAL-KEEP] height=%d locked_round=%d locked_block=%s incoming_round=%d incoming_block=%s votes=%d required=%d reason=%s\n",
 						block.ID,
 						prevRound,
 						ShortHash(prevBlockHash),
@@ -1419,6 +1919,7 @@ func (n *Node) setAcceptedProposalLocked(block Block, reason string, force bool)
 						ShortHash(block.BlockHash),
 						commitVotes,
 						required,
+						keepReason,
 					)
 				}
 				return false
@@ -1452,16 +1953,16 @@ func (n *Node) setAcceptedProposalLocked(block Block, reason string, force bool)
 	return true
 }
 
+// setQuorumLockedProposalLocked implements the set quorum locked proposal locked helper.
 func (n *Node) setQuorumLockedProposalLocked(block Block, reason string, voteCount int, required int) bool {
 	if n == nil || block.ID == 0 {
 		return false
 	}
-	commitVotes, commitRequired, committed := n.proposalHasSignedCommitQuorum(block)
-	if !committed {
+	// Callers must pass the signed commit vote count for this exact proposal.
+	if required <= 0 || voteCount < required {
 		return false
 	}
-	voteCount = commitVotes
-	required = commitRequired
+	// `snap` stores the value produced by this operation.
 	snap := n.registerAcceptedProposalBlockLocked(block)
 	if snap.ProposalKey == "" {
 		return false
@@ -1469,14 +1970,19 @@ func (n *Node) setQuorumLockedProposalLocked(block Block, reason string, voteCou
 	if n.quorumLockedProposal == nil {
 		n.quorumLockedProposal = make(map[string]string)
 	}
+	// `heightKey` stores the key used to access the related value.
 	heightKey := acceptedProposalHeightKey(block.ID)
+	// `currentKey` stores the key used to access the related value.
 	currentKey := strings.TrimSpace(n.quorumLockedProposal[heightKey])
 	if currentKey == snap.ProposalKey {
 		return false
 	}
+	// `prevRound` stores the value produced by this operation.
 	prevRound := uint32(0)
+	// `prevBlockHash` stores the digest used to identify or verify the related data.
 	prevBlockHash := ""
 	if currentKey != "" {
+		// `currentBlock` and `ok` store whether the related condition is satisfied.
 		if currentBlock, ok := n.acceptedProposalBlocks[currentKey]; ok {
 			prevRound = currentBlock.Round
 			prevBlockHash = currentBlock.BlockHash
@@ -1497,6 +2003,7 @@ func (n *Node) setQuorumLockedProposalLocked(block Block, reason string, voteCou
 	return true
 }
 
+// noteObservedProposal implements the note observed proposal helper.
 func (n *Node) noteObservedProposal(block Block) {
 	if n == nil || block.ID == 0 {
 		return
@@ -1507,6 +2014,7 @@ func (n *Node) noteObservedProposal(block Block) {
 	_ = n.setAcceptedProposalLocked(block, "observed", false)
 }
 
+// maybeAdoptProposalOnExecutionVote implements the maybe adopt proposal on execution vote helper.
 func (n *Node) maybeAdoptProposalOnExecutionVote(block Block) bool {
 	if n == nil || block.ID == 0 {
 		return false
@@ -1517,17 +2025,23 @@ func (n *Node) maybeAdoptProposalOnExecutionVote(block Block) bool {
 		n.acceptedProposal = make(map[string]string)
 	}
 	n.registerAcceptedProposalBlockLocked(block)
+	// `heightKey` stores the key used to access the related value.
 	heightKey := acceptedProposalHeightKey(block.ID)
+	// `currentKey` stores the key used to access the related value.
 	currentKey := strings.TrimSpace(n.acceptedProposal[heightKey])
 	if currentKey == "" {
 		return n.setAcceptedProposalLocked(block, "vote_observed", true)
 	}
+	// `nextKey` stores the key used to access the related value.
 	nextKey := proposalSnapshotFromBlock(block).ProposalKey
 	if currentKey == nextKey {
 		return false
 	}
+	// `currentVotes` stores the value produced by this operation.
 	currentVotes := n.acceptedProposalVoteCountLocked(block.ID, currentKey)
+	// `currentBlock` stores the synchronization state protecting shared data.
 	currentBlock := n.acceptedProposalBlocks[currentKey]
+	// `keepCurrent` stores the value produced by this operation.
 	if keepCurrent, _ := n.proposalShouldStayLocked(currentBlock, currentVotes); keepCurrent {
 		return false
 	}
@@ -1537,6 +2051,7 @@ func (n *Node) maybeAdoptProposalOnExecutionVote(block Block) bool {
 	return n.setAcceptedProposalLocked(block, "vote_observed", true)
 }
 
+// clearAcceptedProposal implements the clear accepted proposal helper.
 func (n *Node) clearAcceptedProposal(epoch uint64) {
 	if n == nil || epoch == 0 {
 		return
@@ -1549,6 +2064,7 @@ func (n *Node) clearAcceptedProposal(epoch uint64) {
 		delete(n.quorumLockedProposal, acceptedProposalHeightKey(epoch))
 	}
 	if n.acceptedProposalBlocks != nil {
+		// `key` and `block` track the synchronization state protecting shared data.
 		for key, block := range n.acceptedProposalBlocks {
 			if block.ID == epoch {
 				delete(n.acceptedProposalBlocks, key)
@@ -1560,16 +2076,21 @@ func (n *Node) clearAcceptedProposal(epoch uint64) {
 	n.persistConsensusSafetyStateAsync("accepted_proposal_cleared")
 }
 
+// clearAcceptedProposalIfBlock implements the clear accepted proposal if block helper.
 func (n *Node) clearAcceptedProposalIfBlock(epoch uint64, block Block, reason string) bool {
 	if n == nil || epoch == 0 {
 		return false
 	}
+	// `snap` stores the value produced by this operation.
 	snap := proposalSnapshotFromBlock(block)
+	// `proposalKey` stores the key used to access the related value.
 	proposalKey := strings.TrimSpace(snap.ProposalKey)
 	if proposalKey == "" {
 		return false
 	}
+	// `heightKey` stores the key used to access the related value.
 	heightKey := acceptedProposalHeightKey(epoch)
+	// `cleared` stores the value produced by this operation.
 	cleared := false
 	n.execResultsMu.Lock()
 	if n.acceptedProposal != nil && strings.TrimSpace(n.acceptedProposal[heightKey]) == proposalKey {
@@ -1581,10 +2102,12 @@ func (n *Node) clearAcceptedProposalIfBlock(epoch uint64, block Block, reason st
 		cleared = true
 	}
 	if n.acceptedProposalBlocks != nil {
+		// `ok` stores whether the related condition is satisfied.
 		if _, ok := n.acceptedProposalBlocks[proposalKey]; ok {
 			delete(n.acceptedProposalBlocks, proposalKey)
 			cleared = true
 		}
+		// `key` and `accepted` track the key used to access the related value.
 		for key, accepted := range n.acceptedProposalBlocks {
 			if accepted.ID == epoch && strings.EqualFold(strings.TrimSpace(accepted.BlockHash), strings.TrimSpace(block.BlockHash)) {
 				delete(n.acceptedProposalBlocks, key)
@@ -1605,10 +2128,12 @@ func (n *Node) clearAcceptedProposalIfBlock(epoch uint64, block Block, reason st
 	return true
 }
 
+// executionCommitFailureInvalidatesProposal implements the execution commit failure invalidates proposal helper.
 func executionCommitFailureInvalidatesProposal(err error) bool {
 	if err == nil {
 		return false
 	}
+	// `reason` stores the value produced by this operation.
 	reason := err.Error()
 	switch {
 	case strings.Contains(reason, "quorum_metadata_"):
@@ -1630,14 +2155,19 @@ func executionCommitFailureInvalidatesProposal(err error) bool {
 	}
 }
 
+// clearLocalExecutionVoteMarkerForProposal implements the clear local execution vote marker for proposal helper.
 func (n *Node) clearLocalExecutionVoteMarkerForProposal(epoch uint64, proposalKey string) bool {
 	if n == nil || epoch == 0 || strings.TrimSpace(proposalKey) == "" {
 		return false
 	}
+	// `scopedKey` stores the key used to access the related value.
 	scopedKey := execPoolScopeKey(epoch, proposalKey)
+	// `cleared` stores the value produced by this operation.
 	cleared := false
 	n.execResultsMu.Lock()
+	// `byRound` stores the value produced by this operation.
 	if byRound := n.localExecVoteByRound[epoch]; len(byRound) > 0 {
+		// `round` and `key` track the key used to access the related value.
 		for round, key := range byRound {
 			key = strings.TrimSpace(key)
 			if key == proposalKey || execPoolScopeKey(epoch, key) == scopedKey {
@@ -1653,20 +2183,26 @@ func (n *Node) clearLocalExecutionVoteMarkerForProposal(epoch uint64, proposalKe
 	return cleared
 }
 
+// invalidateExecutionProposalAfterCommitFailure implements the invalidate execution proposal after commit failure helper.
 func (n *Node) invalidateExecutionProposalAfterCommitFailure(epoch uint64, proposal Block, err error) {
 	if n == nil || epoch == 0 || proposal.ID != epoch || !executionCommitFailureInvalidatesProposal(err) {
 		return
 	}
+	// `reason` stores the value produced by this operation.
 	reason := strings.TrimSpace(err.Error())
 	if reason == "" {
 		reason = "commit_verification_failed"
 	}
+	// `proposalKey` stores the key used to access the related value.
 	proposalKey := proposalVoteKey(proposal.ID, proposal.Round, proposal.BlockHash, proposal.MempoolRoot, proposal.StateRoot)
 	if proposalKey == "" {
 		proposalKey = proposalSnapshotFromBlock(proposal).ProposalKey
 	}
+	// `clearedProposal` stores the value produced by this operation.
 	clearedProposal := n.clearAcceptedProposalIfBlock(epoch, proposal, reason)
+	// `clearedLeader` stores the value produced by this operation.
 	clearedLeader := n.clearLeaderBlockIfBlock(epoch, proposal)
+	// `clearedMarker` stores the value produced by this operation.
 	clearedMarker := n.clearLocalExecutionVoteMarkerForProposal(epoch, proposalKey)
 	if proposalKey != "" {
 		clearExecPoolProposal(epoch, proposalKey)
@@ -1682,16 +2218,27 @@ func (n *Node) invalidateExecutionProposalAfterCommitFailure(epoch uint64, propo
 	)
 }
 
+// acceptedProposalBlock implements the accepted proposal block helper.
 func (n *Node) acceptedProposalBlock(epoch uint64) (Block, bool) {
+	if n == nil || epoch == 0 {
+		return Block{}, false
+	}
 	n.execResultsMu.Lock()
 	defer n.execResultsMu.Unlock()
+	return n.acceptedProposalBlockLocked(epoch)
+}
+
+// acceptedProposalBlockLocked reads the accepted proposal block while execResultsMu is held.
+func (n *Node) acceptedProposalBlockLocked(epoch uint64) (Block, bool) {
 	if n.acceptedProposal == nil || n.acceptedProposalBlocks == nil {
 		return Block{}, false
 	}
+	// `key` stores the key used to access the related value.
 	key := strings.TrimSpace(n.acceptedProposal[acceptedProposalHeightKey(epoch)])
 	if key == "" {
 		return Block{}, false
 	}
+	// `block` and `ok` store whether the related condition is satisfied.
 	block, ok := n.acceptedProposalBlocks[key]
 	if !ok || block.ID != epoch {
 		return Block{}, false
@@ -1699,60 +2246,88 @@ func (n *Node) acceptedProposalBlock(epoch uint64) (Block, bool) {
 	return block, true
 }
 
+// executionVoteTargetBlock implements the execution vote target block helper.
 func (n *Node) executionVoteTargetBlock(epoch uint64) (Block, bool) {
+	// `block` and `keep` store the synchronization state protecting shared data.
 	if block, _, keep, _ := n.quorumLockedProposalLockState(epoch); keep {
 		return block, true
 	}
+	// `block` and `ok` store whether the related condition is satisfied.
 	if block, ok := n.acceptedProposalBlock(epoch); ok {
 		return block, true
 	}
 	return n.getLeaderBlock(epoch)
 }
 
+// candidateProposalBlocksForEpoch implements the candidate proposal blocks for epoch helper.
 func (n *Node) candidateProposalBlocksForEpoch(epoch uint64) []Block {
 	if n == nil || epoch == 0 {
 		return nil
 	}
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]bool)
+	// `blocks` stores the block data handled by this operation.
 	blocks := make([]Block, 0, execRecentProposalWindow+1)
-	if block, _, keep, _ := n.quorumLockedProposalLockState(epoch); keep {
-		snap := proposalSnapshotFromBlock(block)
-		if snap.ProposalKey != "" {
-			seen[snap.ProposalKey] = true
-		}
-		blocks = append(blocks, block)
-	}
-	if block, ok := n.acceptedProposalBlock(epoch); ok {
-		snap := proposalSnapshotFromBlock(block)
-		if snap.ProposalKey != "" {
-			seen[snap.ProposalKey] = true
-		}
-		blocks = append(blocks, block)
-	}
-
+	// `lockedBlock`, `lockedOK`, `acceptedBlock`, and `acceptedOK` capture proposal state.
+	var lockedBlock, acceptedBlock Block
+	var lockedOK, acceptedOK bool
+	// `extras` stores the value produced by this operation.
+	extras := make([]Block, 0)
 	n.execResultsMu.Lock()
-	extras := make([]Block, 0, len(n.acceptedProposalBlocks))
-	for key, block := range n.acceptedProposalBlocks {
-		if block.ID != epoch || seen[key] {
-			continue
+	lockedBlock, lockedOK = n.quorumLockedProposalBlockLocked(epoch)
+	acceptedBlock, acceptedOK = n.acceptedProposalBlockLocked(epoch)
+	if n.acceptedProposalBlocks != nil {
+		extras = make([]Block, 0, len(n.acceptedProposalBlocks))
+		// `block` tracks the synchronization state protecting shared data.
+		for _, block := range n.acceptedProposalBlocks {
+			if block.ID == epoch {
+				extras = append(extras, block)
+			}
 		}
-		seen[key] = true
-		extras = append(extras, block)
 	}
 	n.execResultsMu.Unlock()
 
-	if committedBlock, ok := n.Blockchain.GetBlock(epoch); ok && committedBlock.ID == epoch {
-		snap := proposalSnapshotFromBlock(committedBlock)
-		if snap.ProposalKey != "" && !seen[snap.ProposalKey] {
-			seen[snap.ProposalKey] = true
-			extras = append(extras, committedBlock)
+	addCandidate := func(block Block, requireSignedCommit bool) {
+		if block.ID != epoch {
+			return
+		}
+		if requireSignedCommit {
+			if _, _, keep := n.proposalHasSignedCommitQuorum(block); !keep {
+				return
+			}
+		}
+		// `snap` stores the value produced by this operation.
+		snap := proposalSnapshotFromBlock(block)
+		if snap.ProposalKey == "" || seen[snap.ProposalKey] {
+			return
+		}
+		seen[snap.ProposalKey] = true
+		blocks = append(blocks, block)
+	}
+
+	if lockedOK {
+		addCandidate(lockedBlock, true)
+	}
+	if acceptedOK {
+		addCandidate(acceptedBlock, false)
+	}
+
+	// `committedBlock` and `ok` store whether the related condition is satisfied.
+	if n.Blockchain != nil {
+		if committedBlock, ok := n.Blockchain.GetBlock(epoch); ok && committedBlock.ID == epoch {
+			// `snap` stores the value produced by this operation.
+			snap := proposalSnapshotFromBlock(committedBlock)
+			if snap.ProposalKey != "" && !seen[snap.ProposalKey] {
+				extras = append(extras, committedBlock)
+			}
 		}
 	}
 
+	// `leaderBlock` and `ok` store whether the related condition is satisfied.
 	if leaderBlock, ok := n.getLeaderBlock(epoch); ok && leaderBlock.ID == epoch {
+		// `snap` stores the value produced by this operation.
 		snap := proposalSnapshotFromBlock(leaderBlock)
 		if snap.ProposalKey != "" && !seen[snap.ProposalKey] {
-			seen[snap.ProposalKey] = true
 			extras = append(extras, leaderBlock)
 		}
 	}
@@ -1763,20 +2338,32 @@ func (n *Node) candidateProposalBlocksForEpoch(epoch uint64) []Block {
 		}
 		return proposalSnapshotFromBlock(extras[i]).ProposalKey < proposalSnapshotFromBlock(extras[j]).ProposalKey
 	})
-	blocks = append(blocks, extras...)
+	for _, block := range extras {
+		// `snap` stores the value produced by this operation.
+		snap := proposalSnapshotFromBlock(block)
+		if snap.ProposalKey != "" && !seen[snap.ProposalKey] {
+			seen[snap.ProposalKey] = true
+			blocks = append(blocks, block)
+		}
+	}
 	return blocks
 }
 
+// resolveExecutionVoteProposal implements the resolve execution vote proposal helper.
 func (n *Node) resolveExecutionVoteProposal(height uint64, res ExecutionResultMsg) (Block, execProposalSnapshot, bool) {
+	// `candidates` stores the value produced by this operation.
 	candidates := n.candidateProposalBlocksForEpoch(height)
 	if len(candidates) == 0 {
 		return Block{}, execProposalSnapshot{}, false
 	}
 	if strings.TrimSpace(res.BlockHashHint) == "" && res.RoundHint == 0 && strings.TrimSpace(res.TxMerkle) == "" {
+		// `snap` stores the value produced by this operation.
 		snap := proposalSnapshotFromBlock(candidates[0])
 		return candidates[0], snap, snap.ProposalKey != ""
 	}
+	// `block` tracks the synchronization state protecting shared data.
 	for _, block := range candidates {
+		// `snap` stores the value produced by this operation.
 		snap := proposalSnapshotFromBlock(block)
 		if snap.ProposalKey == "" {
 			continue
@@ -1788,10 +2375,12 @@ func (n *Node) resolveExecutionVoteProposal(height uint64, res ExecutionResultMs
 	return Block{}, execProposalSnapshot{}, false
 }
 
+// normalizeEmbeddedExecutionVoteHints normalizes embedded execution vote hints.
 func normalizeEmbeddedExecutionVoteHints(res ExecutionResultMsg) ExecutionResultMsg {
 	if res.Block == nil {
 		return res
 	}
+	// `block` stores the synchronization state protecting shared data.
 	block := *res.Block
 	if res.BlockHashHint == "" {
 		res.BlockHashHint = strings.TrimSpace(block.BlockHash)
@@ -1805,25 +2394,30 @@ func normalizeEmbeddedExecutionVoteHints(res ExecutionResultMsg) ExecutionResult
 	return res
 }
 
+// stripEmbeddedExecutionVoteBlockForQueue implements the strip embedded execution vote block for queue helper.
 func stripEmbeddedExecutionVoteBlockForQueue(res ExecutionResultMsg) ExecutionResultMsg {
 	res = normalizeEmbeddedExecutionVoteHints(res)
 	res.Block = nil
 	return res
 }
 
+// embeddedExecutionVoteProposalKnown implements the embedded execution vote proposal known helper.
 func (n *Node) embeddedExecutionVoteProposalKnown(block Block) bool {
 	if n == nil || block.ID == 0 || strings.TrimSpace(block.BlockHash) == "" {
 		return false
 	}
+	// `snap` stores the value produced by this operation.
 	snap := proposalSnapshotFromBlock(block)
 	if snap.ProposalKey != "" {
 		n.execResultsMu.Lock()
+		// `ok` stores whether the related condition is satisfied.
 		_, ok := n.acceptedProposalBlocks[snap.ProposalKey]
 		n.execResultsMu.Unlock()
 		if ok {
 			return true
 		}
 	}
+	// `leader` and `ok` store whether the related condition is satisfied.
 	if leader, ok := n.getLeaderBlock(block.ID); ok &&
 		strings.EqualFold(strings.TrimSpace(leader.BlockHash), strings.TrimSpace(block.BlockHash)) {
 		return true
@@ -1831,6 +2425,7 @@ func (n *Node) embeddedExecutionVoteProposalKnown(block Block) bool {
 	return false
 }
 
+// allowEmbeddedExecutionVoteProposal implements the allow embedded execution vote proposal helper.
 func (n *Node) allowEmbeddedExecutionVoteProposal(block Block) bool {
 	if n == nil || block.ID == 0 || strings.TrimSpace(block.BlockHash) == "" {
 		return false
@@ -1841,7 +2436,9 @@ func (n *Node) allowEmbeddedExecutionVoteProposal(block Block) bool {
 	if maxEmbeddedProposalPerHeight <= 0 {
 		return true
 	}
+	// `committedHeight` stores the value produced by this operation.
 	committedHeight := n.committedReplayFenceHeight()
+	// `hash` stores the digest used to identify or verify the related data.
 	hash := strings.TrimSpace(block.BlockHash)
 
 	n.execResultsMu.Lock()
@@ -1849,6 +2446,7 @@ func (n *Node) allowEmbeddedExecutionVoteProposal(block Block) bool {
 	if n.embeddedProposalSeen == nil {
 		n.embeddedProposalSeen = make(map[uint64]map[string]struct{})
 	}
+	// `height` tracks the current values while iterating.
 	for height := range n.embeddedProposalSeen {
 		if height <= committedHeight || height+execRecentProposalWindow < block.ID {
 			delete(n.embeddedProposalSeen, height)
@@ -1857,6 +2455,7 @@ func (n *Node) allowEmbeddedExecutionVoteProposal(block Block) bool {
 	if n.embeddedProposalSeen[block.ID] == nil {
 		n.embeddedProposalSeen[block.ID] = make(map[string]struct{})
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := n.embeddedProposalSeen[block.ID][hash]; ok {
 		return true
 	}
@@ -1867,11 +2466,13 @@ func (n *Node) allowEmbeddedExecutionVoteProposal(block Block) bool {
 	return true
 }
 
+// embeddedExecutionVoteParentHash implements the embedded execution vote parent hash helper.
 func (n *Node) embeddedExecutionVoteParentHash(block Block) (string, bool) {
 	if n == nil || n.Blockchain == nil || block.ID == 0 {
 		return "", false
 	}
 	if block.ID == 1 {
+		// `last` stores the value produced by this operation.
 		if last := n.Blockchain.LastBlock(); last.ID == 0 && strings.TrimSpace(last.BlockHash) != "" {
 			return strings.TrimSpace(last.BlockHash), true
 		}
@@ -1880,19 +2481,24 @@ func (n *Node) embeddedExecutionVoteParentHash(block Block) (string, bool) {
 		}
 		return "", false
 	}
+	// `parentHeight` stores the value produced by this operation.
 	parentHeight := block.ID - 1
+	// `parent` and `ok` store whether the related condition is satisfied.
 	if parent, ok := n.Blockchain.GetBlock(parentHeight); ok && strings.TrimSpace(parent.BlockHash) != "" {
 		return strings.TrimSpace(parent.BlockHash), true
 	}
+	// `parent` and `ok` store whether the related condition is satisfied.
 	if parent, ok := n.LoadBlock(int(parentHeight)); ok && strings.TrimSpace(parent.BlockHash) != "" {
 		return strings.TrimSpace(parent.BlockHash), true
 	}
+	// `last` stores the value produced by this operation.
 	if last := n.Blockchain.LastBlock(); last.ID == parentHeight && strings.TrimSpace(last.BlockHash) != "" {
 		return strings.TrimSpace(last.BlockHash), true
 	}
 	return "", false
 }
 
+// validateEmbeddedExecutionVoteProposal validates embedded execution vote proposal.
 func (n *Node) validateEmbeddedExecutionVoteProposal(res ExecutionResultMsg, block Block) (bool, string) {
 	if block.ID == 0 || res.HeightHint == 0 || block.ID != res.HeightHint {
 		return false, "height_mismatch"
@@ -1900,10 +2506,12 @@ func (n *Node) validateEmbeddedExecutionVoteProposal(res ExecutionResultMsg, blo
 	if block.Height != 0 && block.Height != block.ID {
 		return false, "height_alias_mismatch"
 	}
+	// `blockHash` stores the block data handled by this operation.
 	blockHash := strings.TrimSpace(block.BlockHash)
 	if blockHash == "" {
 		return false, "missing_block_hash"
 	}
+	// `hashHint` stores the digest used to identify or verify the related data.
 	if hashHint := strings.TrimSpace(res.BlockHashHint); hashHint == "" || !strings.EqualFold(blockHash, hashHint) {
 		return false, "block_hash_hint_mismatch"
 	}
@@ -1916,6 +2524,7 @@ func (n *Node) validateEmbeddedExecutionVoteProposal(res ExecutionResultMsg, blo
 	if strings.TrimSpace(block.MempoolRoot) != strings.TrimSpace(res.TxMerkle) {
 		return false, "tx_merkle_mismatch"
 	}
+	// `expectedResultHash` stores the digest used to identify or verify the related data.
 	expectedResultHash := executionResultHashFromProposal(
 		res.HeightHint,
 		proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, block.StateRoot),
@@ -1926,6 +2535,7 @@ func (n *Node) validateEmbeddedExecutionVoteProposal(res ExecutionResultMsg, blo
 	if strings.TrimSpace(res.ExecutionResultHash) == "" || !executionResultHashMatches(res.ExecutionResultHash, expectedResultHash) {
 		return false, "execution_result_hash_mismatch"
 	}
+	// `parentHash` and `ok` store whether the related condition is satisfied.
 	if parentHash, ok := n.embeddedExecutionVoteParentHash(block); ok &&
 		!strings.EqualFold(strings.TrimSpace(block.PrevHash), parentHash) {
 		return false, "parent_hash_mismatch"
@@ -1933,53 +2543,65 @@ func (n *Node) validateEmbeddedExecutionVoteProposal(res ExecutionResultMsg, blo
 	if validatorSetCommitmentV2EnabledAt(block.ID) && strings.TrimSpace(block.ValidatorSetHash) == "" {
 		return false, "missing_validator_set_hash"
 	}
+	// `expectedHash` and `source` store the digest used to identify or verify the related data.
 	if expectedHash, source := n.expectedValidatorSetHashWithSource(block.ID); validatorSetSourceIsChainAuthoritative(source) && strings.TrimSpace(expectedHash) == "" {
 		return false, "validator_set_expected_missing"
 	} else if strings.TrimSpace(expectedHash) != "" && !strings.EqualFold(strings.TrimSpace(expectedHash), strings.TrimSpace(block.ValidatorSetHash)) {
 		return false, "validator_set_hash_mismatch"
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.validateBlockValidatorSetHashHeaderCommitment(block); err != nil {
 		return false, "validator_set_header_" + err.Error()
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.validateBlockNextValidatorSetCommitment(block); err != nil {
 		return false, "next_validator_set_" + err.Error()
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.validateBlockNextValidatorSetRootCommitment(block); err != nil {
 		return false, "next_validator_set_root_" + err.Error()
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.validateBlockValidatorSetRootCommitment(block); err != nil {
 		return false, "validator_set_root_" + err.Error()
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.validateBlockValidatorRegistryCommitment(block); err != nil {
 		return false, "validator_registry_" + err.Error()
 	}
 	if !strings.EqualFold(strings.TrimSpace(HashBlock(block)), blockHash) {
 		return false, "block_hash_mismatch"
 	}
+	// `err` stores the error produced by this operation.
 	if err := VerifyMempoolRoot(block); err != nil {
 		return false, "mempool_root_" + err.Error()
 	}
+	// `err` stores the error produced by this operation.
 	if err := VerifyReceiptRoot(block); err != nil {
 		return false, "receipt_root_" + err.Error()
 	}
 	return true, ""
 }
 
+// observeExecutionVoteProposalBlock implements the observe execution vote proposal block helper.
 func (n *Node) observeExecutionVoteProposalBlock(res ExecutionResultMsg) (bool, string) {
 	if n == nil || res.Block == nil || res.HeightHint == 0 {
 		return false, "missing_block"
 	}
 	res = normalizeEmbeddedExecutionVoteHints(res)
+	// `block` stores the synchronization state protecting shared data.
 	block := *res.Block
 	if block.ID != res.HeightHint || strings.TrimSpace(block.BlockHash) == "" {
 		return false, "height_or_hash_missing"
 	}
+	// `hashHint` stores the digest used to identify or verify the related data.
 	if hashHint := strings.TrimSpace(res.BlockHashHint); hashHint == "" || !strings.EqualFold(strings.TrimSpace(block.BlockHash), hashHint) {
 		return false, "block_hash_hint_mismatch"
 	}
 	if !n.allowEmbeddedExecutionVoteProposal(block) {
 		return false, "embedded_proposal_limit"
 	}
+	// `ok` and `reason` store whether the related condition is satisfied.
 	if ok, reason := n.validateEmbeddedExecutionVoteProposal(res, block); !ok {
 		return false, reason
 	}
@@ -1995,11 +2617,14 @@ func (n *Node) observeExecutionVoteProposalBlock(res ExecutionResultMsg) (bool, 
 	return true, ""
 }
 
+// proposalSnapshotForEpoch implements the proposal snapshot for epoch helper.
 func (n *Node) proposalSnapshotForEpoch(height uint64) (execProposalSnapshot, bool) {
+	// `block` and `ok` store whether the related condition is satisfied.
 	block, ok := n.executionVoteTargetBlock(height)
 	if !ok || block.ID != height {
 		return execProposalSnapshot{}, false
 	}
+	// `snap` stores the value produced by this operation.
 	snap := proposalSnapshotFromBlock(block)
 	if strings.TrimSpace(snap.ProposalKey) == "" {
 		return execProposalSnapshot{}, false
@@ -2007,9 +2632,13 @@ func (n *Node) proposalSnapshotForEpoch(height uint64) (execProposalSnapshot, bo
 	return snap, true
 }
 
+// prepareExecutionBroadcastForBlock implements the prepare execution broadcast for block helper.
 func (n *Node) prepareExecutionBroadcastForBlock(block Block, execHash string, txMerkle string) (execBroadcastContext, bool) {
+	// `heightHint` stores the value produced by this operation.
 	heightHint := block.ID
+	// `currentRuntimeLedgerHash`, `currentExecutionLedgerHash`, `tipHeight`, and `tipHash` store the digest used to identify or verify the related data.
 	currentRuntimeLedgerHash, currentExecutionLedgerHash, tipHeight, tipHash := n.executionTraceContext()
+	// `ctx` stores the context controlling this operation.
 	ctx := execBroadcastContext{
 		HeightHint:          heightHint,
 		ExecHash:            strings.TrimSpace(execHash),
@@ -2019,6 +2648,7 @@ func (n *Node) prepareExecutionBroadcastForBlock(block Block, execHash string, t
 		TipHeight:           tipHeight,
 		TipHash:             tipHash,
 	}
+	// `logDefer` stores the value produced by this operation.
 	logDefer := func(reason string) (execBroadcastContext, bool) {
 		log.Printf("[EXEC-BROADCAST-DEFER] validator=%s height=%d reason=%s exec=%s tx_merkle=%s current_runtime=%s current_execution=%s current_tip=%d/%s proposal=%s block=%s prev=%s",
 			ShortID(n.ID),
@@ -2037,6 +2667,7 @@ func (n *Node) prepareExecutionBroadcastForBlock(block Block, execHash string, t
 		return ctx, false
 	}
 
+	// `snap` stores the value produced by this operation.
 	snap := proposalSnapshotFromBlock(block)
 	if strings.TrimSpace(snap.ProposalKey) == "" {
 		return logDefer("missing_proposal")
@@ -2047,6 +2678,7 @@ func (n *Node) prepareExecutionBroadcastForBlock(block Block, execHash string, t
 	ctx.TxCount = len(block.Transactions)
 	ctx.PrevHash = strings.TrimSpace(block.PrevHash)
 	ctx.TxMerkle = strings.TrimSpace(block.MempoolRoot)
+	// `proposalStateRoot` stores the digest used to identify or verify the related data.
 	proposalStateRoot := strings.TrimSpace(snap.StateRoot)
 	if proposalStateRoot == "" {
 		proposalStateRoot = strings.TrimSpace(block.StateRoot)
@@ -2058,6 +2690,7 @@ func (n *Node) prepareExecutionBroadcastForBlock(block Block, execHash string, t
 	if ctx.TipHash == "" || !strings.EqualFold(ctx.PrevHash, ctx.TipHash) {
 		return logDefer("tip_hash_mismatch")
 	}
+	// `currentExec` stores the value produced by this operation.
 	currentExec := strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
 	if currentExec == "" {
 		return logDefer("exec_unavailable")
@@ -2069,13 +2702,17 @@ func (n *Node) prepareExecutionBroadcastForBlock(block Block, execHash string, t
 	return ctx, true
 }
 
+// prepareExecutionBroadcast implements the prepare execution broadcast helper.
 func (n *Node) prepareExecutionBroadcast(heightHint uint64, execHash string, txMerkle string) (execBroadcastContext, bool) {
 	if heightHint == 0 {
 		heightHint = n.currentEpoch()
 	}
+	// `block` and `ok` store whether the related condition is satisfied.
 	block, ok := n.executionVoteTargetBlock(heightHint)
 	if !ok || block.ID != heightHint {
+		// `currentRuntimeLedgerHash`, `currentExecutionLedgerHash`, `tipHeight`, and `tipHash` store the digest used to identify or verify the related data.
 		currentRuntimeLedgerHash, currentExecutionLedgerHash, tipHeight, tipHash := n.executionTraceContext()
+		// `ctx` stores the context controlling this operation.
 		ctx := execBroadcastContext{
 			HeightHint:          heightHint,
 			ExecHash:            strings.TrimSpace(execHash),
@@ -2103,13 +2740,16 @@ func (n *Node) prepareExecutionBroadcast(heightHint uint64, execHash string, txM
 	return n.prepareExecutionBroadcastForBlock(block, execHash, txMerkle)
 }
 
+// currentProposalVoteKey returns current proposal vote key.
 func (n *Node) currentProposalVoteKey(height uint64) string {
+	// `snap` and `ok` store whether the related condition is satisfied.
 	if snap, ok := n.proposalSnapshotForEpoch(height); ok && snap.ProposalKey != "" {
 		return snap.ProposalKey
 	}
 	return legacyProposalVoteKey(height)
 }
 
+// voteProposalKey implements the vote proposal key helper.
 func voteProposalKey(res ExecutionResultMsg) string {
 	if res.HeightHint == 0 {
 		return ""
@@ -2120,6 +2760,7 @@ func voteProposalKey(res ExecutionResultMsg) string {
 	return legacyProposalVoteKey(res.HeightHint)
 }
 
+// voteBelongsToCurrentProposal implements the vote belongs to current proposal helper.
 func voteBelongsToCurrentProposal(res ExecutionResultMsg, snap execProposalSnapshot) bool {
 	if res.HeightHint == 0 || snap.Epoch == 0 {
 		return false
@@ -2127,6 +2768,7 @@ func voteBelongsToCurrentProposal(res ExecutionResultMsg, snap execProposalSnaps
 	if res.HeightHint != snap.Epoch {
 		return false
 	}
+	// `bh` stores the value produced by this operation.
 	if bh := strings.TrimSpace(res.BlockHashHint); bh != "" {
 		if bh != snap.BlockHash {
 			return false
@@ -2143,6 +2785,7 @@ func voteBelongsToCurrentProposal(res ExecutionResultMsg, snap execProposalSnaps
 	return true
 }
 
+// localExecutionBroadcastReady implements the local execution broadcast ready helper.
 func (n *Node) localExecutionBroadcastReady(height uint64) (bool, string) {
 	if n == nil {
 		return false, "node_unavailable"
@@ -2153,18 +2796,21 @@ func (n *Node) localExecutionBroadcastReady(height uint64) (bool, string) {
 	if n.consensusRecomputePauseActive() {
 		return false, "recompute_pause_active"
 	}
+	// `blocked` and `reason` store the block data handled by this operation.
 	if blocked, reason, _ := n.consensusSyncGateForHeight(height); blocked {
 		if reason == "" {
 			reason = "syncing"
 		}
 		return false, reason
 	}
+	// `ready` and `reason` store the value produced by this operation.
 	if ready, reason := n.validatorParticipationGateStatus(height); !ready {
 		return false, reason
 	}
 	return true, ""
 }
 
+// localExecutionFinalityReady implements the local execution finality ready helper.
 func (n *Node) localExecutionFinalityReady(height uint64) (bool, string) {
 	if n == nil {
 		return false, "node_unavailable"
@@ -2177,9 +2823,13 @@ func (n *Node) localExecutionFinalityReady(height uint64) (bool, string) {
 	}
 	if n.Consensus != nil {
 		n.Consensus.mu.Lock()
+		// `syncing` stores the value produced by this operation.
 		syncing := n.Consensus.Syncing
+		// `syncInFlight` stores the value produced by this operation.
 		syncInFlight := n.Consensus.syncInFlight
+		// `paused` stores the value produced by this operation.
 		paused := n.Consensus.Paused
+		// `target` stores the value produced by this operation.
 		target := n.Consensus.SyncTarget
 		n.Consensus.mu.Unlock()
 		if syncInFlight {
@@ -2189,6 +2839,7 @@ func (n *Node) localExecutionFinalityReady(height uint64) (bool, string) {
 			return false, "syncing"
 		}
 		if target > 0 && n.Blockchain != nil {
+			// `localHeight` stores the value produced by this operation.
 			localHeight := n.Blockchain.Height()
 			if target > localHeight && !nearSyncTip(localHeight, target) {
 				return false, fmt.Sprintf("lagging_local_%d_target_%d", localHeight, target)
@@ -2198,6 +2849,7 @@ func (n *Node) localExecutionFinalityReady(height uint64) (bool, string) {
 			return false, "consensus_paused"
 		}
 	}
+	// `blocked` and `reason` store the block data handled by this operation.
 	if blocked, reason, _ := n.consensusSyncGateForHeight(height); blocked {
 		if reason == "" {
 			reason = "syncing"
@@ -2207,19 +2859,23 @@ func (n *Node) localExecutionFinalityReady(height uint64) (bool, string) {
 	return true, "ready"
 }
 
+// maybeBroadcastExecutionVoteForBlock implements the maybe broadcast execution vote for block helper.
 func (n *Node) maybeBroadcastExecutionVoteForBlock(block Block, trigger string) bool {
 	return n.broadcastExecutionVoteForBlock(block, trigger, false, false)
 }
 
+// maybeRebroadcastExecutionVoteForBlock implements the maybe rebroadcast execution vote for block helper.
 func (n *Node) maybeRebroadcastExecutionVoteForBlock(block Block, trigger string) bool {
 	return n.broadcastExecutionVoteForBlock(block, trigger, true, true)
 }
 
+// broadcastExecutionVoteForBlock implements the broadcast execution vote for block helper.
 func (n *Node) broadcastExecutionVoteForBlock(block Block, trigger string, force bool, requirePriorLocalVote bool) bool {
 	if n == nil || block.ID == 0 || n.isShuttingDown() {
 		return false
 	}
 	trigger = strings.TrimSpace(trigger)
+	// `priorSnap` stores the value produced by this operation.
 	priorSnap := execProposalSnapshot{}
 	if requirePriorLocalVote {
 		priorSnap = proposalSnapshotFromBlock(block)
@@ -2227,6 +2883,7 @@ func (n *Node) broadcastExecutionVoteForBlock(block Block, trigger string, force
 			return false
 		}
 	}
+	// `ready` and `reason` store the value produced by this operation.
 	if ready, reason := n.localExecutionBroadcastReady(block.ID); !ready {
 		log.Printf("[EXEC-BROADCAST-DEFER] validator=%s height=%d reason=%s trigger=%s block=%s prev=%s",
 			ShortID(n.ID),
@@ -2248,6 +2905,7 @@ func (n *Node) broadcastExecutionVoteForBlock(block Block, trigger string, force
 		)
 		return false
 	}
+	// `execHash` stores the digest used to identify or verify the related data.
 	execHash := strings.TrimSpace(block.StateRoot)
 	if execHash == "" {
 		execHash = strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
@@ -2275,11 +2933,14 @@ func (n *Node) broadcastExecutionVoteForBlock(block Block, trigger string, force
 	return true
 }
 
+// maybeBroadcastCurrentLeaderExecutionVote implements the maybe broadcast current leader execution vote helper.
 func (n *Node) maybeBroadcastCurrentLeaderExecutionVote(trigger string) bool {
 	if n == nil || n.isShuttingDown() {
 		return false
 	}
+	// `epoch` stores the value produced by this operation.
 	epoch := n.currentEpoch()
+	// `block` and `ok` store whether the related condition is satisfied.
 	block, ok := n.executionVoteTargetBlock(epoch)
 	if !ok || block.ID != epoch {
 		return false
@@ -2287,11 +2948,14 @@ func (n *Node) maybeBroadcastCurrentLeaderExecutionVote(trigger string) bool {
 	return n.maybeBroadcastExecutionVoteForBlock(block, trigger)
 }
 
+// onLeaderProposalReplaced implements the on leader proposal replaced helper.
 func (n *Node) onLeaderProposalReplaced(epoch uint64, oldBlock Block, newBlock Block) {
 	if n == nil || epoch == 0 {
 		return
 	}
+	// `oldKey` stores the key used to access the related value.
 	oldKey := proposalVoteKey(epoch, oldBlock.Round, oldBlock.BlockHash, oldBlock.MempoolRoot, oldBlock.StateRoot)
+	// `newKey` stores the key used to access the related value.
 	newKey := proposalVoteKey(epoch, newBlock.Round, newBlock.BlockHash, newBlock.MempoolRoot, newBlock.StateRoot)
 	if oldKey == "" || oldKey == newKey {
 		return
@@ -2302,21 +2966,27 @@ func (n *Node) onLeaderProposalReplaced(epoch uint64, oldBlock Block, newBlock B
 	}
 }
 
+// execResultSignBytes implements the exec result sign bytes helper.
 func execResultSignBytes(heightHint uint64, execHash string, txMerkle string) []byte {
 	return []byte(fmt.Sprintf("%d|%s|%s", heightHint, execHash, txMerkle))
 }
 
+// execResultSignBytesV2 implements the exec result sign bytes v2 helper.
 func execResultSignBytesV2(heightHint uint64, roundHint uint32, blockHashHint string, execHash string, txMerkle string) []byte {
 	return []byte(fmt.Sprintf("%d|%d|%s|%s|%s", heightHint, roundHint, blockHashHint, execHash, txMerkle))
 }
 
+// verifyExecutionResultSignature verifies execution result signature.
 func verifyExecutionResultSignature(res ExecutionResultMsg, candidates []ed25519.PublicKey, sig []byte) bool {
 	if len(candidates) == 0 || len(sig) == 0 {
 		return false
 	}
+	// `isV2` stores the current position in the related collection.
 	isV2 := res.SigVersion == execResultSigVersionV2 || strings.TrimSpace(res.BlockHashHint) != ""
 	if isV2 {
+		// `signBytes` stores the value produced by this operation.
 		signBytes := execResultSignBytesV2(res.HeightHint, res.RoundHint, res.BlockHashHint, res.ExecHash, res.TxMerkle)
+		// `pub` tracks the current values while iterating.
 		for _, pub := range candidates {
 			if ed25519.Verify(pub, signBytes, sig) {
 				return true
@@ -2325,7 +2995,9 @@ func verifyExecutionResultSignature(res ExecutionResultMsg, candidates []ed25519
 		return false
 	}
 
+	// `signBytes` stores the value produced by this operation.
 	signBytes := execResultSignBytes(res.HeightHint, res.ExecHash, res.TxMerkle)
+	// `pub` tracks the current values while iterating.
 	for _, pub := range candidates {
 		if ed25519.Verify(pub, signBytes, sig) {
 			return true
@@ -2334,6 +3006,7 @@ func verifyExecutionResultSignature(res ExecutionResultMsg, candidates []ed25519
 	return false
 }
 
+// commitVoteSignBytes implements the commit vote sign bytes helper.
 func commitVoteSignBytes(height uint64, proposalHash string, execHash string, txMerkle string) []byte {
 	return []byte(fmt.Sprintf("MSC_COMMIT_V1\x00%d\x00%s\x00%s\x00%s",
 		height,
@@ -2343,8 +3016,28 @@ func commitVoteSignBytes(height uint64, proposalHash string, execHash string, tx
 	))
 }
 
+func commitVoteSignBytesV2(height uint64, proposalHash string, execHash string, txMerkle string, executionCommitmentHash string) []byte {
+	return []byte(fmt.Sprintf("MSC_COMMIT_V2\x00%d\x00%s\x00%s\x00%s\x00%s",
+		height,
+		strings.TrimSpace(proposalHash),
+		strings.TrimSpace(execHash),
+		strings.TrimSpace(txMerkle),
+		strings.TrimSpace(executionCommitmentHash),
+	))
+}
+
+func commitVoteSignBytesForMessage(cm CommitMsg) []byte {
+	if strings.TrimSpace(cm.ExecutionCommitmentHash) != "" {
+		return commitVoteSignBytesV2(cm.Height, cm.Hash, cm.ExecHash, cm.TxMerkle, cm.ExecutionCommitmentHash)
+	}
+	return commitVoteSignBytes(cm.Height, cm.Hash, cm.ExecHash, cm.TxMerkle)
+}
+
+// commitVoteResultScopeKey implements the commit vote result scope key helper.
 func commitVoteResultScopeKey(height uint64, proposalHash string, execHash string, txMerkle string) string {
+	// `scope` stores the value produced by this operation.
 	scope := commitVoteScopeKey(height, proposalHash)
+	// `resultHash` stores the digest used to identify or verify the related data.
 	resultHash := canonicalExecutionResultHash(height, proposalHash, execHash, txMerkle)
 	if scope == "" || resultHash == "" {
 		return scope
@@ -2352,11 +3045,13 @@ func commitVoteResultScopeKey(height uint64, proposalHash string, execHash strin
 	return fmt.Sprintf("%s|%s", scope, resultHash)
 }
 
+// commitVoteProposalHashFromScope implements the commit vote proposal hash from scope helper.
 func commitVoteProposalHashFromScope(height uint64, key string) string {
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return ""
 	}
+	// `parts` stores the value produced by this operation.
 	parts := strings.Split(key, "|")
 	if len(parts) >= 3 && parts[0] == "block" {
 		if height == 0 || strings.TrimSpace(parts[1]) == fmt.Sprintf("%d", height) {
@@ -2366,6 +3061,7 @@ func commitVoteProposalHashFromScope(height uint64, key string) string {
 	return key
 }
 
+// commitVoteScopeMatchesProposal implements the commit vote scope matches proposal helper.
 func commitVoteScopeMatchesProposal(height uint64, key string, proposalHash string) bool {
 	proposalHash = strings.TrimSpace(proposalHash)
 	if proposalHash == "" {
@@ -2377,35 +3073,57 @@ func commitVoteScopeMatchesProposal(height uint64, key string, proposalHash stri
 		commitVoteProposalHashFromScope(height, key) == proposalHash
 }
 
-func verifyCommitVoteSignature(cm CommitMsg) bool {
+// verifyCommitVoteSignature verifies commit vote signature.
+func verifyCommitVoteSignatureWithCandidates(cm CommitMsg, candidates []ed25519.PublicKey) bool {
 	cm.From = normalizeValidatorID(cm.From)
 	cm.Hash = strings.TrimSpace(cm.Hash)
 	cm.ExecHash = strings.TrimSpace(cm.ExecHash)
 	cm.TxMerkle = strings.TrimSpace(cm.TxMerkle)
+	cm.ExecutionCommitmentHash = strings.TrimSpace(cm.ExecutionCommitmentHash)
 	if cm.Height == 0 || cm.From == "" || cm.Hash == "" || cm.ExecHash == "" || strings.TrimSpace(cm.Signature) == "" {
 		return false
 	}
+	// `sig` and `err` store the error produced by this operation.
 	sig, err := hex.DecodeString(strings.TrimSpace(cm.Signature))
 	if err != nil || len(sig) != ed25519.SignatureSize {
 		return false
 	}
-	for _, pub := range execResultPubKeyCandidates(cm.From) {
-		if ed25519.Verify(pub, commitVoteSignBytes(cm.Height, cm.Hash, cm.ExecHash, cm.TxMerkle), sig) {
+	// `pub` tracks the current values while iterating.
+	for _, pub := range candidates {
+		if ed25519.Verify(pub, commitVoteSignBytesForMessage(cm), sig) {
 			return true
 		}
 	}
 	return false
 }
 
+// verifyCommitVoteSignature verifies commit vote signature.
+func verifyCommitVoteSignature(cm CommitMsg) bool {
+	return verifyCommitVoteSignatureWithCandidates(cm, execResultPubKeyCandidates(cm.From))
+}
+
+// verifyCommitVoteSignatureForHeight verifies commit votes with the same
+// height-aware registry/core pubkey candidates used for execution-result votes.
+func (n *Node) verifyCommitVoteSignatureForHeight(cm CommitMsg) bool {
+	if n != nil {
+		return verifyCommitVoteSignatureWithCandidates(cm, n.execResultPubKeyCandidatesForHeight(cm.From, cm.Height))
+	}
+	return verifyCommitVoteSignatureWithCandidates(cm, execResultPubKeyCandidates(cm.From))
+}
+
+// commitVoteEvidence implements the commit vote evidence helper.
 func (n *Node) commitVoteEvidence(height uint64, proposalHash string) ([]string, []ValidatorSignature, int, int) {
 	if n == nil || height == 0 || strings.TrimSpace(proposalHash) == "" {
 		return nil, nil, 0, 0
 	}
 	proposalHash = strings.TrimSpace(proposalHash)
+	// `required` stores the request data being processed.
 	required := n.executionQuorumRequiredForEpoch(height)
 	n.commitMu.Lock()
 	defer n.commitMu.Unlock()
+	// `bySigner` stores the value used by this operation.
 	var bySigner map[string]string
+	// `key` and `candidate` track the key used to access the related value.
 	for key, candidate := range n.commitVoteSignatures[height] {
 		if !commitVoteScopeMatchesProposal(height, key, proposalHash) {
 			continue
@@ -2414,7 +3132,9 @@ func (n *Node) commitVoteEvidence(height uint64, proposalHash string) ([]string,
 			bySigner = candidate
 		}
 	}
+	// `signers` stores the value produced by this operation.
 	signers := make([]string, 0, len(bySigner))
+	// `signer` and `signature` track the current values while iterating.
 	for signer, signature := range bySigner {
 		if normalizeValidatorID(signer) == "" || strings.TrimSpace(signature) == "" {
 			continue
@@ -2422,7 +3142,9 @@ func (n *Node) commitVoteEvidence(height uint64, proposalHash string) ([]string,
 		signers = append(signers, normalizeValidatorID(signer))
 	}
 	signers = canonicalValidatorIDs(signers)
+	// `witnesses` stores the value produced by this operation.
 	witnesses := make([]ValidatorSignature, 0, len(signers))
+	// `signer` tracks the current values while iterating.
 	for _, signer := range signers {
 		witnesses = append(witnesses, ValidatorSignature{
 			Validator: signer,
@@ -2432,14 +3154,18 @@ func (n *Node) commitVoteEvidence(height uint64, proposalHash string) ([]string,
 	return signers, witnesses, len(signers), required
 }
 
+// commitVoteEvidenceForResult implements the commit vote evidence for result helper.
 func (n *Node) commitVoteEvidenceForResult(height uint64, proposalHash string, execHash string, txMerkle string) ([]string, []ValidatorSignature, int, int) {
 	if n == nil || height == 0 || strings.TrimSpace(proposalHash) == "" || strings.TrimSpace(execHash) == "" {
 		return nil, nil, 0, 0
 	}
+	// `key` stores the key used to access the related value.
 	key := commitVoteResultScopeKey(height, proposalHash, execHash, txMerkle)
+	// `required` stores the request data being processed.
 	required := n.executionQuorumRequiredForEpoch(height)
 	n.commitMu.Lock()
 	defer n.commitMu.Unlock()
+	// `bySigner` stores the value produced by this operation.
 	bySigner := n.commitVoteSignatures[height][key]
 	if len(bySigner) == 0 {
 		// Backward compatibility for safety journals written before commit
@@ -2452,7 +3178,9 @@ func (n *Node) commitVoteEvidenceForResult(height uint64, proposalHash string, e
 			bySigner = legacy
 		}
 	}
+	// `signers` stores the value produced by this operation.
 	signers := make([]string, 0, len(bySigner))
+	// `signer` and `signature` track the current values while iterating.
 	for signer, signature := range bySigner {
 		if normalizeValidatorID(signer) == "" || strings.TrimSpace(signature) == "" {
 			continue
@@ -2460,7 +3188,9 @@ func (n *Node) commitVoteEvidenceForResult(height uint64, proposalHash string, e
 		signers = append(signers, normalizeValidatorID(signer))
 	}
 	signers = canonicalValidatorIDs(signers)
+	// `witnesses` stores the value produced by this operation.
 	witnesses := make([]ValidatorSignature, 0, len(signers))
+	// `signer` tracks the current values while iterating.
 	for _, signer := range signers {
 		witnesses = append(witnesses, ValidatorSignature{
 			Validator: signer,
@@ -2470,44 +3200,62 @@ func (n *Node) commitVoteEvidenceForResult(height uint64, proposalHash string, e
 	return signers, witnesses, len(signers), required
 }
 
+// localSignedCommitChoice implements the local signed commit choice helper.
 func (n *Node) localSignedCommitChoice(height uint64) string {
+	// `choice` stores the value produced by this operation.
 	choice := n.localSignedCommitChoiceSnapshot(height)
 	return choice.ProposalHash
 }
 
+// localSignedCommitChoiceScope implements the local signed commit choice scope helper.
 func (n *Node) localSignedCommitChoiceScope(height uint64) string {
+	// `choice` stores the value produced by this operation.
 	choice := n.localSignedCommitChoiceSnapshot(height)
 	return choice.Scope
 }
 
 type localSignedCommitChoiceSnapshot struct {
-	Scope        string
+	// `Scope` stores the value associated with this record.
+	Scope string
+	// `ProposalHash` stores the digest used to identify or verify the related data.
 	ProposalHash string
-	Round        uint32
-	RoundKnown   bool
-	Count        int
-	Quorum       bool
+	// `Round` stores the value associated with this record.
+	Round uint32
+	// `RoundKnown` stores the value associated with this record.
+	RoundKnown bool
+	// `Count` stores the measured quantity used by this operation.
+	Count int
+	// `Quorum` stores the value associated with this record.
+	Quorum bool
 }
 
+// localSignedCommitChoiceSnapshot implements the local signed commit choice snapshot helper.
 func (n *Node) localSignedCommitChoiceSnapshot(height uint64) localSignedCommitChoiceSnapshot {
 	if n == nil || height == 0 {
 		return localSignedCommitChoiceSnapshot{}
 	}
-	localID := normalizeValidatorID(n.ID)
+	// `localID` stores the local consensus identity selected for this height.
+	localID := n.localConsensusValidatorIDForHeight(height)
 	if localID == "" {
 		return localSignedCommitChoiceSnapshot{}
 	}
+	// `required` stores the request data being processed.
 	required := n.executionQuorumRequiredForEpoch(height)
+	// `candidates` stores the value produced by this operation.
 	candidates := make([]localSignedCommitChoiceSnapshot, 0, 2)
 	n.commitMu.Lock()
+	// `proposalKey` and `bySigner` track the key used to access the related value.
 	for proposalKey, bySigner := range n.commitVoteSignatures[height] {
 		if strings.TrimSpace(bySigner[localID]) != "" {
+			// `count` stores the measured quantity used by this operation.
 			count := 0
+			// `signature` tracks the current values while iterating.
 			for _, signature := range bySigner {
 				if strings.TrimSpace(signature) != "" {
 					count++
 				}
 			}
+			// `scope` stores the value produced by this operation.
 			scope := strings.TrimSpace(proposalKey)
 			candidates = append(candidates, localSignedCommitChoiceSnapshot{
 				Scope:        scope,
@@ -2521,14 +3269,18 @@ func (n *Node) localSignedCommitChoiceSnapshot(height uint64) localSignedCommitC
 	if len(candidates) == 0 {
 		return localSignedCommitChoiceSnapshot{}
 	}
+	// `i` tracks the current position in the related collection.
 	for i := range candidates {
+		// `round` and `ok` store whether the related condition is satisfied.
 		if round, ok := n.proposalRoundForHash(height, candidates[i].ProposalHash); ok {
 			candidates[i].Round = round
 			candidates[i].RoundKnown = true
 		}
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
+		// `a` stores the value produced by this operation.
 		a := candidates[i]
+		// `b` stores the value produced by this operation.
 		b := candidates[j]
 		if a.Quorum != b.Quorum {
 			return a.Quorum
@@ -2547,64 +3299,99 @@ func (n *Node) localSignedCommitChoiceSnapshot(height uint64) localSignedCommitC
 	return candidates[0]
 }
 
-func (n *Node) hasLocalSignedCommitScope(height uint64, scope string) bool {
+func (n *Node) signedCommitQuorumChoiceSnapshot(height uint64) localSignedCommitChoiceSnapshot {
 	if n == nil || height == 0 {
-		return false
+		return localSignedCommitChoiceSnapshot{}
 	}
-	localID := normalizeValidatorID(n.ID)
+	required := n.executionQuorumRequiredForEpoch(height)
+	if required <= 0 {
+		return localSignedCommitChoiceSnapshot{}
+	}
+	candidates := make([]localSignedCommitChoiceSnapshot, 0, 2)
+	n.commitMu.Lock()
+	for scope, bySigner := range n.commitVoteSignatures[height] {
+		count := 0
+		for signer, signature := range bySigner {
+			if normalizeValidatorID(signer) != "" && strings.TrimSpace(signature) != "" {
+				count++
+			}
+		}
+		if count < required {
+			continue
+		}
+		proposalHash := commitVoteProposalHashFromScope(height, scope)
+		if proposalHash == "" {
+			continue
+		}
+		candidates = append(candidates, localSignedCommitChoiceSnapshot{
+			Scope:        strings.TrimSpace(scope),
+			ProposalHash: proposalHash,
+			Count:        count,
+			Quorum:       true,
+		})
+	}
+	n.commitMu.Unlock()
+	if len(candidates) == 0 {
+		return localSignedCommitChoiceSnapshot{}
+	}
+	for i := range candidates {
+		if round, ok := n.proposalRoundForHash(height, candidates[i].ProposalHash); ok {
+			candidates[i].Round = round
+			candidates[i].RoundKnown = true
+		}
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		a := candidates[i]
+		b := candidates[j]
+		if a.RoundKnown != b.RoundKnown {
+			return a.RoundKnown
+		}
+		if a.Round != b.Round {
+			return a.Round > b.Round
+		}
+		if a.Count != b.Count {
+			return a.Count > b.Count
+		}
+		return a.Scope < b.Scope
+	})
+	return candidates[0]
+}
+
+// hasLocalSignedCommitScope implements the has local signed commit scope helper.
+func (n *Node) hasLocalSignedCommitScope(height uint64, scope string) bool {
+	// `signature` and `ok` store whether the related condition is satisfied.
+	signature, ok := n.localSignedCommitSignature(height, scope)
+	return ok && strings.TrimSpace(signature) != ""
+}
+
+// localSignedCommitSignature implements the local signed commit signature helper.
+func (n *Node) localSignedCommitSignature(height uint64, scope string) (string, bool) {
+	if n == nil || height == 0 {
+		return "", false
+	}
+	// `localID` stores the local consensus identity selected for this height.
+	localID := n.localConsensusValidatorIDForHeight(height)
 	scope = strings.TrimSpace(scope)
 	if localID == "" || scope == "" {
-		return false
+		return "", false
 	}
 	n.commitMu.Lock()
 	defer n.commitMu.Unlock()
-	return strings.TrimSpace(n.commitVoteSignatures[height][scope][localID]) != ""
+	// `signature` stores the value produced by this operation.
+	signature := strings.TrimSpace(n.commitVoteSignatures[height][scope][localID])
+	return signature, signature != ""
 }
 
-func (n *Node) hasRecordedCommitVote(cm CommitMsg) bool {
-	if n == nil || cm.Height == 0 {
-		return false
-	}
-	from := normalizeValidatorID(cm.From)
-	scope := commitVoteResultScopeKey(cm.Height, strings.TrimSpace(cm.Hash), strings.TrimSpace(cm.ExecHash), strings.TrimSpace(cm.TxMerkle))
-	signature := strings.TrimSpace(cm.Signature)
-	if from == "" || scope == "" || signature == "" {
-		return false
-	}
-	n.commitMu.Lock()
-	defer n.commitMu.Unlock()
-	return strings.EqualFold(strings.TrimSpace(n.commitVoteSignatures[cm.Height][scope][from]), signature)
-}
-
-func (n *Node) markLocalCommitVoteBroadcasted(height uint64, scope string) bool {
-	if n == nil || height == 0 {
-		return false
-	}
-	scope = strings.TrimSpace(scope)
-	if scope == "" {
-		return false
-	}
-	n.commitMu.Lock()
-	defer n.commitMu.Unlock()
-	if n.commitVoteBroadcasted == nil {
-		n.commitVoteBroadcasted = make(map[uint64]map[string]time.Time)
-	}
-	if n.commitVoteBroadcasted[height] == nil {
-		n.commitVoteBroadcasted[height] = make(map[string]time.Time)
-	}
-	if !n.commitVoteBroadcasted[height][scope].IsZero() {
-		return false
-	}
-	n.commitVoteBroadcasted[height][scope] = time.Now()
-	return true
-}
-
+// signedCommitQuorumForHash implements the signed commit quorum for hash helper.
 func (n *Node) signedCommitQuorumForHash(height uint64, proposalHash string) bool {
+	// `count` and `required` store the measured quantity used by this operation.
 	_, _, count, required := n.commitVoteEvidence(height, proposalHash)
 	return required > 0 && count >= required
 }
 
+// proposalRoundForHash implements the proposal round for hash helper.
 func (n *Node) proposalRoundForHash(height uint64, proposalHash string) (uint32, bool) {
+	// `block` and `ok` store whether the related condition is satisfied.
 	block, ok := n.proposalBlockByHash(height, proposalHash)
 	if !ok {
 		return 0, false
@@ -2612,6 +3399,7 @@ func (n *Node) proposalRoundForHash(height uint64, proposalHash string) (uint32,
 	return block.Round, true
 }
 
+// shouldFollowCommitEvidence implements the should follow commit evidence helper.
 func (n *Node) shouldFollowCommitEvidence(height uint64, proposalHash string, count int, required int) bool {
 	if n == nil || height == 0 || strings.TrimSpace(proposalHash) == "" || required <= 1 {
 		return false
@@ -2619,9 +3407,12 @@ func (n *Node) shouldFollowCommitEvidence(height uint64, proposalHash string, co
 	if height != n.currentEpoch() || count <= 0 || count >= required {
 		return false
 	}
+	// `localChoice` stores the value produced by this operation.
 	localChoice := n.localSignedCommitChoice(height)
 	if localChoice == "" {
+		// `accepted` and `ok` store whether the related condition is satisfied.
 		if accepted, ok := n.acceptedProposalBlock(height); ok && !strings.EqualFold(strings.TrimSpace(accepted.BlockHash), strings.TrimSpace(proposalHash)) {
+			// `incomingRound` and `incomingKnown` store the current position in the related collection.
 			incomingRound, incomingKnown := n.proposalRoundForHash(height, proposalHash)
 			return incomingKnown && incomingRound > accepted.Round
 		}
@@ -2633,41 +3424,51 @@ func (n *Node) shouldFollowCommitEvidence(height uint64, proposalHash string, co
 	if n.signedCommitQuorumForHash(height, localChoice) {
 		return false
 	}
+	// `incomingRound` and `incomingKnown` store the current position in the related collection.
 	incomingRound, incomingKnown := n.proposalRoundForHash(height, proposalHash)
+	// `localRound` and `localKnown` store the value produced by this operation.
 	localRound, localKnown := n.proposalRoundForHash(height, localChoice)
 	return incomingKnown && localKnown && incomingRound > localRound
 }
 
-func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool, bool) {
-	if n == nil || !verifyCommitVoteSignature(cm) {
-		return 0, 0, false, false
+// recordVerifiedCommitVote implements the record verified commit vote helper.
+func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool) {
+	if n == nil || !n.verifyCommitVoteSignatureForHeight(cm) {
+		return 0, 0, false
 	}
 	cm.From = normalizeValidatorID(cm.From)
 	cm.Hash = strings.TrimSpace(cm.Hash)
 	cm.Signature = strings.TrimSpace(cm.Signature)
+	// `validators` and `ok` store whether the related condition is satisfied.
 	validators, _, ok := n.deterministicCommitteeValidatorsForHeight(cm.Height)
 	if !ok || len(validators) == 0 || !containsValidatorID(validators, cm.From) {
-		return 0, n.executionQuorumRequiredForEpoch(cm.Height), false, false
+		return 0, n.executionQuorumRequiredForEpoch(cm.Height), false
 	}
+	// `required` stores the request data being processed.
 	required := n.executionQuorumRequiredForEpoch(cm.Height)
 	if required == 0 {
-		return 0, 0, false, false
+		return 0, 0, false
 	}
 
+	// `proposalRounds` stores the value produced by this operation.
 	proposalRounds := make(map[string]uint32)
 	if cm.Block.ID == cm.Height && strings.EqualFold(strings.TrimSpace(cm.Block.BlockHash), cm.Hash) {
 		proposalRounds[cm.Hash] = cm.Block.Round
 	}
+	// `block` tracks the synchronization state protecting shared data.
 	for _, block := range n.candidateProposalBlocksForEpoch(cm.Height) {
+		// `hash` stores the digest used to identify or verify the related data.
 		hash := strings.TrimSpace(block.BlockHash)
 		if block.ID == cm.Height && hash != "" {
 			proposalRounds[hash] = block.Round
 		}
 	}
+	// `incomingRound` and `incomingRoundKnown` store the current position in the related collection.
 	incomingRound, incomingRoundKnown := proposalRounds[cm.Hash]
+	// `commitScope` stores the value produced by this operation.
 	commitScope := commitVoteResultScopeKey(cm.Height, cm.Hash, cm.ExecHash, cm.TxMerkle)
 	if commitScope == "" {
-		return 0, required, false, false
+		return 0, required, false
 	}
 
 	n.commitMu.Lock()
@@ -2680,12 +3481,18 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool, bool) {
 	if n.commitVoteSignatures[cm.Height][commitScope] == nil {
 		n.commitVoteSignatures[cm.Height][commitScope] = make(map[string]string)
 	}
+	// `replacedPrior` stores the value produced by this operation.
 	replacedPrior := false
+	// `proposalKey` and `bySigner` track the key used to access the related value.
 	for proposalKey, bySigner := range n.commitVoteSignatures[cm.Height] {
 		if proposalKey != commitScope && strings.TrimSpace(bySigner[cm.From]) != "" {
+			// `proposalHash` stores the digest used to identify or verify the related data.
 			proposalHash := commitVoteProposalHashFromScope(cm.Height, proposalKey)
+			// `existingRound` and `existingRoundKnown` store the value produced by this operation.
 			existingRound, existingRoundKnown := proposalRounds[proposalHash]
+			// `existingCount` stores the measured quantity used by this operation.
 			existingCount := 0
+			// `signature` tracks the current values while iterating.
 			for _, signature := range bySigner {
 				if strings.TrimSpace(signature) != "" {
 					existingCount++
@@ -2693,13 +3500,15 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool, bool) {
 			}
 			if existingCount >= required || !incomingRoundKnown || !existingRoundKnown || incomingRound <= existingRound {
 				n.commitMu.Unlock()
-				return 0, required, false, false
+				return 0, required, false
 			}
 			delete(bySigner, cm.From)
 			if len(bySigner) == 0 {
 				delete(n.commitVoteSignatures[cm.Height], proposalKey)
 			}
+			// `byHeight` stores the value produced by this operation.
 			if byHeight := n.commitVotes[cm.Height]; byHeight != nil {
+				// `signers` stores the value produced by this operation.
 				if signers := byHeight[proposalKey]; signers != nil {
 					delete(signers, cm.From)
 					if len(signers) == 0 {
@@ -2710,12 +3519,8 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool, bool) {
 			replacedPrior = true
 		}
 	}
+	// `existing` stores the value produced by this operation.
 	existing := strings.TrimSpace(n.commitVoteSignatures[cm.Height][commitScope][cm.From])
-	if existing != "" && !strings.EqualFold(existing, cm.Signature) {
-		n.commitMu.Unlock()
-		return 0, required, false, false
-	}
-	newVote := existing == "" || replacedPrior
 	n.commitVoteSignatures[cm.Height][commitScope][cm.From] = cm.Signature
 	if n.commitVoted == nil {
 		n.commitVoted = make(map[uint64]map[string]string)
@@ -2734,11 +3539,13 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool, bool) {
 		n.commitVotes[cm.Height][commitScope] = make(map[string]struct{})
 	}
 	n.commitVotes[cm.Height][commitScope][cm.From] = struct{}{}
+	// `count` stores the measured quantity used by this operation.
 	count := len(n.commitVoteSignatures[cm.Height][commitScope])
 	n.commitMu.Unlock()
-	if newVote {
+	if existing == "" || replacedPrior {
 		n.persistConsensusSafetyStateAsync("signed_commit_vote")
 	}
+	// `scope` stores the value produced by this operation.
 	scope := commitScope
 	ExecPool.mu.Lock()
 	if ExecPool.commitChoice == nil {
@@ -2747,61 +3554,63 @@ func (n *Node) recordVerifiedCommitVote(cm CommitMsg) (int, int, bool, bool) {
 	if ExecPool.commitChoice[cm.Height] == nil {
 		ExecPool.commitChoice[cm.Height] = make(map[string]string)
 	}
+	// `prior` stores the value produced by this operation.
 	if prior := strings.TrimSpace(ExecPool.commitChoice[cm.Height][cm.From]); prior == "" || prior == scope || replacedPrior {
 		ExecPool.commitChoice[cm.Height][cm.From] = scope
 	}
 	ExecPool.mu.Unlock()
-	return count, required, true, newVote
+	return count, required, true
 }
 
+// broadcastCommitVoteForProposal implements the broadcast commit vote for proposal helper.
 func (n *Node) broadcastCommitVoteForProposal(block Block, execHash string, txMerkle string) bool {
 	if n == nil || block.ID == 0 || strings.TrimSpace(block.BlockHash) == "" || n.isShuttingDown() {
 		return false
 	}
-	if ready, reason := n.validatorParticipationGateStatus(block.ID); !ready {
-		reason = strings.TrimSpace(reason)
-		if n.shouldLogLivenessReason(fmt.Sprintf("commit_broadcast_defer:%d:%s", block.ID, reason), 10*time.Second) {
-			log.Printf("[COMMIT-BROADCAST-DEFER] validator=%s height=%d reason=%s block=%s",
-				ShortID(n.ID),
-				block.ID,
-				reason,
-				ShortHash(block.BlockHash),
-			)
-		}
-		return false
-	}
 	execHash = strings.TrimSpace(execHash)
 	txMerkle = strings.TrimSpace(txMerkle)
-	if execHash == "" || normalizeValidatorID(n.ID) == "" {
+	from := n.localConsensusValidatorIDForHeight(block.ID)
+	if execHash == "" || from == "" {
 		return false
 	}
-	commitScope := commitVoteResultScopeKey(block.ID, strings.TrimSpace(block.BlockHash), execHash, txMerkle)
+	// `cm` stores the value produced by this operation.
+	cm := CommitMsg{
+		Height:                  block.ID,
+		Hash:                    strings.TrimSpace(block.BlockHash),
+		ExecHash:                execHash,
+		TxMerkle:                txMerkle,
+		ExecutionCommitmentHash: executionCommitmentHashForBlock(block),
+		Block:                   block,
+		From:                    from,
+	}
+	// `commitScope` stores the value produced by this operation.
+	commitScope := commitVoteResultScopeKey(cm.Height, cm.Hash, cm.ExecHash, cm.TxMerkle)
 	if commitScope == "" {
 		return false
 	}
-	alreadySignedSameResult := n.hasLocalSignedCommitScope(block.ID, commitScope)
-	cm := CommitMsg{
-		Height:   block.ID,
-		Hash:     strings.TrimSpace(block.BlockHash),
-		ExecHash: execHash,
-		TxMerkle: txMerkle,
-		Block:    block,
-		From:     normalizeValidatorID(n.ID),
-	}
-	sig, ok := n.signValidatorPayload(commitVoteSignBytes(cm.Height, cm.Hash, cm.ExecHash, cm.TxMerkle))
-	if !ok {
-		return false
-	}
-	cm.Signature = hex.EncodeToString(sig)
-	if !n.markLocalCommitVoteBroadcasted(block.ID, commitScope) {
-		return true
+	// `cachedSignature` stores a prior local signature for the same result.
+	cachedSignature, alreadySignedSameResult := n.localSignedCommitSignature(block.ID, commitScope)
+	if alreadySignedSameResult {
+		cm.Signature = cachedSignature
+		if !n.verifyCommitVoteSignatureForHeight(cm) {
+			alreadySignedSameResult = false
+		}
 	}
 	if !alreadySignedSameResult {
+		// `sig` and `ok` store whether the related condition is satisfied.
+		sig, ok := n.signValidatorPayload(commitVoteSignBytesForMessage(cm))
+		if !ok {
+			return false
+		}
+		cm.Signature = hex.EncodeToString(sig)
 		n.handleCommitMsg(cm)
 	}
+	// `msg` stores the value produced by this operation.
 	msg := Message{Type: MsgCommit, Data: MustJSON(cm)}
 	n.fanoutConsensusMessageToPeers(msg)
+	// `data` stores the value produced by this operation.
 	data, _ := MarshalP2PMessage(msg)
+	// `publishTopic` stores the value produced by this operation.
 	publishTopic := n.ConsensusTopic
 	if publishTopic == nil {
 		publishTopic = n.ValidatorTopic
@@ -2812,22 +3621,52 @@ func (n *Node) broadcastCommitVoteForProposal(block Block, execHash string, txMe
 	return true
 }
 
+// rebroadcastCommitVoteForProposal sends an already-signed or newly-signed commit vote during recovery.
+func (n *Node) rebroadcastCommitVoteForProposal(block Block, execHash string, txMerkle string, reason string) bool {
+	if n == nil {
+		return false
+	}
+	if n.shouldLogLivenessReason(fmt.Sprintf("commit_rebroadcast:%d:%s:%s", block.ID, ShortHash(block.BlockHash), strings.TrimSpace(reason)), 5*time.Second) {
+		log.Printf("[COMMIT-REBROADCAST] validator=%s height=%d reason=%s block=%s exec=%s",
+			ShortID(n.ID),
+			block.ID,
+			strings.TrimSpace(reason),
+			ShortHash(block.BlockHash),
+			ShortHash(execHash),
+		)
+	}
+	return n.broadcastCommitVoteForProposal(block, execHash, txMerkle)
+}
+
+// publishExecutionResult implements the publish execution result helper.
 func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 	if n == nil || n.isShuttingDown() {
 		return
 	}
+	// `heightHint` stores the value produced by this operation.
 	heightHint := ctx.HeightHint
+	// `execHash` stores the digest used to identify or verify the related data.
 	execHash := ctx.ExecHash
+	// `txMerkle` stores the transaction data handled by this operation.
 	txMerkle := ctx.TxMerkle
+	// `proposalKey` stores the key used to access the related value.
 	proposalKey := ctx.ProposalKey
+	// `roundHint` stores the value produced by this operation.
 	roundHint := ctx.RoundHint
+	// `blockHashHint` stores the block data handled by this operation.
 	blockHashHint := ctx.BlockHashHint
+	// Execution votes are consensus messages, so their signer must be the
+	// validator identity rather than the independent network node identity.
+	signerID := n.localConsensusValidatorIDForHeight(heightHint)
+	if signerID == "" {
+		return
+	}
 
 	if !n.allowLocalExecutionVoteRound(heightHint, roundHint, proposalKey) {
 		return
 	}
 	if !force {
-		if !n.markExecBroadcastedByValidatorForResult(heightHint, proposalKey, execHash, n.ID) {
+		if !n.markExecBroadcastedByValidatorForResult(heightHint, proposalKey, execHash, signerID) {
 			return
 		}
 		if !n.markExecBroadcasted(heightHint, proposalKey, execHash, txMerkle) {
@@ -2851,18 +3690,24 @@ func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 		force,
 	)
 
+	// `sigVersion` stores the value produced by this operation.
 	sigVersion := execResultSigVersionV1
+	// `sigBytes` stores the value produced by this operation.
 	sigBytes := execResultSignBytes(heightHint, execHash, txMerkle)
 	if blockHashHint != "" {
 		sigVersion = execResultSigVersionV2
 		sigBytes = execResultSignBytesV2(heightHint, roundHint, blockHashHint, execHash, txMerkle)
 	}
+	// `signature` stores the value produced by this operation.
 	signature := ""
+	// `sig` and `ok` store whether the related condition is satisfied.
 	if sig, ok := n.signValidatorPayload(sigBytes); ok {
 		signature = hex.EncodeToString(sig)
 	}
+	// `executionResultHash` stores the digest used to identify or verify the related data.
 	executionResultHash := executionResultHashFromProposal(heightHint, proposalKey, blockHashHint, execHash, txMerkle)
 
+	// `msg` stores the value produced by this operation.
 	msg := Message{
 		Type: MsgExecutionResult,
 		Data: MustJSON(ExecutionResultMsg{
@@ -2874,14 +3719,14 @@ func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 			ExecHash:            execHash,
 			TxMerkle:            txMerkle,
 			ExecutionResultHash: executionResultHash,
-			Signer:              n.ID,
+			Signer:              signerID,
 			Signature:           signature,
 		}),
 	}
 	// Production safety: do not rely on pubsub loopback for the local
 	// validator's own execution vote. Record it immediately so transport
 	// hiccups cannot stall quorum formation.
-	if !force || !execVoteCreditedGlobal(heightHint, proposalKey, n.ID, execHash, txMerkle) {
+	if !force || !execVoteCreditedGlobal(heightHint, proposalKey, signerID, execHash, txMerkle) {
 		if n.isShuttingDown() {
 			return
 		}
@@ -2894,14 +3739,16 @@ func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 			ExecHash:            execHash,
 			TxMerkle:            txMerkle,
 			ExecutionResultHash: executionResultHash,
-			Signer:              n.ID,
+			Signer:              signerID,
 			Signature:           signature,
 		})
 	}
 	n.fanoutConsensusMessageToPeers(msg)
 	n.noteExecBroadcastActivity(heightHint)
 
+	// `data` stores the value produced by this operation.
 	data, _ := MarshalP2PMessage(msg)
+	// `publishTopic` stores the value produced by this operation.
 	publishTopic := n.ConsensusTopic
 	if publishTopic == nil {
 		publishTopic = n.ValidatorTopic
@@ -2914,7 +3761,9 @@ func (n *Node) publishExecutionResult(ctx execBroadcastContext, force bool) {
 	}
 }
 
+// broadcastExecutionResultForBlockInternal implements the broadcast execution result for block internal helper.
 func (n *Node) broadcastExecutionResultForBlockInternal(block Block, execHash string, txMerkle string, force bool) {
+	// `ready` and `reason` store the value produced by this operation.
 	if ready, reason := n.localExecutionBroadcastReady(block.ID); !ready {
 		log.Printf("[EXEC-BROADCAST-DEFER] validator=%s height=%d reason=%s trigger=direct_block_publish block=%s prev=%s",
 			ShortID(n.ID),
@@ -2925,6 +3774,7 @@ func (n *Node) broadcastExecutionResultForBlockInternal(block Block, execHash st
 		)
 		return
 	}
+	// `ctx` and `ok` store whether the related condition is satisfied.
 	ctx, ok := n.prepareExecutionBroadcastForBlock(block, execHash, txMerkle)
 	if !ok {
 		return
@@ -2932,6 +3782,7 @@ func (n *Node) broadcastExecutionResultForBlockInternal(block Block, execHash st
 	n.publishExecutionResult(ctx, force)
 }
 
+// broadcastExecutionResultInternal implements the broadcast execution result internal helper.
 func (n *Node) broadcastExecutionResultInternal(heightHint uint64, execHash string, txMerkle string, force bool) {
 	if n.ConsensusTopic == nil && n.ValidatorTopic == nil {
 		return
@@ -2941,6 +3792,7 @@ func (n *Node) broadcastExecutionResultInternal(heightHint uint64, execHash stri
 		return
 	}
 	if validatorOnboardingStrictActivationEnabled() {
+		// `active` and `reason` store the value produced by this operation.
 		if active, reason := n.selfActiveValidatorAt(heightHint); !active {
 			if DebugConsensus {
 				fmt.Printf("[PROPOSAL-GATE] skipped exec-broadcast validator=%s height=%d reason=%s\n", ShortID(n.ID), heightHint, reason)
@@ -2949,6 +3801,7 @@ func (n *Node) broadcastExecutionResultInternal(heightHint uint64, execHash stri
 		}
 	}
 	if ConsensusProposeRequiresSyncReady {
+		// `ready` and `reason` store the value produced by this operation.
 		if ready, reason := n.syncReadyForConsensus(heightHint); !ready {
 			if DebugConsensus {
 				fmt.Printf("[PROPOSAL-GATE] skipped exec-broadcast validator=%s height=%d reason=%s\n", ShortID(n.ID), heightHint, reason)
@@ -2957,6 +3810,7 @@ func (n *Node) broadcastExecutionResultInternal(heightHint uint64, execHash stri
 		}
 	}
 	if ConsensusPostBlockSafeModeEnabled {
+		// `active` stores the value produced by this operation.
 		if active, _, _ := n.postBlockSafeModeState(heightHint); active {
 			if DebugConsensus {
 				fmt.Printf("[PROPOSAL-GATE] skipped exec-broadcast validator=%s height=%d reason=safe_mode_active\n", ShortID(n.ID), heightHint)
@@ -2964,6 +3818,7 @@ func (n *Node) broadcastExecutionResultInternal(heightHint uint64, execHash stri
 			return
 		}
 	}
+	// `ctx` and `ok` store whether the related condition is satisfied.
 	ctx, ok := n.prepareExecutionBroadcast(heightHint, execHash, txMerkle)
 	if !ok {
 		return
@@ -2971,6 +3826,7 @@ func (n *Node) broadcastExecutionResultInternal(heightHint uint64, execHash stri
 	n.publishExecutionResult(ctx, force)
 }
 
+// shouldRebroadcastExec implements the should rebroadcast exec helper.
 func (n *Node) shouldRebroadcastExec(epoch uint64, cooldown time.Duration) bool {
 	if epoch == 0 {
 		return false
@@ -2983,6 +3839,7 @@ func (n *Node) shouldRebroadcastExec(epoch uint64, cooldown time.Duration) bool 
 	if n.execRebroadcastAt == nil {
 		n.execRebroadcastAt = make(map[uint64]time.Time)
 	}
+	// `last` and `ok` store whether the related condition is satisfied.
 	if last, ok := n.execRebroadcastAt[epoch]; ok {
 		if time.Since(last) < cooldown {
 			return false
@@ -2992,6 +3849,7 @@ func (n *Node) shouldRebroadcastExec(epoch uint64, cooldown time.Duration) bool 
 	return true
 }
 
+// noteExecBroadcastActivity implements the note exec broadcast activity helper.
 func (n *Node) noteExecBroadcastActivity(epoch uint64) {
 	if n == nil || epoch == 0 {
 		return
@@ -3004,11 +3862,14 @@ func (n *Node) noteExecBroadcastActivity(epoch uint64) {
 	n.execRebroadcastAt[epoch] = time.Now()
 }
 
+// executionVoteNetworkIngressID implements the execution vote network ingress id helper.
 func executionVoteNetworkIngressID(res ExecutionResultMsg) string {
+	// `signer` stores the value produced by this operation.
 	signer := normalizeValidatorID(res.Signer)
 	if res.HeightHint == 0 || signer == "" {
 		return ""
 	}
+	// `blockHash` stores the block data handled by this operation.
 	blockHash := strings.TrimSpace(res.BlockHashHint)
 	if blockHash == "" {
 		blockHash = strings.TrimSpace(res.ExecHash)
@@ -3022,26 +3883,32 @@ func executionVoteNetworkIngressID(res ExecutionResultMsg) string {
 	return fmt.Sprintf("%d:%d:%s:%s", res.HeightHint, res.RoundHint, signer, blockHash)
 }
 
+// markStaleExecutionVoteNetworkIngress implements the mark stale execution vote network ingress helper.
 func (n *Node) markStaleExecutionVoteNetworkIngress(res ExecutionResultMsg) bool {
 	if n == nil {
 		return false
 	}
+	// `voteID` stores the value produced by this operation.
 	voteID := executionVoteNetworkIngressID(res)
 	if voteID == "" {
 		return false
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
 	n.execVoteGuardMu.Lock()
 	defer n.execVoteGuardMu.Unlock()
 	if n.execVoteStaleIngressSeen == nil {
 		n.execVoteStaleIngressSeen = make(map[string]time.Time)
 	}
+	// `last` and `ok` store whether the related condition is satisfied.
 	if last, ok := n.execVoteStaleIngressSeen[voteID]; ok && now.Sub(last) <= execVoteStaleIngressTTL {
 		return true
 	}
 	n.execVoteStaleIngressSeen[voteID] = now
 	if len(n.execVoteStaleIngressSeen) > ExecVoteReplayMaxKeys {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := now.Add(-execVoteStaleIngressTTL)
+		// `key` and `seenAt` track the key used to access the related value.
 		for key, seenAt := range n.execVoteStaleIngressSeen {
 			if seenAt.Before(cutoff) {
 				delete(n.execVoteStaleIngressSeen, key)
@@ -3051,6 +3918,7 @@ func (n *Node) markStaleExecutionVoteNetworkIngress(res ExecutionResultMsg) bool
 	return false
 }
 
+// executionVoteTipLag implements the execution vote tip lag helper.
 func executionVoteTipLag(currentEpoch uint64, voteHeight uint64) (uint64, bool) {
 	if currentEpoch == 0 || voteHeight == 0 || voteHeight >= currentEpoch {
 		return 0, false
@@ -3060,11 +3928,14 @@ func executionVoteTipLag(currentEpoch uint64, voteHeight uint64) (uint64, bool) 
 	return currentEpoch - voteHeight - 1, true
 }
 
+// executionVoteTooFarBehind implements the execution vote too far behind helper.
 func executionVoteTooFarBehind(currentEpoch uint64, voteHeight uint64) bool {
+	// `lag` and `ok` store whether the related condition is satisfied.
 	lag, ok := executionVoteTipLag(currentEpoch, voteHeight)
 	return ok && lag > execVoteStaleLagBlocks
 }
 
+// benignExecutionVoteIngressReason implements the benign execution vote ingress reason helper.
 func benignExecutionVoteIngressReason(reason string) bool {
 	switch strings.TrimSpace(reason) {
 	case "ignored_committed_vote", "ignored_committed_vote_cached", "ignored_late_vote", "ignored_late_vote_cached":
@@ -3074,6 +3945,7 @@ func benignExecutionVoteIngressReason(reason string) bool {
 	}
 }
 
+// allowExecutionVoteNetworkIngress implements the allow execution vote network ingress helper.
 func (n *Node) allowExecutionVoteNetworkIngress(res ExecutionResultMsg) (bool, string) {
 	if n == nil {
 		return false, "node_unavailable"
@@ -3082,29 +3954,34 @@ func (n *Node) allowExecutionVoteNetworkIngress(res ExecutionResultMsg) (bool, s
 	if res.HeightHint == 0 || res.Signer == "" || strings.TrimSpace(res.ExecHash) == "" {
 		return false, "invalid_vote"
 	}
+	// `currentEpoch` stores the value produced by this operation.
 	currentEpoch := n.currentEpoch()
-	if n.isCommittedReplayHeight(res.HeightHint) {
-		if n.markStaleExecutionVoteNetworkIngress(res) {
-			return false, "ignored_committed_vote_cached"
-		}
-		return false, "ignored_committed_vote"
-	}
-	if executionVoteTooFarBehind(currentEpoch, res.HeightHint) {
+	lag, hasLag := executionVoteTipLag(currentEpoch, res.HeightHint)
+	if hasLag && lag > execVoteStaleLagBlocks {
 		if n.markStaleExecutionVoteNetworkIngress(res) {
 			return false, "ignored_late_vote_cached"
 		}
 		return false, "ignored_late_vote"
 	}
+	if n.isCommittedReplayHeight(res.HeightHint) && (!hasLag || lag == 0) {
+		if n.markStaleExecutionVoteNetworkIngress(res) {
+			return false, "ignored_committed_vote_cached"
+		}
+		return false, "ignored_committed_vote"
+	}
+	// `voteID` stores the value produced by this operation.
 	voteID := executionVoteNetworkIngressID(res)
 	if voteID == "" {
 		return true, ""
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
 	n.execVoteGuardMu.Lock()
 	defer n.execVoteGuardMu.Unlock()
 	if n.execVoteIngressSeen == nil {
 		n.execVoteIngressSeen = make(map[string]time.Time)
 	}
+	// `last` and `ok` store whether the related condition is satisfied.
 	if last, ok := n.execVoteIngressSeen[voteID]; ok && now.Sub(last) <= execVoteReplayTTL {
 		// Treat rebroadcasts as idempotent at network ingress. The proposal-aware
 		// replay/signer guards later in processing are authoritative; rejecting
@@ -3114,7 +3991,9 @@ func (n *Node) allowExecutionVoteNetworkIngress(res ExecutionResultMsg) (bool, s
 	}
 	n.execVoteIngressSeen[voteID] = now
 	if len(n.execVoteIngressSeen) > ExecVoteReplayMaxKeys {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := now.Add(-execVoteReplayTTL)
+		// `key` and `seenAt` track the key used to access the related value.
 		for key, seenAt := range n.execVoteIngressSeen {
 			if seenAt.Before(cutoff) {
 				delete(n.execVoteIngressSeen, key)
@@ -3124,6 +4003,7 @@ func (n *Node) allowExecutionVoteNetworkIngress(res ExecutionResultMsg) (bool, s
 	return true, ""
 }
 
+// logExecutionVoteIngressDrop implements the log execution vote ingress drop helper.
 func (n *Node) logExecutionVoteIngressDrop(reason string, res ExecutionResultMsg, source string) {
 	if n == nil {
 		return
@@ -3136,6 +4016,7 @@ func (n *Node) logExecutionVoteIngressDrop(reason string, res ExecutionResultMsg
 	if source == "" {
 		source = "ingress"
 	}
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("exec_ingress_drop:%s:%d:%d:%s:%s", reason, res.HeightHint, res.RoundHint, normalizeValidatorID(res.Signer), ShortHash(strings.TrimSpace(res.BlockHashHint)))
 	if !n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
 		return
@@ -3151,6 +4032,7 @@ func (n *Node) logExecutionVoteIngressDrop(reason string, res ExecutionResultMsg
 	)
 }
 
+// shouldForceExecutionVoteRebroadcast implements the should force execution vote rebroadcast helper.
 func (n *Node) shouldForceExecutionVoteRebroadcast(epoch uint64, proposalKey string, votes int, cooldown time.Duration) bool {
 	if n == nil || epoch == 0 || proposalKey == "" || votes <= 0 {
 		return false
@@ -3159,12 +4041,14 @@ func (n *Node) shouldForceExecutionVoteRebroadcast(epoch uint64, proposalKey str
 	if cooldown <= 0 {
 		cooldown = execVoteRebroadcastCooldown
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
 	n.execRebroadcastMu.Lock()
 	defer n.execRebroadcastMu.Unlock()
 	if n.execRebroadcastState == nil {
 		n.execRebroadcastState = make(map[uint64]execVoteRebroadcastState)
 	}
+	// `state` stores the value produced by this operation.
 	state := n.execRebroadcastState[epoch]
 	if state.ProposalKey != proposalKey || state.VoteCount != votes {
 		state.ProposalKey = proposalKey
@@ -3184,9 +4068,12 @@ func (n *Node) shouldForceExecutionVoteRebroadcast(epoch uint64, proposalKey str
 	return true
 }
 
+// markExecBroadcasted implements the mark exec broadcasted helper.
 func (n *Node) markExecBroadcasted(epoch uint64, proposalKey string, execHash string, txMerkle string) bool {
+	// `key` stores the key used to access the related value.
 	key := execBroadcastKey(execPoolResultKey(epoch, proposalKey, execHash), txMerkle)
 	n.commitMu.Lock()
+	// `committedHeight` stores the value produced by this operation.
 	committedHeight := n.committedHeight
 	n.commitMu.Unlock()
 	n.execResultsMu.Lock()
@@ -3194,6 +4081,7 @@ func (n *Node) markExecBroadcasted(epoch uint64, proposalKey string, execHash st
 	if n.execBroadcasted == nil {
 		n.execBroadcasted = make(map[uint64]map[string]bool)
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := n.execBroadcasted[epoch]; !ok {
 		n.execBroadcasted[epoch] = make(map[string]bool)
 	}
@@ -3205,6 +4093,7 @@ func (n *Node) markExecBroadcasted(epoch uint64, proposalKey string, execHash st
 	return true
 }
 
+// execProposalMarkerKey implements the exec proposal marker key helper.
 func execProposalMarkerKey(epoch uint64, proposalKey string, execHash string) string {
 	if strings.TrimSpace(execHash) != "" {
 		return execPoolResultKey(epoch, proposalKey, execHash)
@@ -3212,10 +4101,12 @@ func execProposalMarkerKey(epoch uint64, proposalKey string, execHash string) st
 	return execPoolScopeKey(epoch, proposalKey)
 }
 
+// markExecBroadcastedByValidator implements the mark exec broadcasted by validator helper.
 func (n *Node) markExecBroadcastedByValidator(epoch uint64, proposalKey string, signer string) bool {
 	return n.markExecBroadcastedByValidatorForResult(epoch, proposalKey, "", signer)
 }
 
+// markExecBroadcastedByValidatorForResult implements the mark exec broadcasted by validator for result helper.
 func (n *Node) markExecBroadcastedByValidatorForResult(epoch uint64, proposalKey string, execHash string, signer string) bool {
 	signer = normalizeValidatorID(signer)
 	if epoch == 0 || proposalKey == "" || signer == "" {
@@ -3223,6 +4114,7 @@ func (n *Node) markExecBroadcastedByValidatorForResult(epoch uint64, proposalKey
 	}
 	proposalKey = execProposalMarkerKey(epoch, proposalKey, execHash)
 	n.commitMu.Lock()
+	// `committedHeight` stores the value produced by this operation.
 	committedHeight := n.committedHeight
 	n.commitMu.Unlock()
 	n.execResultsMu.Lock()
@@ -3230,9 +4122,11 @@ func (n *Node) markExecBroadcastedByValidatorForResult(epoch uint64, proposalKey
 	if n.execBroadcastedByValidator == nil {
 		n.execBroadcastedByValidator = make(map[uint64]map[string]map[string]bool)
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := n.execBroadcastedByValidator[epoch]; !ok {
 		n.execBroadcastedByValidator[epoch] = make(map[string]map[string]bool)
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := n.execBroadcastedByValidator[epoch][proposalKey]; !ok {
 		n.execBroadcastedByValidator[epoch][proposalKey] = make(map[string]bool)
 	}
@@ -3244,40 +4138,56 @@ func (n *Node) markExecBroadcastedByValidatorForResult(epoch uint64, proposalKey
 	return true
 }
 
+// hasExecBroadcastedByValidator implements the has exec broadcasted by validator helper.
 func (n *Node) hasExecBroadcastedByValidator(epoch uint64, proposalKey string, signer string) bool {
 	return n.hasExecBroadcastedByValidatorForResult(epoch, proposalKey, "", signer)
 }
 
+// hasExecBroadcastedByValidatorForResult implements the has exec broadcasted by validator for result helper.
 func (n *Node) hasExecBroadcastedByValidatorForResult(epoch uint64, proposalKey string, execHash string, signer string) bool {
 	signer = normalizeValidatorID(signer)
 	if n == nil || epoch == 0 || proposalKey == "" || signer == "" {
 		return false
 	}
+	originalProposalKey := proposalKey
 	proposalKey = execProposalMarkerKey(epoch, proposalKey, execHash)
 	n.execResultsMu.Lock()
 	defer n.execResultsMu.Unlock()
 	if n.execBroadcastedByValidator == nil {
 		return false
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := n.execBroadcastedByValidator[epoch]; !ok {
 		return false
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := n.execBroadcastedByValidator[epoch][proposalKey]; !ok {
+		if strings.TrimSpace(execHash) == "" {
+			prefix := execPoolScopeKey(epoch, originalProposalKey) + "|"
+			for key, signers := range n.execBroadcastedByValidator[epoch] {
+				if strings.HasPrefix(key, prefix) && signers[signer] {
+					return true
+				}
+			}
+		}
 		return false
 	}
 	return n.execBroadcastedByValidator[epoch][proposalKey][signer]
 }
 
+// markExecSignerSeenForProposal implements the mark exec signer seen for proposal helper.
 func (n *Node) markExecSignerSeenForProposal(epoch uint64, proposalKey string, signer string) bool {
 	return n.markExecSignerSeenForProposalResult(epoch, proposalKey, "", signer)
 }
 
+// markExecSignerSeenForProposalResult implements the mark exec signer seen for proposal result helper.
 func (n *Node) markExecSignerSeenForProposalResult(epoch uint64, proposalKey string, execHash string, signer string) bool {
 	if epoch == 0 || proposalKey == "" || signer == "" {
 		return false
 	}
 	proposalKey = execProposalMarkerKey(epoch, proposalKey, execHash)
 	n.commitMu.Lock()
+	// `committedHeight` stores the value produced by this operation.
 	committedHeight := n.committedHeight
 	n.commitMu.Unlock()
 	n.execResultsMu.Lock()
@@ -3285,9 +4195,11 @@ func (n *Node) markExecSignerSeenForProposalResult(epoch uint64, proposalKey str
 	if n.execSignerSeen == nil {
 		n.execSignerSeen = make(map[uint64]map[string]map[string]bool)
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := n.execSignerSeen[epoch]; !ok {
 		n.execSignerSeen[epoch] = make(map[string]map[string]bool)
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := n.execSignerSeen[epoch][proposalKey]; !ok {
 		n.execSignerSeen[epoch][proposalKey] = make(map[string]bool)
 	}
@@ -3299,10 +4211,12 @@ func (n *Node) markExecSignerSeenForProposalResult(epoch uint64, proposalKey str
 	return true
 }
 
+// hasExecSignerSeenForProposal implements the has exec signer seen for proposal helper.
 func (n *Node) hasExecSignerSeenForProposal(epoch uint64, proposalKey string, signer string) bool {
 	return n.hasExecSignerSeenForProposalResult(epoch, proposalKey, "", signer)
 }
 
+// hasExecSignerSeenForProposalResult implements the has exec signer seen for proposal result helper.
 func (n *Node) hasExecSignerSeenForProposalResult(epoch uint64, proposalKey string, execHash string, signer string) bool {
 	signer = normalizeValidatorID(signer)
 	if n == nil || epoch == 0 || proposalKey == "" || signer == "" {
@@ -3314,15 +4228,18 @@ func (n *Node) hasExecSignerSeenForProposalResult(epoch uint64, proposalKey stri
 	if n.execSignerSeen == nil {
 		return false
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := n.execSignerSeen[epoch]; !ok {
 		return false
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := n.execSignerSeen[epoch][proposalKey]; !ok {
 		return false
 	}
 	return n.execSignerSeen[epoch][proposalKey][signer]
 }
 
+// allowLocalExecutionVoteRound implements the allow local execution vote round helper.
 func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposalKey string) bool {
 	if n == nil || epoch == 0 || proposalKey == "" {
 		return false
@@ -3332,13 +4249,16 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 	if n.localExecVoteByRound == nil {
 		n.localExecVoteByRound = make(map[uint64]map[uint32]string)
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := n.localExecVoteByRound[epoch]; !ok {
 		n.localExecVoteByRound[epoch] = make(map[uint32]string)
 	}
+	// `existing` stores the value produced by this operation.
 	existing := strings.TrimSpace(n.localExecVoteByRound[epoch][round])
 	// Commit-choice resolution reads proposal state guarded by execResultsMu.
 	// Snapshot local markers before resolving it to avoid self-deadlock.
 	priorByRound := make(map[uint32]string, len(n.localExecVoteByRound[epoch]))
+	// `existingRound` and `existingKey` track the key used to access the related value.
 	for existingRound, existingKey := range n.localExecVoteByRound[epoch] {
 		priorByRound[existingRound] = strings.TrimSpace(existingKey)
 	}
@@ -3358,11 +4278,19 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 		return false
 	}
 
-	// Execution votes are movable prevotes. Only a signed commit quorum is the
-	// irreversible cross-round lock; a lone commit vote must not strand liveness.
+	// Execution votes remain movable until this node signs a commit for a
+	// proposal that already has execution quorum. At that point moving the
+	// execution evidence can strand a later signed commit quorum.
 	incomingScope := execPoolScopeKey(epoch, proposalKey)
+	// `committedProposal` stores the value produced by this operation.
 	committedProposal := n.localSignedCommitChoice(epoch)
-	if committedProposal != "" && n.signedCommitQuorumForHash(epoch, committedProposal) && commitVoteScopeKey(epoch, committedProposal) != incomingScope {
+	commitChoiceLocked := committedProposal != "" && n.signedCommitQuorumForHash(epoch, committedProposal)
+	if !commitChoiceLocked && committedProposal != "" {
+		if committedBlock, ok := n.proposalBlockByHash(epoch, committedProposal); ok {
+			commitChoiceLocked = n.proposalHasLocalSignedExecutionQuorum(committedBlock, n.proposalVoteCount(committedBlock))
+		}
+	}
+	if committedProposal != "" && commitChoiceLocked && commitVoteScopeKey(epoch, committedProposal) != incomingScope {
 		log.Printf("[EXEC-VOTE-GUARD] validator=%s height=%d round=%d action=skip_conflicting_signed_commit_vote committed=%s incoming=%s",
 			ShortID(n.ID),
 			epoch,
@@ -3373,8 +4301,11 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 		return false
 	}
 
+	// `highestRound` stores the value used by this operation.
 	var highestRound uint32
+	// `hasPriorRound` stores the value produced by this operation.
 	hasPriorRound := false
+	// `existingRound` and `existingKey` track the key used to access the related value.
 	for existingRound, existingKey := range priorByRound {
 		if existingKey == "" {
 			continue
@@ -3403,9 +4334,11 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 	if n.localExecVoteByRound[epoch] == nil {
 		n.localExecVoteByRound[epoch] = make(map[uint32]string)
 	}
+	// `current` stores the value produced by this operation.
 	if current := strings.TrimSpace(n.localExecVoteByRound[epoch][round]); current != "" && current != proposalKey {
 		return false
 	}
+	// `existingRound` and `existingKey` track the key used to access the related value.
 	for existingRound, existingKey := range n.localExecVoteByRound[epoch] {
 		if strings.TrimSpace(existingKey) != "" && existingRound > round {
 			return false
@@ -3415,14 +4348,17 @@ func (n *Node) allowLocalExecutionVoteRound(epoch uint64, round uint32, proposal
 	return true
 }
 
+// execResultKey implements the exec result key helper.
 func execResultKey(epoch uint64, execHash string, txMerkle string) string {
 	return fmt.Sprintf("%d:%s:%s", epoch, execHash, txMerkle)
 }
 
+// execBroadcastKey implements the exec broadcast key helper.
 func execBroadcastKey(execHash string, txMerkle string) string {
 	return fmt.Sprintf("%s:%s", execHash, txMerkle)
 }
 
+// strictExecSupermajority implements the strict exec supermajority helper.
 func strictExecSupermajority(total int) int {
 	if total <= 0 {
 		return 0
@@ -3430,12 +4366,15 @@ func strictExecSupermajority(total int) int {
 	return (2*total)/3 + 1
 }
 
+// allowExecutionVoteIngress implements the allow execution vote ingress helper.
 func (n *Node) allowExecutionVoteIngress(signer string, epoch uint64, proposalKey string, execHash string, txMerkle string) (bool, string) {
 	if n == nil || epoch == 0 || proposalKey == "" || signer == "" || execHash == "" {
 		return false, "invalid_vote"
 	}
 	proposalKey = execPoolScopeKey(epoch, proposalKey)
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("%d:%s:%s:%s:%s", epoch, proposalKey, signer, execHash, txMerkle)
 	n.execVoteGuardMu.Lock()
 	defer n.execVoteGuardMu.Unlock()
@@ -3447,8 +4386,10 @@ func (n *Node) allowExecutionVoteIngress(signer string, epoch uint64, proposalKe
 		n.execVoteLimiter = make(map[string]*rate.Limiter)
 	}
 
+	// `limiter` stores the value produced by this operation.
 	limiter := n.execVoteLimiter[signer]
 	if limiter == nil {
+		// `interval` stores the value currently being processed.
 		interval := time.Second / time.Duration(execVoteRatePerSigner)
 		if interval <= 0 {
 			interval = time.Second
@@ -3460,12 +4401,15 @@ func (n *Node) allowExecutionVoteIngress(signer string, epoch uint64, proposalKe
 		return false, "rate_limited"
 	}
 
+	// `last` and `ok` store whether the related condition is satisfied.
 	if last, ok := n.execVoteSeen[key]; ok && now.Sub(last) <= execVoteReplayTTL && execVoteCreditedGlobal(epoch, proposalKey, signer, execHash, txMerkle) {
 		return false, "replay_cache"
 	}
 	n.execVoteSeen[key] = now
 	if len(n.execVoteSeen) > ExecVoteReplayMaxKeys {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := now.Add(-execVoteReplayTTL)
+		// `k` and `seenAt` track the current values while iterating.
 		for k, seenAt := range n.execVoteSeen {
 			if seenAt.Before(cutoff) {
 				delete(n.execVoteSeen, k)
@@ -3475,6 +4419,7 @@ func (n *Node) allowExecutionVoteIngress(signer string, epoch uint64, proposalKe
 	return true, ""
 }
 
+// shouldThrottleExecutionVoteDrop implements the should throttle execution vote drop helper.
 func shouldThrottleExecutionVoteDrop(reason string) bool {
 	reason = strings.TrimSpace(reason)
 	if strings.HasPrefix(reason, "queued_") {
@@ -3488,10 +4433,12 @@ func shouldThrottleExecutionVoteDrop(reason string) bool {
 	}
 }
 
+// shouldLogExecutionVoteDrop implements the should log execution vote drop helper.
 func (n *Node) shouldLogExecutionVoteDrop(reason string, res ExecutionResultMsg, proposalSnap execProposalSnapshot) bool {
 	if n == nil || !shouldThrottleExecutionVoteDrop(reason) {
 		return true
 	}
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("exec_vote_drop:%s:%s", reason, normalizeValidatorID(res.Signer))
 	// Queue-state drops can arrive once per signer for every future height while
 	// catching up. Keep their key coarse even in debug/file logging mode, or the
@@ -3511,6 +4458,7 @@ func (n *Node) shouldLogExecutionVoteDrop(reason string, res ExecutionResultMsg,
 	return n.shouldLogLivenessReason(key, livenessReasonLogCooldown)
 }
 
+// logExecutionVoteDrop implements the log execution vote drop helper.
 func (n *Node) logExecutionVoteDrop(reason string, res ExecutionResultMsg, proposalSnap execProposalSnapshot) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
@@ -3532,6 +4480,7 @@ func (n *Node) logExecutionVoteDrop(reason string, res ExecutionResultMsg, propo
 	)
 }
 
+// logExecutionVoteStaleAccept implements the log execution vote stale accept helper.
 func (n *Node) logExecutionVoteStaleAccept(reason string, res ExecutionResultMsg) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
@@ -3548,12 +4497,14 @@ func (n *Node) logExecutionVoteStaleAccept(reason string, res ExecutionResultMsg
 	)
 }
 
+// logExecutionVoteAccept implements the log execution vote accept helper.
 func (n *Node) logExecutionVoteAccept(reason string, res ExecutionResultMsg, proposalSnap execProposalSnapshot, votes int, required int) {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		reason = "recorded"
 	}
 	if n != nil && !DebugConsensus && !DebugSync && log.Writer() == os.Stderr {
+		// `key` stores the key used to access the related value.
 		key := fmt.Sprintf("exec_vote_accept:%s:%s", reason, normalizeValidatorID(res.Signer))
 		if !n.shouldLogLivenessReason(key, livenessReasonLogCooldown) {
 			return
@@ -3574,6 +4525,7 @@ func (n *Node) logExecutionVoteAccept(reason string, res ExecutionResultMsg, pro
 	)
 }
 
+// tryFinalizeExecutionQuorumFromPool implements the try finalize execution quorum from pool helper.
 func (n *Node) tryFinalizeExecutionQuorumFromPool(targetEpoch uint64, proposalSnap execProposalSnapshot, leaderBlock Block, execHash string, txMerkle string, reason string) bool {
 	if n == nil || targetEpoch == 0 || execHash == "" || targetEpoch != n.currentEpoch() {
 		return false
@@ -3581,8 +4533,11 @@ func (n *Node) tryFinalizeExecutionQuorumFromPool(targetEpoch uint64, proposalSn
 	if leaderBlock.ID != targetEpoch || proposalSnap.BlockHash == "" || proposalSnap.BlockHash != leaderBlock.BlockHash {
 		return false
 	}
+	// `validators` stores whether the related condition is satisfied.
 	validators := n.freezeValidatorSetForHeight(targetEpoch, n.GetConsensusValidators(int(targetEpoch)))
+	// `total` stores the measured quantity used by this operation.
 	total := len(validators)
+	// `required` stores the request data being processed.
 	required := n.executionQuorumRequiredForEpoch(targetEpoch)
 	if required == 0 {
 		required = execQuorumRequired(total)
@@ -3590,22 +4545,24 @@ func (n *Node) tryFinalizeExecutionQuorumFromPool(targetEpoch uint64, proposalSn
 	if total == 0 || required == 0 {
 		return false
 	}
-	commitScope := commitVoteResultScopeKey(targetEpoch, proposalSnap.BlockHash, execHash, txMerkle)
-	if commitScope != "" && n.hasLocalSignedCommitScope(targetEpoch, commitScope) {
-		return true
-	}
 	storedCount := getExecCountGlobal(targetEpoch, proposalSnap.ProposalKey, execHash, txMerkle)
-	if storedCount < required {
-		return false
-	}
-	results, _, _, ok := getExecResultsGlobal(targetEpoch, proposalSnap.ProposalKey, execHash, txMerkle)
-	if !ok || len(results) < required {
-		var votes int
-		results, _, votes, ok = getExecResultsForBlockHashGlobal(targetEpoch, proposalSnap.BlockHash, execHash, txMerkle)
-		if !ok || votes < required || len(results) < required {
-			return false
+	results, signers, votes, ok := getExecResultsGlobal(targetEpoch, proposalSnap.ProposalKey, execHash, txMerkle)
+	if !ok || votes < required || len(results) < required {
+		results, signers, votes, ok = getExecResultsForBlockHashGlobal(targetEpoch, proposalSnap.BlockHash, execHash, txMerkle)
+		if ok && votes > storedCount {
+			storedCount = votes
 		}
 	}
+	if !ok || votes < required || len(results) < required {
+		results, signers, votes, ok = n.consensusExecutionResultsForBlock(leaderBlock, execHash, txMerkle)
+		if ok && votes > storedCount {
+			storedCount = votes
+		}
+	}
+	if !ok || storedCount < required || len(results) < required {
+		return false
+	}
+	// `result` tracks the result produced by this operation.
 	for _, result := range results {
 		n.mirrorConsensusExecVote(targetEpoch, proposalSnap.BlockHash, result)
 	}
@@ -3618,7 +4575,32 @@ func (n *Node) tryFinalizeExecutionQuorumFromPool(targetEpoch uint64, proposalSn
 		storedCount,
 		required,
 	)
-	return n.broadcastCommitVoteForProposal(leaderBlock, execHash, txMerkle)
+	commitScope := commitVoteResultScopeKey(targetEpoch, proposalSnap.BlockHash, execHash, txMerkle)
+	localCommitAlreadySigned := commitScope != "" && n.hasLocalSignedCommitScope(targetEpoch, commitScope)
+	broadcasted := true
+	if localCommitAlreadySigned {
+		broadcasted = n.rebroadcastCommitVoteForProposal(leaderBlock, execHash, txMerkle, "exec_quorum_recover")
+	} else {
+		broadcasted = n.broadcastCommitVoteForProposal(leaderBlock, execHash, txMerkle)
+		if !broadcasted {
+			broadcasted = n.rebroadcastCommitVoteForProposal(leaderBlock, execHash, txMerkle, "exec_quorum_recover_fallback")
+		}
+	}
+	freezeExecPool(targetEpoch, proposalSnap.ProposalKey, execHash)
+	if n.finalizeExecutionResult(targetEpoch, execHash, txMerkle, results, signers) {
+		return true
+	}
+	_, _, commitCount, commitRequired := n.commitVoteEvidenceForResult(targetEpoch, proposalSnap.BlockHash, execHash, txMerkle)
+	log.Printf("[EXEC-QUORUM-RECOVER-DEFER] height=%d reason=%s block=%s exec=%s commit_votes=%d required=%d rebroadcast=%t",
+		targetEpoch,
+		strings.TrimSpace(reason),
+		ShortHash(proposalSnap.BlockHash),
+		ShortHash(execHash),
+		commitCount,
+		commitRequired,
+		broadcasted,
+	)
+	return broadcasted
 }
 
 // storeVoteButIgnoreForCommit keeps post-commit execution votes available for
@@ -3627,7 +4609,9 @@ func (n *Node) storeVoteButIgnoreForCommit(epoch uint64, res ExecutionResultMsg,
 	if n == nil || epoch == 0 {
 		return
 	}
+	// `validators` stores whether the related condition is satisfied.
 	validators := n.freezeValidatorSetForHeight(epoch, n.GetConsensusValidators(int(epoch)))
+	// `required` stores the request data being processed.
 	required := n.executionQuorumRequiredForEpoch(epoch)
 	if required == 0 {
 		required = execQuorumRequired(len(validators))
@@ -3639,6 +4623,7 @@ func (n *Node) storeVoteButIgnoreForCommit(epoch uint64, res ExecutionResultMsg,
 	_ = n.advanceConsensusToCommittedTip("committed_execution_vote")
 }
 
+// resetExecutionMismatchStrike implements the reset execution mismatch strike helper.
 func (n *Node) resetExecutionMismatchStrike(signer string) {
 	signer = normalizeValidatorID(signer)
 	if n == nil || signer == "" {
@@ -3651,17 +4636,20 @@ func (n *Node) resetExecutionMismatchStrike(signer string) {
 	n.execVoteGuardMu.Unlock()
 }
 
+// recordExecutionMismatchStrike implements the record execution mismatch strike helper.
 func (n *Node) recordExecutionMismatchStrike(signer string, epoch uint64) int {
 	signer = normalizeValidatorID(signer)
 	if n == nil || signer == "" || epoch == 0 {
 		return 0
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
 	n.execVoteGuardMu.Lock()
 	defer n.execVoteGuardMu.Unlock()
 	if n.execMismatch == nil {
 		n.execMismatch = make(map[string]ExecMismatchTracker)
 	}
+	// `tracker` stores the value produced by this operation.
 	tracker := n.execMismatch[signer]
 	if tracker.LastAt.IsZero() || now.Sub(tracker.LastAt) > execMismatchStrikeWindow {
 		tracker.Count = 0
@@ -3674,7 +4662,9 @@ func (n *Node) recordExecutionMismatchStrike(signer string, epoch uint64) int {
 	tracker.LastAt = now
 	n.execMismatch[signer] = tracker
 	if len(n.execMismatch) > ExecMismatchTrackMax {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := now.Add(-execMismatchStrikeWindow)
+		// `id` and `st` track the current position in the related collection.
 		for id, st := range n.execMismatch {
 			if st.LastAt.Before(cutoff) {
 				delete(n.execMismatch, id)
@@ -3684,18 +4674,23 @@ func (n *Node) recordExecutionMismatchStrike(signer string, epoch uint64) int {
 	return tracker.Count
 }
 
+// executionMismatchUniqueSignersAtEpoch implements the execution mismatch unique signers at epoch helper.
 func (n *Node) executionMismatchUniqueSignersAtEpoch(epoch uint64) int {
 	if n == nil || epoch == 0 {
 		return 0
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `cutoff` stores the value produced by this operation.
 	cutoff := now.Add(-execMismatchStrikeWindow)
 	n.execVoteGuardMu.Lock()
 	defer n.execVoteGuardMu.Unlock()
 	if len(n.execMismatch) == 0 {
 		return 0
 	}
+	// `unique` stores the value produced by this operation.
 	unique := 0
+	// `tracker` tracks the current values while iterating.
 	for _, tracker := range n.execMismatch {
 		if tracker.LastEpoch != epoch {
 			continue
@@ -3708,25 +4703,30 @@ func (n *Node) executionMismatchUniqueSignersAtEpoch(epoch uint64) int {
 	return unique
 }
 
+// disconnectValidatorPeers implements the disconnect validator peers helper.
 func (n *Node) disconnectValidatorPeers(validatorID string, reason string) int {
 	validatorID = normalizeValidatorID(validatorID)
 	if n == nil || validatorID == "" {
 		return 0
 	}
+	// `peers` stores the value used by this operation.
 	var peers []string
 	n.peerStateMu.Lock()
+	// `peerID` and `vid` track the current values while iterating.
 	for peerID, vid := range n.peerToValidator {
 		if normalizeValidatorID(vid) == validatorID {
 			peers = append(peers, peerID)
 		}
 	}
 	n.peerStateMu.Unlock()
+	// `peerID` tracks the current values while iterating.
 	for _, peerID := range peers {
 		n.disconnectPeerID(peerID, reason)
 	}
 	return len(peers)
 }
 
+// peerClaimsValidator implements the peer claims validator helper.
 func (n *Node) peerClaimsValidator(peerID, validatorID string) bool {
 	peerID = strings.TrimSpace(peerID)
 	validatorID = normalizeValidatorID(validatorID)
@@ -3734,11 +4734,13 @@ func (n *Node) peerClaimsValidator(peerID, validatorID string) bool {
 		return false
 	}
 	n.peerStateMu.Lock()
+	// `claimed` stores the value produced by this operation.
 	claimed := normalizeValidatorID(n.peerToValidator[peerID])
 	n.peerStateMu.Unlock()
 	return claimed == validatorID
 }
 
+// handleInvalidProposerPolicy handles invalid proposer policy.
 func (n *Node) handleInvalidProposerPolicy(sourcePeer string, height uint64, expected string, got string) {
 	got = normalizeValidatorID(got)
 	expected = normalizeValidatorID(expected)
@@ -3752,6 +4754,7 @@ func (n *Node) handleInvalidProposerPolicy(sourcePeer string, height uint64, exp
 		}
 		return
 	}
+	// `enforce` and `reason` store the value produced by this operation.
 	if enforce, reason := n.canEnforceConsensusPenalty(height); !enforce {
 		if DebugConsensus {
 			fmt.Printf("[PENALTY-GATE] height=%d enforce=false reason=%s policy=invalid_proposer expected=%s got=%s\n",
@@ -3762,27 +4765,32 @@ func (n *Node) handleInvalidProposerPolicy(sourcePeer string, height uint64, exp
 	if DebugConsensus {
 		fmt.Printf("[PENALTY-GATE] height=%d enforce=true reason=converged policy=invalid_proposer\n", height)
 	}
+	// `strikes` stores the value produced by this operation.
 	strikes := n.recordInvalidProposerStrike(got, height, expected, got)
 	if DebugConsensus {
 		fmt.Printf("Invalid proposer strike from %s @ height %d | strike=%d expected=%s got=%s\n",
 			ShortID(got), height, strikes, ShortID(expected), ShortID(got))
 	}
+	// `quarantineAt` stores the value produced by this operation.
 	quarantineAt := ConsensusInvalidProposerQuarantineAfter
 	if quarantineAt <= 0 {
 		quarantineAt = invalidProposerQuarantineAt
 	}
 	if strikes == quarantineAt {
+		// `quarantined` stores the value produced by this operation.
 		quarantined := n.disconnectValidatorPeers(got, "invalid_proposer_repeat")
 		if DebugConsensus && quarantined > 0 {
 			fmt.Printf("Invalid proposer quarantine applied to %s | peers=%d\n", ShortID(got), quarantined)
 		}
 	}
 	if sourcePeer != "" && n.peerClaimsValidator(sourcePeer, got) {
+		// `peerStrikes` stores the value produced by this operation.
 		peerStrikes := n.recordInvalidProposerPeerStrike(sourcePeer, height, expected, got)
 		if DebugConsensus {
 			fmt.Printf("Invalid proposer peer strike %s | strike=%d validator=%s height=%d\n",
 				sourcePeer, peerStrikes, ShortID(got), height)
 		}
+		// `peerQuarantineAt` stores the value produced by this operation.
 		peerQuarantineAt := invalidProposerPeerQuarantineAt
 		if quarantineAt > 0 {
 			peerQuarantineAt = quarantineAt
@@ -3796,6 +4804,7 @@ func (n *Node) handleInvalidProposerPolicy(sourcePeer string, height uint64, exp
 	}
 }
 
+// handleExecutionMismatchPolicy handles execution mismatch policy.
 func (n *Node) handleExecutionMismatchPolicy(signer string, epoch uint64, expected string, got string) {
 	if n.isCorePendingAtHeight(signer, epoch) {
 		if DebugConsensus {
@@ -3804,6 +4813,7 @@ func (n *Node) handleExecutionMismatchPolicy(signer string, epoch uint64, expect
 		}
 		return
 	}
+	// `enforce` and `reason` store the value produced by this operation.
 	if enforce, reason := n.canEnforceConsensusPenalty(epoch); !enforce {
 		if DebugConsensus {
 			fmt.Printf("[PENALTY-GATE] height=%d enforce=false reason=%s policy=exec_mismatch signer=%s\n",
@@ -3815,6 +4825,7 @@ func (n *Node) handleExecutionMismatchPolicy(signer string, epoch uint64, expect
 	if DebugConsensus {
 		fmt.Printf("[PENALTY-GATE] height=%d enforce=true reason=converged policy=exec_mismatch\n", epoch)
 	}
+	// `strikes` stores the value produced by this operation.
 	strikes := n.recordExecutionMismatchStrike(signer, epoch)
 	if strikes <= 0 {
 		return
@@ -3823,17 +4834,20 @@ func (n *Node) handleExecutionMismatchPolicy(signer string, epoch uint64, expect
 		fmt.Printf("Execution mismatch strike from %s @ epoch %d | strike=%d expected=%s got=%s\n",
 			ShortID(signer), epoch, strikes, ShortHash(expected), ShortHash(got))
 	}
+	// `uniqueSigners` stores the value produced by this operation.
 	uniqueSigners := n.executionMismatchUniqueSignersAtEpoch(epoch)
 	if uniqueSigners >= 2 {
 		log.Printf("[EXEC-MISMATCH] severity=high epoch=%d unique_signers=%d last_signer=%s expected=%s got=%s",
 			epoch, uniqueSigners, ShortID(signer), ShortHash(expected), ShortHash(got))
 		n.maybeSyncToBestObservedHeight("exec_mismatch_multi_signer")
 	}
+	// `quarantineAt` stores the value produced by this operation.
 	quarantineAt := ConsensusExecMismatchQuarantineAfter
 	if quarantineAt <= 0 {
 		quarantineAt = execMismatchQuarantineAt
 	}
 	if strikes == quarantineAt {
+		// `quarantined` stores the value produced by this operation.
 		quarantined := n.disconnectValidatorPeers(signer, "exec_mismatch_repeat")
 		if DebugConsensus && quarantined > 0 {
 			fmt.Printf("Execution mismatch quarantine applied to %s | peers=%d\n", ShortID(signer), quarantined)
@@ -3841,6 +4855,7 @@ func (n *Node) handleExecutionMismatchPolicy(signer string, epoch uint64, expect
 		n.maybeSyncToBestObservedHeight("exec_mismatch_repeat")
 		go n.forceSnapshotResyncNow(epoch, "exec_mismatch_repeat")
 	}
+	// `slashAt` stores the value produced by this operation.
 	slashAt := ConsensusExecMismatchSlashAfter
 	if slashAt <= 0 {
 		slashAt = execMismatchSlashAt
@@ -3851,6 +4866,7 @@ func (n *Node) handleExecutionMismatchPolicy(signer string, epoch uint64, expect
 	}
 }
 
+// handleExecutionEquivocationPolicy handles execution equivocation policy.
 func (n *Node) handleExecutionEquivocationPolicy(signer string, epoch uint64, execHash string) {
 	n.resetExecutionMismatchStrike(signer)
 	if n.isCorePendingAtHeight(signer, epoch) {
@@ -3860,6 +4876,7 @@ func (n *Node) handleExecutionEquivocationPolicy(signer string, epoch uint64, ex
 		}
 		return
 	}
+	// `enforce` and `reason` store the value produced by this operation.
 	if enforce, reason := n.canEnforceConsensusPenalty(epoch); !enforce {
 		if DebugConsensus {
 			fmt.Printf("[PENALTY-GATE] height=%d enforce=false reason=%s policy=exec_equivocation signer=%s\n",
@@ -3878,6 +4895,7 @@ func (n *Node) handleExecutionEquivocationPolicy(signer string, epoch uint64, ex
 	go n.forceSnapshotResyncNow(epoch, "exec_equivocation")
 }
 
+// executionVoteSignerLikelyStale implements the execution vote signer likely stale helper.
 func (n *Node) executionVoteSignerLikelyStale(signer string, epoch uint64) bool {
 	if n == nil || epoch == 0 {
 		return false
@@ -3886,10 +4904,12 @@ func (n *Node) executionVoteSignerLikelyStale(signer string, epoch uint64) bool 
 	if signer == "" {
 		return false
 	}
+	// `st` and `ok` store whether the related condition is satisfied.
 	st, ok := n.validatorStatusSnapshot(signer)
 	if !ok {
 		return false
 	}
+	// `observed` stores the value produced by this operation.
 	observed := st.FinalizedHeight
 	if st.ReportedHeight > observed {
 		observed = st.ReportedHeight
@@ -3906,14 +4926,17 @@ func (n *Node) executionVoteSignerLikelyStale(signer string, epoch uint64) bool 
 	return false
 }
 
+// validatorStatusSnapshot implements the validator status snapshot helper.
 func (n *Node) validatorStatusSnapshot(id string) (ValidatorStatus, bool) {
 	id = normalizeValidatorID(id)
 	if n == nil || id == "" {
 		return ValidatorStatus{}, false
 	}
 	n.validatorMu.RLock()
+	// `st` stores the value produced by this operation.
 	st := n.validatorStatus[id]
 	if st == nil {
+		// `key` and `candidate` track the key used to access the related value.
 		for key, candidate := range n.validatorStatus {
 			if normalizeValidatorID(key) == id {
 				st = candidate
@@ -3925,27 +4948,34 @@ func (n *Node) validatorStatusSnapshot(id string) (ValidatorStatus, bool) {
 		n.validatorMu.RUnlock()
 		return ValidatorStatus{}, false
 	}
+	// `snapshot` stores the value produced by this operation.
 	snapshot := *st
 	n.validatorMu.RUnlock()
 	return snapshot, true
 }
 
+// appendExecResultPubKeyCandidate implements the append exec result pub key candidate helper.
 func appendExecResultPubKeyCandidate(candidates []ed25519.PublicKey, pk ed25519.PublicKey) []ed25519.PublicKey {
 	if len(pk) != ed25519.PublicKeySize {
 		return candidates
 	}
+	// `existing` tracks the current values while iterating.
 	for _, existing := range candidates {
 		if bytes.Equal(existing, pk) {
 			return candidates
 		}
 	}
+	// `copied` stores the value produced by this operation.
 	copied := make([]byte, len(pk))
 	copy(copied, pk)
 	return append(candidates, ed25519.PublicKey(copied))
 }
 
+// execResultPubKeyCandidates implements the exec result pub key candidates helper.
 func execResultPubKeyCandidates(signer string) []ed25519.PublicKey {
+	// `normalized` stores the value produced by this operation.
 	normalized := normalizeValidatorID(signer)
+	// `candidates` stores the value produced by this operation.
 	candidates := make([]ed25519.PublicKey, 0, 4)
 	validatorPubKeysMu.RLock()
 	candidates = appendExecResultPubKeyCandidate(candidates, ValidatorPubKeys[normalized])
@@ -3956,6 +4986,21 @@ func execResultPubKeyCandidates(signer string) []ed25519.PublicKey {
 	return candidates
 }
 
+// execResultPubKeyCandidatesFromRegistry returns the consensus key committed
+// for signer in the supplied validator-registry snapshot.
+func execResultPubKeyCandidatesFromRegistry(snapshot map[string]ValidatorRecord, signer string) []ed25519.PublicKey {
+	rec, ok := validatorRecordFromStakeSnapshot(snapshot, signer)
+	if !ok {
+		return nil
+	}
+	pubBytes, err := decodeConsensusPubKeyHex(rec.ConsensusPubKey)
+	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
+		return nil
+	}
+	return appendExecResultPubKeyCandidate(nil, ed25519.PublicKey(pubBytes))
+}
+
+// appendCoreRegistryExecResultPubKeyCandidate implements the append core registry exec result pub key candidate helper.
 func (n *Node) appendCoreRegistryExecResultPubKeyCandidate(candidates []ed25519.PublicKey, signer string) []ed25519.PublicKey {
 	if n == nil {
 		return candidates
@@ -3965,11 +5010,13 @@ func (n *Node) appendCoreRegistryExecResultPubKeyCandidate(candidates []ed25519.
 		return candidates
 	}
 	n.coreRegistryMu.RLock()
+	// `entry` and `ok` store whether the related condition is satisfied.
 	entry, ok := n.coreRegistryEntries[signer]
 	n.coreRegistryMu.RUnlock()
 	if !ok {
 		return candidates
 	}
+	// `pubBytes` and `err` store the error produced by this operation.
 	pubBytes, err := decodeConsensusPubKeyHex(entry.ConsensusPubKey)
 	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
 		return candidates
@@ -3977,27 +5024,30 @@ func (n *Node) appendCoreRegistryExecResultPubKeyCandidate(candidates []ed25519.
 	return appendExecResultPubKeyCandidate(candidates, ed25519.PublicKey(pubBytes))
 }
 
+// execResultPubKeyCandidatesForHeight implements the exec result pub key candidates for height helper.
 func (n *Node) execResultPubKeyCandidatesForHeight(signer string, height uint64) []ed25519.PublicKey {
-	candidates := execResultPubKeyCandidates(signer)
 	if n == nil || height == 0 {
-		return candidates
+		return execResultPubKeyCandidates(signer)
 	}
-	candidates = n.appendCoreRegistryExecResultPubKeyCandidate(candidates, signer)
-	rec, ok := validatorRecordFromStakeSnapshot(n.validatorRegistrySnapshotForHeight(height), signer)
-	if !ok {
-		return candidates
+	// Once a committed parent/current registry exists, it is the exclusive
+	// signature authority. Local runtime/core keys must never broaden it.
+	if snapshot := n.committedProposerRegistrySnapshot(Block{ID: height}); len(snapshot) > 0 {
+		return execResultPubKeyCandidatesFromRegistry(snapshot, signer)
 	}
-	pubBytes, err := decodeConsensusPubKeyHex(rec.ConsensusPubKey)
-	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
-		return candidates
+	if n.validatorRegistryCommitmentRequiredAt(height) {
+		return nil
 	}
-	return appendExecResultPubKeyCandidate(candidates, ed25519.PublicKey(pubBytes))
+	// Pre-commitment/bootstrap compatibility only.
+	candidates := execResultPubKeyCandidates(signer)
+	return n.appendCoreRegistryExecResultPubKeyCandidate(candidates, signer)
 }
 
+// recordExecResultGlobal implements the record exec result global helper.
 func recordExecResultGlobal(epoch uint64, proposalKey string, execHash string, txMerkle string, res ExecutionResult) (int, bool, bool) {
 	return recordExecResultGlobalWithRequired(epoch, proposalKey, execHash, txMerkle, res, 0)
 }
 
+// recordExecResultGlobalWithRequired implements the record exec result global with required helper.
 func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHash string, txMerkle string, res ExecutionResult, requiredQuorum int) (int, bool, bool) {
 	proposalKey = strings.TrimSpace(proposalKey)
 	execHash = strings.TrimSpace(execHash)
@@ -4005,8 +5055,11 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 	if epoch == 0 || execHash == "" || res.Signer == "" {
 		return 0, false, false
 	}
+	// `poolScopeKey` stores the key used to access the related value.
 	poolScopeKey := execPoolScopeKey(epoch, proposalKey)
+	// `scopedExecKey` stores the key used to access the related value.
 	scopedExecKey := execPoolResultKey(epoch, proposalKey, execHash)
+	// `signer` stores the value produced by this operation.
 	signer := normalizeValidatorID(res.Signer)
 	if signer == "" {
 		return 0, false, false
@@ -4018,6 +5071,7 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 	if strings.TrimSpace(res.TxMerkle) == "" {
 		res.TxMerkle = txMerkle
 	}
+	// `expectedResultHash` stores the digest used to identify or verify the related data.
 	expectedResultHash := executionResultHashFromProposal(epoch, proposalKey, res.BlockHash, execHash, txMerkle)
 	if !executionResultHashMatches(res.ExecutionResultHash, expectedResultHash) {
 		return 0, false, false
@@ -4028,7 +5082,9 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 	defer ExecPool.mu.Unlock()
 	ensureExecPoolTopMapsLocked()
 
+	// `frozenHash` and `ok` store whether the related condition is satisfied.
 	if frozenHash, ok := ExecPool.frozen[epoch][poolScopeKey]; ok && frozenHash != "" && frozenHash != execHash {
+		// `byHash` and `ok` store whether the related condition is satisfied.
 		if byHash, ok := ExecPool.pool[epoch][scopedExecKey]; ok {
 			return len(byHash), false, false
 		}
@@ -4036,31 +5092,39 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 	}
 
 	if execVoteCreditedGlobalLocked(epoch, poolScopeKey, signer, execHash, txMerkle) {
+		// `byHash` and `ok` store whether the related condition is satisfied.
 		if byHash, ok := ExecPool.pool[epoch][scopedExecKey]; ok {
 			return len(byHash), false, false
 		}
 		return 0, false, false
 	}
 
+	// `existing` and `ok` store whether the related condition is satisfied.
 	if existing, ok := execPoolTxMerkleLocked(epoch, scopedExecKey); ok && existing != "" && existing != txMerkle {
 		return execPoolResultCountLocked(epoch, scopedExecKey), false, false
 	}
 
+	// `choice` stores the value produced by this operation.
 	choice := execBroadcastKey(execHash, txMerkle)
+	// `epochChoice` stores the value produced by this operation.
 	epochChoice := poolScopeKey + "|" + choice
+	// `epochChoiceKey` stores the key used to access the related value.
 	epochChoiceKey := execEpochChoiceSignerKey(res.Signer, proposalKey)
 	if epochChoiceKey != "" {
+		// `prev` and `exists` store whether the related condition is satisfied.
 		if prev, exists := ExecPool.epochChoice[epoch][epochChoiceKey]; exists && prev != epochChoice {
 			if !releaseStaleExecPoolSignerChoiceLocked(epoch, signer, proposalKey, poolScopeKey, choice, res.Round, requiredQuorum) {
 				return 0, false, true
 			}
 		}
 	}
+	// `prev` and `exists` store whether the related condition is satisfied.
 	if prev, exists := execPoolChoiceLocked(epoch, poolScopeKey, res.Signer); exists {
 		if prev != choice {
 			// Signed equivocation proof: same signer, same epoch+proposal, different exec vote.
 			return 0, false, true
 		}
+		// `byHash` and `ok` store whether the related condition is satisfied.
 		if byHash, ok := ExecPool.pool[epoch][scopedExecKey]; ok {
 			return len(byHash), false, false
 		}
@@ -4068,6 +5132,7 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 	}
 
 	if execPoolSignerKnownLocked(epoch, poolScopeKey, res.Signer) {
+		// `byHash` and `ok` store whether the related condition is satisfied.
 		if byHash, ok := ExecPool.pool[epoch][scopedExecKey]; ok {
 			return len(byHash), false, false
 		}
@@ -4081,6 +5146,7 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 		}
 	}
 	ensureExecPoolScopeMapsLocked(epoch, poolScopeKey)
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := ExecPool.txMerkle[epoch][scopedExecKey]; !ok {
 		ExecPool.txMerkle[epoch][scopedExecKey] = txMerkle
 	}
@@ -4090,9 +5156,11 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 	ExecPool.choice[epoch][poolScopeKey][res.Signer] = choice
 	ExecPool.signers[epoch][poolScopeKey][res.Signer] = true
 
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := ExecPool.pool[epoch][scopedExecKey]; !ok {
 		ExecPool.pool[epoch][scopedExecKey] = make(map[string]ExecutionResult)
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := ExecPool.pool[epoch][scopedExecKey][res.Signer]; !ok {
 		ExecPool.pool[epoch][scopedExecKey][res.Signer] = res
 	}
@@ -4100,6 +5168,7 @@ func recordExecResultGlobalWithRequired(epoch uint64, proposalKey string, execHa
 	return len(ExecPool.pool[epoch][scopedExecKey]), true, false
 }
 
+// releaseStaleExecPoolSignerChoiceLocked implements the release stale exec pool signer choice locked helper.
 func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomingProposalKey string, incomingScope string, incomingChoice string, incomingRound uint32, requiredQuorum int) bool {
 	if epoch == 0 || signer == "" || incomingScope == "" || incomingChoice == "" {
 		return false
@@ -4107,28 +5176,42 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 	if requiredQuorum <= 0 {
 		return false
 	}
+	// `round` and `ok` store whether the related condition is satisfied.
 	if _, round, _, _, _, ok := proposalVoteKeyParts(incomingProposalKey); ok {
 		incomingRound = round
 	}
+	// `previousScope` stores the value used by this operation.
 	var previousScope string
+	// `previousChoice` stores the value used by this operation.
 	var previousChoice string
+	// `previousRound` stores the value used by this operation.
 	var previousRound uint32
+	// `previousBestCount` stores the measured quantity used by this operation.
+	previousBestCount := 0
+	// `scope` and `bySigner` track the current values while iterating.
 	for scope, bySigner := range ExecPool.choice[epoch] {
+		// `choice` stores the value produced by this operation.
 		choice := strings.TrimSpace(bySigner[signer])
 		if choice == "" {
 			continue
 		}
 		previousScope = scope
 		previousChoice = choice
+		// `byHash` and `ok` store whether the related condition is satisfied.
 		if byHash, ok := ExecPool.pool[epoch]; ok {
+			// `prefix` stores the value produced by this operation.
 			prefix := scope + "|"
+			// `key` and `results` track the key used to access the related value.
 			for key, results := range byHash {
 				if !strings.HasPrefix(key, prefix) {
 					continue
 				}
+				if len(results) > previousBestCount {
+					previousBestCount = len(results)
+				}
+				// `existing` and `ok` store whether the related condition is satisfied.
 				if existing, ok := results[signer]; ok {
 					previousRound = existing.Round
-					break
 				}
 			}
 		}
@@ -4140,14 +5223,20 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 	if incomingRound <= previousRound {
 		return false
 	}
+	// `frozen` stores the value produced by this operation.
 	if frozen := strings.TrimSpace(ExecPool.frozen[epoch][previousScope]); frozen != "" {
+		return false
+	}
+	if previousBestCount >= requiredQuorum {
 		return false
 	}
 	// Keep one authoritative signer choice per height by atomically moving the
 	// vote forward. Waiting for the incoming proposal to already have quorum
 	// creates a circular wait when every validator previously voted elsewhere.
 	if byHash, ok := ExecPool.pool[epoch]; ok {
+		// `prefix` stores the value produced by this operation.
 		prefix := previousScope + "|"
+		// `key` and `results` track the key used to access the related value.
 		for key, results := range byHash {
 			if !strings.HasPrefix(key, prefix) {
 				continue
@@ -4161,7 +5250,9 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 			delete(ExecPool.pool, epoch)
 		}
 	}
+	// `byScope` and `ok` store whether the related condition is satisfied.
 	if byScope, ok := ExecPool.signers[epoch]; ok {
+		// `signers` stores the value produced by this operation.
 		if signers := byScope[previousScope]; signers != nil {
 			delete(signers, signer)
 			if len(signers) == 0 {
@@ -4172,7 +5263,9 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 			delete(ExecPool.signers, epoch)
 		}
 	}
+	// `byScope` and `ok` store whether the related condition is satisfied.
 	if byScope, ok := ExecPool.choice[epoch]; ok {
+		// `choices` stores the value produced by this operation.
 		if choices := byScope[previousScope]; choices != nil {
 			delete(choices, signer)
 			if len(choices) == 0 {
@@ -4183,6 +5276,7 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 			delete(ExecPool.choice, epoch)
 		}
 	}
+	// `bySigner` and `ok` store whether the related condition is satisfied.
 	if bySigner, ok := ExecPool.epochChoice[epoch]; ok {
 		delete(bySigner, signer)
 		if len(bySigner) == 0 {
@@ -4192,49 +5286,61 @@ func releaseStaleExecPoolSignerChoiceLocked(epoch uint64, signer string, incomin
 	return true
 }
 
+// freezeExecPool implements the freeze exec pool helper.
 func freezeExecPool(epoch uint64, proposalKey string, execHash string) {
 	if epoch == 0 || execHash == "" {
 		return
 	}
+	// `poolScopeKey` stores the key used to access the related value.
 	poolScopeKey := execPoolScopeKey(epoch, proposalKey)
 	ExecPool.mu.Lock()
 	defer ExecPool.mu.Unlock()
 	if ExecPool.frozen == nil {
 		ExecPool.frozen = make(map[uint64]map[string]string)
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := ExecPool.frozen[epoch]; !ok {
 		ExecPool.frozen[epoch] = make(map[string]string)
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := ExecPool.frozen[epoch][poolScopeKey]; !ok {
 		ExecPool.frozen[epoch][poolScopeKey] = execHash
 	}
 }
 
+// getExecResultsGlobal implements the get exec results global helper.
 func getExecResultsGlobal(epoch uint64, proposalKey string, execHash string, txMerkle string) ([]ExecutionResult, []string, int, bool) {
 	if epoch == 0 || execHash == "" {
 		return nil, nil, 0, false
 	}
+	// `scopedExecKey` stores the key used to access the related value.
 	scopedExecKey := execPoolResultKey(epoch, proposalKey, execHash)
 
 	ExecPool.mu.Lock()
 	defer ExecPool.mu.Unlock()
 
+	// `byHash` and `ok` store whether the related condition is satisfied.
 	byHash, ok := ExecPool.pool[epoch]
 	if !ok {
 		return nil, nil, 0, false
 	}
+	// `resultsMap` and `ok` store whether the related condition is satisfied.
 	resultsMap, ok := byHash[scopedExecKey]
 	if !ok {
 		return nil, nil, 0, false
 	}
 	if txMerkle != "" {
+		// `expected` and `ok` store whether the related condition is satisfied.
 		if expected, ok := ExecPool.txMerkle[epoch][scopedExecKey]; ok && expected != "" && expected != txMerkle {
 			return nil, nil, 0, false
 		}
 	}
 
+	// `results` stores the result produced by this operation.
 	results := make([]ExecutionResult, 0, len(resultsMap))
+	// `signers` stores the value produced by this operation.
 	signers := make([]string, 0, len(resultsMap))
+	// `r` tracks the current values while iterating.
 	for _, r := range resultsMap {
 		results = append(results, r)
 		if r.Signer != "" {
@@ -4311,6 +5417,116 @@ func getExecResultsForBlockHashGlobal(epoch uint64, blockHash string, execHash s
 	return results, signers, len(results), true
 }
 
+func (n *Node) consensusExecutionResultsForBlock(block Block, execHash string, txMerkle string) ([]ExecutionResult, []string, int, bool) {
+	if n == nil || n.Consensus == nil || block.ID == 0 {
+		return nil, nil, 0, false
+	}
+	blockHash := strings.TrimSpace(block.BlockHash)
+	execHash = strings.TrimSpace(execHash)
+	txMerkle = strings.TrimSpace(txMerkle)
+	if txMerkle == "" {
+		txMerkle = strings.TrimSpace(block.MempoolRoot)
+	}
+	if blockHash == "" || execHash == "" {
+		return nil, nil, 0, false
+	}
+	validators := n.freezeValidatorSetForHeight(block.ID, n.GetConsensusValidators(int(block.ID)))
+	required := n.executionQuorumRequiredForEpoch(block.ID)
+	if required == 0 {
+		required = execQuorumRequired(len(validators))
+	}
+	if len(validators) == 0 || required == 0 {
+		return nil, nil, 0, false
+	}
+	allowed := make(map[string]struct{}, len(validators))
+	for _, id := range validators {
+		if id = normalizeValidatorID(id); id != "" {
+			allowed[id] = struct{}{}
+		}
+	}
+	proposalKey := proposalVoteKey(block.ID, block.Round, blockHash, block.MempoolRoot, execHash)
+	expectedResultHash := executionResultHashFromProposal(block.ID, proposalKey, blockHash, execHash, txMerkle)
+
+	n.Consensus.mu.Lock()
+	rawVotes := make([]ExecutionResult, 0, len(n.Consensus.ExecVotes[blockHash]))
+	for signer, vote := range n.Consensus.ExecVotes[blockHash] {
+		mapSigner := normalizeValidatorID(signer)
+		voteSigner := normalizeValidatorID(vote.Signer)
+		if mapSigner != "" {
+			vote.Signer = mapSigner
+		} else {
+			vote.Signer = voteSigner
+		}
+		rawVotes = append(rawVotes, vote)
+	}
+	n.Consensus.mu.Unlock()
+
+	bySigner := make(map[string]ExecutionResult, len(rawVotes))
+	for _, vote := range rawVotes {
+		signer := normalizeValidatorID(vote.Signer)
+		if signer == "" {
+			continue
+		}
+		if _, ok := allowed[signer]; !ok {
+			continue
+		}
+		if vote.Height == 0 {
+			vote.Height = block.ID
+		}
+		if vote.Height != block.ID {
+			continue
+		}
+		if strings.TrimSpace(vote.BlockHash) == "" {
+			vote.BlockHash = blockHash
+		}
+		if !strings.EqualFold(strings.TrimSpace(vote.BlockHash), blockHash) {
+			continue
+		}
+		if strings.TrimSpace(vote.ResultHash) == "" {
+			vote.ResultHash = execHash
+		}
+		if !strings.EqualFold(strings.TrimSpace(vote.ResultHash), execHash) {
+			continue
+		}
+		if strings.TrimSpace(vote.TxMerkle) == "" {
+			vote.TxMerkle = txMerkle
+		}
+		if strings.TrimSpace(vote.TxMerkle) != txMerkle {
+			continue
+		}
+		if !executionResultHashMatches(vote.ExecutionResultHash, expectedResultHash) {
+			continue
+		}
+		vote.ExecutionResultHash = expectedResultHash
+		if strings.TrimSpace(vote.Signature) != "" {
+			if !n.verifyBlockExecutionResultSignatureForHint(vote, block, blockHash) {
+				if err := n.verifyBlockExecutionResultSignature(vote, block); err != nil {
+					continue
+				}
+			}
+		} else if !IsTestnet {
+			continue
+		}
+		vote.Signer = signer
+		if existing, ok := bySigner[signer]; !ok || executionResultSortLess(vote, existing) {
+			bySigner[signer] = vote
+		}
+	}
+	if len(bySigner) < required {
+		return nil, nil, len(bySigner), false
+	}
+	results := make([]ExecutionResult, 0, len(bySigner))
+	signers := make([]string, 0, len(bySigner))
+	for signer, vote := range bySigner {
+		results = append(results, vote)
+		signers = append(signers, signer)
+	}
+	results = canonicalExecutionResults(results)
+	signers = canonicalValidatorIDs(signers)
+	return results, signers, len(results), true
+}
+
+// getExecCountGlobal implements the get exec count global helper.
 func getExecCountGlobal(epoch uint64, proposalKey string, execHash string, txMerkle string) int {
 	ExecPool.mu.Lock()
 	defer ExecPool.mu.Unlock()
@@ -4318,17 +5534,21 @@ func getExecCountGlobal(epoch uint64, proposalKey string, execHash string, txMer
 	if epoch == 0 || execHash == "" {
 		return 0
 	}
+	// `scopedExecKey` stores the key used to access the related value.
 	scopedExecKey := execPoolResultKey(epoch, proposalKey, execHash)
 
+	// `byHash` and `ok` store whether the related condition is satisfied.
 	byHash, ok := ExecPool.pool[epoch]
 	if !ok {
 		return 0
 	}
+	// `resultsMap` and `ok` store whether the related condition is satisfied.
 	resultsMap, ok := byHash[scopedExecKey]
 	if !ok {
 		return 0
 	}
 	if txMerkle != "" {
+		// `expected` and `ok` store whether the related condition is satisfied.
 		if expected, ok := ExecPool.txMerkle[epoch][scopedExecKey]; ok && expected != "" && expected != txMerkle {
 			return 0
 		}
@@ -4336,6 +5556,7 @@ func getExecCountGlobal(epoch uint64, proposalKey string, execHash string, txMer
 	return len(resultsMap)
 }
 
+// getExecCountForProposalScopeGlobal implements the get exec count for proposal scope global helper.
 func getExecCountForProposalScopeGlobal(epoch uint64, proposalKey string, txMerkle string) int {
 	ExecPool.mu.Lock()
 	defer ExecPool.mu.Unlock()
@@ -4343,21 +5564,27 @@ func getExecCountForProposalScopeGlobal(epoch uint64, proposalKey string, txMerk
 	if epoch == 0 || strings.TrimSpace(proposalKey) == "" {
 		return 0
 	}
+	// `scope` stores the value produced by this operation.
 	scope := execPoolScopeKey(epoch, proposalKey)
 	if scope == "" {
 		return 0
 	}
+	// `byHash` and `ok` store whether the related condition is satisfied.
 	byHash, ok := ExecPool.pool[epoch]
 	if !ok {
 		return 0
 	}
+	// `prefix` stores the value produced by this operation.
 	prefix := scope + "|"
+	// `best` stores the value produced by this operation.
 	best := 0
+	// `scopedExecKey` and `resultsMap` track the key used to access the related value.
 	for scopedExecKey, resultsMap := range byHash {
 		if !strings.HasPrefix(scopedExecKey, prefix) {
 			continue
 		}
 		if txMerkle != "" {
+			// `expected` and `ok` store whether the related condition is satisfied.
 			if expected, ok := ExecPool.txMerkle[epoch][scopedExecKey]; ok && expected != "" && expected != txMerkle {
 				continue
 			}
@@ -4369,16 +5596,21 @@ func getExecCountForProposalScopeGlobal(epoch uint64, proposalKey string, txMerk
 	return best
 }
 
+// clearExecPoolProposal implements the clear exec pool proposal helper.
 func clearExecPoolProposal(epoch uint64, proposalKey string) {
 	if epoch == 0 || proposalKey == "" {
 		return
 	}
+	// `poolScopeKey` stores the key used to access the related value.
 	poolScopeKey := execPoolScopeKey(epoch, proposalKey)
 	ExecPool.mu.Lock()
 	defer ExecPool.mu.Unlock()
 
+	// `byHash` and `ok` store whether the related condition is satisfied.
 	if byHash, ok := ExecPool.pool[epoch]; ok {
+		// `prefix` stores the value produced by this operation.
 		prefix := poolScopeKey + "|"
+		// `key` tracks the key used to access the related value.
 		for key := range byHash {
 			if strings.HasPrefix(key, prefix) {
 				delete(byHash, key)
@@ -4388,8 +5620,11 @@ func clearExecPoolProposal(epoch uint64, proposalKey string) {
 			delete(ExecPool.pool, epoch)
 		}
 	}
+	// `byMerkle` and `ok` store whether the related condition is satisfied.
 	if byMerkle, ok := ExecPool.txMerkle[epoch]; ok {
+		// `prefix` stores the value produced by this operation.
 		prefix := poolScopeKey + "|"
+		// `key` tracks the key used to access the related value.
 		for key := range byMerkle {
 			if strings.HasPrefix(key, prefix) {
 				delete(byMerkle, key)
@@ -4399,26 +5634,32 @@ func clearExecPoolProposal(epoch uint64, proposalKey string) {
 			delete(ExecPool.txMerkle, epoch)
 		}
 	}
+	// `byProposal` and `ok` store whether the related condition is satisfied.
 	if byProposal, ok := ExecPool.frozen[epoch]; ok {
 		delete(byProposal, poolScopeKey)
 		if len(byProposal) == 0 {
 			delete(ExecPool.frozen, epoch)
 		}
 	}
+	// `byProposal` and `ok` store whether the related condition is satisfied.
 	if byProposal, ok := ExecPool.signers[epoch]; ok {
 		delete(byProposal, poolScopeKey)
 		if len(byProposal) == 0 {
 			delete(ExecPool.signers, epoch)
 		}
 	}
+	// `byProposal` and `ok` store whether the related condition is satisfied.
 	if byProposal, ok := ExecPool.choice[epoch]; ok {
 		delete(byProposal, poolScopeKey)
 		if len(byProposal) == 0 {
 			delete(ExecPool.choice, epoch)
 		}
 	}
+	// `bySigner` and `ok` store whether the related condition is satisfied.
 	if bySigner, ok := ExecPool.epochChoice[epoch]; ok {
+		// `prefix` stores the value produced by this operation.
 		prefix := poolScopeKey + "|"
+		// `signer` and `choice` track the current values while iterating.
 		for signer, choice := range bySigner {
 			if strings.HasPrefix(choice, prefix) {
 				delete(bySigner, signer)
@@ -4430,40 +5671,48 @@ func clearExecPoolProposal(epoch uint64, proposalKey string) {
 	}
 }
 
+// clearExecPoolUpTo implements the clear exec pool up to helper.
 func clearExecPoolUpTo(height uint64) {
 	ExecPool.mu.Lock()
 	defer ExecPool.mu.Unlock()
 
+	// `h` tracks the current values while iterating.
 	for h := range ExecPool.pool {
 		if h <= height {
 			delete(ExecPool.pool, h)
 		}
 	}
+	// `h` tracks the current values while iterating.
 	for h := range ExecPool.txMerkle {
 		if h <= height {
 			delete(ExecPool.txMerkle, h)
 		}
 	}
+	// `h` tracks the current values while iterating.
 	for h := range ExecPool.frozen {
 		if h <= height {
 			delete(ExecPool.frozen, h)
 		}
 	}
+	// `h` tracks the current values while iterating.
 	for h := range ExecPool.signers {
 		if h <= height {
 			delete(ExecPool.signers, h)
 		}
 	}
+	// `h` tracks the current values while iterating.
 	for h := range ExecPool.choice {
 		if h <= height {
 			delete(ExecPool.choice, h)
 		}
 	}
+	// `h` tracks the current values while iterating.
 	for h := range ExecPool.epochChoice {
 		if h <= height {
 			delete(ExecPool.epochChoice, h)
 		}
 	}
+	// `h` tracks the current values while iterating.
 	for h := range ExecPool.commitChoice {
 		if h <= height {
 			delete(ExecPool.commitChoice, h)
@@ -4471,57 +5720,65 @@ func clearExecPoolUpTo(height uint64) {
 	}
 }
 
+// clearCommitVoteStateUpTo implements the clear commit vote state up to helper.
 func (n *Node) clearCommitVoteStateUpTo(height uint64) {
 	if n == nil || height == 0 {
 		return
 	}
 	n.commitMu.Lock()
+	// `h` tracks the current values while iterating.
 	for h := range n.commitVotes {
 		if h <= height {
 			delete(n.commitVotes, h)
 		}
 	}
+	// `h` tracks the current values while iterating.
 	for h := range n.commitVoted {
 		if h <= height {
 			delete(n.commitVoted, h)
 		}
 	}
+	// `h` tracks the current values while iterating.
 	for h := range n.commitVoteSignatures {
 		if h <= height {
 			delete(n.commitVoteSignatures, h)
 		}
 	}
-	for h := range n.commitVoteBroadcasted {
-		if h <= height {
-			delete(n.commitVoteBroadcasted, h)
-		}
-	}
 	n.commitMu.Unlock()
-	clearExecPoolUpTo(height)
+	n.clearUnsignedExecPoolHintsUpTo(height)
 	n.persistConsensusSafetyStateAsync("commit_vote_state_pruned")
 }
 
+// buildExecPoolSnapshot builds exec pool snapshot.
 func buildExecPoolSnapshot(epoch uint64, proposalKey string) *ExecPoolSnapshot {
 	if epoch == 0 {
 		return nil
 	}
+	// `poolScopeKey` stores the key used to access the related value.
 	poolScopeKey := execPoolScopeKey(epoch, proposalKey)
 	ExecPool.mu.Lock()
 	defer ExecPool.mu.Unlock()
 
+	// `byHash` and `ok` store whether the related condition is satisfied.
 	byHash, ok := ExecPool.pool[epoch]
 	if !ok || len(byHash) == 0 {
 		return nil
 	}
 
+	// `prefix` stores the value produced by this operation.
 	prefix := poolScopeKey + "|"
+	// `hashes` stores the digest used to identify or verify the related data.
 	hashes := make(map[string][]string)
+	// `scopedHash` and `resMap` track the digest used to identify or verify the related data.
 	for scopedHash, resMap := range byHash {
 		if !strings.HasPrefix(scopedHash, prefix) {
 			continue
 		}
+		// `hash` stores the digest used to identify or verify the related data.
 		hash := strings.TrimPrefix(scopedHash, prefix)
+		// `signers` stores the value produced by this operation.
 		signers := make([]string, 0, len(resMap))
+		// `signer` tracks the current values while iterating.
 		for signer := range resMap {
 			signers = append(signers, signer)
 		}
@@ -4531,12 +5788,16 @@ func buildExecPoolSnapshot(epoch uint64, proposalKey string) *ExecPoolSnapshot {
 		return nil
 	}
 
+	// `txMerkle` stores the transaction data handled by this operation.
 	txMerkle := make(map[string]string)
+	// `tm` and `ok` store whether the related condition is satisfied.
 	if tm, ok := ExecPool.txMerkle[epoch]; ok {
+		// `scopedHash` and `merkle` track the digest used to identify or verify the related data.
 		for scopedHash, merkle := range tm {
 			if !strings.HasPrefix(scopedHash, prefix) {
 				continue
 			}
+			// `hash` stores the digest used to identify or verify the related data.
 			hash := strings.TrimPrefix(scopedHash, prefix)
 			txMerkle[hash] = merkle
 		}
@@ -4550,26 +5811,117 @@ func buildExecPoolSnapshot(epoch uint64, proposalKey string) *ExecPoolSnapshot {
 	}
 }
 
+// markUnsignedExecPoolHint records that this node observed an unsigned
+// exec-pool hint for a proposal. The hint is intentionally not counted as vote
+// evidence; it only forces signed commit quorum before finality for that
+// proposal.
+func (n *Node) markUnsignedExecPoolHint(epoch uint64, proposalKey string) {
+	if n == nil || epoch == 0 {
+		return
+	}
+	proposalKey = strings.TrimSpace(proposalKey)
+	if proposalKey == "" {
+		return
+	}
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+	if n.unsignedExecPoolHints == nil {
+		n.unsignedExecPoolHints = make(map[uint64]map[string]bool)
+	}
+	if n.unsignedExecPoolHints[epoch] == nil {
+		n.unsignedExecPoolHints[epoch] = make(map[string]bool)
+	}
+	n.unsignedExecPoolHints[epoch][proposalKey] = true
+}
+
+// unsignedExecPoolHintSeen reports whether this proposal has seen unsigned
+// propagated exec-pool state and therefore must wait for signed commit quorum.
+func (n *Node) unsignedExecPoolHintSeen(epoch uint64, proposalKey string) bool {
+	if n == nil || epoch == 0 {
+		return false
+	}
+	proposalKey = strings.TrimSpace(proposalKey)
+	if proposalKey == "" {
+		return false
+	}
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+	if n.unsignedExecPoolHints == nil || n.unsignedExecPoolHints[epoch] == nil {
+		return false
+	}
+	return n.unsignedExecPoolHints[epoch][proposalKey]
+}
+
+// clearUnsignedExecPoolHintsUpTo prunes local unsigned-hint safety markers
+// after the related heights are finalized.
+func (n *Node) clearUnsignedExecPoolHintsUpTo(height uint64) {
+	if n == nil || height == 0 {
+		return
+	}
+	n.execResultsMu.Lock()
+	defer n.execResultsMu.Unlock()
+	for h := range n.unsignedExecPoolHints {
+		if h <= height {
+			delete(n.unsignedExecPoolHints, h)
+		}
+	}
+}
+
+// execPoolSnapshotProposalKnown reports whether an exec-pool snapshot targets a
+// currently active proposal this node already knows. Stale/future unsigned hints
+// must not influence local finality policy.
+func (n *Node) execPoolSnapshotProposalKnown(epoch uint64, proposalKey string) bool {
+	if n == nil || epoch == 0 {
+		return false
+	}
+	proposalKey = strings.TrimSpace(proposalKey)
+	if proposalKey == "" {
+		return false
+	}
+	n.commitMu.Lock()
+	committedHeight := n.committedHeight
+	n.commitMu.Unlock()
+	if epoch <= committedHeight || epoch != n.currentEpoch() {
+		return false
+	}
+	if snap, ok := n.proposalSnapshotForEpoch(epoch); ok && proposalKey == snap.ProposalKey {
+		return true
+	}
+	for _, block := range n.candidateProposalBlocksForEpoch(epoch) {
+		if proposalKey == proposalSnapshotFromBlock(block).ProposalKey {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeExecPoolSnapshot implements the merge exec pool snapshot helper.
 func (n *Node) mergeExecPoolSnapshot(snapshot ExecPoolSnapshot) {
 	if snapshot.Epoch == 0 {
 		return
+	}
+	// `proposalKey` stores the key used to access the related value.
+	proposalKey := strings.TrimSpace(snapshot.ProposalKey)
+	if proposalKey == "" {
+		proposalKey = legacyProposalVoteKey(snapshot.Epoch)
 	}
 	if len(snapshot.Hashes) > 0 {
 		// ExecPoolSnapshot is an unsigned hint from a peer. Do not let delayed
 		// proof injection manufacture live quorum; validators must replay their
 		// signed execution votes through processExecutionResultMsg.
+		if n.execPoolSnapshotProposalKnown(snapshot.Epoch, proposalKey) {
+			n.markUnsignedExecPoolHint(snapshot.Epoch, proposalKey)
+		}
 		if DebugConsensus || DebugSync {
 			fmt.Printf("[EXEC-POOL-SNAPSHOT-REJECT] epoch=%d reason=unsigned_quorum_hint hashes=%d\n",
 				snapshot.Epoch, len(snapshot.Hashes))
 		}
 		return
 	}
-	proposalKey := strings.TrimSpace(snapshot.ProposalKey)
-	if proposalKey == "" {
-		proposalKey = legacyProposalVoteKey(snapshot.Epoch)
-	}
+	// `proposalBlockHash` stores the digest used to identify or verify the related data.
 	proposalBlockHash := ""
 	n.commitMu.Lock()
+	// `committedHeight` stores the value produced by this operation.
 	committedHeight := n.committedHeight
 	n.commitMu.Unlock()
 	if snapshot.Epoch <= committedHeight {
@@ -4579,11 +5931,14 @@ func (n *Node) mergeExecPoolSnapshot(snapshot ExecPoolSnapshot) {
 	if snapshot.Epoch != n.currentEpoch() {
 		return
 	}
+	// `snap` and `ok` store whether the related condition is satisfied.
 	if snap, ok := n.proposalSnapshotForEpoch(snapshot.Epoch); ok && proposalKey == snap.ProposalKey {
 		proposalBlockHash = snap.BlockHash
 		goto merge_exec_snapshot
 	}
+	// `block` tracks the synchronization state protecting shared data.
 	for _, block := range n.candidateProposalBlocksForEpoch(snapshot.Epoch) {
+		// `snap` stores the value produced by this operation.
 		snap := proposalSnapshotFromBlock(block)
 		if proposalKey == snap.ProposalKey {
 			proposalBlockHash = snap.BlockHash
@@ -4596,13 +5951,18 @@ merge_exec_snapshot:
 	if strings.TrimSpace(proposalBlockHash) == "" {
 		return
 	}
+	// `requiredQuorum` stores the request data being processed.
 	requiredQuorum := n.executionQuorumRequiredForEpoch(snapshot.Epoch)
+	// `hash` and `signers` track the digest used to identify or verify the related data.
 	for hash, signers := range snapshot.Hashes {
+		// `txMerkle` stores the transaction data handled by this operation.
 		txMerkle := ""
 		if snapshot.TxMerkle != nil {
 			txMerkle = snapshot.TxMerkle[hash]
 		}
+		// `executionResultHash` stores the digest used to identify or verify the related data.
 		executionResultHash := executionResultHashFromProposal(snapshot.Epoch, proposalKey, proposalBlockHash, hash, txMerkle)
+		// `signer` tracks the current values while iterating.
 		for _, signer := range signers {
 			if !n.isValidatorInSetForHeight(signer, snapshot.Epoch) {
 				continue
@@ -4627,8 +5987,16 @@ merge_exec_snapshot:
 	}
 }
 
+// currentEpoch returns current epoch.
 func (n *Node) currentEpoch() uint64 {
-	h := n.Blockchain.Height()
+	if n == nil {
+		return 1
+	}
+	// `h` stores the value produced by this operation.
+	h := uint64(0)
+	if n.Blockchain != nil {
+		h = n.Blockchain.Height()
+	}
 	n.commitMu.Lock()
 	if n.committedHeight > h {
 		h = n.committedHeight
@@ -4637,10 +6005,12 @@ func (n *Node) currentEpoch() uint64 {
 	return h + 1
 }
 
+// queueFutureLeaderBlock implements the queue future leader block helper.
 func (n *Node) queueFutureLeaderBlock(block Block, sourcePeer string) bool {
 	if n == nil || block.ID == 0 || strings.TrimSpace(block.BlockHash) == "" {
 		return false
 	}
+	// `currentEpoch` stores the value produced by this operation.
 	currentEpoch := n.currentEpoch()
 	if block.ID <= currentEpoch {
 		return false
@@ -4659,6 +6029,7 @@ func (n *Node) queueFutureLeaderBlock(block Block, sourcePeer string) bool {
 	if n.queuedFutureLeaderBlocks == nil {
 		n.queuedFutureLeaderBlocks = make(map[uint64][]Block)
 	}
+	// `i` and `existing` track the current position in the related collection.
 	for i, existing := range n.queuedFutureLeaderBlocks[block.ID] {
 		if existing.BlockHash != block.BlockHash {
 			continue
@@ -4674,7 +6045,9 @@ func (n *Node) queueFutureLeaderBlock(block Block, sourcePeer string) bool {
 queued:
 	if len(n.queuedFutureLeaderBlocks[block.ID]) > maxQueuedForkBlocksPerHeight {
 		sort.SliceStable(n.queuedFutureLeaderBlocks[block.ID], func(i, j int) bool {
+			// `a` stores the value produced by this operation.
 			a := n.queuedFutureLeaderBlocks[block.ID][i]
+			// `b` stores the value produced by this operation.
 			b := n.queuedFutureLeaderBlocks[block.ID][j]
 			if a.Round != b.Round {
 				return a.Round > b.Round
@@ -4690,10 +6063,12 @@ queued:
 	return true
 }
 
+// replayQueuedLeaderBlocksForCurrentEpoch implements the replay queued leader blocks for current epoch helper.
 func (n *Node) replayQueuedLeaderBlocksForCurrentEpoch() {
 	if n == nil {
 		return
 	}
+	// `epoch` stores the value produced by this operation.
 	epoch := n.currentEpoch()
 	if epoch == 0 {
 		return
@@ -4704,8 +6079,10 @@ func (n *Node) replayQueuedLeaderBlocksForCurrentEpoch() {
 		n.leaderMu.Unlock()
 		return
 	}
+	// `blocks` stores the block data handled by this operation.
 	blocks := append([]Block(nil), n.queuedFutureLeaderBlocks[epoch]...)
 	delete(n.queuedFutureLeaderBlocks, epoch)
+	// `h` tracks the current values while iterating.
 	for h := range n.queuedFutureLeaderBlocks {
 		if h < epoch {
 			delete(n.queuedFutureLeaderBlocks, h)
@@ -4722,11 +6099,13 @@ func (n *Node) replayQueuedLeaderBlocksForCurrentEpoch() {
 		}
 		return blocks[i].BlockHash < blocks[j].BlockHash
 	})
+	// `block` tracks the synchronization state protecting shared data.
 	for _, block := range blocks {
 		n.handleLeaderBlock(block, "queued_future")
 	}
 }
 
+// recordVerifiedProposedBlock implements the record verified proposed block helper.
 func recordVerifiedProposedBlock(height uint64, round uint32, proposer string, blockHash string) (bool, bool, string) {
 	proposer = normalizeValidatorID(proposer)
 	if height == 0 || proposer == "" || blockHash == "" {
@@ -4739,13 +6118,16 @@ func recordVerifiedProposedBlock(height uint64, round uint32, proposer string, b
 	if ProposedBlocks == nil {
 		ProposedBlocks = make(map[uint64]map[uint32]map[string]string)
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := ProposedBlocks[height]; !ok {
 		ProposedBlocks[height] = make(map[uint32]map[string]string)
 	}
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := ProposedBlocks[height][round]; !ok {
 		ProposedBlocks[height][round] = make(map[string]string)
 	}
 
+	// `prev` and `ok` store whether the related condition is satisfied.
 	if prev, ok := ProposedBlocks[height][round][proposer]; ok {
 		if prev == blockHash {
 			return false, false, prev
@@ -4754,9 +6136,12 @@ func recordVerifiedProposedBlock(height uint64, round uint32, proposer string, b
 	}
 	ProposedBlocks[height][round][proposer] = blockHash
 
+	// `keepWindow` defines the constant value used by this package.
 	const keepWindow = uint64(512)
 	if height > keepWindow {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := height - keepWindow
+		// `h` tracks the current values while iterating.
 		for h := range ProposedBlocks {
 			if h < cutoff {
 				delete(ProposedBlocks, h)
@@ -4767,10 +6152,12 @@ func recordVerifiedProposedBlock(height uint64, round uint32, proposer string, b
 	return true, false, ""
 }
 
+// recordProposedBlock implements the record proposed block helper.
 func recordProposedBlock(height uint64, round uint32, proposer string, blockHash string) (bool, bool, string) {
 	return recordVerifiedProposedBlock(height, round, proposer, blockHash)
 }
 
+// penalizeSignedProposal implements the penalize signed proposal helper.
 func penalizeSignedProposal(n *Node, block Block, reason string) {
 	if n == nil || block.ID == 0 || block.Proposer == "" {
 		return
@@ -4779,32 +6166,33 @@ func penalizeSignedProposal(n *Node, block Block, reason string) {
 	n.SlashValidator(block.Proposer)
 }
 
+// verifyLeaderBlockSignatureFromCommittedRegistry verifies leader block signature from committed registry.
 func (n *Node) verifyLeaderBlockSignatureFromCommittedRegistry(block Block) (bool, bool) {
+	// `strictRegistry` stores whether mutable/runtime key fallback is forbidden.
+	strictRegistry := strings.TrimSpace(block.ValidatorRegistryHash) != "" ||
+		(n != nil && n.validatorRegistryCommitmentRequiredAt(block.ID))
 	if n == nil || block.ID == 0 || len(block.Signature) == 0 {
-		return false, false
+		return false, strictRegistry
 	}
+	// `proposerID` stores the value produced by this operation.
 	proposerID := normalizeValidatorID(block.Proposer)
 	if proposerID == "" {
-		return false, false
+		return false, strictRegistry
 	}
+	// `committee` and `ok` store whether the related condition is satisfied.
 	committee, _, ok := n.deterministicCommitteeValidatorsForHeight(block.ID)
 	if !ok {
-		return false, false
+		return false, strictRegistry
 	}
 	if !containsNormalizedValidatorID(committee, proposerID) {
 		return false, true
 	}
-	snapshot := n.validatorRegistrySnapshotForHeight(block.ID)
-	rec, ok := validatorRecordFromStakeSnapshot(snapshot, proposerID)
-	if !ok {
-		return false, block.ID > 1 && validatorSetCommitmentV2EnabledAt(block.ID-1)
+	// `candidates` stores the deterministic public keys accepted for the proposer.
+	candidates := n.blockProposerSignatureCandidates(block, committee)
+	if len(candidates) == 0 {
+		return false, strictRegistry
 	}
-	pubBytes, err := decodeConsensusPubKeyHex(rec.ConsensusPubKey)
-	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
-		return false, block.ID > 1 && validatorSetCommitmentV2EnabledAt(block.ID-1)
-	}
-	pub := ed25519.PublicKey(pubBytes)
-	if !verifyBlockSignatureWithCandidates(block, []ed25519.PublicKey{pub}) {
+	if !verifyBlockSignatureWithCandidates(block, candidates) {
 		return false, true
 	}
 	if DebugConsensus {
@@ -4814,7 +6202,9 @@ func (n *Node) verifyLeaderBlockSignatureFromCommittedRegistry(block Block) (boo
 	return true, true
 }
 
+// verifyLeaderBlockSignatureFromGenesis verifies leader block signature from genesis.
 func verifyLeaderBlockSignatureFromGenesis(block Block) bool {
+	// `pub` stores the value produced by this operation.
 	pub := onChainValidatorPubKeyForID(block.Proposer)
 	if len(pub) != ed25519.PublicKeySize {
 		return false
@@ -4822,6 +6212,7 @@ func verifyLeaderBlockSignatureFromGenesis(block Block) bool {
 	return verifyBlockSignatureWithCandidates(block, []ed25519.PublicKey{ed25519.PublicKey(pub)})
 }
 
+// verifyLeaderBlock verifies leader block.
 func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 	if block.ID == 0 {
 		if DebugConsensus {
@@ -4830,6 +6221,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		}
 		return false
 	}
+	// `epoch` stores the value produced by this operation.
 	epoch := n.currentEpoch()
 	if block.ID != epoch {
 		if DebugConsensus {
@@ -4839,6 +6231,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		return false
 	}
 
+	// `validSig` and `committedAuthority` store whether the related condition is satisfied.
 	validSig, committedAuthority := n.verifyLeaderBlockSignatureFromCommittedRegistry(block)
 	if !committedAuthority && len(block.Signature) > 0 {
 		validSig = verifyLeaderBlockSignatureFromGenesis(block)
@@ -4852,6 +6245,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		return false
 	}
 
+	// `existing` and `ok` store whether the related condition is satisfied.
 	if existing, ok := n.getLeaderBlock(block.ID); ok {
 		if block.Round == existing.Round && block.BlockHash == existing.BlockHash {
 			if DebugConsensus {
@@ -4862,6 +6256,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		}
 	}
 
+	// `requiresValidatorSetHash` stores the digest used to identify or verify the related data.
 	requiresValidatorSetHash := validatorSetCommitmentV2EnabledAt(block.ID)
 	if requiresValidatorSetHash && strings.TrimSpace(block.ValidatorSetHash) == "" {
 		if DebugConsensus {
@@ -4871,7 +6266,9 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		return false
 	}
 	if block.ValidatorSetHash != "" {
+		// `expectedHash` and `expectedSource` store the digest used to identify or verify the related data.
 		expectedHash, expectedSource := n.expectedValidatorSetHashWithSource(block.ID)
+		// `hashMode` stores the digest used to identify or verify the related data.
 		hashMode := validatorSetHashModeForHeight(block.ID)
 		if validatorSetSourceIsChainAuthoritative(expectedSource) && strings.TrimSpace(expectedHash) == "" {
 			if DebugConsensus {
@@ -4882,6 +6279,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 			return false
 		}
 		if expectedHash != "" && block.ValidatorSetHash != expectedHash {
+			// `localHeight` stores the value produced by this operation.
 			localHeight, _ := n.localHeightSnapshot()
 			if !validatorSetSourceIsChainAuthoritative(expectedSource) {
 				if DebugConsensus {
@@ -4902,7 +6300,9 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 			}
 			if n.shouldTreatValidatorSetMismatchAsPeerDrift(block.ID, expectedHash, block.ValidatorSetHash) {
 				if sourcePeer != "" {
+					// `localHeightNow` and `localFinalized` store the value produced by this operation.
 					localHeightNow, localFinalized := n.localHeightSnapshot()
+					// `state` stores the value produced by this operation.
 					state := n.recordFinalizedDrift(sourcePeer, block.ID, localFinalized, expectedHash, block.ValidatorSetHash, 1)
 					n.applyFinalizedDriftPolicy(sourcePeer, state)
 					if DebugConsensus {
@@ -4921,6 +6321,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 			}
 		}
 		if expectedHash != "" && block.ValidatorSetHash != expectedHash {
+			// `count` and `shouldLog` store the measured quantity used by this operation.
 			count, shouldLog := n.recordPeerDriftTuple(block.ID, expectedHash, block.ValidatorSetHash, peerDriftTupleLogCooldown)
 			if DebugConsensus && shouldLog {
 				fmt.Printf("[SET-COMMITMENT-REJECT] height=%d source=%s mode=%s expected=%s got=%s count=%d\n",
@@ -4930,6 +6331,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 				fmt.Printf("Validator set hash mismatch at height %d | expected=%s got=%s count=%d\n",
 					block.ID, ShortHash(expectedHash), ShortHash(block.ValidatorSetHash), count)
 			}
+			// `localHeight` stores the value produced by this operation.
 			localHeight, _ := n.localHeightSnapshot()
 			if n.recordValidatorSetMismatchWithLocal(localHeight, block.ID, expectedHash, block.ValidatorSetHash) {
 				n.requestConsensusRecomputePause(block.ID, "validator_set_hash_mismatch")
@@ -4947,6 +6349,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 				block.ID, expectedSource, hashMode, ShortHash(block.ValidatorSetHash))
 		}
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.validateBlockNextValidatorSetCommitment(block); err != nil {
 		if DebugConsensus {
 			fmt.Printf("[SET-COMMITMENT-REJECT] height=%d field=next_validator_set_hash err=%v\n", block.ID, err)
@@ -4954,6 +6357,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		n.recordPeerSecurityFault(sourcePeer, "invalid_next_validator_set_commitment")
 		return false
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.validateBlockNextValidatorSetRootCommitment(block); err != nil {
 		if DebugConsensus {
 			fmt.Printf("Validator set next-root commitment mismatch at height %d | err=%v\n", block.ID, err)
@@ -4962,7 +6366,9 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		return false
 	}
 
+	// `validators` stores whether the related condition is satisfied.
 	validators := n.freezeValidatorSetForHeight(block.ID, n.GetConsensusValidators(int(block.ID)))
+	// `err` stores the error produced by this operation.
 	if err := verifyBlockQuorumMetadata(block, len(validators)); err != nil {
 		if DebugConsensus {
 			fmt.Printf("[LEADER-BLOCK-REJECT] height=%d round=%d reason=%s peer=%s proposer=%s block=%s\n",
@@ -4971,18 +6377,26 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		n.recordPeerSecurityFault(sourcePeer, "invalid_leader_quorum_metadata")
 		return false
 	}
+	// `expectedLeader` stores the value produced by this operation.
 	expectedLeader := n.consensusLeaderForHeightRound(block.ID, block.Round, validators)
+	// `gotProposer` stores the value produced by this operation.
 	gotProposer := normalizeValidatorID(block.Proposer)
+	// `wantProposer` stores the value produced by this operation.
 	wantProposer := normalizeValidatorID(expectedLeader)
 	if wantProposer == "" || gotProposer != wantProposer {
 		if !n.shouldCountInvalidProposerEvidence(block.ID, block.Round, wantProposer, gotProposer, block.BlockHash) {
 			return false
 		}
+		// `count` and `shouldPause` store the measured quantity used by this operation.
 		count, shouldPause := n.invalidProposerEvent(block.ID, wantProposer, gotProposer)
 		if DebugConsensus && (count <= 3 || count%25 == 0) {
+			// `expectedIdx` stores the current position in the related collection.
 			expectedIdx := -1
+			// `gotIdx` stores the current position in the related collection.
 			gotIdx := -1
+			// `i` and `id` track the current position in the related collection.
 			for i, id := range validators {
+				// `norm` stores the value produced by this operation.
 				norm := normalizeValidatorID(id)
 				if expectedIdx < 0 && norm == wantProposer {
 					expectedIdx = i
@@ -5004,6 +6418,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		return false
 	}
 
+	// `last` stores the value produced by this operation.
 	last := n.Blockchain.LastBlock()
 	if block.PrevHash != last.BlockHash {
 		if DebugConsensus {
@@ -5021,6 +6436,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		n.recordPeerSecurityFault(sourcePeer, "leader_block_hash_mismatch")
 		return false
 	}
+	// `err` stores the error produced by this operation.
 	if err := VerifyMempoolRoot(block); err != nil {
 		if DebugConsensus {
 			fmt.Printf("[LEADER-BLOCK-REJECT] height=%d round=%d reason=mempool_root_mismatch peer=%s proposer=%s err=%v block=%s\n",
@@ -5029,6 +6445,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		n.recordPeerSecurityFault(sourcePeer, "leader_mempool_root_mismatch")
 		return false
 	}
+	// `maxRound` stores the value produced by this operation.
 	if maxRound := ProposerRoundMax; maxRound > 0 && block.Round > maxRound {
 		if DebugConsensus {
 			fmt.Printf("Rejecting over-cap proposal at height %d | peer=%s round=%d max_round=%d\n",
@@ -5036,13 +6453,16 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 		}
 		return false
 	}
+	// `localRound` stores the value produced by this operation.
 	localRound := n.localProposerRoundForHeight(block.ID)
+	// `maxSkew` stores the value produced by this operation.
 	maxSkew := ProposerRoundMaxSkew
 	if maxSkew == 0 {
 		maxSkew = 1
 	}
 	if block.Round > localRound+maxSkew {
 		n.setProposedRound(block.ID, block.Round)
+		// `syncedRound` stores the value produced by this operation.
 		syncedRound := n.localProposerRoundForHeight(block.ID)
 		if DebugConsensus && syncedRound > localRound {
 			fmt.Printf("[ROUND-CATCHUP] height=%d peer=%s round=%d local_round=%d synced_round=%d proposer=%s\n",
@@ -5057,6 +6477,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 			return false
 		}
 	}
+	// `equivocated` and `prevHash` store the digest used to identify or verify the related data.
 	_, equivocated, prevHash := recordVerifiedProposedBlock(block.ID, block.Round, block.Proposer, block.BlockHash)
 	if equivocated {
 		if !n.shouldCountDoubleProposalEvidence(block.ID, block.Round, block.Proposer, prevHash, block.BlockHash) {
@@ -5074,6 +6495,7 @@ func (n *Node) verifyLeaderBlock(block Block, sourcePeer string) bool {
 	return true
 }
 
+// handleLeaderBlock handles leader block.
 func (n *Node) handleLeaderBlock(block Block, sourcePeer string) {
 	if block.ID > n.currentEpoch() {
 		_ = n.queueFutureLeaderBlock(block, sourcePeer)
@@ -5101,6 +6523,7 @@ func (n *Node) handleLeaderBlock(block Block, sourcePeer string) {
 		// Validator-set recompute barrier: do not emit votes while paused.
 		return
 	}
+	// `lockedBlock` and `locked` store the synchronization state protecting shared data.
 	if lockedBlock, _, locked, _ := n.acceptedProposalVoteLockForRound(block.ID, block.Round); locked && proposalConflictsWithAcceptedLock(lockedBlock, block) {
 		n.maybeBroadcastExecutionVoteForBlock(lockedBlock, "accepted_vote_lock")
 		return
@@ -5108,19 +6531,25 @@ func (n *Node) handleLeaderBlock(block Block, sourcePeer string) {
 	n.maybeBroadcastExecutionVoteForBlock(block, "leader_block")
 }
 
+// setLogicalTick implements the set logical tick helper.
 func (n *Node) setLogicalTick(epoch uint64, tick uint64) {
 	n.logicalMu.Lock()
 	n.logicalClock = LogicalClock{Epoch: epoch, Tick: tick}
 	n.logicalMu.Unlock()
 }
 
+// executionResultSortLess implements the execution result sort less helper.
 func executionResultSortLess(a ExecutionResult, b ExecutionResult) bool {
+	// `aSigner` stores the value produced by this operation.
 	aSigner := normalizeValidatorID(a.Signer)
+	// `bSigner` stores the value produced by this operation.
 	bSigner := normalizeValidatorID(b.Signer)
 	if aSigner != bSigner {
 		return aSigner < bSigner
 	}
+	// `aSigned` stores the value produced by this operation.
 	aSigned := strings.TrimSpace(a.Signature) != ""
+	// `bSigned` stores the value produced by this operation.
 	bSigned := strings.TrimSpace(b.Signature) != ""
 	if aSigned != bSigned {
 		return aSigned
@@ -5145,13 +6574,17 @@ func canonicalExecutionResults(results []ExecutionResult) []ExecutionResult {
 	if len(results) == 0 {
 		return nil
 	}
+	// `bySigner` stores the value produced by this operation.
 	bySigner := make(map[string]ExecutionResult, len(results))
+	// `res` tracks the result produced by this operation.
 	for _, res := range results {
+		// `signer` stores the value produced by this operation.
 		signer := normalizeValidatorID(res.Signer)
 		if signer == "" {
 			continue
 		}
 		res.Signer = signer
+		// `existing` and `ok` store whether the related condition is satisfied.
 		if existing, ok := bySigner[signer]; !ok || executionResultSortLess(res, existing) {
 			bySigner[signer] = res
 		}
@@ -5159,7 +6592,9 @@ func canonicalExecutionResults(results []ExecutionResult) []ExecutionResult {
 	if len(bySigner) == 0 {
 		return nil
 	}
+	// `out` stores the result produced by this operation.
 	out := make([]ExecutionResult, 0, len(bySigner))
+	// `res` tracks the result produced by this operation.
 	for _, res := range bySigner {
 		out = append(out, res)
 	}
@@ -5169,19 +6604,209 @@ func canonicalExecutionResults(results []ExecutionResult) []ExecutionResult {
 	return out
 }
 
+// executionResultsWithCommitWitnesses implements the execution results with commit witnesses helper.
+func executionResultsWithCommitWitnesses(block Block, execHash string, txMerkle string, results []ExecutionResult, witnesses []ValidatorSignature) []ExecutionResult {
+	execHash = strings.TrimSpace(execHash)
+	txMerkle = strings.TrimSpace(txMerkle)
+	// `out` stores the result produced by this operation.
+	out := append([]ExecutionResult{}, results...)
+	// `seen` stores the value produced by this operation.
+	seen := make(map[string]struct{}, len(out)+len(witnesses))
+	// `i` tracks the current position in the related collection.
+	for i := range out {
+		// `signer` stores the value produced by this operation.
+		signer := normalizeValidatorID(out[i].Signer)
+		if signer == "" {
+			continue
+		}
+		out[i].Signer = signer
+		seen[signer] = struct{}{}
+	}
+	// `witness` tracks the current values while iterating.
+	for _, witness := range witnesses {
+		// `signer` stores the value produced by this operation.
+		signer := normalizeValidatorID(witness.Validator)
+		// `sig` stores the value produced by this operation.
+		sig := strings.TrimSpace(witness.Signature)
+		if signer == "" || sig == "" {
+			continue
+		}
+		// `ok` stores whether the related condition is satisfied.
+		if _, ok := seen[signer]; ok {
+			continue
+		}
+		seen[signer] = struct{}{}
+		out = append(out, ExecutionResult{
+			Height:              block.ID,
+			Round:               block.Round,
+			BlockHash:           strings.TrimSpace(block.BlockHash),
+			Signer:              signer,
+			ResultHash:          execHash,
+			TxMerkle:            txMerkle,
+			ExecutionResultHash: canonicalExecutionResultHash(block.ID, strings.TrimSpace(block.BlockHash), execHash, txMerkle),
+			Signature:           sig,
+		})
+	}
+	return out
+}
+
+// executionResultFinalityWitnessSigners returns the validator IDs whose
+// execution-result signatures prove this exact proposal/result. It is used only
+// as a compatibility finality witness when a node has already collected an
+// execution quorum but has not separately observed enough commit-vote messages.
+func (n *Node) executionResultFinalityWitnessSigners(block Block, execHash string, txMerkle string, results []ExecutionResult) []string {
+	if n == nil || block.ID == 0 || strings.TrimSpace(block.BlockHash) == "" || strings.TrimSpace(execHash) == "" {
+		return nil
+	}
+	execHash = strings.TrimSpace(execHash)
+	txMerkle = strings.TrimSpace(txMerkle)
+	// `validators` stores whether the related condition is satisfied.
+	validators, _, ok := n.deterministicCommitteeValidatorsForHeight(block.ID)
+	if !ok || len(validators) == 0 {
+		validators = n.freezeValidatorSetForHeight(block.ID, n.GetConsensusValidators(int(block.ID)))
+	}
+	if len(validators) == 0 {
+		return nil
+	}
+	// `validatorSet` stores whether the related condition is satisfied.
+	validatorSet := make(map[string]struct{}, len(validators))
+	// `id` tracks the current position in the related collection.
+	for _, id := range canonicalValidatorIDs(validators) {
+		validatorSet[id] = struct{}{}
+	}
+	// `seen` stores the value produced by this operation.
+	seen := make(map[string]struct{}, len(results))
+	// `result` tracks the result produced by this operation.
+	for _, result := range results {
+		// `signer` stores the value produced by this operation.
+		signer := normalizeValidatorID(result.Signer)
+		if signer == "" {
+			continue
+		}
+		if _, ok := validatorSet[signer]; !ok {
+			continue
+		}
+		if _, ok := seen[signer]; ok {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(result.ResultHash), execHash) {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(result.TxMerkle), txMerkle) {
+			continue
+		}
+		// `sigHex` stores the value produced by this operation.
+		sigHex := strings.TrimSpace(result.Signature)
+		if sigHex == "" {
+			continue
+		}
+		// `blockHashHint` stores the block data handled by this operation.
+		blockHashHint := strings.TrimSpace(result.BlockHash)
+		if blockHashHint == "" {
+			blockHashHint = strings.TrimSpace(block.BlockHash)
+		}
+		if !strings.EqualFold(blockHashHint, strings.TrimSpace(block.BlockHash)) {
+			continue
+		}
+		// `sig` and `err` store the error produced by this operation.
+		sig, err := hex.DecodeString(sigHex)
+		if err != nil || len(sig) != ed25519.SignatureSize {
+			continue
+		}
+		// `candidates` stores the value produced by this operation.
+		candidates := n.execResultPubKeyCandidatesForHeight(signer, block.ID)
+		if len(candidates) == 0 {
+			if DebugConsensus {
+				log.Printf("[EXEC-WITNESS-DROP] height=%d signer=%s reason=no_pubkey_candidate block=%s",
+					block.ID, signer, ShortHash(block.BlockHash))
+			}
+			continue
+		}
+		// `round` stores the value produced by this operation.
+		round := result.Round
+		if round == 0 {
+			round = block.Round
+		}
+		// `msg` stores the value produced by this operation.
+		msg := ExecutionResultMsg{
+			HeightHint:    block.ID,
+			RoundHint:     round,
+			BlockHashHint: blockHashHint,
+			SigVersion:    execResultSigVersionV2,
+			ExecHash:      execHash,
+			TxMerkle:      txMerkle,
+			Signer:        signer,
+			Signature:     sigHex,
+		}
+		if !verifyExecutionResultSignature(msg, candidates, sig) {
+			if DebugConsensus {
+				log.Printf("[EXEC-WITNESS-DROP] height=%d signer=%s reason=invalid_signature block=%s candidates=%d",
+					block.ID, signer, ShortHash(block.BlockHash), len(candidates))
+			}
+			continue
+		}
+		seen[signer] = struct{}{}
+	}
+	// `signers` stores the value produced by this operation.
+	signers := make([]string, 0, len(seen))
+	// `signer` tracks the current values while iterating.
+	for signer := range seen {
+		signers = append(signers, signer)
+	}
+	return canonicalValidatorIDs(signers)
+}
+
+// executionResultsFromCommitWitnesses converts signed commit quorum evidence
+// into final-block execution witnesses for recovery paths where the separate
+// execution vote cache is incomplete locally.
+func executionResultsFromCommitWitnesses(block Block, execHash string, txMerkle string, witnesses []ValidatorSignature) ([]ExecutionResult, []string, int, bool) {
+	results := canonicalExecutionResults(executionResultsWithCommitWitnesses(block, execHash, txMerkle, nil, witnesses))
+	if len(results) == 0 {
+		return nil, nil, 0, false
+	}
+	signers := make([]string, 0, len(results))
+	for _, result := range results {
+		if signer := normalizeValidatorID(result.Signer); signer != "" {
+			signers = append(signers, signer)
+		}
+	}
+	signers = canonicalValidatorIDs(signers)
+	return results, signers, len(results), len(results) > 0
+}
+
+// proposalRequiresSignedCommitQuorum returns true when execution-result witness
+// compatibility must not substitute for signed commit votes.
+func (n *Node) proposalRequiresSignedCommitQuorum(block Block, execHash string, txMerkle string) bool {
+	if n == nil || block.ID == 0 {
+		return false
+	}
+	mode := strings.ToUpper(strings.TrimSpace(block.ConsensusMode))
+	switch mode {
+	case "STRICT", "SIGNED_COMMIT", "SIGNED_COMMIT_QUORUM", "FINALITY_COMMIT":
+		return true
+	}
+	proposalKey := proposalVoteKey(block.ID, block.Round, block.BlockHash, txMerkle, execHash)
+	return n.unsignedExecPoolHintSeen(block.ID, proposalKey)
+}
+
+// executionCommitPrecondition implements the execution commit precondition helper.
 func (n *Node) executionCommitPrecondition(epoch uint64, leaderBlock Block) (int, int, bool, string) {
 	if n == nil || epoch == 0 || leaderBlock.ID != epoch {
 		return 0, 0, false, "invalid_commit_target"
 	}
+	// `validators` and `ok` store whether the related condition is satisfied.
 	validators, _, ok := n.deterministicCommitteeValidatorsForHeight(epoch)
 	if !ok {
 		return 0, 0, false, "commit_committee_unresolved"
 	}
+	// `total` stores the measured quantity used by this operation.
 	total := len(validators)
+	// `required` stores the request data being processed.
 	required := n.executionQuorumRequiredForEpoch(epoch)
 	if total == 0 || required == 0 {
 		return 0, required, false, "commit_quorum_unresolved"
 	}
+	// `lockedBlock`, `lockedVotes`, and `keepLocked` store the synchronization state protecting shared data.
 	lockedBlock, lockedVotes, keepLocked, _ := n.quorumLockedProposalLockState(epoch)
 	if !keepLocked {
 		return 0, required, false, "precommit_quorum_missing"
@@ -5195,17 +6820,22 @@ func (n *Node) executionCommitPrecondition(epoch uint64, leaderBlock Block) (int
 	return lockedVotes, required, true, "precommit_quorum"
 }
 
+// leaderFromExecHash implements the leader from exec hash helper.
 func leaderFromExecHash(execHash string, epoch uint64, validators []string) string {
+	// `ordered` stores the value produced by this operation.
 	ordered := deterministicStakeHashOrderedValidatorIDs(validators, nil)
 	if len(ordered) == 0 {
 		return ""
 	}
 
+	// `sum` stores the value produced by this operation.
 	sum := sha256.Sum256([]byte(fmt.Sprintf("%s:%d", execHash, epoch)))
+	// `idx` stores the current position in the related collection.
 	idx := binary.BigEndian.Uint64(sum[:8]) % uint64(len(ordered))
 	return ordered[idx]
 }
 
+// leaderBlockCommitmentsReadyForFinality implements the leader block commitments ready for finality helper.
 func (n *Node) leaderBlockCommitmentsReadyForFinality(block Block) bool {
 	if n == nil {
 		return false
@@ -5219,6 +6849,7 @@ func (n *Node) leaderBlockCommitmentsReadyForFinality(block Block) bool {
 		}
 		return false
 	}
+	// `expectedHash` and `expectedSource` store the digest used to identify or verify the related data.
 	expectedHash, expectedSource := n.expectedValidatorSetHashWithSource(block.ID)
 	if validatorSetSourceIsChainAuthoritative(expectedSource) && strings.TrimSpace(expectedHash) == "" {
 		if DebugConsensus {
@@ -5235,24 +6866,28 @@ func (n *Node) leaderBlockCommitmentsReadyForFinality(block Block) bool {
 		}
 		return false
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.validateBlockNextValidatorSetCommitment(block); err != nil {
 		if DebugConsensus {
 			fmt.Printf("[FINALITY-GATE] next-set commitment invalid height=%d err=%v\n", block.ID, err)
 		}
 		return false
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.validateBlockNextValidatorSetRootCommitment(block); err != nil {
 		if DebugConsensus {
 			fmt.Printf("[FINALITY-GATE] next-set-root commitment invalid height=%d err=%v\n", block.ID, err)
 		}
 		return false
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.validateBlockValidatorSetRootCommitment(block); err != nil {
 		if DebugConsensus {
 			fmt.Printf("[FINALITY-GATE] set-root commitment invalid height=%d err=%v\n", block.ID, err)
 		}
 		return false
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.validateBlockValidatorRegistryCommitment(block); err != nil {
 		if DebugConsensus {
 			fmt.Printf("[FINALITY-GATE] registry commitment invalid height=%d err=%v\n", block.ID, err)
@@ -5262,10 +6897,12 @@ func (n *Node) leaderBlockCommitmentsReadyForFinality(block Block) bool {
 	return true
 }
 
+// executionProposalBlockForResult implements the execution proposal block for result helper.
 func (n *Node) executionProposalBlockForResult(epoch uint64, execHash string, txMerkle string) (Block, bool) {
 	if n == nil || epoch == 0 || execHash == "" {
 		return Block{}, false
 	}
+	// `block` tracks the synchronization state protecting shared data.
 	for _, block := range n.candidateProposalBlocksForEpoch(epoch) {
 		if block.ID != epoch {
 			continue
@@ -5276,6 +6913,7 @@ func (n *Node) executionProposalBlockForResult(epoch uint64, execHash string, tx
 		if txMerkle == "" && block.MempoolRoot != "" {
 			continue
 		}
+		// `expected` stores the value produced by this operation.
 		expected := strings.TrimSpace(block.StateRoot)
 		if expected == "" {
 			expected = strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
@@ -5287,10 +6925,12 @@ func (n *Node) executionProposalBlockForResult(epoch uint64, execHash string, tx
 	return Block{}, false
 }
 
+// executionResultAlreadyCommitted implements the execution result already committed helper.
 func (n *Node) executionResultAlreadyCommitted(height uint64) bool {
 	if n == nil || height == 0 {
 		return false
 	}
+	// `committedHeight` stores the value produced by this operation.
 	committedHeight := uint64(0)
 	if n.Blockchain != nil {
 		committedHeight = n.Blockchain.Height()
@@ -5303,10 +6943,12 @@ func (n *Node) executionResultAlreadyCommitted(height uint64) bool {
 	return committedHeight >= height
 }
 
+// committedReplayFenceHeight implements the committed replay fence height helper.
 func (n *Node) committedReplayFenceHeight() uint64 {
 	if n == nil {
 		return 0
 	}
+	// `fence` stores the value produced by this operation.
 	fence := uint64(0)
 	if n.Blockchain != nil {
 		fence = n.Blockchain.Height()
@@ -5325,10 +6967,12 @@ func (n *Node) committedReplayFenceHeight() uint64 {
 	return fence
 }
 
+// isCommittedReplayHeight implements the is committed replay height helper.
 func (n *Node) isCommittedReplayHeight(height uint64) bool {
 	return height > 0 && height <= n.committedReplayFenceHeight()
 }
 
+// beginExecutionCommitApply implements the begin execution commit apply helper.
 func (n *Node) beginExecutionCommitApply(height uint64, hash string) bool {
 	if n == nil || height == 0 || strings.TrimSpace(hash) == "" {
 		return false
@@ -5340,6 +6984,7 @@ func (n *Node) beginExecutionCommitApply(height uint64, hash string) bool {
 		return false
 	}
 	if n.committed != nil {
+		// `existing` stores the value produced by this operation.
 		if existing := strings.TrimSpace(n.committed[height]); existing != "" {
 			return false
 		}
@@ -5347,6 +6992,7 @@ func (n *Node) beginExecutionCommitApply(height uint64, hash string) bool {
 	if n.commitInFlight == nil {
 		n.commitInFlight = make(map[uint64]string)
 	}
+	// `existing` stores the value produced by this operation.
 	if existing := strings.TrimSpace(n.commitInFlight[height]); existing != "" {
 		return false
 	}
@@ -5354,6 +7000,7 @@ func (n *Node) beginExecutionCommitApply(height uint64, hash string) bool {
 	return true
 }
 
+// finishExecutionCommitApply implements the finish execution commit apply helper.
 func (n *Node) finishExecutionCommitApply(height uint64, hash string) {
 	if n == nil || height == 0 {
 		return
@@ -5364,17 +7011,24 @@ func (n *Node) finishExecutionCommitApply(height uint64, hash string) {
 	if n.commitInFlight == nil {
 		return
 	}
+	// `existing` stores the value produced by this operation.
 	if existing := strings.TrimSpace(n.commitInFlight[height]); existing == "" || existing == hash {
 		delete(n.commitInFlight, height)
 	}
 }
 
+// finalizeExecutionResult implements the finalize execution result helper.
 func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle string, results []ExecutionResult, signers []string) bool {
 	if n.consensusRecomputePauseActive() {
 		return false
 	}
+	if n.executionResultAlreadyCommitted(epoch) {
+		return n.advanceConsensusToCommittedTip("finalize_execution_result_already_committed")
+	}
+	// `ready` and `reason` store the value produced by this operation.
 	if ready, reason := n.localExecutionFinalityReady(epoch); !ready {
 		if n.shouldLogLivenessReason(fmt.Sprintf("exec_commit_defer:%d:%s", epoch, reason), 5*time.Second) {
+			// `localHeight` stores the value produced by this operation.
 			localHeight := uint64(0)
 			if n.Blockchain != nil {
 				localHeight = n.Blockchain.Height()
@@ -5389,6 +7043,7 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		}
 		return false
 	}
+	// `leaderBlock` and `ok` store whether the related condition is satisfied.
 	leaderBlock, ok := n.executionProposalBlockForResult(epoch, execHash, txMerkle)
 	if !ok || leaderBlock.ID != epoch {
 		return false
@@ -5396,16 +7051,27 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 	if !n.leaderBlockCommitmentsReadyForFinality(leaderBlock) {
 		return false
 	}
-	if n.executionResultAlreadyCommitted(epoch) {
-		return n.advanceConsensusToCommittedTip("finalize_execution_result_already_committed")
-	}
 	if txMerkle != "" && leaderBlock.MempoolRoot != txMerkle {
 		return false
 	}
 	if txMerkle == "" && leaderBlock.MempoolRoot != "" {
 		return false
 	}
+	// `executionWitnessSigners` stores execution-result signatures that can
+	// safely stand in as finality witnesses when signed commit votes have not
+	// propagated locally yet.
+	executionWitnessSigners := n.executionResultFinalityWitnessSigners(leaderBlock, execHash, txMerkle, results)
+	// `requiresSignedCommitQuorum` stores whether compatibility witnesses are
+	// unsafe for this proposal.
+	requiresSignedCommitQuorum := n.proposalRequiresSignedCommitQuorum(leaderBlock, execHash, txMerkle)
+	// `precommitVotes`, `required`, and `commitReady` store the request data being processed.
 	precommitVotes, required, commitReady, _ := n.executionCommitPrecondition(epoch, leaderBlock)
+	if !commitReady {
+		if !requiresSignedCommitQuorum && required > 0 && len(executionWitnessSigners) >= required {
+			precommitVotes = len(executionWitnessSigners)
+			commitReady = true
+		}
+	}
 	if !commitReady {
 		if DebugConsensus {
 			log.Printf("[EXEC-COMMIT-DEFER] height=%d reason=precommit_not_ready votes=%d required=%d block=%s",
@@ -5418,6 +7084,7 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		return false
 	}
 
+	// `expected` stores the value produced by this operation.
 	expected := leaderBlock.StateRoot
 	if expected == "" {
 		expected = n.ExecuteBlockAndGetStateRoot(leaderBlock)
@@ -5425,9 +7092,17 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 	if expected == "" || expected != execHash {
 		return false
 	}
-	commitSigners, _, commitCount, commitRequired := n.commitVoteEvidenceForResult(epoch, leaderBlock.BlockHash, expected, leaderBlock.MempoolRoot)
+	// `commitSigners`, `commitWitnesses`, `commitCount`, and `commitRequired` store the measured quantity used by this operation.
+	commitSigners, commitWitnesses, commitCount, commitRequired := n.commitVoteEvidenceForResult(epoch, leaderBlock.BlockHash, expected, leaderBlock.MempoolRoot)
 	if commitRequired == 0 {
 		commitRequired = required
+	}
+	if commitCount < commitRequired {
+		if !requiresSignedCommitQuorum && commitRequired > 0 && len(executionWitnessSigners) >= commitRequired {
+			commitSigners = executionWitnessSigners
+			commitWitnesses = nil
+			commitCount = len(executionWitnessSigners)
+		}
 	}
 	if commitCount < commitRequired {
 		if DebugConsensus {
@@ -5441,16 +7116,19 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		return false
 	}
 
+	// `final` stores the value produced by this operation.
 	final := leaderBlock
 	final.BlockTime = LogicalTimeForEpochTick(epoch, TickFinalize)
 	final.Timestamp = int64(SystemTimeUnits(final.BlockTime))
 	final.StateRoot = execHash
+	// `validators` stores whether the related condition is satisfied.
 	validators, _, _ := n.deterministicCommitteeValidatorsForHeight(epoch)
+	// `strictRequired` stores the value produced by this operation.
 	strictRequired := execQuorumRequired(len(validators))
+	// `policy` stores the value produced by this operation.
 	policy := quorumPolicySnapshot{
 		Mode:             "NORMAL",
 		Version:          quorumPolicyVersionV1,
-		Total:            len(validators),
 		ActiveReadyCount: len(validators),
 		Required:         required,
 		StrictRequired:   strictRequired,
@@ -5463,6 +7141,7 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		leaderBlock.ActiveReadyCount > 0 ||
 		leaderBlock.RequiredQuorum > 0 ||
 		leaderBlock.StrictQuorum > 0
+	// `proposalPolicyCompatible` stores the value produced by this operation.
 	proposalPolicyCompatible := true
 	if proposalPolicyDefined &&
 		leaderBlock.RequiredQuorum > 0 &&
@@ -5476,6 +7155,7 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		leaderBlock.StrictQuorum != policy.StrictRequired {
 		proposalPolicyCompatible = false
 	}
+	// `preserveProposalPolicy` stores the value produced by this operation.
 	preserveProposalPolicy := proposalPolicyDefined && proposalPolicyCompatible
 	if preserveProposalPolicy {
 		policy.Mode = strings.TrimSpace(leaderBlock.ConsensusMode)
@@ -5500,9 +7180,14 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 	final.RequiredQuorum = policy.Required
 	final.StrictQuorum = policy.StrictRequired
 
-	final.ExecutionResults = canonicalExecutionResults(results)
+	final.ExecutionResults = canonicalExecutionResults(executionResultsWithCommitWitnesses(leaderBlock, execHash, txMerkle, results, commitWitnesses))
 	final.Signatures = commitSigners
-	proposalHashForVotes := executionVoteProposalHashForFinalBlock(final)
+	// `proposalHashForVotes` stores the value produced by this operation.
+	proposalHashForVotes := strings.TrimSpace(leaderBlock.BlockHash)
+	if proposalHashForVotes == "" {
+		proposalHashForVotes = executionVoteProposalHashForFinalBlock(final)
+	}
+	// `i` tracks the current position in the related collection.
 	for i := range final.ExecutionResults {
 		// Always bind execution evidence to the canonical proposal hash for this
 		// height. Votes are recorded against the leader block hash before quorum
@@ -5513,13 +7198,16 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		} else if strings.TrimSpace(final.ExecutionResults[i].BlockHash) == "" {
 			final.ExecutionResults[i].BlockHash = executionVoteProposalHashForFinalBlock(final)
 		}
+		if final.ExecutionResults[i].Round == 0 {
+			final.ExecutionResults[i].Round = final.Round
+		}
 		final.ExecutionResults[i].Height = final.ID
 		final.ExecutionResults[i].TxMerkle = txMerkle
 		final.ExecutionResults[i].ExecutionResultHash = executionResultHashFromBlockResult(final.ExecutionResults[i], final)
 	}
-	n.attachFinalityCommitments(&final)
+	n.attachFinalityCommitmentsForProposal(&final, proposalHashForVotes)
 	final.BlockHash = HashBlock(final)
-	n.attachFinalityCertificate(&final)
+	n.attachFinalityCertificateForProposal(&final, proposalHashForVotes)
 	if n.executionResultAlreadyCommitted(final.ID) {
 		return n.advanceConsensusToCommittedTip("finalize_execution_result_commit_raced")
 	}
@@ -5539,29 +7227,36 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 		precommitVotes,
 	)
 
+	// `finalValidators` stores the value produced by this operation.
 	finalValidators := n.freezeValidatorSetForHeight(final.ID, n.GetConsensusValidators(int(final.ID)))
+	// `err` stores the error produced by this operation.
 	if err := verifyBlockQuorumMetadata(final, len(finalValidators)); err != nil {
 		log.Printf("[EXEC-COMMIT-REJECT] height=%d block=%s reason=%s", final.ID, ShortHash(final.BlockHash), err.Error())
 		n.invalidateExecutionProposalAfterCommitFailure(epoch, leaderBlock, err)
 		return false
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.verifyFinalityCommitments(final, finalValidators); err != nil {
 		log.Printf("[EXEC-COMMIT-REJECT] height=%d block=%s reason=%s", final.ID, ShortHash(final.BlockHash), err.Error())
 		n.invalidateExecutionProposalAfterCommitFailure(epoch, leaderBlock, err)
 		return false
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.validateCommittedBlockQuorumEvidence(final); err != nil {
 		log.Printf("[EXEC-COMMIT-REJECT] height=%d block=%s reason=%s", final.ID, ShortHash(final.BlockHash), err.Error())
 		n.invalidateExecutionProposalAfterCommitFailure(epoch, leaderBlock, err)
 		return false
 	}
 
+	// `before` stores the value produced by this operation.
 	before := n.Blockchain.Height()
 	n.setLogicalTick(epoch, TickFinalize)
+	// `err` stores the error produced by this operation.
 	if err := n.ReceiveBlock(final, n.Blockchain); err != nil {
 		n.invalidateExecutionProposalAfterCommitFailure(epoch, leaderBlock, err)
 		return false
 	}
+	// `after` stores the value produced by this operation.
 	after := n.Blockchain.Height()
 	if after > before && ResultGossipOnly && n.Consensus != nil {
 		n.Consensus.mu.Lock()
@@ -5580,10 +7275,12 @@ func (n *Node) finalizeExecutionResult(epoch uint64, execHash string, txMerkle s
 	return true
 }
 
+// handleExecutionResultMsg handles execution result msg.
 func (n *Node) handleExecutionResultMsg(res ExecutionResultMsg) {
 	n.processExecutionResultMsg(res, true)
 }
 
+// queueExecResult implements the queue exec result helper.
 func (n *Node) queueExecResult(res ExecutionResultMsg) {
 	res = stripEmbeddedExecutionVoteBlockForQueue(res)
 	res.Signer = normalizeValidatorID(res.Signer)
@@ -5593,7 +7290,9 @@ func (n *Node) queueExecResult(res ExecutionResultMsg) {
 	if n.isCommittedReplayHeight(res.HeightHint) {
 		return
 	}
+	// `committedHeight` stores the value produced by this operation.
 	committedHeight := n.committedReplayFenceHeight()
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("%d", res.HeightHint)
 	n.execResultsMu.Lock()
 	defer n.execResultsMu.Unlock()
@@ -5615,6 +7314,7 @@ func (n *Node) queueExecResult(res ExecutionResultMsg) {
 	n.trimConsensusCachesLocked(committedHeight)
 }
 
+// shouldTreatUnresolvedExecutionVoteAsStaleAccept implements the should treat unresolved execution vote as stale accept helper.
 func (n *Node) shouldTreatUnresolvedExecutionVoteAsStaleAccept(res ExecutionResultMsg, currentEpoch uint64) bool {
 	if n == nil || res.HeightHint == 0 || currentEpoch == 0 {
 		return false
@@ -5622,6 +7322,7 @@ func (n *Node) shouldTreatUnresolvedExecutionVoteAsStaleAccept(res ExecutionResu
 	if res.HeightHint != currentEpoch {
 		return false
 	}
+	// `currentRound` and `ok` store whether the related condition is satisfied.
 	currentRound, _, ok := n.consensusRoundSnapshot(currentEpoch)
 	if !ok {
 		currentRound = n.localProposerRoundForHeight(currentEpoch)
@@ -5629,6 +7330,7 @@ func (n *Node) shouldTreatUnresolvedExecutionVoteAsStaleAccept(res ExecutionResu
 	return res.RoundHint == currentRound
 }
 
+// processExecutionResultMsg implements the process execution result msg helper.
 func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool) {
 	res.Signer = normalizeValidatorID(res.Signer)
 	_ = allowQueue
@@ -5649,6 +7351,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		}
 		return
 	}
+	// `blocked` and `reason` store the block data handled by this operation.
 	if blocked, reason, _ := n.consensusSyncGateForHeight(res.HeightHint); blocked {
 		if allowQueue {
 			n.queueExecResult(res)
@@ -5659,12 +7362,20 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		}
 		return
 	}
+	// `currentEpoch` stores the value produced by this operation.
 	currentEpoch := n.currentEpoch()
 	// Future-epoch execution votes are expected during late join/catch-up.
 	// Queue them instead of misclassifying as "non-active validator".
 	if res.HeightHint > currentEpoch {
 		if allowQueue {
 			n.queueExecResult(res)
+			n.maybeSyncToBestObservedHeight("future_exec_vote")
+			if n.Blockchain != nil {
+				localHeight := n.Blockchain.Height()
+				if res.HeightHint > localHeight {
+					n.maybeRecoverMissingBlock(localHeight+1, "future_exec_vote")
+				}
+			}
 			n.logExecutionVoteDrop("queued_future_epoch", res, execProposalSnapshot{})
 		}
 		return
@@ -5673,9 +7384,14 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		return
 	}
 	if n.isCommittedReplayHeight(res.HeightHint) {
-		n.logExecutionVoteDrop("stale_committed_height", res, execProposalSnapshot{})
+		if _, proposalSnap, ok := n.resolveExecutionVoteProposal(res.HeightHint, res); ok && proposalSnap.ProposalKey != "" {
+			n.logExecutionVoteDrop("stale_committed_height", res, proposalSnap)
+		} else {
+			n.logExecutionVoteStaleAccept("committed_proposal_unresolved", res)
+		}
 		return
 	}
+	// `targetEpoch` stores the value produced by this operation.
 	targetEpoch := res.HeightHint
 	// Only validators can send execution votes.
 	validators := n.freezeValidatorSetForHeight(res.HeightHint, n.GetConsensusValidators(int(res.HeightHint)))
@@ -5686,7 +7402,9 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		}
 		return
 	}
+	// `allowed` stores whether the related condition is satisfied.
 	allowed := false
+	// `v` tracks the current values while iterating.
 	for _, v := range validators {
 		if v == res.Signer {
 			allowed = true
@@ -5702,17 +7420,20 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		return
 	}
 	res = normalizeEmbeddedExecutionVoteHints(res)
+	// `embeddedVoteSignatureVerified` stores the value produced by this operation.
 	embeddedVoteSignatureVerified := false
 	if res.Block != nil {
 		if res.Signature == "" {
 			n.logExecutionVoteDrop("missing_signature", res, execProposalSnapshot{})
 			return
 		}
+		// `sig` and `err` store the error produced by this operation.
 		sig, err := hex.DecodeString(res.Signature)
 		if err != nil {
 			n.logExecutionVoteDrop("invalid_signature_encoding", res, execProposalSnapshot{})
 			return
 		}
+		// `candidates` stores the value produced by this operation.
 		candidates := n.execResultPubKeyCandidatesForHeight(res.Signer, targetEpoch)
 		if len(candidates) == 0 {
 			if allowQueue {
@@ -5732,11 +7453,14 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		embeddedVoteSignatureVerified = true
 	}
 	n.commitMu.Lock()
+	// `committedHeight` stores the value produced by this operation.
 	committedHeight := n.committedHeight
 	n.commitMu.Unlock()
+	// `committedEpoch` stores the value produced by this operation.
 	committedEpoch := res.HeightHint <= committedHeight
 
 	if res.Block != nil {
+		// `observed` and `reason` store the value produced by this operation.
 		if observed, reason := n.observeExecutionVoteProposalBlock(res); !observed {
 			if reason == "" {
 				reason = "embedded_proposal_invalid"
@@ -5746,6 +7470,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		}
 		n.processQueuedExecutionVotesForProposal(*res.Block)
 	}
+	// `leaderBlock`, `proposalSnap`, and `ok` store whether the related condition is satisfied.
 	leaderBlock, proposalSnap, ok := n.resolveExecutionVoteProposal(targetEpoch, res)
 	if !ok {
 		if committedEpoch {
@@ -5769,6 +7494,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		n.logExecutionVoteDrop("invalid_leader_commitments", res, proposalSnap)
 		return
 	}
+	// `expected` stores the value produced by this operation.
 	expected := leaderBlock.StateRoot
 	if expected == "" {
 		expected = n.ExecuteBlockAndGetStateRoot(leaderBlock)
@@ -5781,7 +7507,9 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		proposalSnap.StateRoot = expected
 		proposalSnap.ProposalKey = proposalVoteKey(leaderBlock.ID, leaderBlock.Round, leaderBlock.BlockHash, leaderBlock.MempoolRoot, expected)
 	}
+	// `projectedVotes` stores the value produced by this operation.
 	projectedVotes := getExecCountGlobal(targetEpoch, proposalSnap.ProposalKey, expected, proposalSnap.TxMerkle) + 1
+	// `lockedBlock`, `lockedVotes`, `keepLocked`, and `lockReason` store the synchronization state protecting shared data.
 	if lockedBlock, lockedVotes, keepLocked, lockReason := n.quorumLockedProposalHoldStateForIncomingRound(targetEpoch, leaderBlock, projectedVotes); keepLocked && proposalConflictsWithAcceptedLock(lockedBlock, leaderBlock) {
 		if DebugConsensus {
 			fmt.Printf("[EXEC-VOTE-RECENT] signer=%s epoch=%d locked_block=%s vote_block=%s locked_round=%d vote_round=%d locked_votes=%d reason=%s\n",
@@ -5798,6 +7526,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		n.logExecutionVoteDrop("conflict_with_lock", res, proposalSnap)
 		return
 	}
+	// `currentSnap` and `currentOK` store whether the related condition is satisfied.
 	if currentSnap, currentOK := n.proposalSnapshotForEpoch(targetEpoch); currentOK && currentSnap.ProposalKey != proposalSnap.ProposalKey {
 		if DebugConsensus {
 			fmt.Printf("[EXEC-VOTE-RECENT] signer=%s epoch=%d locked_block=%s vote_block=%s locked_round=%d vote_round=%d\n",
@@ -5817,11 +7546,13 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 			n.logExecutionVoteDrop("missing_signature", res, proposalSnap)
 			return
 		}
+		// `sig` and `err` store the error produced by this operation.
 		sig, err := hex.DecodeString(res.Signature)
 		if err != nil {
 			n.logExecutionVoteDrop("invalid_signature_encoding", res, proposalSnap)
 			return
 		}
+		// `candidates` stores the value produced by this operation.
 		candidates := n.execResultPubKeyCandidatesForHeight(res.Signer, targetEpoch)
 		if len(candidates) == 0 {
 			if allowQueue {
@@ -5844,12 +7575,14 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		n.logExecutionVoteDrop("tx_merkle_mismatch", res, proposalSnap)
 		return
 	}
+	// `expectedExecutionResultHash` stores the digest used to identify or verify the related data.
 	expectedExecutionResultHash := executionResultHashFromProposal(targetEpoch, proposalSnap.ProposalKey, proposalSnap.BlockHash, res.ExecHash, res.TxMerkle)
 	if !executionResultHashMatches(res.ExecutionResultHash, expectedExecutionResultHash) {
 		n.logExecutionVoteDrop("execution_result_hash_mismatch", res, proposalSnap)
 		return
 	}
 	res.ExecutionResultHash = expectedExecutionResultHash
+	// `allowed` and `reason` store whether the related condition is satisfied.
 	if allowed, reason := n.allowExecutionVoteIngress(res.Signer, res.HeightHint, proposalSnap.ProposalKey, res.ExecHash, res.TxMerkle); !allowed {
 		if reason == "replay_cache" {
 			if !committedEpoch && targetEpoch == currentEpoch && n.commitStallDuration() >= execQuorumEmergencyStallTimeout && n.canParticipateInConsensusNow() && res.ExecHash == expected {
@@ -5865,6 +7598,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		return
 	}
 	if res.ExecHash != expected {
+		// `staleByProposal` stores the value produced by this operation.
 		staleByProposal := strings.TrimSpace(res.BlockHashHint) != "" && res.BlockHashHint != proposalSnap.BlockHash
 		if staleByProposal {
 			if DebugConsensus {
@@ -5874,6 +7608,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 			n.logExecutionVoteDrop("stale_proposal", res, proposalSnap)
 			return
 		}
+		// `staleByLiveness` stores the value produced by this operation.
 		staleByLiveness := n.executionVoteSignerLikelyStale(res.Signer, targetEpoch)
 		if staleByLiveness {
 			if allowQueue {
@@ -5892,6 +7627,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 			len(leaderBlock.Transactions),
 			expected,
 		)
+		// `currentRuntimeLedgerHash`, `currentExecutionLedgerHash`, `tipHeight`, and `tipHash` store the digest used to identify or verify the related data.
 		currentRuntimeLedgerHash, currentExecutionLedgerHash, tipHeight, tipHash := n.executionTraceContext()
 		log.Printf("[EXEC-COMPARE] signer=%s epoch=%d round=%d proposal=%s vote_block=%s local_block=%s tx_count=%d tx_merkle=%s proposal_root=%s expected=%s got=%s current_runtime=%s current_execution=%s current_tip=%d/%s stale_by_proposal=%t stale_by_liveness=%t",
 			ShortID(res.Signer),
@@ -5941,6 +7677,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 	// If we haven't broadcast yet for this epoch+hash and our local execution matches,
 	// broadcast our execution result to help convergence.
 	if !committedEpoch && n.canParticipateInConsensusNow() {
+		// `localHash` stores the digest used to identify or verify the related data.
 		localHash := expected
 		if localHash == "" {
 			localHash = n.ExecuteBlockAndGetStateRoot(leaderBlock)
@@ -5953,6 +7690,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 
 	// Refresh validator liveness on any execution result
 	n.validatorMu.Lock()
+	// `st` and `ok` store whether the related condition is satisfied.
 	if st, ok := n.validatorStatus[res.Signer]; ok {
 		st.LastSeen = time.Now()
 		st.Active = true
@@ -5972,6 +7710,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 			st.ValidatorSetHeight = targetEpoch
 		}
 	} else {
+		// `finalizedHeight` stores the value produced by this operation.
 		finalizedHeight := uint64(0)
 		if targetEpoch > 0 {
 			finalizedHeight = targetEpoch - 1
@@ -5996,12 +7735,16 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 			res.HeightHint, res.Signer, ShortHash(res.ExecHash))
 	}
 
+	// `epochValidators` stores the value produced by this operation.
 	epochValidators := n.freezeValidatorSetForHeight(targetEpoch, n.GetConsensusValidators(int(targetEpoch)))
+	// `total` stores the measured quantity used by this operation.
 	total := len(epochValidators)
+	// `required` stores the request data being processed.
 	required := n.executionQuorumRequiredForEpoch(targetEpoch)
 	if required == 0 {
 		required = execQuorumRequired(total)
 	}
+	// `storedCount`, `ok`, and `equivocation` store whether the related condition is satisfied.
 	storedCount, ok, equivocation := recordExecResultGlobalWithRequired(targetEpoch, proposalSnap.ProposalKey, res.ExecHash, res.TxMerkle, ExecutionResult{
 		Height:              targetEpoch,
 		Round:               res.RoundHint,
@@ -6076,6 +7819,7 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 		return
 	}
 
+	// `results` and `ok` store whether the related condition is satisfied.
 	results, _, _, ok := getExecResultsGlobal(targetEpoch, proposalSnap.ProposalKey, res.ExecHash, res.TxMerkle)
 	if !ok {
 		return
@@ -6087,15 +7831,17 @@ func (n *Node) processExecutionResultMsg(res ExecutionResultMsg, allowQueue bool
 	}
 
 	_ = n.maybeAdoptProposalOnExecutionVote(leaderBlock)
-	_ = results
 	_ = n.broadcastCommitVoteForProposal(leaderBlock, res.ExecHash, res.TxMerkle)
+	_ = n.finalizeExecutionResult(targetEpoch, res.ExecHash, res.TxMerkle, results, nil)
 }
 
+// recordCandidateExecutionResult implements the record candidate execution result helper.
 func (n *Node) recordCandidateExecutionResult(res ExecutionResultMsg) bool {
 	if res.Signer == "" || res.ExecHash == "" || res.HeightHint == 0 {
 		return false
 	}
 	n.candidateMu.RLock()
+	// `cand` and `ok` store whether the related condition is satisfied.
 	cand, ok := n.candidates[res.Signer]
 	if !ok || cand == nil || cand.PermanentBan {
 		n.candidateMu.RUnlock()
@@ -6105,12 +7851,14 @@ func (n *Node) recordCandidateExecutionResult(res ExecutionResultMsg) bool {
 		n.candidateMu.RUnlock()
 		return false
 	}
+	// `pub` stores the value produced by this operation.
 	pub := cand.PubKey
 	n.candidateMu.RUnlock()
 
 	if len(pub) != ed25519.PublicKeySize || res.Signature == "" {
 		return false
 	}
+	// `sig` and `err` store the error produced by this operation.
 	sig, err := hex.DecodeString(res.Signature)
 	if err != nil {
 		return false
@@ -6122,8 +7870,10 @@ func (n *Node) recordCandidateExecutionResult(res ExecutionResultMsg) bool {
 		return false
 	}
 
+	// `expected` stores the value produced by this operation.
 	expected := ""
 	if res.HeightHint == n.currentEpoch() {
+		// `leaderBlock` and `ok` store whether the related condition is satisfied.
 		leaderBlock, ok := n.getLeaderBlock(res.HeightHint)
 		if ok {
 			if res.TxMerkle != leaderBlock.MempoolRoot {
@@ -6135,6 +7885,7 @@ func (n *Node) recordCandidateExecutionResult(res ExecutionResultMsg) bool {
 			}
 		}
 	} else {
+		// `block` and `ok` store whether the related condition is satisfied.
 		if block, ok := n.Blockchain.GetBlock(res.HeightHint); ok {
 			if res.TxMerkle != block.MempoolRoot {
 				return false
@@ -6152,6 +7903,7 @@ func (n *Node) recordCandidateExecutionResult(res ExecutionResultMsg) bool {
 	if cand.ExecHashes == nil {
 		cand.ExecHashes = make(map[uint64]string)
 	}
+	// `existing` and `ok` store whether the related condition is satisfied.
 	if existing, ok := cand.ExecHashes[res.HeightHint]; ok && existing != res.ExecHash {
 		if res.Signer == "F" || res.Signer == "G" {
 			fmt.Printf("DBG candidate %s exec_equivocation height=%d existing=%s new=%s\n",
@@ -6187,6 +7939,7 @@ func (n *Node) recordCandidateExecutionResult(res ExecutionResultMsg) bool {
 			expected != "",
 		)
 	}
+	// `pending` stores the value produced by this operation.
 	pending := false
 	if cand.PendingMatch != nil {
 		pending = cand.PendingMatch[res.HeightHint]
@@ -6194,9 +7947,11 @@ func (n *Node) recordCandidateExecutionResult(res ExecutionResultMsg) bool {
 	n.candidateMu.Unlock()
 
 	if pending {
+		// `expected` stores the value used by this operation.
 		var expected string
 		n.Blockchain.mu.RLock()
 		if res.HeightHint < uint64(len(n.Blockchain.Blocks)) {
+			// `block` stores the synchronization state protecting shared data.
 			block := n.Blockchain.Blocks[res.HeightHint]
 			if block.ID == res.HeightHint {
 				expected = block.StateRoot
@@ -6221,6 +7976,7 @@ func (n *Node) recordCandidateExecutionResult(res ExecutionResultMsg) bool {
 	return true
 }
 
+// replayQueuedExecutionVotes implements the replay queued execution votes helper.
 func (n *Node) replayQueuedExecutionVotes() {
 	n.execResultsMu.Lock()
 	if len(n.queuedExecVotes) == 0 {
@@ -6228,11 +7984,14 @@ func (n *Node) replayQueuedExecutionVotes() {
 		n.tryFinalizeFromStoredResults()
 		return
 	}
+	// `queued` stores the value produced by this operation.
 	queued := n.queuedExecVotes
 	n.queuedExecVotes = make(map[string][]ExecutionResultMsg)
 	n.execResultsMu.Unlock()
 
+	// `msgs` tracks the current values while iterating.
 	for _, msgs := range queued {
+		// `msg` tracks the current values while iterating.
 		for _, msg := range msgs {
 			n.processExecutionResultMsg(msg, true)
 		}
@@ -6240,10 +7999,12 @@ func (n *Node) replayQueuedExecutionVotes() {
 	n.tryFinalizeFromStoredResults()
 }
 
+// replayQueuedExecutionVotesForEpoch implements the replay queued execution votes for epoch helper.
 func (n *Node) replayQueuedExecutionVotesForEpoch(epoch uint64) {
 	if n == nil || epoch == 0 {
 		return
 	}
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("%d", epoch)
 	n.execResultsMu.Lock()
 	if len(n.queuedExecVotes) == 0 {
@@ -6251,53 +8012,66 @@ func (n *Node) replayQueuedExecutionVotesForEpoch(epoch uint64) {
 		n.tryFinalizeFromStoredResults()
 		return
 	}
+	// `msgs` stores the value produced by this operation.
 	msgs := append([]ExecutionResultMsg(nil), n.queuedExecVotes[key]...)
 	if len(msgs) > 0 {
 		delete(n.queuedExecVotes, key)
 	}
 	n.execResultsMu.Unlock()
 
+	// `msg` tracks the current values while iterating.
 	for _, msg := range msgs {
 		n.processExecutionResultMsg(msg, true)
 	}
 	n.tryFinalizeFromStoredResults()
 }
 
+// schedulePostCommitConsensusDrain implements the schedule post commit consensus drain helper.
 func (n *Node) schedulePostCommitConsensusDrain(committedEpoch uint64) {
-	if n == nil || committedEpoch == 0 || n.isShuttingDown() {
+	if n == nil || n.isShuttingDown() {
 		return
 	}
+	// `nextEpoch` stores the value produced by this operation.
 	nextEpoch := committedEpoch + 1
 	if nextEpoch == 0 {
 		return
 	}
 	if !n.scheduleConsensusPriorityTask(func() {
-		if n == nil || n.isShuttingDown() || n.currentEpoch() != nextEpoch {
-			return
-		}
-		n.replayQueuedLeaderBlocksForCurrentEpoch()
-		n.replayQueuedExecutionVotesForEpoch(nextEpoch)
-		n.maybeBroadcastCurrentLeaderExecutionVote("post_commit_queue_drain")
+		n.runPostCommitConsensusDrain(nextEpoch)
 	}) {
 		n.SafeGo(fmt.Sprintf("post_commit_queue_drain_%d", nextEpoch), func() {
-			if n == nil || n.isShuttingDown() || n.currentEpoch() != nextEpoch {
-				return
-			}
-			n.replayQueuedLeaderBlocksForCurrentEpoch()
-			n.replayQueuedExecutionVotesForEpoch(nextEpoch)
-			n.maybeBroadcastCurrentLeaderExecutionVote("post_commit_queue_drain")
+			n.runPostCommitConsensusDrain(nextEpoch)
 		})
 	}
 }
 
+// runPostCommitConsensusDrain replays next-height consensus work only after the
+// previous ReceiveBlock call has released its non-reentrant apply lock.
+func (n *Node) runPostCommitConsensusDrain(nextEpoch uint64) {
+	if n == nil || nextEpoch == 0 || n.isShuttingDown() {
+		return
+	}
+	n.receiveMu.Lock()
+	n.receiveMu.Unlock()
+	if n.isShuttingDown() || n.currentEpoch() != nextEpoch {
+		return
+	}
+	n.replayQueuedLeaderBlocksForCurrentEpoch()
+	n.replayQueuedExecutionVotesForEpoch(nextEpoch)
+	n.maybeBroadcastCurrentLeaderExecutionVote("post_commit_queue_drain")
+}
+
+// processQueuedExecutionVotesForProposal implements the process queued execution votes for proposal helper.
 func (n *Node) processQueuedExecutionVotesForProposal(block Block) {
 	if n == nil || block.ID == 0 {
 		return
 	}
+	// `proposalSnap` stores the value produced by this operation.
 	proposalSnap := proposalSnapshotFromBlock(block)
 	if proposalSnap.Epoch == 0 {
 		return
 	}
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("%d", block.ID)
 	n.execResultsMu.Lock()
 	if len(n.queuedExecVotes) == 0 {
@@ -6305,14 +8079,18 @@ func (n *Node) processQueuedExecutionVotesForProposal(block Block) {
 		n.tryFinalizeFromStoredResults()
 		return
 	}
+	// `msgs` stores the value produced by this operation.
 	msgs := n.queuedExecVotes[key]
 	if len(msgs) == 0 {
 		n.execResultsMu.Unlock()
 		n.tryFinalizeFromStoredResults()
 		return
 	}
+	// `replay` stores the value produced by this operation.
 	replay := make([]ExecutionResultMsg, 0, len(msgs))
+	// `remaining` stores the value produced by this operation.
 	remaining := make([]ExecutionResultMsg, 0, len(msgs))
+	// `msg` tracks the current values while iterating.
 	for _, msg := range msgs {
 		if voteBelongsToCurrentProposal(msg, proposalSnap) {
 			replay = append(replay, msg)
@@ -6327,12 +8105,14 @@ func (n *Node) processQueuedExecutionVotesForProposal(block Block) {
 	}
 	n.execResultsMu.Unlock()
 
+	// `msg` tracks the current values while iterating.
 	for _, msg := range replay {
 		n.processExecutionResultMsg(msg, true)
 	}
 	n.tryFinalizeFromStoredResults()
 }
 
+// tryFinalizeProposalIfQuorum implements the try finalize proposal if quorum helper.
 func (n *Node) tryFinalizeProposalIfQuorum(block Block, reason string) bool {
 	if n == nil || block.ID == 0 || block.ID != n.currentEpoch() {
 		return false
@@ -6340,8 +8120,11 @@ func (n *Node) tryFinalizeProposalIfQuorum(block Block, reason string) bool {
 	if n.consensusRecomputePauseActive() {
 		return false
 	}
+	// `validators` stores whether the related condition is satisfied.
 	validators := n.freezeValidatorSetForHeight(block.ID, n.GetConsensusValidators(int(block.ID)))
+	// `total` stores the measured quantity used by this operation.
 	total := len(validators)
+	// `required` stores the request data being processed.
 	required := n.executionQuorumRequiredForEpoch(block.ID)
 	if required == 0 {
 		required = execQuorumRequired(total)
@@ -6349,6 +8132,7 @@ func (n *Node) tryFinalizeProposalIfQuorum(block Block, reason string) bool {
 	if total == 0 || required == 0 {
 		return false
 	}
+	// `execHash` stores the digest used to identify or verify the related data.
 	execHash := strings.TrimSpace(block.StateRoot)
 	if execHash == "" {
 		execHash = strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
@@ -6356,15 +8140,19 @@ func (n *Node) tryFinalizeProposalIfQuorum(block Block, reason string) bool {
 	if execHash == "" {
 		return false
 	}
+	// `txMerkle` stores the transaction data handled by this operation.
 	txMerkle := block.MempoolRoot
+	// `proposalKey` stores the key used to access the related value.
 	proposalKey := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, execHash)
 	if proposalKey == "" {
 		return false
 	}
+	// `count` stores the measured quantity used by this operation.
 	count := getExecCountGlobal(block.ID, proposalKey, execHash, txMerkle)
 	if count < required {
 		return false
 	}
+	// `results` and `ok` store whether the related condition is satisfied.
 	results, _, _, ok := getExecResultsGlobal(block.ID, proposalKey, execHash, txMerkle)
 	if !ok {
 		return false
@@ -6377,13 +8165,18 @@ func (n *Node) tryFinalizeProposalIfQuorum(block Block, reason string) bool {
 	return n.broadcastCommitVoteForProposal(block, execHash, txMerkle)
 }
 
+// tryFinalizeFromStoredResults implements the try finalize from stored results helper.
 func (n *Node) tryFinalizeFromStoredResults() {
 	if n.consensusRecomputePauseActive() {
 		return
 	}
+	// `epoch` stores the value produced by this operation.
 	epoch := n.currentEpoch()
+	// `validators` stores whether the related condition is satisfied.
 	validators := n.freezeValidatorSetForHeight(epoch, n.GetConsensusValidators(int(epoch)))
+	// `total` stores the measured quantity used by this operation.
 	total := len(validators)
+	// `required` stores the request data being processed.
 	required := n.executionQuorumRequiredForEpoch(epoch)
 	if required == 0 {
 		required = execQuorumRequired(total)
@@ -6391,6 +8184,7 @@ func (n *Node) tryFinalizeFromStoredResults() {
 	if total == 0 || required == 0 {
 		return
 	}
+	// `block` tracks the synchronization state protecting shared data.
 	for _, block := range n.candidateProposalBlocksForEpoch(epoch) {
 		if block.ID != epoch {
 			continue
@@ -6401,12 +8195,106 @@ func (n *Node) tryFinalizeFromStoredResults() {
 	}
 }
 
+func (n *Node) recoverSignedCommitQuorumAtCurrentHeight(reason string) bool {
+	if n == nil || n.Blockchain == nil || n.consensusRecomputePauseActive() {
+		return false
+	}
+	epoch := n.Blockchain.Height() + 1
+	if epoch == 0 || epoch != n.currentEpoch() {
+		return false
+	}
+	choice := n.localSignedCommitChoiceSnapshot(epoch)
+	if !choice.Quorum || strings.TrimSpace(choice.ProposalHash) == "" {
+		choice = n.signedCommitQuorumChoiceSnapshot(epoch)
+		if !choice.Quorum || strings.TrimSpace(choice.ProposalHash) == "" {
+			return false
+		}
+	}
+	block, ok := n.proposalBlockByHash(epoch, choice.ProposalHash)
+	if !ok || block.ID != epoch {
+		return false
+	}
+	execHash := strings.TrimSpace(block.StateRoot)
+	if execHash == "" {
+		execHash = strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
+	}
+	if execHash == "" {
+		return false
+	}
+	txMerkle := strings.TrimSpace(block.MempoolRoot)
+	_, _, commitVotes, required := n.commitVoteEvidenceForResult(epoch, block.BlockHash, execHash, txMerkle)
+	if required == 0 {
+		required = n.executionQuorumRequiredForEpoch(epoch)
+	}
+	if required == 0 || commitVotes < required {
+		return false
+	}
+	proposalKey := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, execHash)
+	results, signers, executionVotes, executionOK := getExecResultsGlobal(epoch, proposalKey, execHash, txMerkle)
+	if !executionOK || executionVotes < required {
+		results, signers, executionVotes, executionOK = getExecResultsForBlockHashGlobal(epoch, block.BlockHash, execHash, txMerkle)
+	}
+	if !executionOK || executionVotes < required {
+		results, signers, executionVotes, executionOK = n.consensusExecutionResultsForBlock(block, execHash, txMerkle)
+	}
+	if !executionOK || executionVotes < required {
+		var commitWitnesses []ValidatorSignature
+		_, commitWitnesses, _, _ = n.commitVoteEvidenceForResult(epoch, block.BlockHash, execHash, txMerkle)
+		results, signers, executionVotes, executionOK = executionResultsFromCommitWitnesses(block, execHash, txMerkle, commitWitnesses)
+	}
+	if !executionOK || executionVotes < required {
+		if DebugConsensus {
+			log.Printf("[SIGNED-COMMIT-RECOVER-DEFER] height=%d reason=execution_votes_missing block=%s exec=%s votes=%d required=%d trigger=%s",
+				epoch,
+				ShortHash(block.BlockHash),
+				ShortHash(execHash),
+				executionVotes,
+				required,
+				strings.TrimSpace(reason),
+			)
+		}
+		return false
+	}
+	n.execResultsMu.Lock()
+	_ = n.setQuorumLockedProposalLocked(block, "signed_commit_recovery", commitVotes, required)
+	n.execResultsMu.Unlock()
+	freezeExecPool(epoch, proposalKey, execHash)
+	if n.finalizeExecutionResult(epoch, execHash, txMerkle, results, signers) {
+		log.Printf("[SIGNED-COMMIT-RECOVER] height=%d reason=%s block=%s exec=%s commit_votes=%d execution_votes=%d required=%d",
+			epoch,
+			strings.TrimSpace(reason),
+			ShortHash(block.BlockHash),
+			ShortHash(execHash),
+			commitVotes,
+			executionVotes,
+			required,
+		)
+		return true
+	}
+	if DebugConsensus {
+		log.Printf("[SIGNED-COMMIT-RECOVER-DEFER] height=%d reason=finalize_deferred block=%s exec=%s commit_votes=%d execution_votes=%d required=%d trigger=%s",
+			epoch,
+			ShortHash(block.BlockHash),
+			ShortHash(execHash),
+			commitVotes,
+			executionVotes,
+			required,
+			strings.TrimSpace(reason),
+		)
+	}
+	return false
+}
+
+// hasFinalExecutionResult implements the has final execution result helper.
 func (n *Node) hasFinalExecutionResult(epoch uint64, execHash string, txMerkle string) bool {
 	if execHash == "" {
 		return false
 	}
+	// `validators` stores whether the related condition is satisfied.
 	validators := n.freezeValidatorSetForHeight(epoch, n.GetConsensusValidators(int(epoch)))
+	// `total` stores the measured quantity used by this operation.
 	total := len(validators)
+	// `required` stores the request data being processed.
 	required := n.executionQuorumRequiredForEpoch(epoch)
 	if required == 0 {
 		required = execQuorumRequired(total)
@@ -6414,14 +8302,17 @@ func (n *Node) hasFinalExecutionResult(epoch uint64, execHash string, txMerkle s
 	if total == 0 || required == 0 {
 		return false
 	}
+	// `block` tracks the synchronization state protecting shared data.
 	for _, block := range n.candidateProposalBlocksForEpoch(epoch) {
 		if block.ID != epoch {
 			continue
 		}
+		// `stateRoot` stores the digest used to identify or verify the related data.
 		stateRoot := block.StateRoot
 		if stateRoot == "" {
 			stateRoot = execHash
 		}
+		// `proposalKey` stores the key used to access the related value.
 		proposalKey := proposalVoteKey(epoch, block.Round, block.BlockHash, block.MempoolRoot, stateRoot)
 		if getExecCountGlobal(epoch, proposalKey, execHash, txMerkle) >= required {
 			return true
@@ -6430,11 +8321,13 @@ func (n *Node) hasFinalExecutionResult(epoch uint64, execHash string, txMerkle s
 	return false
 }
 
+// proposalBlockByHash implements the proposal block by hash helper.
 func (n *Node) proposalBlockByHash(height uint64, proposalHash string) (Block, bool) {
 	if n == nil || height == 0 || strings.TrimSpace(proposalHash) == "" {
 		return Block{}, false
 	}
 	proposalHash = strings.TrimSpace(proposalHash)
+	// `block` tracks the synchronization state protecting shared data.
 	for _, block := range n.candidateProposalBlocksForEpoch(height) {
 		if block.ID == height && strings.EqualFold(strings.TrimSpace(block.BlockHash), proposalHash) {
 			return block, true
@@ -6443,6 +8336,7 @@ func (n *Node) proposalBlockByHash(height uint64, proposalHash string) (Block, b
 	return Block{}, false
 }
 
+// handleCommitMsg handles commit msg.
 func (n *Node) handleCommitMsg(cm CommitMsg) {
 	if n == nil || cm.Height == 0 || n.isCommittedReplayHeight(cm.Height) {
 		return
@@ -6451,13 +8345,12 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 	cm.Hash = strings.TrimSpace(cm.Hash)
 	cm.ExecHash = strings.TrimSpace(cm.ExecHash)
 	cm.TxMerkle = strings.TrimSpace(cm.TxMerkle)
+	cm.ExecutionCommitmentHash = strings.TrimSpace(cm.ExecutionCommitmentHash)
 	cm.Signature = strings.TrimSpace(cm.Signature)
 	if cm.From == "" || cm.Hash == "" || cm.ExecHash == "" || cm.Signature == "" {
 		return
 	}
-	if n.hasRecordedCommitVote(cm) {
-		return
-	}
+	// `block` and `ok` store whether the related condition is satisfied.
 	block, ok := n.proposalBlockByHash(cm.Height, cm.Hash)
 	if !ok && cm.Block.ID == cm.Height && strings.EqualFold(strings.TrimSpace(cm.Block.BlockHash), cm.Hash) {
 		if n.verifyLeaderBlock(cm.Block, "") {
@@ -6469,6 +8362,7 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 	if !ok {
 		return
 	}
+	// `expected` stores the value produced by this operation.
 	expected := strings.TrimSpace(block.StateRoot)
 	if expected == "" {
 		expected = strings.TrimSpace(n.ExecuteBlockAndGetStateRoot(block))
@@ -6476,22 +8370,22 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 	if expected == "" || !strings.EqualFold(expected, cm.ExecHash) || strings.TrimSpace(block.MempoolRoot) != cm.TxMerkle {
 		return
 	}
-	count, required, accepted, newVote := n.recordVerifiedCommitVote(cm)
+	if err := verifyCommitVoteExecutionCommitment(block, cm.ExecutionCommitmentHash); err != nil {
+		return
+	}
+	// `count`, `required`, and `accepted` store the measured quantity used by this operation.
+	count, required, accepted := n.recordVerifiedCommitVote(cm)
 	if !accepted {
 		return
 	}
-	if newVote {
-		log.Printf("[COMMIT-VOTE] signer=%s height=%d block=%s votes=%d required=%d",
-			ShortID(cm.From),
-			cm.Height,
-			ShortHash(cm.Hash),
-			count,
-			required,
-		)
-	}
-	commitScope := commitVoteResultScopeKey(cm.Height, cm.Hash, expected, block.MempoolRoot)
-	localAlreadySigned := commitScope != "" && n.hasLocalSignedCommitScope(cm.Height, commitScope)
-	if newVote && !localAlreadySigned && n.shouldFollowCommitEvidence(cm.Height, cm.Hash, count, required) {
+	log.Printf("[COMMIT-VOTE] signer=%s height=%d block=%s votes=%d required=%d",
+		ShortID(cm.From),
+		cm.Height,
+		ShortHash(cm.Hash),
+		count,
+		required,
+	)
+	if n.shouldFollowCommitEvidence(cm.Height, cm.Hash, count, required) {
 		log.Printf("[COMMIT-FOLLOW] validator=%s height=%d block=%s votes=%d required=%d action=broadcast_commit_vote",
 			ShortID(n.ID),
 			cm.Height,
@@ -6507,29 +8401,42 @@ func (n *Node) handleCommitMsg(cm CommitMsg) {
 	if required == 0 || count < required || cm.Height != n.currentEpoch() {
 		return
 	}
+	n.execResultsMu.Lock()
+	_ = n.setQuorumLockedProposalLocked(block, "signed_commit_quorum", count, required)
+	n.execResultsMu.Unlock()
+	// `proposalKey` stores the key used to access the related value.
 	proposalKey := proposalVoteKey(block.ID, block.Round, block.BlockHash, block.MempoolRoot, expected)
+	// `results`, `signers`, `executionVotes`, and `executionOK` store whether the related condition is satisfied.
 	results, signers, executionVotes, executionOK := getExecResultsGlobal(block.ID, proposalKey, expected, block.MempoolRoot)
 	if !executionOK || executionVotes < required {
 		results, signers, executionVotes, executionOK = getExecResultsForBlockHashGlobal(block.ID, block.BlockHash, expected, block.MempoolRoot)
 		if !executionOK || executionVotes < required {
-			if DebugConsensus {
-				log.Printf("[EXEC-COMMIT-DEFER] height=%d reason=execution_votes_missing_for_commit block=%s votes=%d required=%d",
-					block.ID,
-					ShortHash(block.BlockHash),
-					executionVotes,
-					required,
-				)
+			results, signers, executionVotes, executionOK = n.consensusExecutionResultsForBlock(block, expected, block.MempoolRoot)
+			if !executionOK || executionVotes < required {
+				if n.shouldLogLivenessReason(fmt.Sprintf("commit_quorum_exec_cache_shortfall:%d:%s", block.ID, block.BlockHash), 5*time.Second) {
+					log.Printf("[EXEC-COMMIT-DEFER] height=%d reason=execution_votes_missing_for_commit block=%s exec=%s commit_votes=%d required=%d exec_votes=%d",
+						block.ID,
+						ShortHash(block.BlockHash),
+						ShortHash(expected),
+						count,
+						required,
+						executionVotes,
+					)
+				}
+				var commitWitnesses []ValidatorSignature
+				_, commitWitnesses, _, _ = n.commitVoteEvidenceForResult(block.ID, block.BlockHash, expected, block.MempoolRoot)
+				results, signers, executionVotes, executionOK = executionResultsFromCommitWitnesses(block, expected, block.MempoolRoot, commitWitnesses)
+				if !executionOK || executionVotes < required {
+					return
+				}
 			}
-			return
 		}
 	}
-	n.execResultsMu.Lock()
-	_ = n.setQuorumLockedProposalLocked(block, "signed_commit_quorum", executionVotes, required)
-	n.execResultsMu.Unlock()
 	freezeExecPool(block.ID, proposalKey, expected)
 	_ = n.finalizeExecutionResult(block.ID, expected, block.MempoolRoot, results, signers)
 }
 
+// BroadcastBlock implements the broadcast block helper.
 func (n *Node) BroadcastBlock(block Block) {
 	if ResultGossipOnly {
 		return
@@ -6539,18 +8446,22 @@ func (n *Node) BroadcastBlock(block Block) {
 		return
 	}
 
+	// `msg` stores the value produced by this operation.
 	msg := Message{Type: MsgBlock, Data: MustJSON(block)}
+	// `data` and `err` store the error produced by this operation.
 	data, err := MarshalP2PMessage(msg)
 	if err != nil {
 		data, _ = json.Marshal(block)
 	}
 
 	if n.BlockTopic != nil {
+		// `err` stores the error produced by this operation.
 		if err := n.BlockTopic.Publish(context.Background(), data); err != nil {
 			fmt.Println("Block publish failed:", err)
 			return
 		}
 	} else if n.TopicBlocks != nil {
+		// `err` stores the error produced by this operation.
 		if err := n.TopicBlocks.Publish(context.Background(), data); err != nil {
 			fmt.Println("Block publish failed:", err)
 			return
@@ -6562,16 +8473,22 @@ func (n *Node) BroadcastBlock(block Block) {
 	}
 }
 
+// DiscoverPeers implements the discover peers helper.
 func (n *Node) DiscoverPeers() {
+	// `ctx` stores the context controlling this operation.
 	ctx := n.RootContext()
+	// `seeds` stores the value produced by this operation.
 	seeds := n.seedsSnapshot()
 
+	// `seed` tracks the current values while iterating.
 	for _, seed := range seeds {
+		// `seedAddr` and `err` store the error produced by this operation.
 		seedAddr, err := ma.NewMultiaddr(seed)
 		if err != nil {
 			continue
 		}
 
+		// `seedInfo` and `err` store the error produced by this operation.
 		seedInfo, err := peer.AddrInfoFromP2pAddr(seedAddr)
 		if err != nil {
 			continue
@@ -6583,6 +8500,7 @@ func (n *Node) DiscoverPeers() {
 		if !n.canDialPeerID(seedInfo.ID.String()) {
 			continue
 		}
+		// `err` stores the error produced by this operation.
 		if err := n.Host.Connect(ctx, *seedInfo); err == nil {
 			n.Host.ConnManager().TagPeer(seedInfo.ID, "bootstrap", 100)
 
@@ -6591,6 +8509,7 @@ func (n *Node) DiscoverPeers() {
 			}
 			n.recordDialSuccess(seedInfo.ID.String())
 		} else {
+			// `errLower` stores the error produced by this operation.
 			errLower := strings.ToLower(err.Error())
 			if strings.Contains(errLower, "peer id mismatch") ||
 				strings.Contains(errLower, "dial to self attempted") {
@@ -6604,6 +8523,7 @@ func (n *Node) DiscoverPeers() {
 	}
 }
 
+// connectPubSubPeers implements the connect pub sub peers helper.
 func (n *Node) connectPubSubPeers() {
 	// =====================================================
 	// HARD GUARD - require host + pubsub
@@ -6628,6 +8548,7 @@ func (n *Node) connectPubSubPeers() {
 		if n.isTopicJoined(topic) {
 			continue
 		}
+		// `err` stores the error produced by this operation.
 		if _, err := n.PubSub.Join(topic); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢Å¡Â Ã¯Â¸Â Failed to join topic %s: %v\n", topic, err)
@@ -6651,7 +8572,9 @@ func (n *Node) connectPubSubPeers() {
 	// 4Ã¯Â¸ÂÃ¢Æ’Â£ BUILD FAST LOOKUP OF MESH PEERS (O(1))
 	// =====================================================
 	meshPeers := make(map[string]bool)
+	// `topic` tracks the current values while iterating.
 	for _, topic := range canonicalTopics {
+		// `pid` tracks the current values while iterating.
 		for _, pid := range n.PubSub.ListPeers(topic) {
 			meshPeers[pid.String()] = true
 		}
@@ -6694,20 +8617,27 @@ func (n *Node) connectPubSubPeers() {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+// validatorSetHash implements the validator set hash helper.
 func (n *Node) validatorSetHash() string {
+	// `nextHeight` stores the value produced by this operation.
 	nextHeight := n.Blockchain.Height() + 1
 	if validatorOnboardingStrictActivationEnabled() {
+		// `active` stores the value produced by this operation.
 		if active, _ := n.selfActiveValidatorAt(nextHeight); !active {
 			return n.stableFrozenHashForAdvertise(nextHeight)
 		}
 	}
+	// `hash` stores the digest used to identify or verify the related data.
 	if hash, _ := n.runtimeAdvertisedValidatorSetHash(nextHeight); hash != "" {
 		return hash
 	}
 	return n.stableFrozenHashForAdvertise(nextHeight)
 }
 
+// peerHelloAdvertiseIdentity implements the peer hello advertise identity helper.
 func (n *Node) peerHelloAdvertiseIdentity(height uint64) (string, string, string) {
+	// `role` stores the value produced by this operation.
 	role := normalizeNodeRole(n.Role)
 	if role != "validator" {
 		return role, "", ""
@@ -6715,6 +8645,7 @@ func (n *Node) peerHelloAdvertiseIdentity(height uint64) (string, string, string
 	if height == 0 {
 		height = n.currentEpoch()
 	}
+	// `active` stores the value produced by this operation.
 	active, _ := n.selfActiveValidatorAt(height)
 	if validatorOnboardingStrictActivationEnabled() && !active {
 		return "full", "", ""
@@ -6722,6 +8653,7 @@ func (n *Node) peerHelloAdvertiseIdentity(height uint64) (string, string, string
 	if !active {
 		return role, "", ""
 	}
+	// `pubHex` stores the value produced by this operation.
 	pubHex := ""
 	if len(n.ValidatorKey.PublicKey) == ed25519.PublicKeySize {
 		pubHex = hex.EncodeToString(n.ValidatorKey.PublicKey)
@@ -6729,27 +8661,46 @@ func (n *Node) peerHelloAdvertiseIdentity(height uint64) (string, string, string
 	if pubHex == "" {
 		return role, "", ""
 	}
+	if !validatorOnboardingStrictActivationEnabled() && !isAutoGeneratedNodeID(n.ID) {
+		if legacyID := normalizeValidatorID(n.ID); legacyID != "" {
+			return "validator", legacyID, pubHex
+		}
+	}
+	validatorID := n.localConsensusValidatorIDForHeight(height)
+	if validatorID == "" {
+		return role, "", ""
+	}
 	// Peer hello is an identity advertisement, not a participation vote.
 	// Existing-chain validators must continue to identify themselves even while
 	// startup/sync gates temporarily keep them out of vote/propose mode.
-	return "validator", n.ID, pubHex
+	return "validator", validatorID, pubHex
 }
 
+// outboundPeerHello implements the outbound peer hello helper.
 func (n *Node) outboundPeerHello() PeerHello {
+	// `role`, `validatorID`, and `validatorPubKey` store whether the related condition is satisfied.
 	role, validatorID, validatorPubKey := n.peerHelloAdvertiseIdentity(n.currentEpoch())
+	// `validatorSetHeight` stores whether the related condition is satisfied.
 	validatorSetHeight := n.Blockchain.Height() + 1
+	// `nextValidatorSetHash` stores the digest used to identify or verify the related data.
 	nextValidatorSetHash := strings.TrimSpace(n.deterministicNextValidatorSetHash(validatorSetHeight, n.validatorSetHash()))
+	// `tipHash` stores the digest used to identify or verify the related data.
 	tipHash := ""
 	if n.Blockchain != nil {
 		tipHash = strings.TrimSpace(n.Blockchain.LastBlock().BlockHash)
 	}
+	// `hello` stores the value produced by this operation.
+	nodeIdentity := n.NetworkID
+	if strings.TrimSpace(nodeIdentity) == "" {
+		nodeIdentity = n.ID
+	}
 	hello := PeerHello{
-		ChainID:              ChainID,
+		ChainID:              protocolChainID(),
 		GenesisHash:          GenesisHash,
 		Version:              Version,
 		ConsensusHash:        consensusParamsHash(),
 		Role:                 role,
-		NodeID:               normalizeValidatorID(n.ID),
+		NodeID:               normalizeNodeIdentityID(nodeIdentity),
 		ValidatorID:          validatorID,
 		ValidatorPubKey:      validatorPubKey,
 		P2PAddr:              n.SelfAddr,
@@ -6764,9 +8715,11 @@ func (n *Node) outboundPeerHello() PeerHello {
 	return hello
 }
 
+// outboundPeerHelloPreValidation implements the outbound peer hello pre validation helper.
 func (n *Node) outboundPeerHelloPreValidation() PeerHello {
+	// `hello` stores the value produced by this operation.
 	hello := PeerHello{
-		ChainID:       ChainID,
+		ChainID:       protocolChainID(),
 		GenesisHash:   GenesisHash,
 		Version:       Version,
 		ConsensusHash: consensusParamsHash(),
@@ -6775,6 +8728,7 @@ func (n *Node) outboundPeerHelloPreValidation() PeerHello {
 	return hello
 }
 
+// peerHelloHasPostValidationFields implements the peer hello has post validation fields helper.
 func peerHelloHasPostValidationFields(hello PeerHello) bool {
 	return strings.TrimSpace(hello.Role) != "" ||
 		strings.TrimSpace(hello.NodeID) != "" ||
@@ -6789,16 +8743,21 @@ func peerHelloHasPostValidationFields(hello PeerHello) bool {
 		strings.TrimSpace(hello.TipHash) != ""
 }
 
+// setGossipQuiet implements the set gossip quiet helper.
 func (n *Node) setGossipQuiet(quiet bool) {
 	n.peerStateMu.Lock()
 	n.gossipQuiet = quiet
 	n.peerStateMu.Unlock()
 }
+
+// isGossipQuiet implements the is gossip quiet helper.
 func (n *Node) isGossipQuiet() bool {
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
 	return n.gossipQuiet
 }
+
+// setPeerConnected implements the set peer connected helper.
 func (n *Node) setPeerConnected(peerID string, connected bool) {
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
@@ -6810,30 +8769,40 @@ func (n *Node) setPeerConnected(peerID string, connected bool) {
 		delete(n.connectingPeers, peerID)
 	}
 }
+
+// isPeerConnected implements the is peer connected helper.
 func (n *Node) isPeerConnected(peerID string) bool {
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
 	return n.connectedPeers[peerID]
 }
+
+// setPeerConnectedAt implements the set peer connected at helper.
 func (n *Node) setPeerConnectedAt(peerID string, t time.Time) {
 	n.peerStateMu.Lock()
 	n.peerConnectedAt[peerID] = t
 	n.peerStateMu.Unlock()
 }
+
+// clearPeerConnectedAt implements the clear peer connected at helper.
 func (n *Node) clearPeerConnectedAt(peerID string) {
 	n.peerStateMu.Lock()
 	delete(n.peerConnectedAt, peerID)
 	n.peerStateMu.Unlock()
 }
+
+// peerConnectedFor implements the peer connected for helper.
 func (n *Node) peerConnectedFor(peerID string) time.Duration {
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
+	// `t` and `ok` store whether the related condition is satisfied.
 	if t, ok := n.peerConnectedAt[peerID]; ok {
 		return time.Since(t)
 	}
 	return 0
 }
 
+// hasActivePeerConnection implements the has active peer connection helper.
 func (n *Node) hasActivePeerConnection(pid peer.ID) bool {
 	if n == nil || n.Host == nil || pid == "" {
 		return false
@@ -6844,10 +8813,13 @@ func (n *Node) hasActivePeerConnection(pid peer.ID) bool {
 	return len(n.Host.Network().ConnsToPeer(pid)) > 0
 }
 
+// shouldForceGraft implements the should force graft helper.
 func (n *Node) shouldForceGraft(peerID string) bool {
+	// `now` stores the value produced by this operation.
 	now := time.Now()
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
+	// `t` and `ok` store whether the related condition is satisfied.
 	if t, ok := n.peerGraftAt[peerID]; ok {
 		if now.Sub(t) < peerGraftCooldown {
 			return false
@@ -6856,6 +8828,8 @@ func (n *Node) shouldForceGraft(peerID string) bool {
 	n.peerGraftAt[peerID] = now
 	return true
 }
+
+// markPeerConnecting implements the mark peer connecting helper.
 func (n *Node) markPeerConnecting(peerID string) bool {
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
@@ -6865,6 +8839,8 @@ func (n *Node) markPeerConnecting(peerID string) bool {
 	n.connectingPeers[peerID] = true
 	return true
 }
+
+// dialBackoffDelay implements the dial backoff delay helper.
 func dialBackoffDelay(failures int) time.Duration {
 	switch failures {
 	case 1:
@@ -6878,6 +8854,7 @@ func dialBackoffDelay(failures int) time.Duration {
 	}
 }
 
+// validatorDialBackoffDelay implements the validator dial backoff delay helper.
 func validatorDialBackoffDelay(failures int) time.Duration {
 	switch failures {
 	case 1:
@@ -6891,12 +8868,15 @@ func validatorDialBackoffDelay(failures int) time.Duration {
 	}
 }
 
+// peerIDInPeerAddrs implements the peer id in peer addrs helper.
 func peerIDInPeerAddrs(peerID string, addrs []string) bool {
 	peerID = strings.TrimSpace(peerID)
 	if peerID == "" {
 		return false
 	}
+	// `addr` tracks the address used by this operation.
 	for _, addr := range addrs {
+		// `parsed` and `ok` store whether the related condition is satisfied.
 		_, parsed, ok := splitPeerAddress(addr)
 		if ok && strings.TrimSpace(parsed) == peerID {
 			return true
@@ -6905,10 +8885,12 @@ func peerIDInPeerAddrs(peerID string, addrs []string) bool {
 	return false
 }
 
+// isValidatorOrPersistentPeerID implements the is validator or persistent peer id helper.
 func (n *Node) isValidatorOrPersistentPeerID(peerID string) bool {
 	if n == nil || strings.TrimSpace(peerID) == "" {
 		return false
 	}
+	// `targets` stores the value produced by this operation.
 	targets := n.persistentPeersSnapshot()
 	if normalizeNodeRole(n.Role) == "validator" {
 		targets = mergePeerLists(targets, n.validatorMeshTargets())
@@ -6917,12 +8899,20 @@ func (n *Node) isValidatorOrPersistentPeerID(peerID string) bool {
 		return true
 	}
 	n.peerStateMu.Lock()
+	// `allowed` stores whether the peer was provided by the operator/runtime
+	// bootstrap path. Those peers need the same soft-failure handling as
+	// persistent peers even when config.toml was intentionally bypassed by
+	// --peers or MSC_P2P_PEERS.
+	allowed := n.allowedPeerIDs[peerID]
+	// `validatorID` stores whether the related condition is satisfied.
 	validatorID := strings.TrimSpace(n.peerToValidator[peerID])
 	n.peerStateMu.Unlock()
-	return validatorID != ""
+	return allowed || validatorID != ""
 }
 
+// isLocalhostPeerAddr implements the is localhost peer addr helper.
 func isLocalhostPeerAddr(addr string) bool {
+	// `base` stores the value produced by this operation.
 	base := strings.ToLower(strings.TrimSpace(stripP2PComponent(addr)))
 	if base == "" {
 		return false
@@ -6939,14 +8929,17 @@ func isLocalhostPeerAddr(addr string) bool {
 	return false
 }
 
+// isDialRefusedError implements the is dial refused error helper.
 func isDialRefusedError(err error) bool {
 	if err == nil {
 		return false
 	}
+	// `msg` stores the value produced by this operation.
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "connection refused") || strings.Contains(msg, "actively refused")
 }
 
+// dialFailureCount implements the dial failure count helper.
 func (n *Node) dialFailureCount(peerID string) int {
 	if n == nil || peerID == "" {
 		return 0
@@ -6956,6 +8949,7 @@ func (n *Node) dialFailureCount(peerID string) int {
 	return n.peerDialFailures[peerID]
 }
 
+// shouldPruneLocalhostDialRefused implements the should prune localhost dial refused helper.
 func shouldPruneLocalhostDialRefused(n *Node, peerID, addr string, err error) bool {
 	if !PruneLocalhostOnRefused {
 		return false
@@ -6974,9 +8968,90 @@ func shouldPruneLocalhostDialRefused(n *Node, peerID, addr string, err error) bo
 	}
 	return n.dialFailureCount(peerID) >= PruneLocalhostRefusedFailures
 }
+
+// shouldPruneStaleStaticDialFailure drops stale static/public /p2p/ IDs after
+// repeated hard dial failures. The address can be rediscovered from validator
+// hello, peers-list gossip, or registry seeds when it becomes healthy again.
+func shouldPruneStaleStaticDialFailure(n *Node, peerID, addr string, err error) bool {
+	if n == nil || strings.TrimSpace(peerID) == "" || strings.TrimSpace(addr) == "" || err == nil {
+		return false
+	}
+	if !n.isValidatorOrPersistentPeerID(peerID) {
+		return false
+	}
+	if n.isPeerConnected(peerID) {
+		return false
+	}
+	errMsg := strings.ToLower(err.Error())
+	if strings.Contains(errMsg, "context canceled") || strings.Contains(errMsg, "shutdown") {
+		return false
+	}
+	hardDialFailure := strings.Contains(errMsg, "all dials failed") ||
+		strings.Contains(errMsg, "connection refused") ||
+		strings.Contains(errMsg, "actively refused") ||
+		strings.Contains(errMsg, "no route") ||
+		strings.Contains(errMsg, "i/o timeout") ||
+		strings.Contains(errMsg, "deadline exceeded")
+	if !hardDialFailure {
+		return false
+	}
+	threshold := PruneLocalhostRefusedFailures * 2
+	if threshold < 6 {
+		threshold = 6
+	}
+	return n.dialFailureCount(peerID) >= threshold
+}
+
+// `staleStaticPeerPruneCooldown` defines the value currently being processed.
+const staleStaticPeerPruneCooldown = 10 * time.Minute
+
+// staleStaticPeerKey implements the stale static peer key helper.
+func staleStaticPeerKey(peerID string) string {
+	return "stale-static-peer:" + strings.TrimSpace(peerID)
+}
+
+// markStaleStaticPeerSuppressed implements the mark stale static peer suppressed helper.
+func (n *Node) markStaleStaticPeerSuppressed(peerID string) {
+	if n == nil || strings.TrimSpace(peerID) == "" {
+		return
+	}
+	n.noBlockLogMu.Lock()
+	defer n.noBlockLogMu.Unlock()
+	if n.noBlockLogAt == nil {
+		n.noBlockLogAt = make(map[string]time.Time)
+	}
+	n.noBlockLogAt[staleStaticPeerKey(peerID)] = time.Now()
+}
+
+// staleStaticPeerSuppressed implements the stale static peer suppressed helper.
+func (n *Node) staleStaticPeerSuppressed(peerID string) bool {
+	if n == nil || strings.TrimSpace(peerID) == "" {
+		return false
+	}
+	n.noBlockLogMu.Lock()
+	defer n.noBlockLogMu.Unlock()
+	if n.noBlockLogAt == nil {
+		return false
+	}
+	key := staleStaticPeerKey(peerID)
+	last, ok := n.noBlockLogAt[key]
+	if !ok || last.IsZero() {
+		return false
+	}
+	if time.Since(last) > staleStaticPeerPruneCooldown {
+		delete(n.noBlockLogAt, key)
+		return false
+	}
+	return true
+}
+
+// canDialPeerID implements the can dial peer id helper.
 func (n *Node) canDialPeerID(peerID string) bool {
 	if peerID == "" {
 		return true
+	}
+	if n.staleStaticPeerSuppressed(peerID) {
+		return false
 	}
 	if !n.peerAdmissionAllowed(peerID) {
 		return false
@@ -6986,27 +9061,34 @@ func (n *Node) canDialPeerID(peerID string) bool {
 	}
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
+	// `next` and `ok` store whether the related condition is satisfied.
 	next, ok := n.peerDialNext[peerID]
 	if !ok || next.IsZero() {
 		return true
 	}
 	return time.Now().After(next)
 }
+
+// recordDialFailure implements the record dial failure helper.
 func (n *Node) recordDialFailure(peerID string) {
 	if peerID == "" {
 		return
 	}
+	// `backoff` stores the value produced by this operation.
 	backoff := dialBackoffDelay
 	if n.isValidatorOrPersistentPeerID(peerID) {
 		backoff = validatorDialBackoffDelay
 	}
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
+	// `failures` stores the result produced by this operation.
 	failures := n.peerDialFailures[peerID] + 1
 	n.peerDialFailures[peerID] = failures
 	n.peerDialNext[peerID] = time.Now().Add(backoff(failures))
 	n.notePeerDialScore(peerID, false)
 }
+
+// recordDialSuccess implements the record dial success helper.
 func (n *Node) recordDialSuccess(peerID string) {
 	if peerID == "" {
 		return
@@ -7019,28 +9101,33 @@ func (n *Node) recordDialSuccess(peerID string) {
 	n.notePeerDialScore(peerID, true)
 }
 
+// clearDialBackoffForPeerID implements the clear dial backoff for peer id helper.
 func (n *Node) clearDialBackoffForPeerID(peerID string) {
 	if n == nil || strings.TrimSpace(peerID) == "" {
 		return
 	}
 	n.peerStateMu.Lock()
-	delete(n.peerDialFailures, peerID)
 	delete(n.peerDialNext, peerID)
 	delete(n.quarantineUntil, peerID)
 	delete(n.connectingPeers, peerID)
 	n.peerStateMu.Unlock()
 }
 
+// clearDialBackoffForPeerAddrs implements the clear dial backoff for peer addrs helper.
 func (n *Node) clearDialBackoffForPeerAddrs(peerAddrs []string) {
 	if n == nil || len(peerAddrs) == 0 {
 		return
 	}
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]struct{}, len(peerAddrs))
+	// `addr` tracks the address used by this operation.
 	for _, addr := range peerAddrs {
+		// `peerID` and `ok` store whether the related condition is satisfied.
 		_, peerID, ok := splitPeerAddress(addr)
 		if !ok || strings.TrimSpace(peerID) == "" {
 			continue
 		}
+		// `done` stores the value produced by this operation.
 		if _, done := seen[peerID]; done {
 			continue
 		}
@@ -7049,6 +9136,7 @@ func (n *Node) clearDialBackoffForPeerAddrs(peerAddrs []string) {
 	}
 }
 
+// protectValidatorMeshPeerID implements the protect validator mesh peer id helper.
 func (n *Node) protectValidatorMeshPeerID(peerID string) {
 	if n == nil || n.Host == nil {
 		return
@@ -7057,16 +9145,19 @@ func (n *Node) protectValidatorMeshPeerID(peerID string) {
 	if peerID == "" || !n.isValidatorOrPersistentPeerID(peerID) {
 		return
 	}
+	// `pid` and `err` store the error produced by this operation.
 	pid, err := peer.Decode(peerID)
 	if err != nil {
 		return
 	}
+	// `cm` stores the value produced by this operation.
 	if cm := n.Host.ConnManager(); cm != nil {
 		cm.TagPeer(pid, "validator-mesh", 1000)
 		cm.Protect(pid, "validator-mesh")
 	}
 }
 
+// unprotectValidatorMeshPeerID implements the unprotect validator mesh peer id helper.
 func (n *Node) unprotectValidatorMeshPeerID(peerID string) {
 	if n == nil || n.Host == nil {
 		return
@@ -7075,15 +9166,18 @@ func (n *Node) unprotectValidatorMeshPeerID(peerID string) {
 	if peerID == "" {
 		return
 	}
+	// `pid` and `err` store the error produced by this operation.
 	pid, err := peer.Decode(peerID)
 	if err != nil {
 		return
 	}
+	// `cm` stores the value produced by this operation.
 	if cm := n.Host.ConnManager(); cm != nil {
 		cm.Unprotect(pid, "validator-mesh")
 	}
 }
 
+// decayDialFailures implements the decay dial failures helper.
 func (n *Node) decayDialFailures(now time.Time) {
 	if n == nil {
 		return
@@ -7092,6 +9186,7 @@ func (n *Node) decayDialFailures(now time.Time) {
 		now = time.Now()
 	}
 	n.peerStateMu.Lock()
+	// `peerID` and `next` track the current values while iterating.
 	for peerID, next := range n.peerDialNext {
 		if next.IsZero() || now.After(next.Add(dialBackoffMax)) {
 			delete(n.peerDialNext, peerID)
@@ -7100,6 +9195,8 @@ func (n *Node) decayDialFailures(now time.Time) {
 	}
 	n.peerStateMu.Unlock()
 }
+
+// quarantineDurationFor implements the quarantine duration for helper.
 func quarantineDurationFor(reason string) time.Duration {
 	switch {
 	case strings.Contains(reason, "peer_flap"):
@@ -7120,6 +9217,8 @@ func quarantineDurationFor(reason string) time.Duration {
 		return peerQuarantineFor
 	}
 }
+
+// trustedPeerCanBypassQuarantine implements the trusted peer can bypass quarantine helper.
 func trustedPeerCanBypassQuarantine(reason string) bool {
 	reason = strings.ToLower(strings.TrimSpace(reason))
 	if reason == "" || shouldForgetPeer(reason) {
@@ -7139,6 +9238,8 @@ func trustedPeerCanBypassQuarantine(reason string) bool {
 		return true
 	}
 }
+
+// shouldForgetPeer implements the should forget peer helper.
 func shouldForgetPeer(reason string) bool {
 	switch {
 	case strings.Contains(reason, "chain_id_mismatch"),
@@ -7151,6 +9252,8 @@ func shouldForgetPeer(reason string) bool {
 		return false
 	}
 }
+
+// clearPeerState implements the clear peer state helper.
 func (n *Node) clearPeerState(peerID string) {
 	if peerID == "" {
 		return
@@ -7164,12 +9267,14 @@ func (n *Node) clearPeerState(peerID string) {
 	delete(n.peerHelloOK, peerID)
 	delete(n.peerSuspectAt, peerID)
 	delete(n.peerHashMatch, peerID)
+	// `nodeID` and `mappedPeerID` track the current values while iterating.
 	for nodeID, mappedPeerID := range n.nodeIDToPeer {
 		if mappedPeerID == peerID {
 			delete(n.nodeIDToPeer, nodeID)
 		}
 	}
 	delete(n.peerToValidator, peerID)
+	// `validatorID` and `mappedPeerID` track whether the related condition is satisfied.
 	for validatorID, mappedPeerID := range n.validatorToPeer {
 		if mappedPeerID == peerID {
 			delete(n.validatorToPeer, validatorID)
@@ -7187,12 +9292,15 @@ func (n *Node) clearPeerState(peerID string) {
 	delete(n.connectingPeers, peerID)
 	delete(n.peerConnectedAt, peerID)
 	delete(n.allowedPeerIDs, peerID)
+	// `prefix` stores the value produced by this operation.
 	prefix := peerID + "|"
+	// `key` tracks the key used to access the related value.
 	for key := range n.peerDriftState {
 		if strings.HasPrefix(key, prefix) {
 			delete(n.peerDriftState, key)
 		}
 	}
+	// `key` tracks the key used to access the related value.
 	for key := range n.peerSyncOnlyLastDropLog {
 		if strings.HasPrefix(key, prefix) {
 			delete(n.peerSyncOnlyLastDropLog, key)
@@ -7200,29 +9308,39 @@ func (n *Node) clearPeerState(peerID string) {
 	}
 	n.peerStateMu.Unlock()
 }
+
+// remotePeerIDFromMismatchError implements the remote peer id from mismatch error helper.
 func remotePeerIDFromMismatchError(err error) string {
 	if err == nil {
 		return ""
 	}
+	// `msg` stores the value produced by this operation.
 	msg := err.Error()
+	// `lower` stores the value produced by this operation.
 	lower := strings.ToLower(msg)
+	// `markers` stores the value produced by this operation.
 	markers := []string{
 		"remote key matches ",
 		"but got ",
 	}
+	// `marker` tracks the current values while iterating.
 	for _, marker := range markers {
+		// `idx` stores the current position in the related collection.
 		idx := strings.Index(lower, marker)
 		if idx < 0 {
 			continue
 		}
+		// `tail` stores the value produced by this operation.
 		tail := strings.TrimSpace(msg[idx+len(marker):])
 		if tail == "" {
 			continue
 		}
+		// `fields` stores the value produced by this operation.
 		fields := strings.Fields(tail)
 		if len(fields) == 0 {
 			continue
 		}
+		// `candidate` stores the value produced by this operation.
 		candidate := strings.Trim(fields[0], " ,.;:)]}\"'")
 		if strings.HasPrefix(candidate, "12D3") {
 			return candidate
@@ -7230,33 +9348,42 @@ func remotePeerIDFromMismatchError(err error) string {
 	}
 	return ""
 }
+
+// peerAddrWithPeerID implements the peer addr with peer id helper.
 func peerAddrWithPeerID(rawAddr, peerID string) (string, bool) {
 	rawAddr = strings.TrimSpace(rawAddr)
 	peerID = strings.TrimSpace(peerID)
 	if rawAddr == "" || peerID == "" {
 		return "", false
 	}
+	// `base` and `hasPID` store the value produced by this operation.
 	base, _, hasPID := splitPeerAddress(rawAddr)
 	if hasPID {
 		return fmt.Sprintf("%s/p2p/%s", base, peerID), true
 	}
 	if strings.HasPrefix(rawAddr, "/") {
+		// `err` stores the error produced by this operation.
 		if _, err := ma.NewMultiaddr(rawAddr); err == nil {
 			return fmt.Sprintf("%s/p2p/%s", rawAddr, peerID), true
 		}
 	}
 	return "", false
 }
+
+// replacePeerAddrForBase implements the replace peer addr for base helper.
 func replacePeerAddrForBase(list []string, fixedAddr string) []string {
 	fixedAddr = strings.TrimSpace(fixedAddr)
 	if fixedAddr == "" {
 		return list
 	}
+	// `base` stores the value produced by this operation.
 	base := stripP2PComponent(fixedAddr)
 	if base == "" {
 		return list
 	}
+	// `out` stores the result produced by this operation.
 	out := make([]string, 0, len(list)+1)
+	// `addr` tracks the address used by this operation.
 	for _, addr := range list {
 		addr = strings.TrimSpace(addr)
 		if addr == "" {
@@ -7270,6 +9397,8 @@ func replacePeerAddrForBase(list []string, fixedAddr string) []string {
 	out = append(out, fixedAddr)
 	return sanitizePeerListWithPreferred(out, []string{fixedAddr})
 }
+
+// resetPeerRetryState implements the reset peer retry state helper.
 func (n *Node) resetPeerRetryState(peerID string) {
 	if n == nil || peerID == "" {
 		return
@@ -7281,6 +9410,8 @@ func (n *Node) resetPeerRetryState(peerID string) {
 	delete(n.connectingPeers, peerID)
 	n.peerStateMu.Unlock()
 }
+
+// refreshPeerIDMismatch implements the refresh peer id mismatch helper.
 func (n *Node) refreshPeerIDMismatch(rawAddr, expectedPeerID string, dialErr error) bool {
 	if n == nil || expectedPeerID == "" || rawAddr == "" || dialErr == nil {
 		return false
@@ -7289,10 +9420,12 @@ func (n *Node) refreshPeerIDMismatch(rawAddr, expectedPeerID string, dialErr err
 	if !isPeerAddrPrivate(rawAddr) {
 		return false
 	}
+	// `remotePeerID` stores the value produced by this operation.
 	remotePeerID := remotePeerIDFromMismatchError(dialErr)
 	if remotePeerID == "" || remotePeerID == expectedPeerID {
 		return false
 	}
+	// `fixedAddr` and `ok` store whether the related condition is satisfied.
 	fixedAddr, ok := peerAddrWithPeerID(rawAddr, remotePeerID)
 	if !ok {
 		return false
@@ -7302,19 +9435,24 @@ func (n *Node) refreshPeerIDMismatch(rawAddr, expectedPeerID string, dialErr err
 		n.forgetPeer(expectedPeerID, "self_dial")
 		return true
 	}
+	// `persistent` and `seeds` store the value produced by this operation.
 	persistent, seeds := n.configPeerListsSnapshot()
 	persistent = replacePeerAddrForBase(persistent, fixedAddr)
 	seeds = replacePeerAddrForBase(seeds, fixedAddr)
 	n.setConfigPeerLists(persistent, seeds)
 	if PersistPeerIDRefresh {
+		// `err` stores the error produced by this operation.
 		if err := savePersistentPeers(n.DataDir, n.ID, persistent); err != nil && DebugNet {
 			fmt.Printf("Ã¢Å¡Â Ã¯Â¸Â Failed to persist peer-id refresh for %s: %v\n", expectedPeerID, err)
 		}
 	}
+	// `base` and `hasBase` store the value produced by this operation.
 	base, _, hasBase := splitPeerAddress(rawAddr)
 	if hasBase {
 		ValidatorAddrBook.mu.Lock()
+		// `vid` and `addr` track the address used by this operation.
 		for vid, addr := range ValidatorAddrBook.m {
+			// `addrBase` and `has` store the address used by this operation.
 			addrBase, _, has := splitPeerAddress(addr)
 			if has && addrBase == base {
 				ValidatorAddrBook.m[vid] = fixedAddr
@@ -7333,6 +9471,8 @@ func (n *Node) refreshPeerIDMismatch(rawAddr, expectedPeerID string, dialErr err
 	n.forgetPeer(expectedPeerID, "peer_id_mismatch")
 	return true
 }
+
+// forgetPeer implements the forget peer helper.
 func (n *Node) forgetPeer(peerID, reason string) {
 	if peerID == "" {
 		return
@@ -7340,22 +9480,30 @@ func (n *Node) forgetPeer(peerID, reason string) {
 	n.unprotectValidatorMeshPeerID(peerID)
 	n.clearPeerState(peerID)
 	if n.Host != nil {
+		// `pid` and `err` store the error produced by this operation.
 		if pid, err := peer.Decode(peerID); err == nil {
 			n.Host.Peerstore().ClearAddrs(pid)
 		}
 	}
 	ValidatorAddrBook.mu.Lock()
+	// `vid` and `addr` track the address used by this operation.
 	for vid, addr := range ValidatorAddrBook.m {
 		if strings.Contains(addr, peerID) {
 			delete(ValidatorAddrBook.m, vid)
 		}
 	}
 	ValidatorAddrBook.mu.Unlock()
+	// `persistent` and `seeds` store the value produced by this operation.
 	persistent, seeds := n.configPeerListsSnapshot()
+	// `filteredPersistent` stores the value produced by this operation.
 	filteredPersistent := make([]string, 0, len(persistent))
+	// `filteredSeeds` stores the value produced by this operation.
 	filteredSeeds := make([]string, 0, len(seeds))
+	// `persistentChanged` stores the value produced by this operation.
 	persistentChanged := false
+	// `seedsChanged` stores the value produced by this operation.
 	seedsChanged := false
+	// `addr` tracks the address used by this operation.
 	for _, addr := range persistent {
 		if strings.Contains(addr, peerID) {
 			persistentChanged = true
@@ -7363,6 +9511,7 @@ func (n *Node) forgetPeer(peerID, reason string) {
 		}
 		filteredPersistent = append(filteredPersistent, addr)
 	}
+	// `addr` tracks the address used by this operation.
 	for _, addr := range seeds {
 		if strings.Contains(addr, peerID) {
 			seedsChanged = true
@@ -7373,6 +9522,7 @@ func (n *Node) forgetPeer(peerID, reason string) {
 	if persistentChanged || seedsChanged {
 		n.setConfigPeerLists(filteredPersistent, filteredSeeds)
 		if persistentChanged && PersistPeerIDRefresh {
+			// `err` stores the error produced by this operation.
 			if err := savePersistentPeers(n.DataDir, n.ID, filteredPersistent); err != nil && DebugNet {
 				fmt.Printf("?? Failed to persist peers list: %v\n", err)
 			}
@@ -7382,6 +9532,8 @@ func (n *Node) forgetPeer(peerID, reason string) {
 		fmt.Printf("?? Peer forgotten: %s reason=%s\n", peerID, reason)
 	}
 }
+
+// quarantinePeer implements the quarantine peer helper.
 func (n *Node) quarantinePeer(peerID, reason string) {
 	if peerID == "" {
 		return
@@ -7398,7 +9550,9 @@ func (n *Node) quarantinePeer(peerID, reason string) {
 		}
 		return
 	}
+	// `duration` stores the value produced by this operation.
 	duration := quarantineDurationFor(reason)
+	// `forget` stores the value produced by this operation.
 	forget := shouldForgetPeer(reason)
 	if forget {
 		n.forgetPeer(peerID, reason)
@@ -7410,11 +9564,20 @@ func (n *Node) quarantinePeer(peerID, reason string) {
 		fmt.Printf("?? Peer quarantined: %s reason=%s\n", peerID, reason)
 	}
 }
+
+// disconnectPeerID implements the disconnect peer id helper.
 func (n *Node) disconnectPeerID(peerID, reason string) {
 	if peerID == "" {
 		return
 	}
-	log.Printf("[PEER-DISCONNECT] peer=%s reason=%s trusted=%t", ShortID(peerID), strings.TrimSpace(reason), n.isValidatorOrPersistentPeerID(peerID))
+	reason = strings.TrimSpace(reason)
+	trustedPeer := n.isValidatorOrPersistentPeerID(peerID)
+	if trustedPeer && isSoftTrustedPeerDisconnectReason(reason) {
+		n.clearDialBackoffForPeerID(peerID)
+		log.Printf("[PEER-DISCONNECT-SOFT] peer=%s reason=%s trusted=true action=keep_trusted_connection", ShortID(peerID), reason)
+		return
+	}
+	log.Printf("[PEER-DISCONNECT] peer=%s reason=%s trusted=%t", ShortID(peerID), reason, trustedPeer)
 	n.observePeerDisconnect(reason)
 	n.quarantinePeer(peerID, reason)
 	n.recordDialFailure(peerID)
@@ -7422,6 +9585,7 @@ func (n *Node) disconnectPeerID(peerID, reason string) {
 	if n.Host == nil {
 		return
 	}
+	// `pid` and `err` store the error produced by this operation.
 	pid, err := peer.Decode(peerID)
 	if err != nil {
 		return
@@ -7429,21 +9593,44 @@ func (n *Node) disconnectPeerID(peerID, reason string) {
 	_ = n.Host.Network().ClosePeer(pid)
 }
 
+// isSoftTrustedPeerDisconnectReason returns true for transient local-pressure reasons.
+func isSoftTrustedPeerDisconnectReason(reason string) bool {
+	reason = strings.ToLower(strings.TrimSpace(reason))
+	if reason == "" {
+		return false
+	}
+	if strings.HasPrefix(reason, "rate_limit_") {
+		return true
+	}
+	switch reason {
+	case "low_peer_reputation", "rate_limited", "connection_flood", "peer_limit",
+		"max_connections", "max_peers", "inbound_peer_limit", "outbound_peer_limit":
+		return true
+	default:
+		return false
+	}
+}
+
+// peerIdentityFromAddrOrID implements the peer identity from addr or id helper.
 func peerIdentityFromAddrOrID(raw string) (string, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", false
 	}
+	// `pid` and `ok` store whether the related condition is satisfied.
 	if _, pid, ok := splitPeerAddress(raw); ok && strings.TrimSpace(pid) != "" {
 		return strings.TrimSpace(pid), true
 	}
+	// `err` stores the error produced by this operation.
 	if _, err := peer.Decode(raw); err == nil {
 		return raw, true
 	}
 	return "", false
 }
 
+// peerHelloAdvertisedPeerID implements the peer hello advertised peer id helper.
 func peerHelloAdvertisedPeerID(hello PeerHello) string {
+	// `pid` and `ok` store whether the related condition is satisfied.
 	_, pid, ok := splitPeerAddress(strings.TrimSpace(hello.P2PAddr))
 	if !ok {
 		return ""
@@ -7451,10 +9638,13 @@ func peerHelloAdvertisedPeerID(hello PeerHello) string {
 	return strings.TrimSpace(pid)
 }
 
+// validatorIdentityPeerID implements the validator identity peer id helper.
 func validatorIdentityPeerID(peerAddr, advertisedAddr string) string {
+	// `pid` and `ok` store whether the related condition is satisfied.
 	if pid, ok := peerIdentityFromAddrOrID(peerAddr); ok {
 		return strings.TrimSpace(pid)
 	}
+	// `pid` and `ok` store whether the related condition is satisfied.
 	_, pid, ok := splitPeerAddress(strings.TrimSpace(advertisedAddr))
 	if !ok {
 		return ""
@@ -7462,41 +9652,54 @@ func validatorIdentityPeerID(peerAddr, advertisedAddr string) string {
 	return strings.TrimSpace(pid)
 }
 
+// peerHelloNodeID implements the peer hello node id helper.
 func peerHelloNodeID(hello PeerHello) string {
-	nodeID := normalizeValidatorID(hello.NodeID)
+	// `nodeID` stores the value produced by this operation.
+	nodeID := normalizeNodeIdentityID(hello.NodeID)
 	if nodeID == "" {
-		nodeID = normalizeValidatorID(hello.ValidatorID)
+		nodeID = normalizeNodeIdentityID(hello.ValidatorID)
 	}
 	return nodeID
 }
 
+// reserveNodePeerIdentity implements the reserve node peer identity helper.
 func (n *Node) reserveNodePeerIdentity(peerID, nodeID string) bool {
 	if n == nil {
 		return true
 	}
-	nodeID = normalizeValidatorID(nodeID)
+	rawNodeID := normalizeNodeIdentityID(nodeID)
+	nodeID = nodeIdentityMapKey(rawNodeID)
 	peerID = strings.TrimSpace(peerID)
 	if nodeID == "" || peerID == "" {
 		return true
 	}
+	// `selfPeerID` stores the value produced by this operation.
 	selfPeerID := ""
 	if n.Host != nil {
 		selfPeerID = n.Host.ID().String()
 	}
-	if selfID := normalizeValidatorID(n.ID); selfID != "" && nodeID == selfID && peerID != selfPeerID {
+	// `selfID` stores the value produced by this operation.
+	selfIdentity := n.NetworkID
+	if strings.TrimSpace(selfIdentity) == "" {
+		selfIdentity = n.ID
+	}
+	if selfID := nodeIdentityMapKey(selfIdentity); selfID != "" && nodeID == selfID && peerID != selfPeerID {
 		log.Printf("[DUPLICATE-NODE-ID] node=%s existing_peer=%s new_peer=%s action=reject reason=local_node_id_claim",
-			nodeID, selfPeerID, peerID)
+			rawNodeID, selfPeerID, peerID)
+		log.Printf("%s", duplicateNodeIdentityErrorMessage(rawNodeID))
 		n.disconnectPeerID(peerID, "duplicate_local_node_id")
 		return false
 	}
 
 	n.ensurePeerIsolationMaps()
 	n.peerStateMu.Lock()
+	// `existingPeerID` stores the value produced by this operation.
 	existingPeerID := strings.TrimSpace(n.nodeIDToPeer[nodeID])
 	if existingPeerID != "" && existingPeerID != peerID {
 		n.peerStateMu.Unlock()
 		log.Printf("[DUPLICATE-NODE-ID] node=%s existing_peer=%s new_peer=%s action=reject reason=live_node_conflict",
-			nodeID, existingPeerID, peerID)
+			rawNodeID, existingPeerID, peerID)
+		log.Printf("%s", duplicateNodeIdentityErrorMessage(rawNodeID))
 		n.disconnectPeerID(peerID, "duplicate_node_id")
 		return false
 	}
@@ -7505,6 +9708,7 @@ func (n *Node) reserveNodePeerIdentity(peerID, nodeID string) bool {
 	return true
 }
 
+// reserveValidatorPeerIdentity implements the reserve validator peer identity helper.
 func (n *Node) reserveValidatorPeerIdentity(peerID, validatorID, advertisedAddr string) bool {
 	if n == nil {
 		return true
@@ -7514,17 +9718,21 @@ func (n *Node) reserveValidatorPeerIdentity(peerID, validatorID, advertisedAddr 
 	if validatorID == "" || peerID == "" {
 		return true
 	}
+	// `selfPeerID` stores the value produced by this operation.
 	selfPeerID := ""
 	if n.Host != nil {
 		selfPeerID = n.Host.ID().String()
 	}
-	if selfID := normalizeValidatorID(n.ID); selfID != "" && validatorID == selfID && peerID != selfPeerID {
-		log.Printf("[DUPLICATE-NODE-ID] validator=%s existing_peer=%s new_peer=%s action=reject reason=local_validator_id_claim",
-			validatorID, selfPeerID, peerID)
-		n.disconnectPeerID(peerID, "duplicate_local_validator_id")
-		return false
+	for _, selfID := range n.localConsensusValidatorIDCandidates() {
+		if selfID != "" && validatorID == selfID && peerID != selfPeerID {
+			log.Printf("[DUPLICATE-NODE-ID] validator=%s existing_peer=%s new_peer=%s action=reject reason=local_validator_id_claim",
+				validatorID, selfPeerID, peerID)
+			n.disconnectPeerID(peerID, "duplicate_local_validator_id")
+			return false
+		}
 	}
 
+	// `advertisedPeerID` stores the value produced by this operation.
 	if advertisedPeerID := strings.TrimSpace(peerHelloAdvertisedPeerID(PeerHello{P2PAddr: advertisedAddr})); advertisedPeerID != "" && advertisedPeerID != peerID {
 		log.Printf("[DUPLICATE-NODE-ID] validator=%s advertised_peer=%s remote_peer=%s action=reject reason=advertised_peer_mismatch",
 			validatorID, advertisedPeerID, peerID)
@@ -7533,17 +9741,29 @@ func (n *Node) reserveValidatorPeerIdentity(peerID, validatorID, advertisedAddr 
 	}
 
 	ValidatorAddrBook.mu.Lock()
+	// `oldAddr` stores the address used by this operation.
 	oldAddr := strings.TrimSpace(ValidatorAddrBook.m[validatorID])
 	ValidatorAddrBook.mu.Unlock()
+	// `oldPeerID` stores the value produced by this operation.
 	if oldPeerID := strings.TrimSpace(peerHelloAdvertisedPeerID(PeerHello{P2PAddr: oldAddr})); oldPeerID != "" && oldPeerID != peerID {
-		log.Printf("[DUPLICATE-NODE-ID] validator=%s existing_peer=%s new_peer=%s action=reject reason=address_book_conflict",
-			validatorID, oldPeerID, peerID)
-		n.disconnectPeerID(peerID, "duplicate_validator_id")
-		return false
+		// Same transport endpoint with a new libp2p ID is a peer-ID refresh, not
+		// a duplicate validator. This keeps AWS/public validators stable after
+		// identity rotation or stale peers.json entries.
+		oldBase := stripP2PComponent(oldAddr)
+		newBase := stripP2PComponent(advertisedAddr)
+		if oldBase == "" || newBase == "" || oldBase != newBase {
+			log.Printf("[DUPLICATE-NODE-ID] validator=%s existing_peer=%s new_peer=%s action=reject reason=address_book_conflict",
+				validatorID, oldPeerID, peerID)
+			n.disconnectPeerID(peerID, "duplicate_validator_id")
+			return false
+		}
+		log.Printf("[PEER-ID-REFRESH] validator=%s endpoint=%s old_peer=%s new_peer=%s source=peer_hello",
+			validatorID, oldBase, oldPeerID, peerID)
 	}
 
 	n.ensurePeerIsolationMaps()
 	n.peerStateMu.Lock()
+	// `existingPeerID` stores the value produced by this operation.
 	existingPeerID := strings.TrimSpace(n.validatorToPeer[validatorID])
 	if existingPeerID != "" && existingPeerID != peerID {
 		n.peerStateMu.Unlock()
@@ -7557,16 +9777,22 @@ func (n *Node) reserveValidatorPeerIdentity(peerID, validatorID, advertisedAddr 
 	return true
 }
 
+// peerHelloNonce implements the peer hello nonce helper.
 func peerHelloNonce() string {
+	// `b` stores the value used by this operation.
 	var b [16]byte
+	// `err` stores the error produced by this operation.
 	if _, err := crand.Read(b[:]); err != nil {
+		// `fallback` stores the value produced by this operation.
 		fallback := sha256.Sum256([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
 		return hex.EncodeToString(fallback[:16])
 	}
 	return hex.EncodeToString(b[:])
 }
 
+// peerHelloSignBytes implements the peer hello sign bytes helper.
 func peerHelloSignBytes(hello PeerHello) []byte {
+	// `fields` stores the value produced by this operation.
 	fields := []string{
 		"msc-peer-hello-v1",
 		strings.TrimSpace(hello.ChainID),
@@ -7589,10 +9815,12 @@ func peerHelloSignBytes(hello PeerHello) []byte {
 	return []byte(strings.Join(fields, "\n"))
 }
 
+// signPeerHello implements the sign peer hello helper.
 func (n *Node) signPeerHello(hello *PeerHello) {
 	if n == nil || hello == nil || n.Host == nil {
 		return
 	}
+	// `priv` stores the value produced by this operation.
 	priv := n.Host.Peerstore().PrivKey(n.Host.ID())
 	if priv == nil {
 		return
@@ -7604,6 +9832,7 @@ func (n *Node) signPeerHello(hello *PeerHello) {
 		hello.Nonce = peerHelloNonce()
 	}
 	hello.SignatureHex = ""
+	// `sig` and `err` store the error produced by this operation.
 	sig, err := priv.Sign(peerHelloSignBytes(*hello))
 	if err != nil {
 		return
@@ -7611,20 +9840,25 @@ func (n *Node) signPeerHello(hello *PeerHello) {
 	hello.SignatureHex = hex.EncodeToString(sig)
 }
 
+// peerHelloPublicKey implements the peer hello public key helper.
 func (n *Node) peerHelloPublicKey(peerID string) (libp2pcrypto.PubKey, bool) {
+	// `remotePeerID` and `ok` store whether the related condition is satisfied.
 	remotePeerID, ok := peerIdentityFromAddrOrID(peerID)
 	if !ok {
 		return nil, false
 	}
+	// `pid` and `err` store the error produced by this operation.
 	pid, err := peer.Decode(remotePeerID)
 	if err != nil {
 		return nil, false
 	}
 	if n != nil && n.Host != nil {
+		// `pub` stores the value produced by this operation.
 		if pub := n.Host.Peerstore().PubKey(pid); pub != nil {
 			return pub, true
 		}
 	}
+	// `pub` and `err` store the error produced by this operation.
 	pub, err := pid.ExtractPublicKey()
 	if err != nil || pub == nil {
 		return nil, false
@@ -7633,9 +9867,11 @@ func (n *Node) peerHelloPublicKey(peerID string) (libp2pcrypto.PubKey, bool) {
 }
 
 type peerHelloNonceStore struct {
+	// `Nonces` stores the value associated with this record.
 	Nonces map[string]int64 `json:"nonces"`
 }
 
+// peerHelloNonceStorePath implements the peer hello nonce store path helper.
 func (n *Node) peerHelloNonceStorePath() string {
 	if n == nil || strings.TrimSpace(n.DataDir) == "" || strings.TrimSpace(n.ID) == "" {
 		return ""
@@ -7643,6 +9879,7 @@ func (n *Node) peerHelloNonceStorePath() string {
 	return filepath.Join(nodeDataPath(n.DataDir, n.ID), peerHelloNonceStoreFile)
 }
 
+// prunePeerHelloNoncesLocked implements the prune peer hello nonces locked helper.
 func (n *Node) prunePeerHelloNoncesLocked(now time.Time) bool {
 	if n == nil || n.peerHelloNonces == nil {
 		return false
@@ -7650,7 +9887,9 @@ func (n *Node) prunePeerHelloNoncesLocked(now time.Time) bool {
 	if now.IsZero() {
 		now = time.Now()
 	}
+	// `changed` stores the value produced by this operation.
 	changed := false
+	// `key` and `seenAt` track the key used to access the related value.
 	for key, seenAt := range n.peerHelloNonces {
 		if strings.TrimSpace(key) == "" || seenAt.IsZero() || now.Sub(seenAt) > peerHelloNonceTTL || seenAt.After(now.Add(peerHelloMaxClockSkew)) {
 			delete(n.peerHelloNonces, key)
@@ -7660,29 +9899,38 @@ func (n *Node) prunePeerHelloNoncesLocked(now time.Time) bool {
 	return changed
 }
 
+// loadPeerHelloNonces implements the load peer hello nonces helper.
 func (n *Node) loadPeerHelloNonces() {
+	// `path` stores the value produced by this operation.
 	path := n.peerHelloNonceStorePath()
 	if path == "" {
 		return
 	}
+	// `raw` and `err` store the error produced by this operation.
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return
 	}
+	// `store` stores the value used by this operation.
 	var store peerHelloNonceStore
+	// `err` stores the error produced by this operation.
 	if err := json.Unmarshal(raw, &store); err != nil {
 		return
 	}
 	n.ensurePeerIsolationMaps()
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `changed` stores the value produced by this operation.
 	changed := false
 	n.peerStateMu.Lock()
+	// `key` and `seenUnix` track the key used to access the related value.
 	for key, seenUnix := range store.Nonces {
 		key = strings.TrimSpace(key)
 		if key == "" || seenUnix <= 0 {
 			changed = true
 			continue
 		}
+		// `seenAt` stores the value produced by this operation.
 		seenAt := time.Unix(seenUnix, 0)
 		if now.Sub(seenAt) > peerHelloNonceTTL || seenAt.After(now.Add(peerHelloMaxClockSkew)) {
 			changed = true
@@ -7699,14 +9947,18 @@ func (n *Node) loadPeerHelloNonces() {
 	}
 }
 
+// persistPeerHelloNonces implements the persist peer hello nonces helper.
 func (n *Node) persistPeerHelloNonces() {
+	// `path` stores the value produced by this operation.
 	path := n.peerHelloNonceStorePath()
 	if path == "" {
 		return
 	}
 	n.ensurePeerIsolationMaps()
+	// `nonces` stores the value produced by this operation.
 	nonces := make(map[string]int64)
 	n.peerStateMu.Lock()
+	// `key` and `seenAt` track the key used to access the related value.
 	for key, seenAt := range n.peerHelloNonces {
 		key = strings.TrimSpace(key)
 		if key != "" && !seenAt.IsZero() {
@@ -7718,9 +9970,11 @@ func (n *Node) persistPeerHelloNonces() {
 		_ = os.Remove(path)
 		return
 	}
+	// `err` stores the error produced by this operation.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return
 	}
+	// `raw` and `err` store the error produced by this operation.
 	raw, err := json.MarshalIndent(peerHelloNonceStore{Nonces: nonces}, "", "  ")
 	if err != nil {
 		return
@@ -7728,12 +9982,14 @@ func (n *Node) persistPeerHelloNonces() {
 	_ = writeFileAtomic(path, raw, 0o600)
 }
 
+// sweepPeerHelloNonces implements the sweep peer hello nonces helper.
 func (n *Node) sweepPeerHelloNonces(now time.Time) bool {
 	if n == nil {
 		return false
 	}
 	n.ensurePeerIsolationMaps()
 	n.peerStateMu.Lock()
+	// `changed` stores the value produced by this operation.
 	changed := n.prunePeerHelloNoncesLocked(now)
 	n.peerStateMu.Unlock()
 	if changed {
@@ -7742,6 +9998,7 @@ func (n *Node) sweepPeerHelloNonces(now time.Time) bool {
 	return changed
 }
 
+// startPeerHelloNonceSweeper implements the start peer hello nonce sweeper helper.
 func (n *Node) startPeerHelloNonceSweeper(ctx context.Context) {
 	if n == nil {
 		return
@@ -7749,10 +10006,12 @@ func (n *Node) startPeerHelloNonceSweeper(ctx context.Context) {
 	if ctx == nil {
 		ctx = n.RootContext()
 	}
+	// `interval` stores the value currently being processed.
 	interval := peerHelloNonceSweepInterval
 	if interval <= 0 {
 		interval = time.Minute
 	}
+	// `ticker` stores the value produced by this operation.
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	n.sweepPeerHelloNonces(time.Now())
@@ -7768,15 +10027,20 @@ func (n *Node) startPeerHelloNonceSweeper(ctx context.Context) {
 	}
 }
 
+// acceptPeerHelloNonce implements the accept peer hello nonce helper.
 func (n *Node) acceptPeerHelloNonce(peerID string, hello PeerHello) bool {
+	// `nonce` stores the value produced by this operation.
 	nonce := strings.TrimSpace(hello.Nonce)
 	if n == nil || peerID == "" || nonce == "" {
 		return false
 	}
 	n.ensurePeerIsolationMaps()
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `key` stores the key used to access the related value.
 	key := peerID + "|" + nonce
 	n.peerStateMu.Lock()
+	// `exists` stores whether the related condition is satisfied.
 	if _, exists := n.peerHelloNonces[key]; exists {
 		n.peerStateMu.Unlock()
 		return false
@@ -7787,7 +10051,9 @@ func (n *Node) acceptPeerHelloNonce(peerID string, hello PeerHello) bool {
 	return true
 }
 
+// verifyPeerHelloSignature verifies peer hello signature.
 func (n *Node) verifyPeerHelloSignature(peerID string, hello PeerHello) bool {
+	// `pub` and `ok` store whether the related condition is satisfied.
 	pub, ok := n.peerHelloPublicKey(peerID)
 	if !ok {
 		return false
@@ -7795,28 +10061,34 @@ func (n *Node) verifyPeerHelloSignature(peerID string, hello PeerHello) bool {
 	if hello.Timestamp == 0 || strings.TrimSpace(hello.Nonce) == "" || strings.TrimSpace(hello.SignatureHex) == "" {
 		return false
 	}
+	// `age` stores the value produced by this operation.
 	age := time.Since(time.Unix(hello.Timestamp, 0))
 	if age < -peerHelloMaxClockSkew || age > peerHelloMaxClockSkew {
 		return false
 	}
+	// `sig` and `err` store the error produced by this operation.
 	sig, err := hex.DecodeString(strings.TrimSpace(hello.SignatureHex))
 	if err != nil || len(sig) == 0 {
 		return false
 	}
+	// `unsigned` stores the value produced by this operation.
 	unsigned := hello
 	unsigned.SignatureHex = ""
 	ok, err = pub.Verify(peerHelloSignBytes(unsigned), sig)
 	return err == nil && ok
 }
 
+// validatePeerHelloEnvelope validates peer hello envelope.
 func (n *Node) validatePeerHelloEnvelope(peerID string, hello PeerHello) bool {
+	// `advertisedPeerID` stores the value produced by this operation.
 	if advertisedPeerID := peerHelloAdvertisedPeerID(hello); advertisedPeerID != "" {
+		// `remotePeerID` and `ok` store whether the related condition is satisfied.
 		if remotePeerID, ok := peerIdentityFromAddrOrID(peerID); ok && remotePeerID != advertisedPeerID {
 			n.disconnectPeerID(peerID, "peer_id_mismatch")
 			return false
 		}
 	}
-	if hello.ChainID == "" || hello.ChainID != ChainID {
+	if !isProtocolChainID(hello.ChainID) {
 		n.disconnectPeerID(peerID, "chain_id_mismatch")
 		return false
 	}
@@ -7832,6 +10104,7 @@ func (n *Node) validatePeerHelloEnvelope(peerID string, hello PeerHello) bool {
 		n.disconnectPeerID(peerID, "consensus_params_mismatch")
 		return false
 	}
+	// `hasPubKey` stores the key used to access the related value.
 	if _, hasPubKey := n.peerHelloPublicKey(peerID); hasPubKey {
 		if !n.verifyPeerHelloSignature(peerID, hello) {
 			n.disconnectPeerID(peerID, "peer_hello_bad_signature")
@@ -7841,16 +10114,19 @@ func (n *Node) validatePeerHelloEnvelope(peerID string, hello PeerHello) bool {
 	return true
 }
 
+// validatePeerHello validates peer hello.
 func (n *Node) validatePeerHello(peerID string, hello PeerHello) bool {
 	if !n.validatePeerHelloEnvelope(peerID, hello) {
 		return false
 	}
+	// `hasPubKey` stores the key used to access the related value.
 	if _, hasPubKey := n.peerHelloPublicKey(peerID); hasPubKey {
 		if !n.acceptPeerHelloNonce(peerID, hello) {
 			n.disconnectPeerID(peerID, "peer_hello_replay")
 			return false
 		}
 	}
+	// `identityPeerID` stores the current position in the related collection.
 	identityPeerID := validatorIdentityPeerID(peerID, hello.P2PAddr)
 	if !n.reserveNodePeerIdentity(identityPeerID, peerHelloNodeID(hello)) {
 		return false
@@ -7866,23 +10142,29 @@ func (n *Node) validatePeerHello(peerID string, hello PeerHello) bool {
 	return true
 }
 
+// applyPeerHelloPubKey applies peer hello pub key.
 func (n *Node) applyPeerHelloPubKey(hello PeerHello) {
-	// Keep strict signed-announcement behavior on non-testnet.
-	if !IsTestnet {
+	// Keep strict signed-announcement behavior when the protocol requires it.
+	if !protocolIsTestnet() {
 		return
 	}
+	// `validatorID` stores whether the related condition is satisfied.
 	validatorID := normalizeValidatorID(hello.ValidatorID)
+	// `pubHex` stores the value produced by this operation.
 	pubHex := strings.TrimSpace(hello.ValidatorPubKey)
 	if validatorID == "" || pubHex == "" {
 		return
 	}
+	// `pubBytes` and `err` store the error produced by this operation.
 	pubBytes, err := hex.DecodeString(pubHex)
 	if err != nil || len(pubBytes) != ed25519.PublicKeySize {
 		return
 	}
 	validatorPubKeysMu.RLock()
+	// `existing` and `existingOK` store whether the related condition is satisfied.
 	existing, existingOK := ValidatorPubKeys[validatorID]
 	validatorPubKeysMu.RUnlock()
+	// `pubKeyUpdated` stores the value produced by this operation.
 	pubKeyUpdated := !existingOK || !bytes.Equal(existing, pubBytes)
 	if existingOK && len(existing) == ed25519.PublicKeySize {
 		if !bytes.Equal(existing, pubBytes) && DebugConsensus {
@@ -7898,6 +10180,8 @@ func (n *Node) applyPeerHelloPubKey(hello PeerHello) {
 		go n.ProcessQueuedBlocks()
 	}
 }
+
+// isPeerHelloOK implements the is peer hello ok helper.
 func (n *Node) isPeerHelloOK(peerID string) bool {
 	if peerID == "" {
 		return false
@@ -7906,6 +10190,8 @@ func (n *Node) isPeerHelloOK(peerID string) bool {
 	defer n.peerStateMu.Unlock()
 	return n.peerHelloOK[peerID]
 }
+
+// clearPeerHello implements the clear peer hello helper.
 func (n *Node) clearPeerHello(peerID string) {
 	if peerID == "" {
 		return
@@ -7914,6 +10200,8 @@ func (n *Node) clearPeerHello(peerID string) {
 	delete(n.peerHelloOK, peerID)
 	n.peerStateMu.Unlock()
 }
+
+// shouldHandshakePeer implements the should handshake peer helper.
 func (n *Node) shouldHandshakePeer(peerID string) bool {
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
@@ -7925,10 +10213,13 @@ func (n *Node) shouldHandshakePeer(peerID string) bool {
 	}
 	return n.allowedPeerIDs[peerID]
 }
+
+// recomputeGossipQuiet implements the recompute gossip quiet helper.
 func (n *Node) recomputeGossipQuiet() {
 	if n.Host == nil {
 		return
 	}
+	// `peers` stores the value produced by this operation.
 	peers := n.Host.Network().Peers()
 	if len(peers) == 0 {
 		n.setGossipQuiet(true)
@@ -7936,7 +10227,9 @@ func (n *Node) recomputeGossipQuiet() {
 	}
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
+	// `pid` tracks the current values while iterating.
 	for _, pid := range peers {
+		// `match` and `ok` store whether the related condition is satisfied.
 		if match, ok := n.peerHashMatch[pid.String()]; !ok || !match {
 			n.gossipQuiet = false
 			return
@@ -7944,9 +10237,12 @@ func (n *Node) recomputeGossipQuiet() {
 	}
 	n.gossipQuiet = true
 }
+
+// isPeerQuarantined implements the is peer quarantined helper.
 func (n *Node) isPeerQuarantined(peerID string) bool {
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
+	// `until` and `ok` store whether the related condition is satisfied.
 	until, ok := n.quarantineUntil[peerID]
 	if !ok {
 		return false
@@ -7957,9 +10253,12 @@ func (n *Node) isPeerQuarantined(peerID string) bool {
 	}
 	return true
 }
+
+// markHelloSent implements the mark hello sent helper.
 func (n *Node) markHelloSent(peerID string) bool {
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
+	// `last` and `ok` store whether the related condition is satisfied.
 	if last, ok := n.peerHelloSentAt[peerID]; ok {
 		if time.Since(last) < peerHelloCooldown {
 			return false
@@ -7968,6 +10267,8 @@ func (n *Node) markHelloSent(peerID string) bool {
 	n.peerHelloSentAt[peerID] = time.Now()
 	return true
 }
+
+// sendPeerHello implements the send peer hello helper.
 func (n *Node) sendPeerHello(pid peer.ID) {
 	if n.Host == nil {
 		return
@@ -7981,14 +10282,17 @@ func (n *Node) sendPeerHello(pid peer.ID) {
 	if !n.markHelloSent(pid.String()) {
 		return
 	}
+	// `ctx` and `cancel` store the context controlling this operation.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	// `s` and `err` store the error produced by this operation.
 	s, err := n.openStream(ctx, pid, "/msc/peerinfo/1.0.0")
 	if err != nil {
 		if DebugNet {
 			fmt.Printf("Ã¢Å¡Â Ã¯Â¸Â Peer hello stream failed to %s: %v\n", pid, err)
 		}
 		n.recordDialFailure(pid.String())
+		// `errMsg` stores the error produced by this operation.
 		errMsg := strings.ToLower(err.Error())
 		if strings.Contains(errMsg, "protocols not supported") || strings.Contains(errMsg, "protocol not supported") {
 			n.disconnectPeerID(pid.String(), "peerinfo_protocol_mismatch")
@@ -7996,22 +10300,32 @@ func (n *Node) sendPeerHello(pid peer.ID) {
 		return
 	}
 	defer s.Close()
+	// `deadline` stores the value produced by this operation.
 	deadline := time.Now().Add(5 * time.Second)
 	_ = s.SetDeadline(deadline)
+	// `enc` stores the value produced by this operation.
 	enc := json.NewEncoder(s)
+	// `dec` stores the value produced by this operation.
 	dec := json.NewDecoder(s)
 	_ = n.completeOutboundPeerHelloExchange(pid.String(), enc, dec)
 }
+
+// decodePeerHelloPayload implements the decode peer hello payload helper.
 func decodePeerHelloPayload(raw json.RawMessage) (PeerHello, error) {
+	// `hello` stores the value used by this operation.
 	var hello PeerHello
+	// `err` stores the error produced by this operation.
 	if err := json.Unmarshal(raw, &hello); err == nil {
 		if hello.ChainID != "" {
 			return hello, nil
 		}
 	}
+	// `wrapped` stores the value used by this operation.
 	var wrapped Message
+	// `err` stores the error produced by this operation.
 	if err := json.Unmarshal(raw, &wrapped); err == nil {
 		if wrapped.Type == MsgPeerHello && len(wrapped.Data) > 0 {
+			// `err` stores the error produced by this operation.
 			if err := json.Unmarshal(wrapped.Data, &hello); err == nil {
 				if hello.ChainID != "" {
 					return hello, nil
@@ -8022,12 +10336,16 @@ func decodePeerHelloPayload(raw json.RawMessage) (PeerHello, error) {
 	return PeerHello{}, fmt.Errorf("invalid peer hello payload")
 }
 
+// completeOutboundPeerHelloExchange implements the complete outbound peer hello exchange helper.
 func (n *Node) completeOutboundPeerHelloExchange(peerID string, enc *json.Encoder, dec *json.Decoder) bool {
+	// `raw` stores the value used by this operation.
 	var raw json.RawMessage
+	// `err` stores the error produced by this operation.
 	if err := dec.Decode(&raw); err != nil {
 		n.recordDialFailure(peerID)
 		return false
 	}
+	// `peerInfo` and `derr` store the error produced by this operation.
 	peerInfo, derr := decodePeerHelloPayload(raw)
 	if derr != nil {
 		n.recordDialFailure(peerID)
@@ -8036,11 +10354,13 @@ func (n *Node) completeOutboundPeerHelloExchange(peerID string, enc *json.Encode
 	if !n.validatePeerHelloEnvelope(peerID, peerInfo) {
 		return false
 	}
+	// `err` stores the error produced by this operation.
 	if err := enc.Encode(n.outboundPeerHello()); err != nil {
 		n.recordDialFailure(peerID)
 		return false
 	}
 	if !peerHelloHasPostValidationFields(peerInfo) {
+		// `err` stores the error produced by this operation.
 		if err := dec.Decode(&raw); err != nil {
 			n.recordDialFailure(peerID)
 			return false
@@ -8063,6 +10383,7 @@ func (n *Node) completeOutboundPeerHelloExchange(peerID string, enc *json.Encode
 	return true
 }
 
+// exchangePeerInfo implements the exchange peer info helper.
 func (n *Node) exchangePeerInfo(pid peer.ID) {
 	if n.Host == nil {
 		return
@@ -8073,14 +10394,17 @@ func (n *Node) exchangePeerInfo(pid peer.ID) {
 	if !n.shouldHandshakePeer(pid.String()) {
 		return
 	}
+	// `ctx` and `cancel` store the context controlling this operation.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	// `s` and `err` store the error produced by this operation.
 	s, err := n.openStream(ctx, pid, "/msc/peerinfo/1.0.0")
 	if err != nil {
 		if DebugNet {
 			fmt.Printf("Ã¢Å¡Â Ã¯Â¸Â Peer info stream failed to %s: %v\n", pid, err)
 		}
 		n.recordDialFailure(pid.String())
+		// `errMsg` stores the error produced by this operation.
 		errMsg := strings.ToLower(err.Error())
 		if strings.Contains(errMsg, "protocols not supported") || strings.Contains(errMsg, "protocol not supported") {
 			n.disconnectPeerID(pid.String(), "peerinfo_protocol_mismatch")
@@ -8088,10 +10412,14 @@ func (n *Node) exchangePeerInfo(pid peer.ID) {
 		return
 	}
 	defer s.Close()
+	// `enc` stores the value produced by this operation.
 	enc := json.NewEncoder(s)
+	// `dec` stores the value produced by this operation.
 	dec := json.NewDecoder(s)
 	_ = n.completeOutboundPeerHelloExchange(pid.String(), enc, dec)
 }
+
+// sendPeersList implements the send peers list helper.
 func (n *Node) sendPeersList(pid peer.ID) {
 	if n.Host == nil {
 		return
@@ -8099,13 +10427,18 @@ func (n *Node) sendPeersList(pid peer.ID) {
 	if n.isPeerQuarantined(pid.String()) {
 		return
 	}
+	// `peers` stores the value produced by this operation.
 	peers := n.collectPeerMultiaddrs()
 	if len(peers) == 0 {
 		return
 	}
+	// `self` stores the value produced by this operation.
 	self := stripP2PComponent(n.SelfAddr)
+	// `out` stores the result produced by this operation.
 	out := make([]string, 0, len(peers))
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]struct{}, len(peers))
+	// `addr` tracks the address used by this operation.
 	for _, addr := range peers {
 		addr = strings.TrimSpace(addr)
 		if addr == "" {
@@ -8119,6 +10452,7 @@ func (n *Node) sendPeersList(pid peer.ID) {
 		if n.Host != nil && strings.Contains(addr, n.Host.ID().String()) {
 			continue
 		}
+		// `ok` stores whether the related condition is satisfied.
 		if _, ok := seen[addr]; ok {
 			continue
 		}
@@ -8131,18 +10465,22 @@ func (n *Node) sendPeersList(pid peer.ID) {
 	if len(out) > 50 {
 		out = out[:50]
 	}
+	// `msg` stores the value produced by this operation.
 	msg := Message{
 		Type: MsgPeers,
 		Data: MustJSON(out),
 	}
+	// `ctx` and `cancel` store the context controlling this operation.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	// `s` and `err` store the error produced by this operation.
 	s, err := n.openStream(ctx, pid, "/msc/consensus/1.0.0")
 	if err != nil {
 		if DebugNet {
 			fmt.Printf("Ã¢Å¡Â Ã¯Â¸Â Peers list stream failed to %s: %v\n", pid, err)
 		}
 		n.recordDialFailure(pid.String())
+		// `errMsg` stores the error produced by this operation.
 		errMsg := strings.ToLower(err.Error())
 		if strings.Contains(errMsg, "protocols not supported") || strings.Contains(errMsg, "protocol not supported") {
 			n.disconnectPeerID(pid.String(), "consensus_protocol_mismatch")
@@ -8150,15 +10488,21 @@ func (n *Node) sendPeersList(pid peer.ID) {
 		return
 	}
 	defer s.Close()
+	// `data` stores the value produced by this operation.
 	data, _ := json.Marshal(msg)
 	_, _ = s.Write(append(data, '\n'))
 }
+
+// handlePeersList handles peers list.
 func (n *Node) handlePeersList(peerAddr string, peers []string) {
 	if len(peers) == 0 {
 		return
 	}
+	// `self` stores the value produced by this operation.
 	self := stripP2PComponent(n.SelfAddr)
+	// `uniq` stores the value produced by this operation.
 	uniq := make(map[string]struct{}, len(peers))
+	// `addr` tracks the address used by this operation.
 	for _, addr := range peers {
 		addr = strings.TrimSpace(addr)
 		if addr == "" {
@@ -8178,21 +10522,29 @@ func (n *Node) handlePeersList(peerAddr string, peers []string) {
 	if len(uniq) == 0 {
 		return
 	}
+	// `list` stores the value produced by this operation.
 	list := make([]string, 0, len(uniq))
+	// `addr` tracks the address used by this operation.
 	for addr := range uniq {
 		list = append(list, addr)
 	}
 	sort.Strings(list)
 	list = sanitizePeerListWithPreferred(list, n.trustedPeerMultiaddrs())
+	// `currentPersistent` stores the value produced by this operation.
 	currentPersistent := n.persistentPeersSnapshot()
+	// `merged` stores the value produced by this operation.
 	merged := mergePeerLists(currentPersistent, list)
+	// `sanitizedPersistent` stores the value produced by this operation.
 	sanitizedPersistent := sanitizePeerListWithPreferred(merged, n.trustedPeerMultiaddrs())
 	n.setPersistentPeers(sanitizedPersistent)
+	// `err` stores the error produced by this operation.
 	if err := savePersistentPeers(n.DataDir, n.ID, sanitizedPersistent); err != nil && DebugNet {
 		fmt.Printf("Ã¢Å¡Â Ã¯Â¸Â Failed to persist peers list: %v\n", err)
 	}
 	n.connectToPeersAsync(sanitizePeerListWithPreferred(list, n.trustedPeerMultiaddrs()), 15*time.Second)
 }
+
+// shouldSyncForValidatorSetMismatch implements the should sync for validator set mismatch helper.
 func shouldSyncForValidatorSetMismatch(localHeight, peerHeight uint64) bool {
 	if peerHeight == 0 {
 		return false
@@ -8200,6 +10552,8 @@ func shouldSyncForValidatorSetMismatch(localHeight, peerHeight uint64) bool {
 	// Never roll back due to a stale peer advertisement.
 	return peerHeight >= localHeight
 }
+
+// shouldForceSnapshotResyncForValidatorSetMismatch implements the should force snapshot resync for validator set mismatch helper.
 func shouldForceSnapshotResyncForValidatorSetMismatch(localHeight, targetHeight uint64) bool {
 	if targetHeight == 0 {
 		return false
@@ -8209,6 +10563,7 @@ func shouldForceSnapshotResyncForValidatorSetMismatch(localHeight, targetHeight 
 	return targetHeight > localHeight
 }
 
+// markValidatorSuspect implements the mark validator suspect helper.
 func (n *Node) markValidatorSuspect(id string, at time.Time) {
 	id = normalizeValidatorID(id)
 	if n == nil || id == "" {
@@ -8225,6 +10580,7 @@ func (n *Node) markValidatorSuspect(id string, at time.Time) {
 	n.validatorMu.Unlock()
 }
 
+// clearValidatorSuspect implements the clear validator suspect helper.
 func (n *Node) clearValidatorSuspect(id string) {
 	id = normalizeValidatorID(id)
 	if n == nil || id == "" {
@@ -8235,17 +10591,21 @@ func (n *Node) clearValidatorSuspect(id string) {
 	n.validatorMu.Unlock()
 }
 
+// validatorSuspectCount implements the validator suspect count helper.
 func (n *Node) validatorSuspectCount() int {
 	if n == nil {
 		return 0
 	}
 	n.validatorMu.RLock()
+	// `count` stores the measured quantity used by this operation.
 	count := len(n.validatorSuspect)
 	n.validatorMu.RUnlock()
 	return count
 }
 
+// applyPeerInfo applies peer info.
 func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
+	// `peerRole` stores the value produced by this operation.
 	peerRole := normalizeNodeRole(hello.Role)
 	if peerRole == "validator" && hello.ValidatorID == "" {
 		peerRole = "full"
@@ -8258,8 +10618,11 @@ func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
 	}
 	// Peer hello is informational only. Do not update sync state.
 	expectedHash := ""
+	// `expectedSource` stores the value produced by this operation.
 	expectedSource := "none"
+	// `expectedHeight` stores the value produced by this operation.
 	expectedHeight := uint64(0)
+	// `advertisedActivationHeight` stores the value produced by this operation.
 	advertisedActivationHeight := peerHelloActivationHeight(hello)
 	if advertisedActivationHeight > 0 {
 		expectedHeight = advertisedActivationHeight
@@ -8270,6 +10633,7 @@ func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
 		hello.Height > 0 &&
 		(GenesisHash == "" || hello.GenesisHash == "" || strings.EqualFold(strings.TrimSpace(hello.GenesisHash), strings.TrimSpace(GenesisHash))) &&
 		strings.TrimSpace(hello.ValidatorSetHash) != "" {
+		// `sampleHeight` stores the value produced by this operation.
 		sampleHeight := expectedHeight
 		if sampleHeight == 0 {
 			sampleHeight = hello.Height + 1
@@ -8279,11 +10643,14 @@ func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
 	if expectedHeight > 0 {
 		expectedHash, expectedSource = n.expectedValidatorSetHashWithSource(expectedHeight)
 	}
+	// `hashMatch` stores the digest used to identify or verify the related data.
 	hashMatch := true
 	if hello.ValidatorSetHash != "" && expectedHash != "" {
 		hashMatch = hello.ValidatorSetHash == expectedHash
 	}
+	// `mismatch` stores the value produced by this operation.
 	mismatch := !hashMatch && hello.ValidatorSetHash != "" && expectedHash != ""
+	// `effectiveValidatorPeer` stores the value produced by this operation.
 	effectiveValidatorPeer := peerRole == "validator" && normalizeValidatorID(hello.ValidatorID) != ""
 	n.peerStateMu.Lock()
 	if n.peerSetHash == nil {
@@ -8307,6 +10674,7 @@ func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
 	if n.peerHelloOK == nil {
 		n.peerHelloOK = make(map[string]bool)
 	}
+	// `nodeID` stores the value produced by this operation.
 	if nodeID := peerHelloNodeID(hello); nodeID != "" {
 		n.nodeIDToPeer[nodeID] = peerAddr
 	}
@@ -8356,8 +10724,11 @@ func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
 			fmt.Printf("Peer validator set mismatch %s | expected=%s got=%s height=%d\n",
 				peerAddr, expectedHash[:8], hello.ValidatorSetHash[:8], hello.Height)
 		}
+		// `localHeight` stores the value produced by this operation.
 		localHeight := n.Blockchain.Height()
+		// `finalizedHeight` stores the value produced by this operation.
 		finalizedHeight := n.getFinalizedHeight()
+		// `effectiveLocal` stores the value produced by this operation.
 		effectiveLocal := localHeight
 		if finalizedHeight > effectiveLocal {
 			effectiveLocal = finalizedHeight
@@ -8370,11 +10741,13 @@ func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
 			n.recomputeGossipQuiet()
 			return
 		}
+		// `targetHeight` stores the value produced by this operation.
 		targetHeight := expectedHeight
 		if targetHeight == 0 {
 			targetHeight = hello.Height + 1
 		}
 		if n.shouldTreatValidatorSetMismatchAsPeerDrift(targetHeight, expectedHash, hello.ValidatorSetHash) {
+			// `state` stores the value produced by this operation.
 			state := n.recordFinalizedDrift(peerAddr, hello.Height, effectiveLocal, expectedHash, hello.ValidatorSetHash, 1)
 			n.applyFinalizedDriftPolicy(peerAddr, state)
 			n.handlePersistentPeerDrift(effectiveLocal, targetHeight, expectedHash, hello.ValidatorSetHash, "peer-validator-set-mismatch-autoheal")
@@ -8385,6 +10758,7 @@ func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
 			n.recomputeGossipQuiet()
 			return
 		}
+		// `target` stores the value produced by this operation.
 		target := hello.Height
 		if target == 0 || target < effectiveLocal {
 			target = effectiveLocal
@@ -8409,6 +10783,8 @@ func (n *Node) applyPeerInfo(peerAddr string, hello PeerHello) {
 	n.maybeConvergeTipFromPeerHello(peerAddr, hello)
 	n.recomputeGossipQuiet()
 }
+
+// recordPeerAck implements the record peer ack helper.
 func (n *Node) recordPeerAck(peerAddr string, height uint64) {
 	if peerAddr == "" || height == 0 {
 		return
@@ -8420,11 +10796,14 @@ func (n *Node) recordPeerAck(peerAddr string, height uint64) {
 	if n.peerTipHash == nil {
 		n.peerTipHash = make(map[string]string)
 	}
+	// `prev` and `ok` store whether the related condition is satisfied.
 	if prev, ok := n.peerAckHeight[peerAddr]; !ok || height > prev {
 		n.peerAckHeight[peerAddr] = height
 	}
 	n.peerStateMu.Unlock()
 }
+
+// peerAckHeightFor implements the peer ack height for helper.
 func (n *Node) peerAckHeightFor(peerAddr string) uint64 {
 	if peerAddr == "" {
 		return 0
@@ -8433,24 +10812,31 @@ func (n *Node) peerAckHeightFor(peerAddr string) uint64 {
 	defer n.peerStateMu.Unlock()
 	return n.peerAckHeight[peerAddr]
 }
+
+// shouldLogNoBlocks implements the should log no blocks helper.
 func (n *Node) shouldLogNoBlocks(peerID string, from, to uint64) bool {
 	if n == nil {
 		return false
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("%s:%d:%d", peerID, from, to)
 	n.noBlockLogMu.Lock()
 	defer n.noBlockLogMu.Unlock()
 	if n.noBlockLogAt == nil {
 		n.noBlockLogAt = make(map[string]time.Time)
 	}
+	// `prev` and `ok` store whether the related condition is satisfied.
 	if prev, ok := n.noBlockLogAt[key]; ok && now.Sub(prev) < 60*time.Second {
 		return false
 	}
 	n.noBlockLogAt[key] = now
 	// Keep map bounded to avoid unbounded growth on noisy peers.
 	if len(n.noBlockLogAt) > 2048 {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := now.Add(-2 * time.Minute)
+		// `k` and `ts` track the current values while iterating.
 		for k, ts := range n.noBlockLogAt {
 			if ts.Before(cutoff) {
 				delete(n.noBlockLogAt, k)
@@ -8462,23 +10848,30 @@ func (n *Node) shouldLogNoBlocks(peerID string, from, to uint64) bool {
 	}
 	return true
 }
+
+// shouldLogSentBlocks implements the should log sent blocks helper.
 func (n *Node) shouldLogSentBlocks(peerID string, from, to uint64) bool {
 	if n == nil {
 		return false
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("sent:%s:%d:%d", peerID, from, to)
 	n.noBlockLogMu.Lock()
 	defer n.noBlockLogMu.Unlock()
 	if n.noBlockLogAt == nil {
 		n.noBlockLogAt = make(map[string]time.Time)
 	}
+	// `prev` and `ok` store whether the related condition is satisfied.
 	if prev, ok := n.noBlockLogAt[key]; ok && now.Sub(prev) < 10*time.Second {
 		return false
 	}
 	n.noBlockLogAt[key] = now
 	if len(n.noBlockLogAt) > 2048 {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := now.Add(-2 * time.Minute)
+		// `k` and `ts` track the current values while iterating.
 		for k, ts := range n.noBlockLogAt {
 			if ts.Before(cutoff) {
 				delete(n.noBlockLogAt, k)
@@ -8490,23 +10883,30 @@ func (n *Node) shouldLogSentBlocks(peerID string, from, to uint64) bool {
 	}
 	return true
 }
+
+// shouldLogPartialBatch implements the should log partial batch helper.
 func (n *Node) shouldLogPartialBatch(peerID string, from, to uint64) bool {
 	if n == nil {
 		return false
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("partial:%s:%d:%d", peerID, from, to)
 	n.noBlockLogMu.Lock()
 	defer n.noBlockLogMu.Unlock()
 	if n.noBlockLogAt == nil {
 		n.noBlockLogAt = make(map[string]time.Time)
 	}
+	// `prev` and `ok` store whether the related condition is satisfied.
 	if prev, ok := n.noBlockLogAt[key]; ok && now.Sub(prev) < 10*time.Second {
 		return false
 	}
 	n.noBlockLogAt[key] = now
 	if len(n.noBlockLogAt) > 2048 {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := now.Add(-2 * time.Minute)
+		// `k` and `ts` track the current values while iterating.
 		for k, ts := range n.noBlockLogAt {
 			if ts.Before(cutoff) {
 				delete(n.noBlockLogAt, k)
@@ -8519,23 +10919,29 @@ func (n *Node) shouldLogPartialBatch(peerID string, from, to uint64) bool {
 	return true
 }
 
+// shouldLogFinalizedDrift implements the should log finalized drift helper.
 func (n *Node) shouldLogFinalizedDrift(peerID string, from, to uint64) bool {
 	if n == nil {
 		return false
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("drift:%s:%d:%d", peerID, from, to)
 	n.noBlockLogMu.Lock()
 	defer n.noBlockLogMu.Unlock()
 	if n.noBlockLogAt == nil {
 		n.noBlockLogAt = make(map[string]time.Time)
 	}
+	// `prev` and `ok` store whether the related condition is satisfied.
 	if prev, ok := n.noBlockLogAt[key]; ok && now.Sub(prev) < 30*time.Second {
 		return false
 	}
 	n.noBlockLogAt[key] = now
 	if len(n.noBlockLogAt) > 2048 {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := now.Add(-2 * time.Minute)
+		// `k` and `ts` track the current values while iterating.
 		for k, ts := range n.noBlockLogAt {
 			if ts.Before(cutoff) {
 				delete(n.noBlockLogAt, k)
@@ -8548,6 +10954,7 @@ func (n *Node) shouldLogFinalizedDrift(peerID string, from, to uint64) bool {
 	return true
 }
 
+// classifyPeerDrift implements the classify peer drift helper.
 func classifyPeerDrift(peerHeight, peerFinalized, localHeight, localFinalized uint64) PeerDriftClass {
 	if peerHeight > localHeight {
 		return PeerDriftClassAhead
@@ -8564,10 +10971,12 @@ func classifyPeerDrift(peerHeight, peerFinalized, localHeight, localFinalized ui
 	return PeerDriftClassDangerous
 }
 
+// peerHeightSnapshot implements the peer height snapshot helper.
 func (n *Node) peerHeightSnapshot(peerID string) (peerHeight, peerFinalized uint64) {
 	if n == nil || peerID == "" {
 		return 0, 0
 	}
+	// `validatorID` stores whether the related condition is satisfied.
 	var validatorID string
 	n.peerStateMu.Lock()
 	peerHeight = n.peerAckHeight[peerID]
@@ -8577,6 +10986,7 @@ func (n *Node) peerHeightSnapshot(peerID string) (peerHeight, peerFinalized uint
 	if validatorID == "" {
 		return peerHeight, peerFinalized
 	}
+	// `st` and `ok` store whether the related condition is satisfied.
 	st, ok := n.validatorStatusSnapshot(validatorID)
 	if !ok {
 		return peerHeight, peerFinalized
@@ -8592,6 +11002,7 @@ func (n *Node) peerHeightSnapshot(peerID string) (peerHeight, peerFinalized uint
 	return peerHeight, peerFinalized
 }
 
+// localHeightSnapshot implements the local height snapshot helper.
 func (n *Node) localHeightSnapshot() (localHeight, localFinalized uint64) {
 	if n == nil {
 		return 0, 0
@@ -8612,16 +11023,21 @@ func (n *Node) localHeightSnapshot() (localHeight, localFinalized uint64) {
 	return localHeight, localFinalized
 }
 
+// driftTupleKey implements the drift tuple key helper.
 func driftTupleKey(peerID, expected, got string) string {
 	return peerID + "|" + expected + "|" + got
 }
 
+// recordFinalizedDrift implements the record finalized drift helper.
 func (n *Node) recordFinalizedDrift(peerID string, from, to uint64, expected, got string, countDelta int) PeerDriftState {
 	if n == nil || peerID == "" {
 		return PeerDriftState{}
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `key` stores the key used to access the related value.
 	key := driftTupleKey(peerID, expected, got)
+	// `cutoff` stores the value produced by this operation.
 	cutoff := now.Add(-2 * finalizedDriftWindow)
 
 	n.peerStateMu.Lock()
@@ -8629,12 +11045,14 @@ func (n *Node) recordFinalizedDrift(peerID string, from, to uint64, expected, go
 	if n.peerDriftState == nil {
 		n.peerDriftState = make(map[string]PeerDriftState)
 	}
+	// `k` and `st` track the current values while iterating.
 	for k, st := range n.peerDriftState {
 		if !st.LastSeen.IsZero() && st.LastSeen.Before(cutoff) {
 			delete(n.peerDriftState, k)
 		}
 	}
 
+	// `st` stores the value produced by this operation.
 	st := n.peerDriftState[key]
 	if st.LastSeen.IsZero() || now.Sub(st.LastSeen) > finalizedDriftWindow {
 		st = PeerDriftState{
@@ -8662,6 +11080,7 @@ func (n *Node) recordFinalizedDrift(peerID string, from, to uint64, expected, go
 	return st
 }
 
+// setPeerSyncOnly implements the set peer sync only helper.
 func (n *Node) setPeerSyncOnly(peerID string, class PeerDriftClass, until time.Time) {
 	if n == nil || peerID == "" {
 		return
@@ -8683,12 +11102,14 @@ func (n *Node) setPeerSyncOnly(peerID string, class PeerDriftClass, until time.T
 	n.peerSyncOnlyClass[peerID] = string(class)
 }
 
+// isPeerSyncOnly implements the is peer sync only helper.
 func (n *Node) isPeerSyncOnly(peerID string) bool {
 	if n == nil || peerID == "" {
 		return false
 	}
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
+	// `until` and `ok` store whether the related condition is satisfied.
 	until, ok := n.peerSyncOnlyUntil[peerID]
 	if !ok || until.IsZero() {
 		return false
@@ -8701,6 +11122,7 @@ func (n *Node) isPeerSyncOnly(peerID string) bool {
 	return true
 }
 
+// isSyncOnlyAllowedMsgType implements the is sync only allowed msg type helper.
 func isSyncOnlyAllowedMsgType(msgType string) bool {
 	switch msgType {
 	case MsgPeerHello, MsgGetBlocks, MsgBlockAck, MsgPing, MsgPong:
@@ -8710,17 +11132,21 @@ func isSyncOnlyAllowedMsgType(msgType string) bool {
 	}
 }
 
+// shouldLogSyncOnlyDrop implements the should log sync only drop helper.
 func (n *Node) shouldLogSyncOnlyDrop(peerID, msgType string) bool {
 	if n == nil || peerID == "" || msgType == "" {
 		return false
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `key` stores the key used to access the related value.
 	key := peerID + "|" + msgType
 	n.peerStateMu.Lock()
 	defer n.peerStateMu.Unlock()
 	if n.peerSyncOnlyLastDropLog == nil {
 		n.peerSyncOnlyLastDropLog = make(map[string]time.Time)
 	}
+	// `prev` and `ok` store whether the related condition is satisfied.
 	if prev, ok := n.peerSyncOnlyLastDropLog[key]; ok && now.Sub(prev) < finalizedDriftDropLogInterval {
 		return false
 	}
@@ -8728,6 +11154,7 @@ func (n *Node) shouldLogSyncOnlyDrop(peerID, msgType string) bool {
 	return true
 }
 
+// clearPeerDriftState implements the clear peer drift state helper.
 func (n *Node) clearPeerDriftState(peerID string) {
 	if n == nil || peerID == "" {
 		return
@@ -8736,12 +11163,15 @@ func (n *Node) clearPeerDriftState(peerID string) {
 	defer n.peerStateMu.Unlock()
 	delete(n.peerSyncOnlyUntil, peerID)
 	delete(n.peerSyncOnlyClass, peerID)
+	// `prefix` stores the value produced by this operation.
 	prefix := peerID + "|"
+	// `key` tracks the key used to access the related value.
 	for key := range n.peerDriftState {
 		if strings.HasPrefix(key, prefix) {
 			delete(n.peerDriftState, key)
 		}
 	}
+	// `key` tracks the key used to access the related value.
 	for key := range n.peerSyncOnlyLastDropLog {
 		if strings.HasPrefix(key, prefix) {
 			delete(n.peerSyncOnlyLastDropLog, key)
@@ -8749,14 +11179,19 @@ func (n *Node) clearPeerDriftState(peerID string) {
 	}
 }
 
+// peerMaxDriftState implements the peer max drift state helper.
 func (n *Node) peerMaxDriftState(peerID string) (PeerDriftState, bool) {
 	if n == nil || peerID == "" {
 		return PeerDriftState{}, false
 	}
+	// `prefix` stores the value produced by this operation.
 	prefix := peerID + "|"
+	// `best` stores the value used by this operation.
 	var best PeerDriftState
+	// `found` stores whether the related condition is satisfied.
 	found := false
 	n.peerStateMu.Lock()
+	// `key` and `st` track the key used to access the related value.
 	for key, st := range n.peerDriftState {
 		if !strings.HasPrefix(key, prefix) {
 			continue
@@ -8770,6 +11205,7 @@ func (n *Node) peerMaxDriftState(peerID string) (PeerDriftState, bool) {
 	return best, found
 }
 
+// driftRangeNearTip implements the drift range near tip helper.
 func driftRangeNearTip(localFinalized, to uint64) bool {
 	if localFinalized == 0 || localFinalized <= finalizedDriftNearTipSlack {
 		return true
@@ -8777,17 +11213,21 @@ func driftRangeNearTip(localFinalized, to uint64) bool {
 	return to >= (localFinalized - finalizedDriftNearTipSlack)
 }
 
+// shouldLogFinalizedDriftPolicy implements the should log finalized drift policy helper.
 func (n *Node) shouldLogFinalizedDriftPolicy(peerID, expected, got string) bool {
 	if n == nil {
 		return false
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("drift-policy:%s:%s:%s", peerID, expected, got)
 	n.noBlockLogMu.Lock()
 	defer n.noBlockLogMu.Unlock()
 	if n.noBlockLogAt == nil {
 		n.noBlockLogAt = make(map[string]time.Time)
 	}
+	// `prev` and `ok` store whether the related condition is satisfied.
 	if prev, ok := n.noBlockLogAt[key]; ok && now.Sub(prev) < finalizedDriftDropLogInterval {
 		return false
 	}
@@ -8795,22 +11235,32 @@ func (n *Node) shouldLogFinalizedDriftPolicy(peerID, expected, got string) bool 
 	return true
 }
 
+// applyFinalizedDriftPolicy applies finalized drift policy.
 func (n *Node) applyFinalizedDriftPolicy(peerID string, state PeerDriftState) {
 	if n == nil || peerID == "" || state.Count <= finalizedDriftThreshold {
 		return
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `peerHeight` and `peerFinalized` store the value produced by this operation.
 	peerHeight, peerFinalized := n.peerHeightSnapshot(peerID)
+	// `localHeight` and `localFinalized` store the value produced by this operation.
 	localHeight, localFinalized := n.localHeightSnapshot()
+	// `class` stores the value produced by this operation.
 	class := classifyPeerDrift(peerHeight, peerFinalized, localHeight, localFinalized)
+	// `syncOnlyUntil` stores the value produced by this operation.
 	syncOnlyUntil := now.Add(finalizedDriftCooldown)
 	n.setPeerSyncOnly(peerID, class, syncOnlyUntil)
 
+	// `key` stores the key used to access the related value.
 	key := driftTupleKey(peerID, state.Expected, state.Got)
+	// `recomputeTriggered` stores the value produced by this operation.
 	recomputeTriggered := false
+	// `action` stores the value produced by this operation.
 	action := "sync_only"
 
 	n.peerStateMu.Lock()
+	// `st` stores the value produced by this operation.
 	st := n.peerDriftState[key]
 	if st.Count == 0 {
 		st = state
@@ -8827,6 +11277,7 @@ func (n *Node) applyFinalizedDriftPolicy(peerID string, state PeerDriftState) {
 	n.peerDriftState[key] = st
 	n.peerStateMu.Unlock()
 
+	// `repairHeight` stores the value produced by this operation.
 	repairHeight := st.To
 	if repairHeight == 0 {
 		repairHeight = localFinalized
@@ -8874,6 +11325,7 @@ func (n *Node) applyFinalizedDriftPolicy(peerID string, state PeerDriftState) {
 	}
 }
 
+// shouldServeBlockRange implements the should serve block range helper.
 func (n *Node) shouldServeBlockRange(peerID string, from, to uint64, wantSnapshot bool) bool {
 	if n == nil || peerID == "" {
 		return false
@@ -8883,7 +11335,9 @@ func (n *Node) shouldServeBlockRange(peerID string, from, to uint64, wantSnapsho
 	}
 	// If a peer is repeatedly drifting, keep serving lane narrow and near-tip only.
 	if drift, ok := n.peerMaxDriftState(peerID); ok && drift.Count > finalizedDriftThreshold {
+		// `localFinalized` stores the value produced by this operation.
 		_, localFinalized := n.localHeightSnapshot()
+		// `rangeLen` stores the measured quantity used by this operation.
 		rangeLen := to - from
 		if !driftRangeNearTip(localFinalized, to) || rangeLen > finalizedDriftMaxServeRange {
 			if (DebugSync || DebugNet) && n.shouldLogFinalizedDriftPolicy(peerID, drift.Expected, drift.Got) {
@@ -8893,7 +11347,9 @@ func (n *Node) shouldServeBlockRange(peerID string, from, to uint64, wantSnapsho
 			return false
 		}
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `mode` stores the value produced by this operation.
 	mode := "blocks"
 	if wantSnapshot {
 		mode = "snapshot"
@@ -8912,7 +11368,9 @@ func (n *Node) shouldServeBlockRange(peerID string, from, to uint64, wantSnapsho
 	}
 	n.noBlockLogAt[key] = now
 	if len(n.noBlockLogAt) > 2048 {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := now.Add(-2 * time.Minute)
+		// `k` and `ts` track the current values while iterating.
 		for k, ts := range n.noBlockLogAt {
 			if ts.Before(cutoff) {
 				delete(n.noBlockLogAt, k)
@@ -8924,35 +11382,46 @@ func (n *Node) shouldServeBlockRange(peerID string, from, to uint64, wantSnapsho
 	}
 	return true
 }
+
+// shouldSendSnapshotToPeer implements the should send snapshot to peer helper.
 func (n *Node) shouldSendSnapshotToPeer(peerID string, height uint64) bool {
 	if n == nil || peerID == "" || height == 0 {
 		return false
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `minInterval` stores the value currently being processed.
 	minInterval := 5 * time.Second
+	// `drift` and `ok` store whether the related condition is satisfied.
 	if drift, ok := n.peerMaxDriftState(peerID); ok && drift.Count > finalizedDriftThreshold {
 		minInterval = finalizedDriftSnapshotCooldown
 		if drift.Count >= finalizedDriftEscalateThreshold {
 			minInterval = finalizedDriftCooldown
 		}
 	}
+	// `peerKey` stores the key used to access the related value.
 	peerKey := fmt.Sprintf("snap-send-peer:%s", peerID)
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("snap-send:%s:%d", peerID, height)
 	n.noBlockLogMu.Lock()
 	defer n.noBlockLogMu.Unlock()
 	if n.noBlockLogAt == nil {
 		n.noBlockLogAt = make(map[string]time.Time)
 	}
+	// `prev` and `ok` store whether the related condition is satisfied.
 	if prev, ok := n.noBlockLogAt[peerKey]; ok && now.Sub(prev) < minInterval {
 		return false
 	}
+	// `prev` and `ok` store whether the related condition is satisfied.
 	if prev, ok := n.noBlockLogAt[key]; ok && now.Sub(prev) < minInterval {
 		return false
 	}
 	n.noBlockLogAt[peerKey] = now
 	n.noBlockLogAt[key] = now
 	if len(n.noBlockLogAt) > 2048 {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := now.Add(-2 * time.Minute)
+		// `k` and `ts` track the current values while iterating.
 		for k, ts := range n.noBlockLogAt {
 			if ts.Before(cutoff) {
 				delete(n.noBlockLogAt, k)
@@ -8964,23 +11433,30 @@ func (n *Node) shouldSendSnapshotToPeer(peerID string, height uint64) bool {
 	}
 	return true
 }
+
+// shouldProcessSnapshotOffer implements the should process snapshot offer helper.
 func (n *Node) shouldProcessSnapshotOffer(from string, height uint64) bool {
 	if n == nil || from == "" || height == 0 {
 		return false
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("snap-offer:%s:%d", from, height)
 	n.noBlockLogMu.Lock()
 	defer n.noBlockLogMu.Unlock()
 	if n.noBlockLogAt == nil {
 		n.noBlockLogAt = make(map[string]time.Time)
 	}
+	// `prev` and `ok` store whether the related condition is satisfied.
 	if prev, ok := n.noBlockLogAt[key]; ok && now.Sub(prev) < 5*time.Second {
 		return false
 	}
 	n.noBlockLogAt[key] = now
 	if len(n.noBlockLogAt) > 2048 {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := now.Add(-2 * time.Minute)
+		// `k` and `ts` track the current values while iterating.
 		for k, ts := range n.noBlockLogAt {
 			if ts.Before(cutoff) {
 				delete(n.noBlockLogAt, k)
@@ -8992,6 +11468,8 @@ func (n *Node) shouldProcessSnapshotOffer(from string, height uint64) bool {
 	}
 	return true
 }
+
+// shouldLogNetworkProbe implements the should log network probe helper.
 func (n *Node) shouldLogNetworkProbe(tag string, interval time.Duration) bool {
 	if n == nil || strings.TrimSpace(tag) == "" {
 		return false
@@ -8999,19 +11477,24 @@ func (n *Node) shouldLogNetworkProbe(tag string, interval time.Duration) bool {
 	if interval <= 0 {
 		interval = 10 * time.Second
 	}
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `key` stores the key used to access the related value.
 	key := fmt.Sprintf("probe:%s", tag)
 	n.noBlockLogMu.Lock()
 	defer n.noBlockLogMu.Unlock()
 	if n.noBlockLogAt == nil {
 		n.noBlockLogAt = make(map[string]time.Time)
 	}
+	// `prev` and `ok` store whether the related condition is satisfied.
 	if prev, ok := n.noBlockLogAt[key]; ok && now.Sub(prev) < interval {
 		return false
 	}
 	n.noBlockLogAt[key] = now
 	if len(n.noBlockLogAt) > 2048 {
+		// `cutoff` stores the value produced by this operation.
 		cutoff := now.Add(-2 * time.Minute)
+		// `k` and `ts` track the current values while iterating.
 		for k, ts := range n.noBlockLogAt {
 			if ts.Before(cutoff) {
 				delete(n.noBlockLogAt, k)
@@ -9023,19 +11506,28 @@ func (n *Node) shouldLogNetworkProbe(tag string, interval time.Duration) bool {
 	}
 	return true
 }
+
+// recordPeerFlap implements the record peer flap helper.
 func (n *Node) recordPeerFlap(peerID string) {
 	peerID = strings.TrimSpace(peerID)
 	if n == nil || peerID == "" {
 		return
 	}
 	n.ensurePeerIsolationMaps()
+	// `now` stores the value produced by this operation.
 	now := time.Now()
+	// `cutoff` stores the value produced by this operation.
 	cutoff := now.Add(-peerFlapWindow)
+	// `quarantine` stores the value produced by this operation.
 	quarantine := false
+	// `trustedMeshPeer` stores the value produced by this operation.
 	trustedMeshPeer := n.isValidatorOrPersistentPeerID(peerID)
 	n.peerStateMu.Lock()
+	// `list` stores the value produced by this operation.
 	list := n.peerFlapTimes[peerID]
+	// `filtered` stores the value produced by this operation.
 	filtered := list[:0]
+	// `t` tracks the current values while iterating.
 	for _, t := range list {
 		if t.After(cutoff) {
 			filtered = append(filtered, t)
@@ -9058,6 +11550,8 @@ func (n *Node) recordPeerFlap(peerID string) {
 		n.quarantinePeer(peerID, "peer_flap")
 	}
 }
+
+// onPeerConnected implements the on peer connected helper.
 func (n *Node) onPeerConnected(pid peer.ID) {
 	if n.isPeerConnected(pid.String()) {
 		return
@@ -9071,6 +11565,7 @@ func (n *Node) onPeerConnected(pid peer.ID) {
 	n.setPeerConnected(pid.String(), true)
 	n.setPeerConnectedAt(pid.String(), time.Now())
 	n.peerStateMu.Lock()
+	// `vid` stores the value produced by this operation.
 	vid := n.peerToValidator[pid.String()]
 	n.peerStateMu.Unlock()
 	if vid != "" {
@@ -9081,6 +11576,7 @@ func (n *Node) onPeerConnected(pid peer.ID) {
 	// Send peer list after a short hello window to avoid deterministic
 	// "unverified peer" drops when both sides race peers-list first.
 	go func() {
+		// `deadline` stores the value produced by this operation.
 		deadline := time.Now().Add(1200 * time.Millisecond)
 		for time.Now().Before(deadline) {
 			if n.isPeerHelloOK(pid.String()) {
@@ -9096,6 +11592,8 @@ func (n *Node) onPeerConnected(pid peer.ID) {
 		n.requestHeartbeatBroadcast(true)
 	}
 }
+
+// onPeerDisconnected implements the on peer disconnected helper.
 func (n *Node) onPeerDisconnected(pid peer.ID) {
 	// libp2p disconnect notifications are per connection. Do not mark the peer
 	// offline while another live connection to the same peer still exists.
@@ -9106,6 +11604,7 @@ func (n *Node) onPeerDisconnected(pid peer.ID) {
 		}
 		return
 	}
+	// `connectedFor` stores the value produced by this operation.
 	connectedFor := n.peerConnectedFor(pid.String())
 	n.clearPeerConnectedAt(pid.String())
 	n.setPeerConnected(pid.String(), false)
@@ -9122,6 +11621,7 @@ func (n *Node) onPeerDisconnected(pid peer.ID) {
 	n.setGossipQuiet(false)
 	// Mark validator as suspect if we know the mapping
 	n.peerStateMu.Lock()
+	// `vid` stores the value produced by this operation.
 	vid := n.peerToValidator[pid.String()]
 	n.peerStateMu.Unlock()
 	n.markValidatorSuspect(vid, time.Now())
@@ -9129,8 +11629,11 @@ func (n *Node) onPeerDisconnected(pid peer.ID) {
 	// validator in suspect state first; monitorPeerSuspects marks it offline
 	// only if the peer remains gone past peerSuspectTimeout.
 }
+
+// removeValidatorByPeer implements the remove validator by peer helper.
 func (n *Node) removeValidatorByPeer(peerID string) {
 	n.peerStateMu.Lock()
+	// `vid` and `ok` store whether the related condition is satisfied.
 	vid, ok := n.peerToValidator[peerID]
 	n.peerStateMu.Unlock()
 	if !ok || vid == "" {
@@ -9138,6 +11641,7 @@ func (n *Node) removeValidatorByPeer(peerID string) {
 	}
 	n.markValidatorOffline(vid, "peer_suspect_expired")
 	n.validatorMu.Lock()
+	// `st` and `ok` store whether the related condition is satisfied.
 	if st, ok := n.validatorStatus[vid]; ok && st != nil {
 		// Keep status entry so inactive-removal logic can evict deterministically
 		// after ValidatorInactiveBlocks instead of keeping the validator forever.
@@ -9147,7 +11651,10 @@ func (n *Node) removeValidatorByPeer(peerID string) {
 	}
 	n.validatorMu.Unlock()
 }
+
+// monitorPeerSuspects implements the monitor peer suspects helper.
 func (n *Node) monitorPeerSuspects() {
+	// `ticker` stores the value produced by this operation.
 	ticker := time.NewTicker(peerSuspectInterval)
 	defer ticker.Stop()
 	for {
@@ -9155,16 +11662,20 @@ func (n *Node) monitorPeerSuspects() {
 		case <-n.shutdownCh:
 			return
 		case <-ticker.C:
+			// `toRemove` stores the value used by this operation.
 			var toRemove []string
 			n.peerStateMu.Lock()
+			// `peerID` and `ts` track the current values while iterating.
 			for peerID, ts := range n.peerSuspectAt {
 				if time.Since(ts) >= peerSuspectTimeout {
 					toRemove = append(toRemove, peerID)
 				}
 			}
 			n.peerStateMu.Unlock()
+			// `peerID` tracks the current values while iterating.
 			for _, peerID := range toRemove {
 				if n.Host != nil {
+					// `pid` and `err` store the error produced by this operation.
 					if pid, err := peer.Decode(peerID); err == nil {
 						if n.Host.Network().Connectedness(pid) == network.Connected {
 							continue
@@ -9183,12 +11694,15 @@ func (n *Node) monitorPeerSuspects() {
 				delete(n.peerHelloOK, peerID)
 				delete(n.peerSyncOnlyUntil, peerID)
 				delete(n.peerSyncOnlyClass, peerID)
+				// `prefix` stores the value produced by this operation.
 				prefix := peerID + "|"
+				// `key` tracks the key used to access the related value.
 				for key := range n.peerDriftState {
 					if strings.HasPrefix(key, prefix) {
 						delete(n.peerDriftState, key)
 					}
 				}
+				// `key` tracks the key used to access the related value.
 				for key := range n.peerSyncOnlyLastDropLog {
 					if strings.HasPrefix(key, prefix) {
 						delete(n.peerSyncOnlyLastDropLog, key)
@@ -9200,20 +11714,32 @@ func (n *Node) monitorPeerSuspects() {
 		}
 	}
 }
+
+// startSelfHeal implements the start self heal helper.
 func (n *Node) startSelfHeal(ctx context.Context) {
 	if n == nil || !SelfHealEnabled {
 		return
 	}
+	// `interval` stores the value currently being processed.
 	interval := SelfHealInterval
 	if interval <= 0 {
 		interval = 15 * time.Second
 	}
-	minPeers := SelfHealMinPeers
-	if minPeers < 1 {
-		minPeers = 1
+	// `minPeers` stores the value produced by this operation.
+	minPeers := normalizedMinimumPeers(SelfHealMinPeers)
+	// Heal toward a healthy sparse mesh, not merely the emergency floor.
+	targetPeers := TargetPeers
+	if targetPeers < minPeers {
+		targetPeers = minPeers
 	}
+	if MaxPeers > 0 && targetPeers > MaxPeers {
+		targetPeers = MaxPeers
+	}
+	// `lastHeight` stores the value produced by this operation.
 	lastHeight := uint64(0)
+	// `lastProgress` stores the value produced by this operation.
 	lastProgress := time.Now()
+	// `ticker` stores the value produced by this operation.
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -9226,6 +11752,11 @@ func (n *Node) startSelfHeal(ctx context.Context) {
 			if n.Host == nil {
 				continue
 			}
+			// Reputation is also enforced for connections that became unhealthy
+			// after admission. Trusted validator/persistent peers remain subject to
+			// hard quarantine, but are not removed for transient soft failures.
+			n.enforceConnectedPeerReputation()
+			// `height` stores the value produced by this operation.
 			height := uint64(0)
 			if n.Blockchain != nil {
 				height = n.Blockchain.FinalizedHeight()
@@ -9237,17 +11768,25 @@ func (n *Node) startSelfHeal(ctx context.Context) {
 				lastHeight = height
 				lastProgress = time.Now()
 			}
+			// `peers` stores the value produced by this operation.
 			peers := len(n.Host.Network().Peers())
+			// `stalled` stores the value produced by this operation.
 			stalled := false
 			if SelfHealStallSeconds > 0 {
+				// `observedHeight` stores the value produced by this operation.
 				observedHeight, _ := n.bestObservedSyncHeight()
+				// `lagging` stores the value produced by this operation.
 				lagging := observedHeight > height && observedHeight > 0
 				if lagging && time.Since(lastProgress) >= time.Duration(SelfHealStallSeconds)*time.Second {
 					stalled = true
 				}
 			}
-			if peers < minPeers || stalled {
+			if peers < targetPeers || stalled {
+				if peers < targetPeers && n.DHT != nil {
+					n.triggerDHTPeerDiscovery(ctx, n.DHT)
+				}
 				if n.Role == "validator" {
+					// `targets` stores the value produced by this operation.
 					targets := n.validatorMeshTargets()
 					if len(targets) > 0 {
 						if peers < n.validatorMeshUrgentPeerFloor(len(targets)) || stalled {
@@ -9256,7 +11795,9 @@ func (n *Node) startSelfHeal(ctx context.Context) {
 						n.connectToPeers(ctx, targets)
 					}
 				}
+				// `persistent` and `seeds` store the value produced by this operation.
 				persistent, seeds := n.configPeerListsSnapshot()
+				// `extras` stores the value produced by this operation.
 				extras := mergePeerLists(nil, persistent)
 				extras = mergePeerLists(extras, seeds)
 				extras = sanitizePeerListWithPreferred(extras, n.trustedPeerMultiaddrs())
@@ -9273,10 +11814,13 @@ func (n *Node) startSelfHeal(ctx context.Context) {
 		}
 	}
 }
+
+// isTopicJoined implements the is topic joined helper.
 func (n *Node) isTopicJoined(topic string) bool {
 	if n.PubSub == nil {
 		return false
 	}
+	// `t` tracks the current values while iterating.
 	for _, t := range n.PubSub.GetTopics() {
 		if t == topic {
 			return true
@@ -9292,18 +11836,24 @@ func ShortID(id string) string {
 	}
 	return id[:8]
 }
+
+// signData implements the sign data helper.
 func signData(data map[string]interface{}, privKey ed25519.PrivateKey) ([]byte, error) {
 	// Create a deterministic representation of the data for signing
 	// Remove signature field if present
 	delete(data, "signature")
 	// Sort keys for consistent serialization
 	keys := make([]string, 0, len(data))
+	// `k` tracks the current values while iterating.
 	for k := range data {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	// `buffer` stores the value used by this operation.
 	var buffer bytes.Buffer
+	// `k` tracks the current values while iterating.
 	for _, k := range keys {
+		// `value` stores the value currently being processed.
 		value := data[k]
 		buffer.WriteString(fmt.Sprintf("%s:%v|", k, value))
 	}
@@ -9311,15 +11861,23 @@ func signData(data map[string]interface{}, privKey ed25519.PrivateKey) ([]byte, 
 	hash := sha256.Sum256(buffer.Bytes())
 	return ed25519.Sign(privKey, hash[:]), nil
 }
+
+// validatorAnnounceSignBytes implements the validator announce sign bytes helper.
 func validatorAnnounceSignBytes(nodeID string, pubKey string, reported uint64, finalized uint64, execEpoch uint64, isValidator bool) []byte {
 	return []byte(fmt.Sprintf("%s|%s|%d|%d|%d|%t", nodeID, pubKey, reported, finalized, execEpoch, isValidator))
 }
+
+// validatorAnnounceSignBytesV2 implements the validator announce sign bytes v2 helper.
 func validatorAnnounceSignBytesV2(nodeID string, pubKey string, p2pAddr string, reported uint64, finalized uint64, execEpoch uint64, isValidator bool) []byte {
 	return []byte(fmt.Sprintf("%s|%s|%s|%d|%d|%d|%t", nodeID, pubKey, p2pAddr, reported, finalized, execEpoch, isValidator))
 }
+
+// validatorAnnounceSignBytesV3 implements the validator announce sign bytes v3 helper.
 func validatorAnnounceSignBytesV3(nodeID string, pubKey string, p2pAddr string, reported uint64, finalized uint64, execEpoch uint64, validatorSetHeight uint64, validatorSetHash string, isValidator bool) []byte {
 	return []byte(fmt.Sprintf("%s|%s|%s|%d|%d|%d|%d|%s|%t", nodeID, pubKey, p2pAddr, reported, finalized, execEpoch, validatorSetHeight, validatorSetHash, isValidator))
 }
+
+// validatorAnnounceSignBytesV4 implements the validator announce sign bytes v4 helper.
 func validatorAnnounceSignBytesV4(nodeID string, pubKey string, p2pAddr string, reported uint64, finalized uint64, execEpoch uint64, validatorSetHeight uint64, validatorSetHash string, nextValidatorSetHash string, nextActivationHeight uint64, isValidator bool) []byte {
 	return []byte(fmt.Sprintf("%s|%s|%s|%d|%d|%d|%d|%s|%s|%d|%t",
 		nodeID,
@@ -9335,6 +11893,8 @@ func validatorAnnounceSignBytesV4(nodeID string, pubKey string, p2pAddr string, 
 		isValidator,
 	))
 }
+
+// validatorAnnounceSignBytesV5 implements the validator announce sign bytes v5 helper.
 func validatorAnnounceSignBytesV5(nodeID string, pubKey string, p2pAddr string, reported uint64, finalized uint64, execEpoch uint64, validatorSetHeight uint64, validatorSetHash string, nextValidatorSetHash string, nextActivationHeight uint64, consensusReadySet bool, consensusReady bool, isValidator bool) []byte {
 	return []byte(fmt.Sprintf("%s|%s|%s|%d|%d|%d|%d|%s|%s|%d|%t|%t|%t",
 		nodeID,
@@ -9352,9 +11912,13 @@ func validatorAnnounceSignBytesV5(nodeID string, pubKey string, p2pAddr string, 
 		isValidator,
 	))
 }
+
+// validatorAnnounceSignBytesLegacy implements the validator announce sign bytes legacy helper.
 func validatorAnnounceSignBytesLegacy(nodeID string, pubKey string, height uint64, isValidator bool) []byte {
 	return []byte(fmt.Sprintf("%s|%s|%d|%t", nodeID, pubKey, height, isValidator))
 }
+
+// broadcastValidatorInfoViaBlocks implements the broadcast validator info via blocks helper.
 func (n *Node) broadcastValidatorInfoViaBlocks() {
 	// =====================================================
 	// HARD GUARD - Validator topic must exist
@@ -9365,15 +11929,19 @@ func (n *Node) broadcastValidatorInfoViaBlocks() {
 		}
 		return
 	}
+	// `reported` stores the value produced by this operation.
 	reported := uint64(0)
 	if n.Blockchain != nil {
 		reported = n.Blockchain.Height()
 	}
+	// `finalized` stores the value produced by this operation.
 	finalized := n.getFinalizedHeight()
 	if finalized == 0 {
 		finalized = reported
 	}
+	// `execEpoch` stores the value produced by this operation.
 	execEpoch := finalized + 1
+	// `pubHex` stores the value produced by this operation.
 	pubHex := hex.EncodeToString(n.ValidatorKey.PublicKey)
 
 	// Keep the wire payload aligned with handleValidatorAnnouncement's
@@ -9390,6 +11958,7 @@ func (n *Node) broadcastValidatorInfoViaBlocks() {
 		IsValidator:     true,
 	}
 	if pubHex != "" {
+		// `sig` and `ok` store whether the related condition is satisfied.
 		sig, ok := n.signValidatorPayload(
 			validatorAnnounceSignBytesV2(n.ID, pubHex, n.SelfAddr, reported, finalized, execEpoch, true),
 		)
@@ -9407,10 +11976,12 @@ func (n *Node) broadcastValidatorInfoViaBlocks() {
 		}
 		return
 	}
+	// `msg` stores the value produced by this operation.
 	msg := Message{
 		Type: MsgValidatorAnnounce,
 		Data: payload,
 	}
+	// `msgBytes` and `err` store the error produced by this operation.
 	msgBytes, err := MarshalP2PMessage(msg)
 	if err != nil {
 		if DebugConsensus {
@@ -9422,6 +11993,7 @@ func (n *Node) broadcastValidatorInfoViaBlocks() {
 	// PUBLISH VIA VALIDATOR TOPIC
 	// =====================================================
 	if n.ValidatorTopic != nil {
+		// `err` stores the error produced by this operation.
 		if err := n.ValidatorTopic.Publish(context.Background(), msgBytes); err != nil {
 			if DebugConsensus {
 				fmt.Printf("Validator broadcast failed: %v\n", err)
@@ -9429,6 +12001,7 @@ func (n *Node) broadcastValidatorInfoViaBlocks() {
 			return
 		}
 	} else if n.PubSub != nil {
+		// `err` stores the error produced by this operation.
 		if err := n.PubSub.Publish(TopicValidator, msgBytes); err != nil {
 			_ = n.PubSub.Publish(TopicValidatorsLegacy, msgBytes)
 		}
@@ -9455,6 +12028,9 @@ func (n *Node) discoverPeersViaDHT(ctx context.Context, dhtInst *dht.IpfsDHT) {
 	}
 	// Initial discovery after a short delay
 	time.Sleep(5 * time.Second)
+	// Do not wait for the first 45-second ticker before provider discovery.
+	n.triggerDHTPeerDiscovery(ctx, dhtInst)
+	// `ticker` stores the value produced by this operation.
 	ticker := time.NewTicker(45 * time.Second)
 	defer ticker.Stop()
 	// Function to attempt connection to a peer
@@ -9485,6 +12061,7 @@ func (n *Node) discoverPeersViaDHT(ctx context.Context, dhtInst *dht.IpfsDHT) {
 				return
 			}
 		}
+		// `addrInfo` stores the address used by this operation.
 		addrInfo := peer.AddrInfo{
 			ID:    pid,
 			Addrs: addrs,
@@ -9501,6 +12078,7 @@ func (n *Node) discoverPeersViaDHT(ctx context.Context, dhtInst *dht.IpfsDHT) {
 		// Try to connect
 		connectCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
+		// `err` stores the error produced by this operation.
 		if err := n.Host.Connect(connectCtx, addrInfo); err == nil {
 			if DebugNet {
 				fmt.Printf("Ã¢Å“â€¦ DHT discovered and connected to peer: %s\n", pid)
@@ -9513,9 +12091,11 @@ func (n *Node) discoverPeersViaDHT(ctx context.Context, dhtInst *dht.IpfsDHT) {
 			n.rememberPeerDiversityAddr(pid.String(), addrInfo.Addrs, true)
 			n.recordDialSuccess(pid.String())
 		} else {
+			// `errLower` stores the error produced by this operation.
 			errLower := strings.ToLower(err.Error())
 			if strings.Contains(errLower, "peer id mismatch") ||
 				strings.Contains(errLower, "dial to self attempted") {
+				// `rawAddr` stores the address used by this operation.
 				rawAddr := ""
 				if len(addrs) > 0 {
 					rawAddr = fmt.Sprintf("%s/p2p/%s", addrs[0].String(), pid.String())
@@ -9537,17 +12117,21 @@ func (n *Node) discoverPeersViaDHT(ctx context.Context, dhtInst *dht.IpfsDHT) {
 		case <-ticker.C:
 			// Look for specific providers (network-key only)
 			// This helps nodes in the same network find each other
-			networkKey := fmt.Sprintf("msc-chain-network-%s", ChainID)
+			networkKey := fmt.Sprintf("msc-chain-network-%s", protocolChainID())
+			// `mh` and `err` store the error produced by this operation.
 			mh, err := multihash.Sum([]byte(networkKey), multihash.SHA2_256, -1)
 			if err != nil {
 				continue
 			}
+			// `c` stores the value produced by this operation.
 			c := cid.NewCidV1(cid.Raw, mh)
+			// `providersCtx` and `cancel` store the context controlling this operation.
 			providersCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			// Announce ourselves as a provider
 			dhtInst.Provide(providersCtx, c, true)
 			// Look for other providers
-			providers := dhtInst.FindProvidersAsync(providersCtx, c, 10)
+			providers := dhtInst.FindProvidersAsync(providersCtx, c, MaxPeers)
+			// `provider` tracks the current values while iterating.
 			for provider := range providers {
 				if provider.ID != n.Host.ID() {
 					tryConnect(provider.ID)
@@ -9559,9 +12143,11 @@ func (n *Node) discoverPeersViaDHT(ctx context.Context, dhtInst *dht.IpfsDHT) {
 }
 
 type mdnsNotifee struct {
+	// `node` stores the value associated with this record.
 	node *Node
 }
 
+// HandlePeerFound handles peer found.
 func (m *mdnsNotifee) HandlePeerFound(pi peer.AddrInfo) {
 	if m == nil || m.node == nil || m.node.Host == nil {
 		return
@@ -9573,6 +12159,7 @@ func (m *mdnsNotifee) HandlePeerFound(pi peer.AddrInfo) {
 		return
 	}
 	if BlockPublicPeers {
+		// `filtered` stores the value produced by this operation.
 		filtered := filterPrivateAddrs(pi.Addrs)
 		if len(filtered) == 0 {
 			return
@@ -9593,9 +12180,12 @@ func (m *mdnsNotifee) HandlePeerFound(pi peer.AddrInfo) {
 	if !m.node.allowDiscoveredPeer(pi) {
 		return
 	}
+	// `ctx` and `cancel` store the context controlling this operation.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	// `err` stores the error produced by this operation.
 	if err := m.node.Host.Connect(ctx, pi); err == nil {
+		// `cm` stores the value produced by this operation.
 		if cm := m.node.Host.ConnManager(); cm != nil {
 			cm.TagPeer(pi.ID, "mdns-discovered", 50)
 		}
@@ -9605,9 +12195,11 @@ func (m *mdnsNotifee) HandlePeerFound(pi peer.AddrInfo) {
 		m.node.rememberPeerDiversityAddr(pi.ID.String(), pi.Addrs, true)
 		m.node.recordDialSuccess(pi.ID.String())
 	} else {
+		// `errLower` stores the error produced by this operation.
 		errLower := strings.ToLower(err.Error())
 		if strings.Contains(errLower, "peer id mismatch") ||
 			strings.Contains(errLower, "dial to self attempted") {
+			// `rawAddr` stores the address used by this operation.
 			rawAddr := ""
 			if len(pi.Addrs) > 0 {
 				rawAddr = fmt.Sprintf("%s/p2p/%s", pi.Addrs[0].String(), pi.ID.String())
@@ -9620,6 +12212,8 @@ func (m *mdnsNotifee) HandlePeerFound(pi peer.AddrInfo) {
 		m.node.recordDialFailure(pi.ID.String())
 	}
 }
+
+// startMDNS implements the start mdns helper.
 func (n *Node) startMDNS() {
 	if !EnableMDNS || n == nil || n.Host == nil {
 		return
@@ -9630,8 +12224,11 @@ func (n *Node) startMDNS() {
 		fmt.Println("mDNS auto-disabled on Windows (set MSC_FORCE_MDNS=1 to force-enable)")
 		return
 	}
-	serviceTag := fmt.Sprintf("msc-mdns-%s", ChainID)
+	// `serviceTag` stores the value produced by this operation.
+	serviceTag := fmt.Sprintf("msc-mdns-%s", protocolChainID())
+	// `service` stores the value produced by this operation.
 	service := mdns.NewMdnsService(n.Host, serviceTag, &mdnsNotifee{node: n})
+	// `err` stores the error produced by this operation.
 	if err := service.Start(); err != nil {
 		if DebugNet {
 			fmt.Printf("Ã¢Å¡Â Ã¯Â¸Â mDNS start failed: %v\n", err)
@@ -9642,6 +12239,8 @@ func (n *Node) startMDNS() {
 		fmt.Printf("Ã°Å¸â€œÂ¡ mDNS discovery enabled (%s)\n", serviceTag)
 	}
 }
+
+// initLibp2p implements the init libp2p helper.
 func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 	// =====================================================
 	// Ã°Å¸â€â€˜ CONVERT VALIDATOR KEY TO LIBP2P KEY
@@ -9654,19 +12253,27 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 	// Ã°Å¸Å¡â‚¬ CREATE LIBP2P HOST
 	// =====================================================
 	if n.SelfAddr != "" {
+		// `maddr` and `err` store the error produced by this operation.
 		if maddr, err := ma.NewMultiaddr(stripP2PComponent(n.SelfAddr)); err == nil {
+			// `portStr` and `err` store the error produced by this operation.
 			if portStr, err := maddr.ValueForProtocol(ma.P_TCP); err == nil {
+				// `port` and `err` store the error produced by this operation.
 				if port, err := strconv.Atoi(portStr); err == nil && port > 0 {
 					listenPort = port
 				}
 			}
 		}
 	}
+	// `listenAddr` stores the address used by this operation.
 	listenAddr := fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", listenPort)
+	// `listenIP` stores the value produced by this operation.
 	listenIP := ""
 	if n.SelfAddr != "" {
+		// `selfAddr` stores the address used by this operation.
 		selfAddr := stripP2PComponent(n.SelfAddr)
+		// `maddr` and `err` store the error produced by this operation.
 		if maddr, err := ma.NewMultiaddr(selfAddr); err == nil {
+			// `ip` and `err` store the error produced by this operation.
 			if ip, err := maddr.ValueForProtocol(ma.P_IP4); err == nil && ip != "" {
 				listenIP = ip
 				listenAddr = fmt.Sprintf("/ip4/%s/tcp/%d", ip, listenPort)
@@ -9675,7 +12282,9 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 			}
 		}
 	}
+	// `sourceMultiAddr` stores the address used by this operation.
 	sourceMultiAddr, _ := ma.NewMultiaddr(listenAddr)
+	// `opts` stores the value produced by this operation.
 	opts := []libp2p.Option{
 		libp2p.ListenAddrs(sourceMultiAddr),
 		libp2p.Identity(lpPriv),
@@ -9703,24 +12312,33 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 		high = MaxConnections
 	}
 	if high <= 0 {
-		high = 50
+		high = MaxPeers
 	}
-	low := high / 2
+	// `low` stores the value produced by this operation.
+	low := TargetPeers
+	if low > high {
+		low = high
+	}
 	if low < 1 {
 		low = 1
 	}
+	// `cm` and `err` store the error produced by this operation.
 	if cm, err := connmgr.NewConnManager(low, high, connmgr.WithGracePeriod(time.Minute)); err == nil {
 		opts = append(opts, libp2p.ConnectionManager(cm))
 	}
+	// `externalAddr` stores the address used by this operation.
 	externalAddr := ""
 	if ConfigP2PExternalAddr != "" {
 		externalAddr = stripP2PComponent(ConfigP2PExternalAddr)
 	}
 	if listenIP != "" || externalAddr != "" {
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
+			// `filtered` stores the value produced by this operation.
 			filtered := make([]ma.Multiaddr, 0, len(addrs))
 			if listenIP != "" {
+				// `addr` tracks the address used by this operation.
 				for _, addr := range addrs {
+					// `ip` and `err` store the error produced by this operation.
 					if ip, err := addr.ValueForProtocol(ma.P_IP4); err == nil && ip == listenIP {
 						filtered = append(filtered, addr)
 					}
@@ -9729,6 +12347,7 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 				filtered = append(filtered, addrs...)
 			}
 			if externalAddr != "" {
+				// `maddr` and `err` store the error produced by this operation.
 				if maddr, err := ma.NewMultiaddr(externalAddr); err == nil {
 					filtered = append(filtered, maddr)
 				}
@@ -9739,10 +12358,12 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 			return filtered
 		}))
 	}
+	// `h` and `err` store the error produced by this operation.
 	h, err := libp2p.New(opts...)
 	if err != nil {
 		return fmt.Errorf("failed to create libp2p host: %w", err)
 	}
+	// `keyPath` stores the key used to access the related value.
 	if keyPath := p2pIdentityKeyPath(n.DataDir, n.ID); strings.TrimSpace(keyPath) != "" {
 		log.Printf("[P2P-ID] identity key=%s peer_id=%s", keyPath, h.ID().String())
 	}
@@ -9750,39 +12371,8 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 	// =====================================================
 	// Ã°Å¸â€œÂ¡ CREATE GOSSIPSUB
 	// =====================================================
-	params := pubsub.DefaultGossipSubParams()
-	params.HeartbeatInterval = 5 * time.Second
-	validateWorkers := runtime.NumCPU()
-	if validateWorkers < 2 {
-		validateWorkers = 2
-	}
-	if MaxValidateWorkers > 0 && validateWorkers > MaxValidateWorkers {
-		validateWorkers = MaxValidateWorkers
-	}
-	validateQueue := MaxValidateQueue
-	if validateQueue <= 0 {
-		validateQueue = 128
-	}
-	validateThrottle := validateWorkers * 4
-	if validateThrottle < validateQueue {
-		validateThrottle = validateQueue
-	}
-	peerOutboundQueue := MaxPeerOutboundQueue
-	if peerOutboundQueue <= 0 {
-		peerOutboundQueue = 512
-	}
-	ps, err := pubsub.NewGossipSub(
-		ctx,
-		h,
-		pubsub.WithMessageSignaturePolicy(pubsub.StrictSign),
-		pubsub.WithPeerExchange(true),
-		pubsub.WithMaxMessageSize(10<<20),
-		pubsub.WithGossipSubParams(params),
-		pubsub.WithValidateWorkers(validateWorkers),
-		pubsub.WithValidateQueueSize(validateQueue),
-		pubsub.WithValidateThrottle(validateThrottle),
-		pubsub.WithPeerOutboundQueueSize(peerOutboundQueue),
-	)
+	// `ps` and `err` store the error produced by this operation.
+	ps, err := newMSCGossipSub(ctx, h, 5*time.Second)
 	if err != nil {
 		return fmt.Errorf("failed to create pubsub: %w", err)
 	}
@@ -9805,6 +12395,7 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 				return
 			}
 			n.rememberPeerDiversityConn(c)
+			// `remotePeer` stores the value produced by this operation.
 			remotePeer := c.RemotePeer()
 			peerLastSeenMu.Lock()
 			PeerLastSeen[remotePeer.String()] = time.Now()
@@ -9815,6 +12406,7 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 			n.SafeGo("on_peer_connected", func() { n.onPeerConnected(remotePeer) })
 		},
 		DisconnectedF: func(_ network.Network, c network.Conn) {
+			// `remotePeer` stores the value produced by this operation.
 			remotePeer := c.RemotePeer()
 			if n.hasActivePeerConnection(remotePeer) {
 				return
@@ -9832,27 +12424,35 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 			fmt.Println("DHT disabled by config")
 		}
 	} else {
+		// `bootstrapPeers` stores the value produced by this operation.
 		bootstrapPeers := make([]peer.AddrInfo, 0)
+		// `addBootstrap` stores the value produced by this operation.
 		addBootstrap := func(raw string) {
 			raw = strings.TrimSpace(raw)
 			if raw == "" {
 				return
 			}
+			// `maddr` and `err` store the error produced by this operation.
 			maddr, err := ma.NewMultiaddr(raw)
 			if err != nil {
 				return
 			}
+			// `info` and `err` store the error produced by this operation.
 			info, err := peer.AddrInfoFromP2pAddr(maddr)
 			if err != nil {
 				return
 			}
 			bootstrapPeers = append(bootstrapPeers, *info)
 		}
+		// `seeds` stores the value produced by this operation.
 		_, seeds := n.configPeerListsSnapshot()
+		// `persistent` stores the value produced by this operation.
 		persistent := n.persistentPeersSnapshot()
+		// `seed` tracks the current values while iterating.
 		for _, seed := range seeds {
 			addBootstrap(seed)
 		}
+		// `p` tracks the current values while iterating.
 		for _, p := range persistent {
 			addBootstrap(p)
 		}
@@ -9885,6 +12485,7 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 		fmt.Println("Ã°Å¸Å’Â LibP2P host initialized")
 		fmt.Println("Ã°Å¸â€ â€ PeerID:", h.ID().String())
 		fmt.Println("Ã°Å¸â€œÂ Listening addresses:")
+		// `addr` tracks the address used by this operation.
 		for _, addr := range h.Addrs() {
 			fmt.Printf("  %s/p2p/%s\n", addr, h.ID())
 		}
@@ -9904,11 +12505,13 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 			if DebugNet {
 				fmt.Println("Ã°Å¸â€â€ž Bootstrapping DHT...")
 			}
+			// `bootstrapCtx` and `cancel` store the context controlling this operation.
 			bootstrapCtx, cancel := context.WithTimeout(
 				ctx,
 				15*time.Second,
 			)
 			defer cancel()
+			// `err` stores the error produced by this operation.
 			if err := d.Bootstrap(bootstrapCtx); err != nil {
 				if DebugNet {
 					fmt.Printf(
@@ -9931,28 +12534,36 @@ func (n *Node) initLibp2p(ctx context.Context, listenPort int) error {
 	}
 	return nil
 }
+
+// validatorMeshMode implements the validator mesh mode helper.
 func validatorMeshMode() string {
-	return "active_only"
+	return "sparse_active_set"
 }
 
+// validatorMeshReconcileInterval implements the validator mesh reconcile interval helper.
 func validatorMeshReconcileInterval() time.Duration {
 	return 5 * time.Second
 }
 
+// validatorMeshTargets implements the validator mesh targets helper.
 func (n *Node) validatorMeshTargets() []string {
 	if n == nil {
 		return nil
 	}
+	// `nextHeight` stores the value produced by this operation.
 	nextHeight := uint64(1)
 	if n.Blockchain != nil {
 		nextHeight = n.Blockchain.Height() + 1
 	}
+	// `activeSet` stores the value produced by this operation.
 	activeSet := canonicalValidatorIDs(n.frozenValidatorsForHeight(nextHeight))
 	if len(activeSet) == 0 {
 		// Fallback only when deterministic frozen set is not available yet.
 		activeSet = canonicalValidatorIDs(n.GetConsensusValidators(int(nextHeight)))
 	}
+	// `targetIDs` stores the value produced by this operation.
 	targetIDs := make(map[string]struct{})
+	// `vid` tracks the current values while iterating.
 	for _, vid := range activeSet {
 		vid = strings.TrimSpace(vid)
 		if vid == "" {
@@ -9960,31 +12571,39 @@ func (n *Node) validatorMeshTargets() []string {
 		}
 		targetIDs[strings.ToUpper(vid)] = struct{}{}
 	}
+	// `addrs` stores the address used by this operation.
 	addrs := make([]string, 0, len(targetIDs))
+	// `vid` tracks the current values while iterating.
 	for vid := range targetIDs {
 		if strings.EqualFold(vid, n.ID) {
 			continue
 		}
+		// `addr` stores the address used by this operation.
 		if addr := n.GetValidatorAddr(vid); addr != "" {
 			addrs = append(addrs, addr)
 		}
 	}
-	return sanitizePeerListWithPreferred(addrs, addrs)
+	addrs = sanitizePeerListWithPreferred(addrs, addrs)
+	return selectSparsePeerTargets(n.ID, nextHeight, addrs, TargetPeers)
 }
 
+// validatorMeshUrgentPeerFloor implements the validator mesh urgent peer floor helper.
 func (n *Node) validatorMeshUrgentPeerFloor(targetCount int) int {
 	if n == nil {
 		return 1
 	}
+	// `floor` stores the value produced by this operation.
 	floor := 1
 	if n.Blockchain != nil {
+		// `nextHeight` stores the value produced by this operation.
 		nextHeight := n.Blockchain.Height() + 1
+		// `required` stores the request data being processed.
 		if required := n.executionQuorumRequiredForEpoch(nextHeight); required > 0 && required+1 > floor {
 			floor = required + 1
 		}
 	}
-	if SelfHealMinPeers > floor {
-		floor = SelfHealMinPeers
+	if minPeers := normalizedMinimumPeers(SelfHealMinPeers); minPeers > floor {
+		floor = minPeers
 	}
 	if targetCount > 0 && floor > targetCount {
 		floor = targetCount
@@ -9995,6 +12614,7 @@ func (n *Node) validatorMeshUrgentPeerFloor(targetCount int) int {
 	return floor
 }
 
+// trustedPeerMultiaddrs implements the trusted peer multiaddrs helper.
 func (n *Node) trustedPeerMultiaddrs() []string {
 	if n == nil {
 		return nil
@@ -10002,6 +12622,7 @@ func (n *Node) trustedPeerMultiaddrs() []string {
 	if n.Config == nil {
 		return nil
 	}
+	// `persistent` and `seeds` store the value produced by this operation.
 	persistent, seeds := n.configPeerListsSnapshot()
 	// Order matters: later sources override earlier ones for same endpoint.
 	// Keep runtime order so fresh discoveries can win over stale static entries.
@@ -10009,6 +12630,7 @@ func (n *Node) trustedPeerMultiaddrs() []string {
 	trusted = append(trusted, seeds...)
 	trusted = append(trusted, persistent...)
 	ValidatorAddrBook.mu.RLock()
+	// `addr` tracks the address used by this operation.
 	for _, addr := range ValidatorAddrBook.m {
 		if strings.TrimSpace(addr) != "" {
 			trusted = append(trusted, strings.TrimSpace(addr))
@@ -10016,7 +12638,9 @@ func (n *Node) trustedPeerMultiaddrs() []string {
 	}
 	ValidatorAddrBook.mu.RUnlock()
 	if n.Host != nil {
+		// `pid` tracks the current values while iterating.
 		for _, pid := range n.Host.Network().Peers() {
+			// `addr` tracks the address used by this operation.
 			for _, addr := range n.Host.Peerstore().Addrs(pid) {
 				trusted = append(trusted, fmt.Sprintf("%s/p2p/%s", addr.String(), pid.String()))
 			}
@@ -10025,6 +12649,7 @@ func (n *Node) trustedPeerMultiaddrs() []string {
 	return sanitizePeerListWithPreferred(trusted, trusted)
 }
 
+// validatorMeshNeedsBackoffReset implements the validator mesh needs backoff reset helper.
 func (n *Node) validatorMeshNeedsBackoffReset(targets []string) bool {
 	if n == nil || n.Host == nil || len(targets) == 0 {
 		return false
@@ -10032,11 +12657,14 @@ func (n *Node) validatorMeshNeedsBackoffReset(targets []string) bool {
 	if len(n.Host.Network().Peers()) < n.validatorMeshUrgentPeerFloor(len(targets)) {
 		return true
 	}
+	// `target` tracks the current values while iterating.
 	for _, target := range targets {
+		// `peerID` and `ok` store whether the related condition is satisfied.
 		_, peerID, ok := splitPeerAddress(target)
 		if !ok || strings.TrimSpace(peerID) == "" {
 			continue
 		}
+		// `pid` and `err` store the error produced by this operation.
 		pid, err := peer.Decode(peerID)
 		if err != nil {
 			continue
@@ -10051,10 +12679,12 @@ func (n *Node) validatorMeshNeedsBackoffReset(targets []string) bool {
 	return false
 }
 
+// maintainValidatorMesh implements the maintain validator mesh helper.
 func (n *Node) maintainValidatorMesh(ctx context.Context) {
 	if n == nil || n.Host == nil {
 		return
 	}
+	// `ticker` stores the value produced by this operation.
 	ticker := time.NewTicker(validatorMeshReconcileInterval())
 	defer ticker.Stop()
 	for {
@@ -10081,6 +12711,8 @@ func (n *Node) maintainValidatorMesh(ctx context.Context) {
 		}
 	}
 }
+
+// HandlePeerHello handles peer hello.
 func (n *Node) HandlePeerHello(peerAddr, validatorID, advertisedAddr string) {
 	// Hard validation
 	if validatorID == "" || advertisedAddr == "" {
@@ -10090,7 +12722,9 @@ func (n *Node) HandlePeerHello(peerAddr, validatorID, advertisedAddr string) {
 	peerAddr = strings.TrimSpace(peerAddr)
 	// If /p2p/ is missing in advertised address, attach remote stream peer ID.
 	if _, _, hasPID := splitPeerAddress(advertisedAddr); !hasPID {
+		// `remotePeerID` and `ok` store whether the related condition is satisfied.
 		if _, remotePeerID, ok := splitPeerAddress(peerAddr); ok {
+			// `fixedAddr` and `ok` store whether the related condition is satisfied.
 			if fixedAddr, ok := peerAddrWithPeerID(advertisedAddr, remotePeerID); ok {
 				advertisedAddr = fixedAddr
 			}
@@ -10099,8 +12733,10 @@ func (n *Node) HandlePeerHello(peerAddr, validatorID, advertisedAddr string) {
 	if !n.reserveValidatorPeerIdentity(validatorIdentityPeerID(peerAddr, advertisedAddr), validatorID, advertisedAddr) {
 		return
 	}
+	// `updated` stores the value produced by this operation.
 	updated := false
 	ValidatorAddrBook.mu.Lock()
+	// `old` and `exists` store whether the related condition is satisfied.
 	if old, exists := ValidatorAddrBook.m[validatorID]; exists {
 		updated = old != advertisedAddr
 	} else {
@@ -10108,7 +12744,7 @@ func (n *Node) HandlePeerHello(peerAddr, validatorID, advertisedAddr string) {
 	}
 	ValidatorAddrBook.m[validatorID] = advertisedAddr
 	ValidatorAddrBook.mu.Unlock()
-	n.upsertDiscoveredPeerAddress(advertisedAddr)
+	n.upsertDiscoveredPeerAddress(advertisedAddr, true)
 	if updated && DebugConsensus {
 		fmt.Printf("Validator registered | id=%s addr=%s\n", validatorID, advertisedAddr)
 	}
@@ -10117,10 +12753,13 @@ func (n *Node) HandlePeerHello(peerAddr, validatorID, advertisedAddr string) {
 		n.requestHeartbeatBroadcast(true)
 	}
 }
+
+// peerListsEqual implements the peer lists equal helper.
 func peerListsEqual(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
 	}
+	// `i` tracks the current position in the related collection.
 	for i := range a {
 		if a[i] != b[i] {
 			return false
@@ -10129,17 +12768,22 @@ func peerListsEqual(a, b []string) bool {
 	return true
 }
 
-// upsertDiscoveredPeerAddress persists private peer addresses learned during
-// peer hello so stale /p2p/ identities are corrected across restarts.
-func (n *Node) upsertDiscoveredPeerAddress(addr string) {
+// upsertDiscoveredPeerAddress persists verified peer addresses so stale /p2p/
+// identities are corrected across restarts.
+func (n *Node) upsertDiscoveredPeerAddress(addr string, allowPublic bool) {
 	if n == nil {
 		return
 	}
 	addr = strings.TrimSpace(addr)
-	if addr == "" || !isPeerAddrPrivate(addr) {
+	if addr == "" {
 		return
 	}
+	if !allowPublic && !isPeerAddrPrivate(addr) {
+		return
+	}
+	// `selfBase` stores the value produced by this operation.
 	selfBase := stripP2PComponent(n.SelfAddr)
+	// `addrBase` stores the address used by this operation.
 	addrBase := stripP2PComponent(addr)
 	if n.SelfAddr != "" && (addr == n.SelfAddr || addrBase == selfBase) {
 		return
@@ -10147,18 +12791,25 @@ func (n *Node) upsertDiscoveredPeerAddress(addr string) {
 	if n.Host != nil && strings.Contains(addr, n.Host.ID().String()) {
 		return
 	}
+	// `currentPersistent` stores the value produced by this operation.
 	currentPersistent := n.persistentPeersSnapshot()
+	// `merged` stores the value produced by this operation.
 	merged := mergePeerLists(currentPersistent, []string{addr})
+	// `preferred` stores the value produced by this operation.
 	preferred := append(n.trustedPeerMultiaddrs(), addr)
+	// `sanitized` stores the value produced by this operation.
 	sanitized := sanitizePeerListWithPreferred(merged, preferred)
 	if peerListsEqual(sanitized, currentPersistent) {
 		return
 	}
 	n.setPersistentPeers(sanitized)
+	// `err` stores the error produced by this operation.
 	if err := savePersistentPeers(n.DataDir, n.ID, sanitized); err != nil && DebugNet {
 		fmt.Printf("Failed to persist discovered peer %s: %v\n", stripP2PComponent(addr), err)
 	}
 }
+
+// parsePeerAddress parses peer address.
 func parsePeerAddress(addr string) (string, error) {
 	// If it's already a multiaddr, use it as-is
 	if strings.HasPrefix(addr, "/") {
@@ -10185,6 +12836,8 @@ func parsePeerAddress(addr string) (string, error) {
 	// Create multiaddr WITHOUT peer ID
 	return fmt.Sprintf("/ip4/%s/tcp/%s", host, port), nil
 }
+
+// isPrivateIP implements the is private ip helper.
 func isPrivateIP(ip net.IP) bool {
 	if ip == nil {
 		return false
@@ -10194,20 +12847,28 @@ func isPrivateIP(ip net.IP) bool {
 	}
 	return false
 }
+
+// isPrivateMultiaddr implements the is private multiaddr helper.
 func isPrivateMultiaddr(maddr ma.Multiaddr) bool {
+	// `v` and `err` store the error produced by this operation.
 	if v, err := maddr.ValueForProtocol(ma.P_IP4); err == nil && v != "" {
 		return isPrivateIP(net.ParseIP(v))
 	}
+	// `v` and `err` store the error produced by this operation.
 	if v, err := maddr.ValueForProtocol(ma.P_IP6); err == nil && v != "" {
 		return isPrivateIP(net.ParseIP(v))
 	}
 	return false
 }
+
+// filterPrivateAddrs implements the filter private addrs helper.
 func filterPrivateAddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
 	if len(addrs) == 0 {
 		return addrs
 	}
+	// `out` stores the result produced by this operation.
 	out := make([]ma.Multiaddr, 0, len(addrs))
+	// `addr` tracks the address used by this operation.
 	for _, addr := range addrs {
 		if isPrivateMultiaddr(addr) {
 			out = append(out, addr)
@@ -10215,18 +12876,23 @@ func filterPrivateAddrs(addrs []ma.Multiaddr) []ma.Multiaddr {
 	}
 	return out
 }
+
+// isPeerAddrPrivate implements the is peer addr private helper.
 func isPeerAddrPrivate(raw string) bool {
 	if raw == "" {
 		return false
 	}
 	if strings.HasPrefix(raw, "/") {
+		// `maddr` and `err` store the error produced by this operation.
 		maddr, err := ma.NewMultiaddr(raw)
 		if err != nil {
 			return false
 		}
 		return isPrivateMultiaddr(maddr)
 	}
+	// `host` stores the value produced by this operation.
 	host := raw
+	// `h` and `err` store the error produced by this operation.
 	if h, _, err := net.SplitHostPort(raw); err == nil {
 		host = h
 	}
@@ -10236,19 +12902,26 @@ func isPeerAddrPrivate(raw string) bool {
 	if host == "localhost" {
 		return true
 	}
+	// `ip` stores the current position in the related collection.
 	ip := net.ParseIP(host)
 	if ip == nil {
 		return false
 	}
 	return isPrivateIP(ip)
 }
+
+// countConnectionDirections implements the count connection directions helper.
 func (n *Node) countConnectionDirections() (int, int, int) {
 	if n == nil || n.Host == nil {
 		return 0, 0, 0
 	}
+	// `conns` stores the value produced by this operation.
 	conns := n.Host.Network().Conns()
+	// `inbound` stores the current position in the related collection.
 	inbound := 0
+	// `outbound` stores the result produced by this operation.
 	outbound := 0
+	// `c` tracks the current values while iterating.
 	for _, c := range conns {
 		switch c.Stat().Direction {
 		case network.DirInbound:
@@ -10259,10 +12932,13 @@ func (n *Node) countConnectionDirections() (int, int, int) {
 	}
 	return inbound, outbound, len(conns)
 }
+
+// canDialPeer implements the can dial peer helper.
 func (n *Node) canDialPeer() bool {
 	if n == nil || n.Host == nil {
 		return false
 	}
+	// `inbound`, `outbound`, and `total` store the measured quantity used by this operation.
 	inbound, outbound, total := n.countConnectionDirections()
 	if MaxConnections > 0 && total >= MaxConnections {
 		return false
@@ -10276,6 +12952,8 @@ func (n *Node) canDialPeer() bool {
 	_ = inbound // inbound is enforced for inbound conns only
 	return true
 }
+
+// allowConnection implements the allow connection helper.
 func (n *Node) allowConnection(conn network.Conn) bool {
 	if n == nil || n.Host == nil || conn == nil {
 		return true
@@ -10283,6 +12961,7 @@ func (n *Node) allowConnection(conn network.Conn) bool {
 	if !n.allowPeerConnectionFlood(conn) {
 		return false
 	}
+	// `inbound`, `outbound`, and `total` store the measured quantity used by this operation.
 	inbound, outbound, total := n.countConnectionDirections()
 	if MaxConnections > 0 && total > MaxConnections {
 		return false
@@ -10305,11 +12984,15 @@ func (n *Node) allowConnection(conn network.Conn) bool {
 	}
 	return true
 }
+
+// peerSubnetKeyFromMultiaddr implements the peer subnet key from multiaddr helper.
 func peerSubnetKeyFromMultiaddr(maddr ma.Multiaddr) string {
 	if maddr == nil {
 		return ""
 	}
+	// `ip4` and `err` store the error produced by this operation.
 	if ip4, err := maddr.ValueForProtocol(ma.P_IP4); err == nil && ip4 != "" {
+		// `ip` stores the current position in the related collection.
 		ip := net.ParseIP(ip4)
 		if ip == nil {
 			return ""
@@ -10317,21 +13000,26 @@ func peerSubnetKeyFromMultiaddr(maddr ma.Multiaddr) string {
 		if ip.IsLoopback() {
 			return ""
 		}
+		// `v4` stores the value produced by this operation.
 		v4 := ip.To4()
 		if v4 == nil {
 			return ""
 		}
+		// `prefix` stores the value produced by this operation.
 		prefix := PeerDiversityIPv4Prefix
 		if prefix <= 0 || prefix > 32 {
 			prefix = 24
 		}
+		// `masked` stores the value produced by this operation.
 		masked := v4.Mask(net.CIDRMask(prefix, 32))
 		if masked == nil {
 			return ""
 		}
 		return fmt.Sprintf("%s/%d", masked.String(), prefix)
 	}
+	// `ip6` and `err` store the error produced by this operation.
 	if ip6, err := maddr.ValueForProtocol(ma.P_IP6); err == nil && ip6 != "" {
+		// `ip` stores the current position in the related collection.
 		ip := net.ParseIP(ip6)
 		if ip == nil {
 			return ""
@@ -10339,14 +13027,17 @@ func peerSubnetKeyFromMultiaddr(maddr ma.Multiaddr) string {
 		if ip.IsLoopback() {
 			return ""
 		}
+		// `v6` stores the value produced by this operation.
 		v6 := ip.To16()
 		if v6 == nil {
 			return ""
 		}
+		// `prefix` stores the value produced by this operation.
 		prefix := PeerDiversityIPv6Prefix
 		if prefix <= 0 || prefix > 128 {
 			prefix = 64
 		}
+		// `masked` stores the value produced by this operation.
 		masked := v6.Mask(net.CIDRMask(prefix, 128))
 		if masked == nil {
 			return ""
@@ -10355,20 +13046,26 @@ func peerSubnetKeyFromMultiaddr(maddr ma.Multiaddr) string {
 	}
 	return ""
 }
+
+// connectedPeersInSubnet implements the connected peers in subnet helper.
 func (n *Node) connectedPeersInSubnet(subnet string, excludePeer string) int {
 	if n == nil || subnet == "" {
 		return 0
 	}
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]struct{})
 	if n.Host != nil {
+		// `c` tracks the current values while iterating.
 		for _, c := range n.Host.Network().Conns() {
 			if c == nil {
 				continue
 			}
+			// `pid` stores the value produced by this operation.
 			pid := c.RemotePeer().String()
 			if pid == "" || pid == excludePeer {
 				continue
 			}
+			// `key` stores the key used to access the related value.
 			key := peerSubnetKeyFromMultiaddr(c.RemoteMultiaddr())
 			if key != subnet {
 				continue
@@ -10377,6 +13074,7 @@ func (n *Node) connectedPeersInSubnet(subnet string, excludePeer string) int {
 		}
 	}
 	n.peerStateMu.Lock()
+	// `pid` and `key` track the key used to access the related value.
 	for pid, key := range n.peerSubnet {
 		if pid == "" || pid == excludePeer || key != subnet {
 			continue
@@ -10390,6 +13088,7 @@ func (n *Node) connectedPeersInSubnet(subnet string, excludePeer string) int {
 	return len(seen)
 }
 
+// normalizePeerDiversityASN normalizes peer diversity asn.
 func normalizePeerDiversityASN(asn string) string {
 	asn = strings.ToUpper(strings.TrimSpace(asn))
 	if asn == "" {
@@ -10406,16 +13105,20 @@ func normalizePeerDiversityASN(asn string) string {
 	return asn
 }
 
+// peerDiversityASNFromEnv implements the peer diversity asn from env helper.
 func peerDiversityASNFromEnv(peerID string) string {
 	peerID = strings.TrimSpace(peerID)
 	if peerID == "" {
 		return ""
 	}
+	// `raw` stores the value produced by this operation.
 	raw := strings.TrimSpace(os.Getenv("MSC_PEER_ASN_MAP"))
 	if raw == "" {
 		return ""
 	}
+	// `item` tracks the current position in the related collection.
 	for _, item := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ';' || r == '\n' }) {
+		// `parts` stores the value produced by this operation.
 		parts := strings.SplitN(strings.TrimSpace(item), "=", 2)
 		if len(parts) != 2 {
 			parts = strings.SplitN(strings.TrimSpace(item), ":", 2)
@@ -10430,6 +13133,7 @@ func peerDiversityASNFromEnv(peerID string) string {
 	return ""
 }
 
+// setPeerDiversityASN implements the set peer diversity asn helper.
 func (n *Node) setPeerDiversityASN(peerID string, asn string) {
 	peerID = strings.TrimSpace(peerID)
 	asn = normalizePeerDiversityASN(asn)
@@ -10446,12 +13150,14 @@ func (n *Node) setPeerDiversityASN(peerID string, asn string) {
 	n.peerStateMu.Unlock()
 }
 
+// peerDiversityASNForPeer implements the peer diversity asn for peer helper.
 func (n *Node) peerDiversityASNForPeer(peerID string) string {
 	peerID = strings.TrimSpace(peerID)
 	if n == nil || peerID == "" {
 		return ""
 	}
 	n.peerStateMu.Lock()
+	// `asn` stores the value produced by this operation.
 	asn := normalizePeerDiversityASN(n.peerASN[peerID])
 	n.peerStateMu.Unlock()
 	if asn != "" {
@@ -10464,17 +13170,21 @@ func (n *Node) peerDiversityASNForPeer(peerID string) string {
 	return ""
 }
 
+// connectedPeersInASN implements the connected peers in asn helper.
 func (n *Node) connectedPeersInASN(asn string, excludePeer string) int {
 	asn = normalizePeerDiversityASN(asn)
 	if n == nil || asn == "" {
 		return 0
 	}
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]struct{})
 	if n.Host != nil {
+		// `c` tracks the current values while iterating.
 		for _, c := range n.Host.Network().Conns() {
 			if c == nil {
 				continue
 			}
+			// `pid` stores the value produced by this operation.
 			pid := c.RemotePeer().String()
 			if pid == "" || pid == excludePeer {
 				continue
@@ -10485,6 +13195,7 @@ func (n *Node) connectedPeersInASN(asn string, excludePeer string) int {
 		}
 	}
 	n.peerStateMu.Lock()
+	// `pid` and `knownASN` track the current values while iterating.
 	for pid, knownASN := range n.peerASN {
 		if pid == "" || pid == excludePeer || normalizePeerDiversityASN(knownASN) != asn {
 			continue
@@ -10498,12 +13209,15 @@ func (n *Node) connectedPeersInASN(asn string, excludePeer string) int {
 	return len(seen)
 }
 
+// rememberPeerDiversityAddr implements the remember peer diversity addr helper.
 func (n *Node) rememberPeerDiversityAddr(peerID string, addrs []ma.Multiaddr, outbound bool) {
 	peerID = strings.TrimSpace(peerID)
 	if n == nil || peerID == "" {
 		return
 	}
+	// `subnet` stores the value produced by this operation.
 	subnet := ""
+	// `addr` tracks the address used by this operation.
 	for _, addr := range addrs {
 		subnet = peerSubnetKeyFromMultiaddr(addr)
 		if subnet != "" {
@@ -10519,11 +13233,13 @@ func (n *Node) rememberPeerDiversityAddr(peerID string, addrs []ma.Multiaddr, ou
 		n.peerOutbound[peerID] = true
 	}
 	n.peerStateMu.Unlock()
+	// `asn` stores the value produced by this operation.
 	if asn := peerDiversityASNFromEnv(peerID); asn != "" {
 		n.setPeerDiversityASN(peerID, asn)
 	}
 }
 
+// rememberPeerDiversityConn implements the remember peer diversity conn helper.
 func (n *Node) rememberPeerDiversityConn(conn network.Conn) {
 	if n == nil || conn == nil {
 		return
@@ -10531,16 +13247,20 @@ func (n *Node) rememberPeerDiversityConn(conn network.Conn) {
 	n.rememberPeerDiversityAddr(conn.RemotePeer().String(), []ma.Multiaddr{conn.RemoteMultiaddr()}, conn.Stat().Direction == network.DirOutbound)
 }
 
+// outboundPeersInSubnet implements the outbound peers in subnet helper.
 func (n *Node) outboundPeersInSubnet(subnet string) int {
 	if n == nil || subnet == "" {
 		return 0
 	}
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]struct{})
 	if n.Host != nil {
+		// `c` tracks the current values while iterating.
 		for _, c := range n.Host.Network().Conns() {
 			if c == nil || c.Stat().Direction != network.DirOutbound {
 				continue
 			}
+			// `pid` stores the value produced by this operation.
 			pid := c.RemotePeer().String()
 			if pid == "" || peerSubnetKeyFromMultiaddr(c.RemoteMultiaddr()) != subnet {
 				continue
@@ -10549,6 +13269,7 @@ func (n *Node) outboundPeersInSubnet(subnet string) int {
 		}
 	}
 	n.peerStateMu.Lock()
+	// `pid` and `key` track the key used to access the related value.
 	for pid, key := range n.peerSubnet {
 		if pid == "" || key != subnet || !n.connectedPeers[pid] || !n.peerOutbound[pid] {
 			continue
@@ -10559,17 +13280,21 @@ func (n *Node) outboundPeersInSubnet(subnet string) int {
 	return len(seen)
 }
 
+// outboundPeersInASN implements the outbound peers in asn helper.
 func (n *Node) outboundPeersInASN(asn string) int {
 	asn = normalizePeerDiversityASN(asn)
 	if n == nil || asn == "" {
 		return 0
 	}
+	// `seen` stores the value produced by this operation.
 	seen := make(map[string]struct{})
 	if n.Host != nil {
+		// `c` tracks the current values while iterating.
 		for _, c := range n.Host.Network().Conns() {
 			if c == nil || c.Stat().Direction != network.DirOutbound {
 				continue
 			}
+			// `pid` stores the value produced by this operation.
 			pid := c.RemotePeer().String()
 			if pid == "" || n.peerDiversityASNForPeer(pid) != asn {
 				continue
@@ -10578,6 +13303,7 @@ func (n *Node) outboundPeersInASN(asn string) int {
 		}
 	}
 	n.peerStateMu.Lock()
+	// `pid` and `knownASN` track the current values while iterating.
 	for pid, knownASN := range n.peerASN {
 		if pid == "" || normalizePeerDiversityASN(knownASN) != asn || !n.connectedPeers[pid] || !n.peerOutbound[pid] {
 			continue
@@ -10588,6 +13314,7 @@ func (n *Node) outboundPeersInASN(asn string) int {
 	return len(seen)
 }
 
+// allowPeerDiversityASN implements the allow peer diversity asn helper.
 func (n *Node) allowPeerDiversityASN(peerID string, outbound bool) bool {
 	if n == nil || !PeerDiversityEnabled {
 		return true
@@ -10595,6 +13322,7 @@ func (n *Node) allowPeerDiversityASN(peerID string, outbound bool) bool {
 	if n.isValidatorOrPersistentPeerID(peerID) {
 		return true
 	}
+	// `asn` stores the value produced by this operation.
 	asn := n.peerDiversityASNForPeer(peerID)
 	if asn == "" {
 		return true
@@ -10618,16 +13346,20 @@ func (n *Node) allowPeerDiversityASN(peerID string, outbound bool) bool {
 	return true
 }
 
+// allowPeerDiversityConn implements the allow peer diversity conn helper.
 func (n *Node) allowPeerDiversityConn(conn network.Conn) bool {
 	if n == nil || conn == nil || !PeerDiversityEnabled {
 		return true
 	}
+	// `peerID` stores the value produced by this operation.
 	peerID := conn.RemotePeer().String()
 	if n.isValidatorOrPersistentPeerID(peerID) {
 		return true
 	}
+	// `subnet` stores the value produced by this operation.
 	subnet := peerSubnetKeyFromMultiaddr(conn.RemoteMultiaddr())
 	if subnet != "" && PeerDiversityMaxPerSubnet > 0 {
+		// `connected` stores the value produced by this operation.
 		connected := n.connectedPeersInSubnet(subnet, peerID)
 		if connected >= PeerDiversityMaxPerSubnet {
 			n.observePeerDiversityReject(conn.Stat().Direction == network.DirOutbound)
@@ -10644,6 +13376,7 @@ func (n *Node) allowPeerDiversityConn(conn network.Conn) bool {
 	return true
 }
 
+// allowPeerDiversityDial implements the allow peer diversity dial helper.
 func (n *Node) allowPeerDiversityDial(maddr ma.Multiaddr) bool {
 	if n == nil {
 		return true
@@ -10651,9 +13384,11 @@ func (n *Node) allowPeerDiversityDial(maddr ma.Multiaddr) bool {
 	if !PeerDiversityEnabled {
 		return true
 	}
+	// `peerID` and `ok` store whether the related condition is satisfied.
 	if _, peerID, ok := splitPeerAddress(maddr.String()); ok && n.isValidatorOrPersistentPeerID(peerID) {
 		return true
 	}
+	// `subnet` stores the value produced by this operation.
 	subnet := peerSubnetKeyFromMultiaddr(maddr)
 	if subnet == "" {
 		return true
@@ -10677,10 +13412,12 @@ func (n *Node) allowPeerDiversityDial(maddr ma.Multiaddr) bool {
 	return true
 }
 
+// allowPeerDiversityOutboundPeer implements the allow peer diversity outbound peer helper.
 func (n *Node) allowPeerDiversityOutboundPeer(info *peer.AddrInfo) bool {
 	if n == nil || info == nil || !PeerDiversityEnabled {
 		return true
 	}
+	// `peerID` stores the value produced by this operation.
 	peerID := info.ID.String()
 	if n.isValidatorOrPersistentPeerID(peerID) {
 		return true
@@ -10688,7 +13425,9 @@ func (n *Node) allowPeerDiversityOutboundPeer(info *peer.AddrInfo) bool {
 	if !n.allowPeerDiversityASN(peerID, true) {
 		return false
 	}
+	// `addr` tracks the address used by this operation.
 	for _, addr := range info.Addrs {
+		// `subnet` stores the value produced by this operation.
 		subnet := peerSubnetKeyFromMultiaddr(addr)
 		if subnet == "" {
 			continue
@@ -10705,6 +13444,7 @@ func (n *Node) allowPeerDiversityOutboundPeer(info *peer.AddrInfo) bool {
 	return true
 }
 
+// allowDiscoveredPeer implements the allow discovered peer helper.
 func (n *Node) allowDiscoveredPeer(info peer.AddrInfo) bool {
 	if n == nil {
 		return false
@@ -10729,33 +13469,47 @@ func (n *Node) allowDiscoveredPeer(info peer.AddrInfo) bool {
 }
 
 type peerDiversitySnapshot struct {
-	SubnetBuckets         int
-	ASNBuckets            int
+	// `SubnetBuckets` stores the value associated with this record.
+	SubnetBuckets int
+	// `ASNBuckets` stores the value associated with this record.
+	ASNBuckets int
+	// `OutboundSubnetBuckets` stores the result produced by this operation.
 	OutboundSubnetBuckets int
-	OutboundASNBuckets    int
-	RejectTotal           uint64
-	OutboundRejectTotal   uint64
+	// `OutboundASNBuckets` stores the result produced by this operation.
+	OutboundASNBuckets int
+	// `RejectTotal` stores the measured quantity used by this operation.
+	RejectTotal uint64
+	// `OutboundRejectTotal` stores the measured quantity used by this operation.
+	OutboundRejectTotal uint64
 }
 
+// peerDiversitySnapshot implements the peer diversity snapshot helper.
 func (n *Node) peerDiversitySnapshot() peerDiversitySnapshot {
 	if n == nil {
 		return peerDiversitySnapshot{}
 	}
+	// `subnets` stores the value produced by this operation.
 	subnets := make(map[string]struct{})
+	// `asns` stores the value produced by this operation.
 	asns := make(map[string]struct{})
+	// `outSubnets` stores the result produced by this operation.
 	outSubnets := make(map[string]struct{})
+	// `outASNs` stores the result produced by this operation.
 	outASNs := make(map[string]struct{})
 	n.peerStateMu.Lock()
+	// `pid` and `connected` track the current values while iterating.
 	for pid, connected := range n.connectedPeers {
 		if !connected {
 			continue
 		}
+		// `subnet` stores the value produced by this operation.
 		if subnet := strings.TrimSpace(n.peerSubnet[pid]); subnet != "" {
 			subnets[subnet] = struct{}{}
 			if n.peerOutbound[pid] {
 				outSubnets[subnet] = struct{}{}
 			}
 		}
+		// `asn` stores the value produced by this operation.
 		if asn := normalizePeerDiversityASN(n.peerASN[pid]); asn != "" {
 			asns[asn] = struct{}{}
 			if n.peerOutbound[pid] {
@@ -10765,16 +13519,19 @@ func (n *Node) peerDiversitySnapshot() peerDiversitySnapshot {
 	}
 	n.peerStateMu.Unlock()
 	if n.Host != nil {
+		// `c` tracks the current values while iterating.
 		for _, c := range n.Host.Network().Conns() {
 			if c == nil {
 				continue
 			}
+			// `subnet` stores the value produced by this operation.
 			if subnet := peerSubnetKeyFromMultiaddr(c.RemoteMultiaddr()); subnet != "" {
 				subnets[subnet] = struct{}{}
 				if c.Stat().Direction == network.DirOutbound {
 					outSubnets[subnet] = struct{}{}
 				}
 			}
+			// `asn` stores the value produced by this operation.
 			if asn := n.peerDiversityASNForPeer(c.RemotePeer().String()); asn != "" {
 				asns[asn] = struct{}{}
 				if c.Stat().Direction == network.DirOutbound {
@@ -10783,6 +13540,7 @@ func (n *Node) peerDiversitySnapshot() peerDiversitySnapshot {
 			}
 		}
 	}
+	// `obs` stores the value produced by this operation.
 	obs := n.observabilityStatsSnapshot()
 	return peerDiversitySnapshot{
 		SubnetBuckets:         len(subnets),
@@ -10794,8 +13552,10 @@ func (n *Node) peerDiversitySnapshot() peerDiversitySnapshot {
 	}
 }
 
+// `maxDialFanout` defines the result produced by this operation.
 const maxDialFanout = 16
 
+// connectToPeersAsync implements the connect to peers async helper.
 func (n *Node) connectToPeersAsync(peerMultiaddrs []string, timeout time.Duration) {
 	if n == nil || len(peerMultiaddrs) == 0 {
 		return
@@ -10803,6 +13563,7 @@ func (n *Node) connectToPeersAsync(peerMultiaddrs []string, timeout time.Duratio
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
+	// `targets` stores the value produced by this operation.
 	targets := append([]string(nil), peerMultiaddrs...)
 	go func() {
 		if n == nil {
@@ -10815,12 +13576,14 @@ func (n *Node) connectToPeersAsync(peerMultiaddrs []string, timeout time.Duratio
 			default:
 			}
 		}
+		// `ctx` and `cancel` store the context controlling this operation.
 		ctx, cancel := context.WithTimeout(n.RootContext(), timeout)
 		defer cancel()
 		n.connectToPeers(ctx, targets)
 	}()
 }
 
+// dialSemaphore implements the dial semaphore helper.
 func (n *Node) dialSemaphore() chan struct{} {
 	if n == nil {
 		return nil
@@ -10831,7 +13594,9 @@ func (n *Node) dialSemaphore() chan struct{} {
 	return n.dialSlots
 }
 
+// releaseDialSlot implements the release dial slot helper.
 func (n *Node) releaseDialSlot() {
+	// `sem` stores the value produced by this operation.
 	sem := n.dialSemaphore()
 	if sem == nil {
 		return
@@ -10863,7 +13628,9 @@ func (n *Node) connectToPeers(ctx context.Context, peerMultiaddrs []string) {
 	if len(peerMultiaddrs) == 0 {
 		return
 	}
+	// `uniquePeers` stores the value produced by this operation.
 	uniquePeers := make(map[string]struct{})
+	// `p` tracks the current values while iterating.
 	for _, p := range peerMultiaddrs {
 		if p == "" {
 			continue
@@ -10873,7 +13640,9 @@ func (n *Node) connectToPeers(ctx context.Context, peerMultiaddrs []string) {
 	if DebugNet && len(uniquePeers) > 0 && n.shouldLogNetworkProbe(fmt.Sprintf("connect_targets:%d", len(uniquePeers)), 20*time.Second) {
 		fmt.Printf("Attempting to connect to %d peers\n", len(uniquePeers))
 	}
+	// `sem` stores the value produced by this operation.
 	sem := n.dialSemaphore()
+	// `rawAddr` tracks the address used by this operation.
 	for rawAddr := range uniquePeers {
 		if rawAddr == "" {
 			continue
@@ -10898,11 +13667,14 @@ func (n *Node) connectToPeers(ctx context.Context, peerMultiaddrs []string) {
 		go func(addr string) {
 			defer n.releaseDialSlot()
 			defer func() {
+				// `r` stores the value produced by this operation.
 				if r := recover(); r != nil {
 					fmt.Printf("[RECOVERED] connect_to_peers_dial panic: %v\n%s\n", r, debug.Stack())
 				}
 			}()
+			// `delay` stores the value produced by this operation.
 			delay := time.Duration(rand.Intn(2000)) * time.Millisecond
+			// `timer` stores the value produced by this operation.
 			timer := time.NewTimer(delay)
 			defer timer.Stop()
 			select {
@@ -10930,8 +13702,10 @@ func (n *Node) connectToPeers(ctx context.Context, peerMultiaddrs []string) {
 				}
 				return
 			}
+			// `selfBase` stores the value produced by this operation.
 			selfBase := stripP2PComponent(n.SelfAddr)
 			if selfBase != "" && stripP2PComponent(addr) == selfBase {
+				// `stalePID` and `has` store the value produced by this operation.
 				if _, stalePID, has := splitPeerAddress(addr); has && (n.Host == nil || stalePID != n.Host.ID().String()) {
 					n.forgetPeer(stalePID, "self_dial")
 				}
@@ -10941,6 +13715,7 @@ func (n *Node) connectToPeers(ctx context.Context, peerMultiaddrs []string) {
 				return
 			}
 			if !strings.HasPrefix(addr, "/") {
+				// `parsedAddr` and `err` store the error produced by this operation.
 				parsedAddr, err := parsePeerAddress(addr)
 				if err != nil {
 					if DebugNet {
@@ -10953,6 +13728,7 @@ func (n *Node) connectToPeers(ctx context.Context, peerMultiaddrs []string) {
 				}
 				return
 			}
+			// `maddr` and `err` store the error produced by this operation.
 			maddr, err := ma.NewMultiaddr(addr)
 			if err != nil {
 				if DebugNet {
@@ -10960,6 +13736,7 @@ func (n *Node) connectToPeers(ctx context.Context, peerMultiaddrs []string) {
 				}
 				return
 			}
+			// `hasPeerID` stores the value produced by this operation.
 			hasPeerID := false
 			ma.ForEach(maddr, func(c ma.Component) bool {
 				if c.Protocol().Name == "p2p" {
@@ -10974,6 +13751,7 @@ func (n *Node) connectToPeers(ctx context.Context, peerMultiaddrs []string) {
 				}
 				return
 			}
+			// `addrInfo` and `err` store the error produced by this operation.
 			addrInfo, err := peer.AddrInfoFromP2pAddr(maddr)
 			if err != nil {
 				if DebugNet {
@@ -10993,6 +13771,7 @@ func (n *Node) connectToPeers(ctx context.Context, peerMultiaddrs []string) {
 			if n.isPeerConnected(addrInfo.ID.String()) {
 				return
 			}
+			// `err` stores the error produced by this operation.
 			if err := n.connectToPeer(ctx, addr); err != nil {
 				if DebugNet {
 					fmt.Printf("Failed to connect to peer %s: %v\n", addr, err)
@@ -11004,6 +13783,7 @@ func (n *Node) connectToPeers(ctx context.Context, peerMultiaddrs []string) {
 
 // Add this method to the Node struct
 func (n *Node) startNetworkCLI() {
+	// `reader` stores the value produced by this operation.
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Ã°Å¸Å’Â Network CLI ready (type 'network help' for commands)")
 	fmt.Println("Type 'back' to return to main CLI")
@@ -11012,6 +13792,7 @@ func (n *Node) startNetworkCLI() {
 			return
 		}
 		fmt.Printf("[network:%s] > ", n.ID)
+		// `line` and `err` store the error produced by this operation.
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Printf("[WARN] network CLI input closed; node keeps running: %v\n", err)
@@ -11042,14 +13823,18 @@ func (n *Node) startNetworkCLI() {
 				fmt.Println("Ã¢Å¡Â Ã¯Â¸Â libp2p host not initialized")
 				continue
 			}
+			// `peers` stores the value produced by this operation.
 			peers := n.Host.Network().Peers()
 			fmt.Printf("=== Connected Peers (%d) ===\n", len(peers))
 			if len(peers) == 0 {
 				fmt.Println("No connected peers")
 				continue
 			}
+			// `pid` tracks the current values while iterating.
 			for _, pid := range peers {
+				// `conns` stores the value produced by this operation.
 				conns := n.Host.Network().ConnsToPeer(pid)
+				// `addrInfo` stores the address used by this operation.
 				addrInfo := n.Host.Peerstore().PeerInfo(pid)
 				fmt.Printf("Peer: %s\n", pid.String())
 				fmt.Printf("  Connections: %d\n", len(conns))
@@ -11072,6 +13857,7 @@ func (n *Node) startNetworkCLI() {
 			fmt.Println("=== Network Information ===")
 			fmt.Printf("Peer ID: %s\n", n.Host.ID())
 			fmt.Printf("Listening addresses:\n")
+			// `addr` tracks the address used by this operation.
 			for _, addr := range n.Host.Addrs() {
 				fmt.Printf("  %s\n", addr)
 			}
@@ -11080,13 +13866,16 @@ func (n *Node) startNetworkCLI() {
 			fmt.Printf("Connected peers: %d\n", len(peers))
 			// Connection count
 			totalConns := 0
+			// `pid` tracks the current values while iterating.
 			for _, pid := range peers {
 				totalConns += len(n.Host.Network().ConnsToPeer(pid))
 			}
 			fmt.Printf("Total connections: %d\n", totalConns)
 		case "network topics", "topics":
 			fmt.Println("=== PubSub Topics ===")
+			// `topics` stores the value produced by this operation.
 			topics := []string{TopicBlock, TopicTx, TopicConsensus, TopicValidator, TopicSnapshotMeta, TopicSnapshotChunk, TopicSnapshotProof}
+			// `topic` tracks the current values while iterating.
 			for _, topic := range topics {
 				fmt.Printf("- %s\n", topic)
 			}
@@ -11128,23 +13917,31 @@ func (n *Node) startNetworkCLI() {
 			fmt.Println("=== Network Statistics ===")
 			// Peer count by connection state
 			peers := n.Host.Network().Peers()
+			// `states` stores the value produced by this operation.
 			states := make(map[string]int)
+			// `pid` tracks the current values while iterating.
 			for _, pid := range peers {
+				// `state` stores the value produced by this operation.
 				state := n.Host.Network().Connectedness(pid)
 				states[state.String()]++
 			}
+			// `state` and `count` track the measured quantity used by this operation.
 			for state, count := range states {
 				fmt.Printf("%s: %d\n", state, count)
 			}
 			// Protocol usage
 			fmt.Println("\nProtocol usage:")
+			// `pid` tracks the current values while iterating.
 			for _, pid := range peers {
+				// `protos` stores the value produced by this operation.
 				protos, _ := n.Host.Peerstore().GetProtocols(pid)
+				// `proto` tracks the current values while iterating.
 				for _, proto := range protos {
 					fmt.Printf("  %s: %s\n", pid.ShortString(), proto)
 				}
 			}
 		case "network maps", "maps":
+			// `stats` stores the value produced by this operation.
 			stats := n.MapStats()
 			fmt.Println("=== Map Sizes ===")
 			fmt.Printf("SeenBlockHashes: %d\n", stats.SeenBlockHashes)
@@ -11168,7 +13965,9 @@ func (n *Node) startNetworkCLI() {
 			fmt.Printf("HeightReports: epochs=%d total=%d\n",
 				stats.HeightReportsEpochs, stats.HeightReportValidatorsTotal)
 		case "status", "network status":
+			// `runtime` stores the value produced by this operation.
 			runtime := n.runtimeStatusSnapshot()
+			// `validators` stores whether the related condition is satisfied.
 			validators := len(n.GetConsensusValidators(int(runtime.Height)))
 			fmt.Printf(
 				"[STATUS] height=%d finalized=%d peers=%d validators=%d syncing=%t sync_complete=%t execution_ready=%t execution_reason=%s gossip=%t gossip_pipeline=%s consensus_running=%t mode=%s vote=%t propose=%t role=%s validator_state=%s warmup_blocks=%d ready=%t reason=%s\n",
@@ -11193,6 +13992,7 @@ func (n *Node) startNetworkCLI() {
 				runtime.WaitReason,
 			)
 		case "snapshot latest", "network snapshot latest":
+			// `snapshot`, `meta`, `source`, and `err` store the error produced by this operation.
 			snapshot, meta, source, err := n.latestCommittedSnapshotMeta()
 			if err != nil || snapshot == nil {
 				fmt.Println("snapshot not found")
@@ -11213,6 +14013,7 @@ func (n *Node) startNetworkCLI() {
 				)
 			}
 		case "snapshot create", "network snapshot create":
+			// `snapshot`, `meta`, `source`, and `err` store the error produced by this operation.
 			snapshot, meta, source, err := n.createCommittedTipSnapshot("cli_create", false)
 			if err != nil || snapshot == nil {
 				fmt.Printf("snapshot create failed: %v\n", err)
@@ -11231,11 +14032,13 @@ func (n *Node) startNetworkCLI() {
 				)
 			}
 		case "snapshot export", "network snapshot export":
+			// `snapshot`, `meta`, `source`, and `err` store the error produced by this operation.
 			snapshot, meta, source, err := n.createCommittedTipSnapshot("cli_export", false)
 			if err != nil || snapshot == nil {
 				fmt.Printf("snapshot export failed: %v\n", err)
 				continue
 			}
+			// `err` stores the error produced by this operation.
 			if err := n.exportSnapshotArtifacts(snapshot); err != nil {
 				fmt.Printf("snapshot export failed: %v\n", err)
 				continue
@@ -11254,6 +14057,7 @@ func (n *Node) startNetworkCLI() {
 				)
 			}
 		case "snapshot download", "network snapshot download":
+			// `result` and `err` store the error produced by this operation.
 			result, err := n.downloadTrustedSnapshotAndStore(0, 0, false, true, false, false)
 			if err != nil || result == nil || result.Snapshot == nil {
 				fmt.Printf("snapshot download failed: %v\n", err)
@@ -11271,22 +14075,29 @@ func (n *Node) startNetworkCLI() {
 				fmt.Printf("  export_dir=%s\n", result.ExportDir)
 			}
 		case "validators", "validator list", "network validators":
+			// `vals` stores the value currently being processed.
 			vals := n.GetActiveValidators()
 			if len(vals) == 0 {
 				fmt.Println("no validators")
 				continue
 			}
+			// `v` tracks the current values while iterating.
 			for _, v := range vals {
 				fmt.Println(v)
 			}
 		case "validatorset", "validator set", "validator-set", "network validatorset", "network validator set", "network validator-set":
+			// `current` stores the value produced by this operation.
 			current := n.GetConsensusValidators(int(n.Blockchain.Height() + 1))
 			n.validatorSetMu.RLock()
+			// `pendingAdds` stores the value produced by this operation.
 			pendingAdds := make([]string, 0, len(n.pendingValidators))
+			// `id` and `act` track the current position in the related collection.
 			for id, act := range n.pendingValidators {
 				pendingAdds = append(pendingAdds, fmt.Sprintf("%s@%d", id, act))
 			}
+			// `pendingRemoves` stores the value produced by this operation.
 			pendingRemoves := make([]string, 0, len(n.pendingValidatorRemovals))
+			// `id` and `act` track the current position in the related collection.
 			for id, act := range n.pendingValidatorRemovals {
 				pendingRemoves = append(pendingRemoves, fmt.Sprintf("%s@%d", id, act))
 			}
@@ -11296,6 +14107,7 @@ func (n *Node) startNetworkCLI() {
 			sort.Strings(pendingRemoves)
 			fmt.Printf("validator_set_hash=%s\n", ValidatorSetHash(current)[:8])
 			fmt.Printf("validators (%d):\n", len(current))
+			// `v` tracks the current values while iterating.
 			for _, v := range current {
 				fmt.Println(v)
 			}
@@ -11310,11 +14122,15 @@ func (n *Node) startNetworkCLI() {
 			}
 		case "validator-pending", "validator pending", "network validator-pending", "network validator pending":
 			n.validatorSetMu.RLock()
+			// `pendingAdds` stores the value produced by this operation.
 			pendingAdds := make([]string, 0, len(n.pendingValidators))
+			// `id` and `act` track the current position in the related collection.
 			for id, act := range n.pendingValidators {
 				pendingAdds = append(pendingAdds, fmt.Sprintf("%s@%d", id, act))
 			}
+			// `pendingRemoves` stores the value produced by this operation.
 			pendingRemoves := make([]string, 0, len(n.pendingValidatorRemovals))
+			// `id` and `act` track the current position in the related collection.
 			for id, act := range n.pendingValidatorRemovals {
 				pendingRemoves = append(pendingRemoves, fmt.Sprintf("%s@%d", id, act))
 			}
@@ -11338,22 +14154,32 @@ func (n *Node) startNetworkCLI() {
 				fmt.Println("no candidates")
 				continue
 			}
+			// `ids` stores the current position in the related collection.
 			ids := make([]string, 0, len(n.candidates))
+			// `id` tracks the current position in the related collection.
 			for id := range n.candidates {
 				ids = append(ids, id)
 			}
 			sort.Strings(ids)
 			fmt.Printf("candidates (%d):\n", len(ids))
+			// `id` tracks the current position in the related collection.
 			for _, id := range ids {
+				// `cand` stores the value produced by this operation.
 				cand := n.candidates[id]
 				if cand == nil {
 					continue
 				}
+				// `observed` stores the value produced by this operation.
 				observed := cand.ObservedEpochs
+				// `matched` stores the value produced by this operation.
 				matched := cand.MatchedEpochs
+				// `dcs` stores the value produced by this operation.
 				dcs := 0.0
+				// `uptime` stores the value produced by this operation.
 				uptime := 0.0
+				// `diversityAvg` stores the value produced by this operation.
 				diversityAvg := 0.0
+				// `gossipTimeliness` stores the value produced by this operation.
 				gossipTimeliness := 0.0
 				if observed > 0 {
 					dcs = float64(matched) / float64(observed)
@@ -11365,6 +14191,7 @@ func (n *Node) startNetworkCLI() {
 				if cand.GossipTotal > 0 {
 					gossipTimeliness = float64(cand.GossipTimely) / float64(cand.GossipTotal)
 				}
+				// `ban` stores the value produced by this operation.
 				ban := "none"
 				if cand.PermanentBan {
 					ban = "permanent"
@@ -11387,25 +14214,30 @@ func (n *Node) startNetworkCLI() {
 			n.candidateMu.RUnlock()
 		case "network connect":
 			fmt.Print("Enter peer multiaddr (e.g., /ip4/127.0.0.1/tcp/7001/p2p/...): ")
+			// `addrInput` stores the address used by this operation.
 			addrInput, _ := reader.ReadString('\n')
 			addrInput = strings.TrimSpace(addrInput)
 			if addrInput == "" {
 				fmt.Println("Ã¢ÂÅ’ No address provided")
 				continue
 			}
+			// `ctx` and `cancel` store the context controlling this operation.
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
+			// `maddr` and `err` store the error produced by this operation.
 			maddr, err := ma.NewMultiaddr(addrInput)
 			if err != nil {
 				fmt.Printf("Ã¢ÂÅ’ Invalid multiaddr: %v\n", err)
 				continue
 			}
+			// `addrInfo` and `err` store the error produced by this operation.
 			addrInfo, err := peer.AddrInfoFromP2pAddr(maddr)
 			if err != nil {
 				fmt.Printf("Ã¢ÂÅ’ Failed to parse peer info: %v\n", err)
 				continue
 			}
 			fmt.Printf("Attempting to connect to %s...\n", addrInfo.ID)
+			// `err` stores the error produced by this operation.
 			if err := n.connectToPeer(ctx, addrInput); err != nil {
 				fmt.Printf("Ã¢ÂÅ’ Connection failed: %v\n", err)
 			} else {
@@ -11421,6 +14253,8 @@ func (n *Node) startNetworkCLI() {
 		}
 	}
 }
+
+// connectToPeer implements the connect to peer helper.
 func (n *Node) connectToPeer(ctx context.Context, peerAddr string) error {
 	// Convert string to multiaddr
 	maddr, err := ma.NewMultiaddr(peerAddr)
@@ -11473,8 +14307,10 @@ func (n *Node) connectToPeer(ctx context.Context, peerAddr string) error {
 	// Connect with timeout
 	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+	// `err` stores the error produced by this operation.
 	if err := n.Host.Connect(connectCtx, *addrInfo); err != nil {
 		n.setPeerConnected(addrInfo.ID.String(), false)
+		// `errLower` stores the error produced by this operation.
 		errLower := strings.ToLower(err.Error())
 		if strings.Contains(errLower, "peer id mismatch") ||
 			strings.Contains(errLower, "dial to self attempted") {
@@ -11491,6 +14327,14 @@ func (n *Node) connectToPeer(ctx context.Context, peerAddr string) error {
 				stripP2PComponent(peerAddr),
 			)
 			n.forgetPeer(addrInfo.ID.String(), "dial_refused_localhost")
+		} else if shouldPruneStaleStaticDialFailure(n, addrInfo.ID.String(), peerAddr, err) {
+			log.Printf("[PEER-PRUNE] reason=stale_static_dial_failure failures=%d peer=%s addr=%s",
+				n.dialFailureCount(addrInfo.ID.String()),
+				addrInfo.ID.String(),
+				stripP2PComponent(peerAddr),
+			)
+			n.forgetPeer(addrInfo.ID.String(), "stale_static_dial_failure")
+			n.markStaleStaticPeerSuppressed(addrInfo.ID.String())
 		}
 		return fmt.Errorf("connection failed: %w", err)
 	}
@@ -11512,17 +14356,26 @@ func (n *Node) connectToPeer(ctx context.Context, peerAddr string) error {
 	n.recordDialSuccess(addrInfo.ID.String())
 	return nil
 }
+
+// handlePeerInfoStream handles peer info stream.
 func (n *Node) handlePeerInfoStream(s network.Stream) {
 	defer s.Close()
+	// `enc` stores the value produced by this operation.
 	enc := json.NewEncoder(s)
+	// `dec` stores the value produced by this operation.
 	dec := json.NewDecoder(s)
+	// `peerID` stores the value produced by this operation.
 	peerID := s.Conn().RemotePeer().String()
+	// `err` stores the error produced by this operation.
 	if err := enc.Encode(n.outboundPeerHelloPreValidation()); err != nil {
 		n.recordDialFailure(peerID)
 		return
 	}
+	// `raw` stores the value used by this operation.
 	var raw json.RawMessage
+	// `err` stores the error produced by this operation.
 	if err := dec.Decode(&raw); err == nil {
+		// `peerInfo` and `derr` store the error produced by this operation.
 		peerInfo, derr := decodePeerHelloPayload(raw)
 		if derr != nil {
 			n.recordDialFailure(peerID)
@@ -11541,6 +14394,8 @@ func (n *Node) handlePeerInfoStream(s network.Stream) {
 		n.recordDialFailure(peerID)
 	}
 }
+
+// handleMessage handles message.
 func (n *Node) handleMessage(msg Message, peerAddr string) {
 	if n.isPeerQuarantined(peerAddr) {
 		if DebugNet {
@@ -11555,7 +14410,7 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 	if !n.allowPeerResource(peerAddr, msg.Type, len(msg.Data)) {
 		return
 	}
-	if !checkRateLimit(peerAddr, msg.Type) {
+	if !checkRateLimitForPeer(peerAddr, msg.Type, n.isValidatorOrPersistentPeerID(peerAddr)) {
 		n.recordPeerRateLimitDrop(peerAddr, msg.Type)
 		return
 	}
@@ -11568,6 +14423,7 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 			}
 		}
 		if n.Host != nil {
+			// `pid` and `err` store the error produced by this operation.
 			if pid, err := peer.Decode(peerAddr); err == nil {
 				go n.sendPeerHello(pid)
 			}
@@ -11621,7 +14477,9 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 	// =================================================
 	*/
 	case MsgPeerHello:
+		// `hello` stores the value used by this operation.
 		var hello PeerHello
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &hello); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢ÂÅ’ Failed to unmarshal peer hello from %s: %v\n", peerAddr, err)
@@ -11637,7 +14495,9 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 	// Ã°Å¸â€œÂ¦ LEADER BLOCK (REAL-TIME PROPOSAL)
 	// =================================================
 	case MsgLeaderBlock:
+		// `block` stores the synchronization state protecting shared data.
 		var block Block
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &block); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢ÂÅ’ Failed to unmarshal leader block from %s: %v\n", peerAddr, err)
@@ -11653,7 +14513,9 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 	// Ã°Å¸â€ºÂ¡Ã¯Â¸Â CENSORSHIP EVIDENCE
 	// =================================================
 	case MsgCensorshipEvidence:
+		// `evidence` stores the value used by this operation.
 		var evidence CensorshipEvidence
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &evidence); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢ÂÅ’ Failed to unmarshal censorship evidence from %s: %v\n", peerAddr, err)
@@ -11674,7 +14536,9 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 	// Ã°Å¸â€™Â¸ TRANSACTION
 	// =================================================
 	case MsgTx:
+		// `tx` stores the transaction data handled by this operation.
 		var tx Transaction
+		// `err` stores the error produced by this operation.
 		if err := UnmarshalTransactionWire(msg.Data, &tx); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢ÂÅ’ Failed to unmarshal transaction from %s: %v\n", peerAddr, err)
@@ -11690,7 +14554,9 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 	// Ã°Å¸â€œÂ¦ BLOCK (FINALIZED)
 	// =================================================
 	case MsgFinalBlock:
+		// `block` stores the synchronization state protecting shared data.
 		var block Block
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &block); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢ÂÅ’ Failed to unmarshal final block from %s: %v\n", peerAddr, err)
@@ -11706,13 +14572,16 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 	// Ã¢Å“â€¦ EXECUTION RESULT (CONSENSUS QUORUM)
 	// =================================================
 	case MsgExecutionResult:
+		// `res` stores the result produced by this operation.
 		var res ExecutionResultMsg
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &res); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢ÂÅ’ Failed to unmarshal execution result from %s: %v\n", peerAddr, err)
 			}
 			return
 		}
+		// `allowed` and `reason` store whether the related condition is satisfied.
 		if allowed, reason := n.allowExecutionVoteNetworkIngress(res); !allowed {
 			if !benignExecutionVoteIngressReason(reason) {
 				n.logExecutionVoteIngressDrop(reason, res, "stream:"+peerAddr)
@@ -11724,7 +14593,9 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 	// Ã¢Å“â€¦ COMMIT (FINALITY)
 	// =================================================
 	case MsgCommit:
+		// `cm` stores the value used by this operation.
 		var cm CommitMsg
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &cm); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢ÂÅ’ Failed to unmarshal commit from %s: %v\n", peerAddr, err)
@@ -11736,7 +14607,9 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 	// Ã¢Å“â€¦ BLOCK ACK (SYNC CONFIRMATION)
 	// =================================================
 	case MsgBlockAck:
+		// `ack` stores the value used by this operation.
 		var ack BlockAck
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &ack); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢ÂÅ’ Failed to unmarshal block ack from %s: %v\n", peerAddr, err)
@@ -11748,7 +14621,9 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 	// Ã°Å¸â€â€ž BLOCK SYNC REQUEST
 	// =================================================
 	case MsgGetBlocks:
+		// `req` stores the request data being processed.
 		var req BlockRequest
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &req); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢ÂÅ’ Failed to unmarshal block request from %s: %v\n", peerAddr, err)
@@ -11765,6 +14640,7 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 			}
 			return
 		}
+		// `maxInt` stores the value produced by this operation.
 		maxInt := uint64(^uint(0) >> 1)
 		if req.From > maxInt || req.To > maxInt {
 			if DebugNet {
@@ -11772,6 +14648,7 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 			}
 			return
 		}
+		// `maxBlocks` stores the value produced by this operation.
 		maxBlocks := syncBlockRequestMaxBlocks(0)
 		if maxBlocks == 0 {
 			maxBlocks = 512
@@ -11793,7 +14670,9 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 			}
 		}
 	case MsgBlocksBatch:
+		// `resp` stores the response produced by this operation.
 		var resp BlockResponse
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &resp); err != nil {
 			if DebugNet {
 				fmt.Printf("failed to unmarshal block batch from %s: %v\n", peerAddr, err)
@@ -11808,7 +14687,9 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 		})
 		_ = n.submitBlockBatchOnConsensusLane(resp.Blocks)
 		if DebugSync {
+			// `first` stores the value produced by this operation.
 			first := resp.Blocks[0].ID
+			// `last` stores the value produced by this operation.
 			last := resp.Blocks[len(resp.Blocks)-1].ID
 			fmt.Printf("applied block batch from %s: %d-%d (%d blocks)\n",
 				peerAddr, first, last, len(resp.Blocks))
@@ -11817,7 +14698,9 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 	// Ã°Å¸â€â€ž PEERS LIST EXCHANGE
 	// =================================================
 	case MsgPeers:
+		// `peers` stores the value used by this operation.
 		var peers []string
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal(msg.Data, &peers); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢ÂÅ’ Failed to unmarshal peers list from %s: %v\n", peerAddr, err)
@@ -11835,6 +14718,7 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 		if DebugNet {
 			fmt.Printf("Ã°Å¸Ââ€œ Ping from %s\n", peerAddr)
 		}
+		// `pid` and `err` store the error produced by this operation.
 		if pid, err := peer.Decode(peerAddr); err == nil {
 			go n.sendConsensusMessage(pid, Message{
 				Type: MsgPong,
@@ -11854,6 +14738,8 @@ func (n *Node) handleMessage(msg Message, peerAddr string) {
 		}
 	}
 }
+
+// addBootstrapAddr implements the add bootstrap addr helper.
 func (n *Node) addBootstrapAddr(maddr ma.Multiaddr) {
 	// This function would add addresses to DHT for bootstrap
 	// In practice, DHT bootstrap addresses should be set during DHT creation
@@ -11869,7 +14755,10 @@ func createMultiaddrFromHostPort(host string, port int) string {
 	}
 	return fmt.Sprintf("/ip4/%s/tcp/%d", host, port)
 }
+
+// verifyCensorshipEvidenceObserver verifies censorship evidence observer.
 func verifyCensorshipEvidenceObserver(ev CensorshipEvidence) bool {
+	// `observer` stores the value produced by this operation.
 	observer := normalizeValidatorID(ev.Observer)
 	if observer == "" {
 		return false
@@ -11878,6 +14767,7 @@ func verifyCensorshipEvidenceObserver(ev CensorshipEvidence) bool {
 		return false
 	}
 	validatorPubKeysMu.RLock()
+	// `pubKey` and `ok` store whether the related condition is satisfied.
 	pubKey, ok := ValidatorPubKeys[observer]
 	validatorPubKeysMu.RUnlock()
 	if !ok || len(pubKey) != ed25519.PublicKeySize {
@@ -11885,6 +14775,8 @@ func verifyCensorshipEvidenceObserver(ev CensorshipEvidence) bool {
 	}
 	return ed25519.Verify(pubKey, censorshipEvidenceSignBytes(ev), ev.ObserverSig)
 }
+
+// ApplyCensorshipEvidence applies censorship evidence.
 func ApplyCensorshipEvidence(
 	n *Node,
 	ev CensorshipEvidence,
@@ -11915,14 +14807,17 @@ func ApplyCensorshipEvidence(
 	if !verifyCensorshipEvidenceObserver(ev) {
 		return false
 	}
+	// `key` stores the key used to access the related value.
 	key := EvidenceKey{
 		Leader: ev.Leader,
 		Height: ev.Height,
 	}
+	// `list` stores the value produced by this operation.
 	list := CensorshipEvidencePool[key]
 	if len(list) >= MaxEvidencePerHeight {
 		return false
 	}
+	// `existing` tracks the current values while iterating.
 	for _, existing := range list {
 		if existing.TxID == ev.TxID && normalizeValidatorID(existing.Observer) == ev.Observer {
 			return false
@@ -11947,6 +14842,7 @@ func (n *Node) GetPublicMultiaddr() string {
 	}
 	// Return the first address with peer ID
 	for _, addr := range n.Host.Addrs() {
+		// `fullAddr` stores the address used by this operation.
 		fullAddr := fmt.Sprintf("%s/p2p/%s", addr, n.Host.ID())
 		// Return a loopback address if available
 		if strings.Contains(addr.String(), "127.0.0.1") {
@@ -11957,10 +14853,12 @@ func (n *Node) GetPublicMultiaddr() string {
 	return fmt.Sprintf("%s/p2p/%s", n.Host.Addrs()[0], n.Host.ID())
 }
 
+// selectAdvertisedHostAddr implements the select advertised host addr helper.
 func selectAdvertisedHostAddr(addrs []ma.Multiaddr) ma.Multiaddr {
 	if len(addrs) == 0 {
 		return nil
 	}
+	// `addr` tracks the address used by this operation.
 	for _, addr := range addrs {
 		if !multiaddrHasLoopbackOrUnspecifiedIP(addr) {
 			return addr
@@ -11969,15 +14867,20 @@ func selectAdvertisedHostAddr(addrs []ma.Multiaddr) ma.Multiaddr {
 	return addrs[0]
 }
 
+// multiaddrHasLoopbackOrUnspecifiedIP implements the multiaddr has loopback or unspecified ip helper.
 func multiaddrHasLoopbackOrUnspecifiedIP(addr ma.Multiaddr) bool {
 	if addr == nil {
 		return true
 	}
+	// `raw` and `err` store the error produced by this operation.
 	if raw, err := addr.ValueForProtocol(ma.P_IP4); err == nil {
+		// `ip` stores the current position in the related collection.
 		ip := net.ParseIP(raw)
 		return ip == nil || ip.IsLoopback() || ip.IsUnspecified()
 	}
+	// `raw` and `err` store the error produced by this operation.
 	if raw, err := addr.ValueForProtocol(ma.P_IP6); err == nil {
+		// `ip` stores the current position in the related collection.
 		ip := net.ParseIP(raw)
 		return ip == nil || ip.IsLoopback() || ip.IsUnspecified()
 	}
@@ -11986,11 +14889,13 @@ func multiaddrHasLoopbackOrUnspecifiedIP(addr ma.Multiaddr) bool {
 
 // Helper function for public IP detection
 func GetPublicIP() (string, error) {
+	// `resp` and `err` store the error produced by this operation.
 	resp, err := http.Get("https://api.ipify.org?format=text")
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
+	// `ip` and `err` store the error produced by this operation.
 	ip, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
@@ -11998,37 +14903,48 @@ func GetPublicIP() (string, error) {
 	return string(ip), nil
 }
 
+// snapshotChunkHash implements the snapshot chunk hash helper.
 func snapshotChunkHash(data []byte) string {
+	// `sum` stores the value produced by this operation.
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
 
+// latestSnapshotMetaForSyncRequest implements the latest snapshot meta for sync request helper.
 func (n *Node) latestSnapshotMetaForSyncRequest() *StateSnapshot {
 	if n == nil {
 		return nil
 	}
+	// `snapshot` stores the value produced by this operation.
 	if snapshot := n.publishedValidatorSnapshotForSyncRequest(0); snapshot != nil {
 		return snapshot
 	}
+	// `snapshot` and `err` store the error produced by this operation.
 	if snapshot, err := n.verifiedStoredSnapshotAtOrBelow(0); err == nil && snapshot != nil {
 		return snapshot
 	}
+	// `tip` stores the value produced by this operation.
 	tip := n.Blockchain.Height()
 	if tip == 0 {
 		return nil
 	}
+	// `snapshot` and `ok` store whether the related condition is satisfied.
 	if snapshot, _, _, ok := n.ResolveCommittedStateSnapshot(tip); ok && snapshot != nil && n.snapshotMatchesLocalAnchor(snapshot) {
 		return snapshot
 	}
+	// `block` and `ok` store whether the related condition is satisfied.
 	block, ok := n.Blockchain.GetBlock(tip)
 	if !ok {
 		return nil
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.CreateSnapshot(tip, block.BlockHash); err != nil {
 		return n.waitForSnapshotAtHeightForSync(tip)
 	}
+	// `snapshot` and `err` store the error produced by this operation.
 	snapshot, err := n.GetSnapshot(tip)
 	if err != nil || snapshot == nil || !n.snapshotMatchesLocalAnchor(snapshot) {
+		// `snapshot` stores the value produced by this operation.
 		if snapshot := n.waitForSnapshotAtHeightForSync(tip); snapshot != nil {
 			return snapshot
 		}
@@ -12039,20 +14955,25 @@ func (n *Node) latestSnapshotMetaForSyncRequest() *StateSnapshot {
 	return snapshot
 }
 
+// waitForSnapshotAtHeightForSync implements the wait for snapshot at height for sync helper.
 func (n *Node) waitForSnapshotAtHeightForSync(height uint64) *StateSnapshot {
 	if n == nil || height == 0 {
 		return nil
 	}
+	// `attempt` stores the value produced by this operation.
 	for attempt := 0; attempt < snapshotServeRetryAttempts; attempt++ {
 		if attempt > 0 {
 			time.Sleep(snapshotServeRetryBackoff)
 		}
+		// `snapshot` stores the value produced by this operation.
 		if snapshot := n.publishedValidatorSnapshotForSyncRequest(height); snapshot != nil && snapshot.Height == height {
 			return snapshot
 		}
+		// `snapshot` and `ok` store whether the related condition is satisfied.
 		if snapshot, _, _, ok := n.ResolveCommittedStateSnapshot(height); ok && snapshot != nil && snapshot.Height == height && n.snapshotMatchesLocalAnchor(snapshot) {
 			return snapshot
 		}
+		// `snapshot` and `err` store the error produced by this operation.
 		snapshot, err := n.GetSnapshot(height)
 		if err == nil && snapshot != nil && snapshot.Height == height && n.snapshotMatchesLocalAnchor(snapshot) {
 			return snapshot
@@ -12061,10 +14982,12 @@ func (n *Node) waitForSnapshotAtHeightForSync(height uint64) *StateSnapshot {
 	return nil
 }
 
+// snapshotForSyncRequest implements the snapshot for sync request helper.
 func (n *Node) snapshotForSyncRequest(targetHeight uint64) *StateSnapshot {
 	if n == nil {
 		return nil
 	}
+	// `tip` stores the value produced by this operation.
 	tip := n.Blockchain.Height()
 	if targetHeight > 0 {
 	} else {
@@ -12075,27 +14998,34 @@ func (n *Node) snapshotForSyncRequest(targetHeight uint64) *StateSnapshot {
 	if targetHeight > tip && tip > 0 {
 		targetHeight = tip
 	}
+	// `snapshot` stores the value produced by this operation.
 	if snapshot := n.publishedValidatorSnapshotForSyncRequest(targetHeight); snapshot != nil {
 		return snapshot
 	}
+	// `snapshot` and `err` store the error produced by this operation.
 	if snapshot, err := n.verifiedStoredSnapshotAtOrBelow(targetHeight); err == nil && snapshot != nil {
 		return snapshot
 	}
 	if tip == 0 || targetHeight == 0 || targetHeight != tip {
 		return nil
 	}
+	// `snapshot` and `ok` store whether the related condition is satisfied.
 	if snapshot, _, _, ok := n.ResolveCommittedStateSnapshot(tip); ok && snapshot != nil && n.snapshotMatchesLocalAnchor(snapshot) {
 		return snapshot
 	}
+	// `block` and `ok` store whether the related condition is satisfied.
 	block, ok := n.Blockchain.GetBlock(tip)
 	if !ok {
 		return nil
 	}
+	// `err` stores the error produced by this operation.
 	if err := n.CreateSnapshot(tip, block.BlockHash); err != nil {
 		return n.waitForSnapshotAtHeightForSync(tip)
 	}
+	// `snapshot` and `err` store the error produced by this operation.
 	snapshot, err := n.GetSnapshot(tip)
 	if err != nil || snapshot == nil || !n.snapshotMatchesLocalAnchor(snapshot) {
+		// `snapshot` stores the value produced by this operation.
 		if snapshot := n.waitForSnapshotAtHeightForSync(tip); snapshot != nil {
 			return snapshot
 		}
@@ -12106,8 +15036,10 @@ func (n *Node) snapshotForSyncRequest(targetHeight uint64) *StateSnapshot {
 	return snapshot
 }
 
+// handleBlockStream handles block stream.
 func (n *Node) handleBlockStream(s network.Stream) {
 	defer s.Close()
+	// `requestStarted` stores the request data being processed.
 	requestStarted := time.Now()
 	// =====================================================
 	// Ã¢ÂÂ±Ã¯Â¸Â SET TIMEOUTS FOR NETWORK OPERATIONS
@@ -12120,14 +15052,19 @@ func (n *Node) handleBlockStream(s network.Stream) {
 	// Ã°Å¸â€œÂ¥ RECEIVE BLOCK REQUEST
 	// =====================================================
 	dec := json.NewDecoder(s)
+	// `enc` stores the value produced by this operation.
 	enc := json.NewEncoder(s)
+	// `req` stores the request data being processed.
 	var req BlockRequest
+	// `err` stores the error produced by this operation.
 	if err := dec.Decode(&req); err != nil {
 		fmt.Printf("[SYNC-SERVE-ERROR] peer=%s stage=decode err=%v\n",
 			ShortID(s.Conn().RemotePeer().String()), err)
 		return
 	}
+	// `origFrom` stores the value produced by this operation.
 	origFrom := req.From
+	// `origTo` stores the value produced by this operation.
 	origTo := req.To
 	fmt.Printf("[SYNC-SERVE-REQUEST] peer=%s requested=%d-%d snapshot=%t snapshot_height=%d\n",
 		ShortID(s.Conn().RemotePeer().String()), req.From, req.To, req.WantSnapshot, req.SnapshotHeight)
@@ -12136,7 +15073,9 @@ func (n *Node) handleBlockStream(s network.Stream) {
 			ShortID(s.Conn().RemotePeer().String()), req.From, req.To)
 		return
 	}
+	// `peerID` stores the value produced by this operation.
 	peerID := s.Conn().RemotePeer().String()
+	// `ackHeight` stores the value produced by this operation.
 	if ackHeight := n.peerAckHeightFor(peerID); !req.BypassAck && ackHeight > 0 {
 		if ackHeight >= req.From {
 			req.From = ackHeight + 1
@@ -12148,6 +15087,7 @@ func (n *Node) handleBlockStream(s network.Stream) {
 			return
 		}
 	}
+	// `blockRangeEmpty` stores the block data handled by this operation.
 	blockRangeEmpty := req.From > req.To
 	if !blockRangeEmpty {
 		req.To = clampBlockSyncRangeToServeLimit(req.From, req.To, 0)
@@ -12166,6 +15106,7 @@ func (n *Node) handleBlockStream(s network.Stream) {
 	// Ã°Å¸â€œÂ¦ SNAPSHOT (OPTIONAL)
 	// =====================================================
 	var snapshot *StateSnapshot
+	// `start` stores the value produced by this operation.
 	start := req.From
 	if req.WantSnapshot {
 		snapshot = n.snapshotForSyncRequest(req.SnapshotHeight)
@@ -12182,21 +15123,32 @@ func (n *Node) handleBlockStream(s network.Stream) {
 	// Ã°Å¸â€œÂ¦ FETCH REQUESTED BLOCKS
 	// =====================================================
 	var blocks []Block
+	// `fetchedCount` stores the measured quantity used by this operation.
 	fetchedCount := 0
+	// `currentTip` stores the value produced by this operation.
 	currentTip := n.Blockchain.Height()
+	// `finalizedHeight` stores the value produced by this operation.
 	finalizedHeight := n.getFinalizedHeight()
 	if finalizedHeight == 0 {
 		finalizedHeight = currentTip
 	}
+	// `tipGapOnly` stores the value produced by this operation.
 	tipGapOnly := false
+	// `historicalGapOnly` stores the value produced by this operation.
 	historicalGapOnly := false
 	type finalizedDriftAggregate struct {
-		count    int
-		from     uint64
-		to       uint64
+		// `count` stores the measured quantity used by this operation.
+		count int
+		// `from` stores the value associated with this record.
+		from uint64
+		// `to` stores the value associated with this record.
+		to uint64
+		// `expected` stores the value associated with this record.
 		expected string
-		got      string
+		// `got` stores the value associated with this record.
+		got string
 	}
+	// `finalizedDrifts` stores the value produced by this operation.
 	finalizedDrifts := make(map[string]finalizedDriftAggregate)
 	if blockRangeEmpty {
 		// The peer already acknowledged this whole block range. Snapshot payloads
@@ -12205,17 +15157,20 @@ func (n *Node) handleBlockStream(s network.Stream) {
 		// Peer is asking for blocks beyond our current tip; return snapshot/empty response quietly.
 		tipGapOnly = true
 	} else {
+		// `h` stores the value produced by this operation.
 		for h := start; h <= req.To; h++ {
 			// Avoid noisy "not found" logs for blocks we simply don't have yet.
 			if h > currentTip {
 				tipGapOnly = true
 				break
 			}
+			// `b` and `ok` store whether the related condition is satisfied.
 			if b, ok := n.LoadBlock(int(h)); ok {
 				// For non-finalized heights, keep strict validator-set consistency.
 				// For finalized history, serve canonical blocks even if expected-set
 				// view drifted due repair/snapshot recomputation.
 				if b.ValidatorSetHash != "" {
+					// `expected` stores the value produced by this operation.
 					if expected := n.expectedValidatorSetHash(b.ID); expected != "" && expected != b.ValidatorSetHash {
 						if b.ID > finalizedHeight {
 							historicalGapOnly = true
@@ -12225,7 +15180,9 @@ func (n *Node) handleBlockStream(s network.Stream) {
 							}
 							break
 						}
+						// `tupleKey` stores the key used to access the related value.
 						tupleKey := expected + "|" + b.ValidatorSetHash
+						// `agg` stores the value produced by this operation.
 						agg := finalizedDrifts[tupleKey]
 						agg.count++
 						if agg.from == 0 || b.ID < agg.from {
@@ -12254,7 +15211,9 @@ func (n *Node) handleBlockStream(s network.Stream) {
 			// Limit batch size for memory/network efficiency
 			if fetchedCount >= int(syncBlockRequestMaxBlocks(0)) {
 				if DebugNet && len(blocks) > 0 {
+					// `fromHeight` stores the value produced by this operation.
 					fromHeight := blocks[0].ID
+					// `toHeight` stores the value produced by this operation.
 					toHeight := blocks[len(blocks)-1].ID
 					if n.shouldLogPartialBatch(peerID, fromHeight, toHeight) {
 						fmt.Printf("Partial batch: %d blocks to %s (range %d-%d)\n",
@@ -12269,13 +15228,18 @@ func (n *Node) handleBlockStream(s network.Stream) {
 	// Ã°Å¸â€œÂ¤ SEND BLOCK RESPONSE
 	// =====================================================
 	if len(finalizedDrifts) > 0 {
+		// `keys` stores the key used to access the related value.
 		keys := make([]string, 0, len(finalizedDrifts))
+		// `key` tracks the key used to access the related value.
 		for key := range finalizedDrifts {
 			keys = append(keys, key)
 		}
 		sort.Strings(keys)
+		// `key` tracks the key used to access the related value.
 		for _, key := range keys {
+			// `agg` stores the value produced by this operation.
 			agg := finalizedDrifts[key]
+			// `state` stores the value produced by this operation.
 			state := n.recordFinalizedDrift(peerID, agg.from, agg.to, agg.expected, agg.got, agg.count)
 			if (DebugSync || DebugConsensus) && n.shouldLogFinalizedDrift(peerID, agg.from, agg.to) {
 				fmt.Printf("Serving finalized blocks %d-%d to %s despite expected-set drift (expected_set=%s got=%s count=%d)\n",
@@ -12284,22 +15248,29 @@ func (n *Node) handleBlockStream(s network.Stream) {
 			n.applyFinalizedDriftPolicy(peerID, state)
 		}
 	}
+	// `execPoolSnap` stores the value used by this operation.
 	var execPoolSnap *ExecPoolSnapshot
 	if ResultGossipOnly && req.WantSnapshot {
+		// `epoch` stores the value produced by this operation.
 		epoch := n.currentEpoch()
 		execPoolSnap = buildExecPoolSnapshot(epoch, n.currentProposalVoteKey(epoch))
 	}
+	// `resp` stores the response produced by this operation.
 	resp := BlockResponse{Blocks: blocks, Snapshot: snapshot, ExecPool: execPoolSnap}
+	// `err` stores the error produced by this operation.
 	if err := enc.Encode(resp); err != nil {
 		fmt.Printf("[SYNC-SERVE-ERROR] peer=%s stage=encode requested=%d-%d count=%d err=%v\n",
 			ShortID(peerID), req.From, req.To, len(blocks), err)
 		return
 	}
+	// `err` stores the error produced by this operation.
 	if err := s.CloseWrite(); err != nil {
 		fmt.Printf("[SYNC-SERVE-ERROR] peer=%s stage=close_write requested=%d-%d count=%d err=%v\n",
 			ShortID(peerID), req.From, req.To, len(blocks), err)
 	}
+	// `servedFrom` stores the value produced by this operation.
 	servedFrom := uint64(0)
+	// `servedTo` stores the value produced by this operation.
 	servedTo := uint64(0)
 	if len(blocks) > 0 {
 		servedFrom = blocks[0].ID
@@ -12316,7 +15287,9 @@ func (n *Node) handleBlockStream(s network.Stream) {
 				snapshot.Height, s.Conn().RemotePeer())
 		}
 		if len(blocks) > 0 {
+			// `fromHeight` stores the value produced by this operation.
 			fromHeight := blocks[0].ID
+			// `toHeight` stores the value produced by this operation.
 			toHeight := blocks[len(blocks)-1].ID
 			if n.shouldLogSentBlocks(peerID, fromHeight, toHeight) {
 				fmt.Printf("Ã°Å¸â€œÂ¦ Sent blocks %d-%d (%d blocks) to %s\n",
@@ -12351,30 +15324,41 @@ func (n *Node) handleBlockStream(s network.Stream) {
 		}
 	}
 }
+
+// handleSnapshotMetaStream handles snapshot meta stream.
 func (n *Node) handleSnapshotMetaStream(s network.Stream) {
 	defer s.Close()
+	// `timeout` stores the result produced by this operation.
 	timeout := syncPeerRequestTimeout()
 	_ = s.SetDeadline(time.Now().Add(timeout))
+	// `dec` stores the value produced by this operation.
 	dec := json.NewDecoder(s)
+	// `enc` stores the value produced by this operation.
 	enc := json.NewEncoder(s)
 
+	// `req` stores the request data being processed.
 	var req SnapshotMetaRequest
+	// `err` stores the error produced by this operation.
 	if err := dec.Decode(&req); err != nil {
 		return
 	}
+	// `snapshot`, `manifest`, and `err` store the error produced by this operation.
 	snapshot, manifest, _, _, err := n.snapshotManifestForTransfer(req.Height)
 	if err != nil || snapshot == nil || manifest == nil {
 		_ = enc.Encode(SnapshotMetaResponse{Available: false})
 		return
 	}
+	// `chunkSize` stores the measured quantity used by this operation.
 	chunkSize := syncSnapshotChunkSizeBytes()
 	if chunkSize == 0 {
 		chunkSize = 1024 * 1024
 	}
+	// `totalChunks` stores the measured quantity used by this operation.
 	totalChunks := manifest.ChunkCount
 	if totalChunks == 0 {
 		totalChunks = 1
 	}
+	// `resp` stores the response produced by this operation.
 	resp := SnapshotMetaResponse{
 		Height:                snapshot.Height,
 		SnapshotHash:          snapshot.SnapshotHash,
@@ -12394,35 +15378,40 @@ func (n *Node) handleSnapshotMetaStream(s network.Stream) {
 		CheckpointProof:       snapshot.CheckpointProof,
 		Available:             true,
 	}
-	if manifest != nil {
-		resp.Manifest = manifest
-		resp.ChunkHashes = append([]string{}, manifest.ChunkHashes...)
-		resp.StateRoot = manifest.StateRoot
-		resp.StateMerkleRoot = manifest.StateMerkleRoot
-		resp.ValidatorSetHash = manifest.ValidatorSetHash
-		resp.ValidatorSetRoot = manifest.ValidatorSetRoot
-		resp.ValidatorRegistryHash = manifest.ValidatorRegistryHash
-		resp.FinalizedHeight = manifest.FinalizedHeight
-		resp.FinalizedHash = manifest.FinalizedHash
-		resp.EpochAnchorHash = manifest.EpochAnchorHash
-		resp.FinalityRoot = manifest.FinalityRoot
-		resp.Encoding = manifest.Encoding
-		resp.Compression = manifest.Compression
-	}
+	resp.Manifest = manifest
+	resp.ChunkHashes = append([]string{}, manifest.ChunkHashes...)
+	resp.StateRoot = manifest.StateRoot
+	resp.StateMerkleRoot = manifest.StateMerkleRoot
+	resp.ValidatorSetHash = manifest.ValidatorSetHash
+	resp.ValidatorSetRoot = manifest.ValidatorSetRoot
+	resp.ValidatorRegistryHash = manifest.ValidatorRegistryHash
+	resp.FinalizedHeight = manifest.FinalizedHeight
+	resp.FinalizedHash = manifest.FinalizedHash
+	resp.EpochAnchorHash = manifest.EpochAnchorHash
+	resp.FinalityRoot = manifest.FinalityRoot
+	resp.Encoding = manifest.Encoding
+	resp.Compression = manifest.Compression
 	_ = enc.Encode(resp)
 }
 
+// handleSnapshotChunkStream handles snapshot chunk stream.
 func (n *Node) handleSnapshotChunkStream(s network.Stream) {
 	defer s.Close()
+	// `timeout` stores the result produced by this operation.
 	timeout := syncPeerRequestTimeout()
 	_ = s.SetDeadline(time.Now().Add(timeout))
+	// `dec` stores the value produced by this operation.
 	dec := json.NewDecoder(s)
+	// `enc` stores the value produced by this operation.
 	enc := json.NewEncoder(s)
 
+	// `req` stores the request data being processed.
 	var req SnapshotChunkRequest
+	// `err` stores the error produced by this operation.
 	if err := dec.Decode(&req); err != nil {
 		return
 	}
+	// `resp` and `err` store the error produced by this operation.
 	resp, _, _, _, err := n.snapshotChunkForTransfer(req.Height, req.Index)
 	if err != nil || resp == nil {
 		_ = enc.Encode(SnapshotChunkResponse{})
@@ -12431,13 +15420,18 @@ func (n *Node) handleSnapshotChunkStream(s network.Stream) {
 	_ = enc.Encode(resp)
 }
 
+// ed25519ToLibp2pKey implements the ed25519 to libp2p key helper.
 func ed25519ToLibp2pKey(priv ed25519.PrivateKey) (libp2pcrypto.PrivKey, error) {
 	return libp2pcrypto.UnmarshalEd25519PrivateKey(priv)
 }
+
+// sendToPeerLibp2p implements the send to peer libp2p helper.
 func (n *Node) sendToPeerLibp2p(ctx context.Context, peerID peer.ID, msg Message) error {
+	// `s` and `err` store the error produced by this operation.
 	s, err := n.openStream(ctx, peerID, "/msc/1.0.0")
 	if err != nil {
 		n.recordDialFailure(peerID.String())
+		// `errMsg` stores the error produced by this operation.
 		errMsg := strings.ToLower(err.Error())
 		if strings.Contains(errMsg, "protocols not supported") || strings.Contains(errMsg, "protocol not supported") {
 			n.disconnectPeerID(peerID.String(), "consensus_protocol_mismatch")
@@ -12445,10 +15439,13 @@ func (n *Node) sendToPeerLibp2p(ctx context.Context, peerID peer.ID, msg Message
 		return err
 	}
 	defer s.Close()
+	// `data` stores the value produced by this operation.
 	data, _ := json.Marshal(msg)
 	_, err = s.Write(append(data, '\n'))
 	return err
 }
+
+// libp2pKeyFromEd25519 implements the libp2p key from ed25519 helper.
 func libp2pKeyFromEd25519(priv ed25519.PrivateKey) (lpcrypto.PrivKey, error) {
 	return lpcrypto.UnmarshalEd25519PrivateKey(priv)
 }
@@ -12456,6 +15453,7 @@ func libp2pKeyFromEd25519(priv ed25519.PrivateKey) (lpcrypto.PrivKey, error) {
 /*
 legacy consensus removed
 
+	// subscribeProposals implements the subscribe proposals helper.
 	func (n *Node) subscribeProposals(ctx context.Context) {
 			sub, err := n.TopicProposal.Subscribe()
 			if err != nil {
@@ -12502,6 +15500,8 @@ func (n *Node) setupProtocols() {
 		fmt.Println("Ã°Å¸â€Â§ Network protocols configured")
 	}
 }
+
+// handleConsensusStream handles consensus stream.
 func (n *Node) handleConsensusStream(s network.Stream) {
 	defer s.Close()
 	// =====================================================
@@ -12515,8 +15515,10 @@ func (n *Node) handleConsensusStream(s network.Stream) {
 	// Ã°Å¸â€œâ€“ SETUP READER/WRITER WITH BUFFERING
 	// =====================================================
 	reader := bufio.NewReaderSize(s, 65536) // 64KB buffer
+	// `writer` stores the value produced by this operation.
 	writer := bufio.NewWriterSize(s, 65536)
 	defer writer.Flush()
+	// `normalClose` stores the value produced by this operation.
 	normalClose := false
 	// =====================================================
 	// Ã°Å¸â€â€ž PROCESSING LOOP
@@ -12550,7 +15552,9 @@ func (n *Node) handleConsensusStream(s network.Stream) {
 		if line == "" {
 			continue
 		}
+		// `msg` stores the value used by this operation.
 		var msg Message
+		// `err` stores the error produced by this operation.
 		if err := json.Unmarshal([]byte(line), &msg); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢Å¡Â Ã¯Â¸Â Invalid JSON from %s: %v\n",
@@ -12562,6 +15566,7 @@ func (n *Node) handleConsensusStream(s network.Stream) {
 				Type: "error",
 				Data: []byte(fmt.Sprintf(`{"error":"invalid_json","message":"%v"}`, err)),
 			}
+			// `respData` stores the response produced by this operation.
 			respData, _ := json.Marshal(errorResp)
 			writer.Write(append(respData, '\n'))
 			writer.Flush()
@@ -12599,7 +15604,9 @@ func (n *Node) handleConsensusStream(s network.Stream) {
 				}
 			*/
 			case MsgPeerHello:
+				// `hello` stores the value used by this operation.
 				var hello PeerHello
+				// `err` stores the error produced by this operation.
 				if err := json.Unmarshal(msg.Data, &hello); err == nil {
 					fmt.Printf("   Peer hello: validator=%s\n", ShortID(hello.ValidatorID))
 				}
@@ -12616,7 +15623,9 @@ func (n *Node) handleConsensusStream(s network.Stream) {
 			Type: "ack",
 			Data: []byte(fmt.Sprintf(`{"type":"%s","status":"processed"}`, msg.Type)),
 		}
+		// `ackData` stores the value produced by this operation.
 		ackData, _ := json.Marshal(ack)
+		// `err` stores the error produced by this operation.
 		if _, err := writer.Write(append(ackData, '\n')); err != nil {
 			if DebugNet {
 				fmt.Printf("Ã¢Å¡Â Ã¯Â¸Â Failed to send ack to %s: %v\n",
@@ -12650,46 +15659,56 @@ func (n *Node) handleConsensusStream(s network.Stream) {
 		fmt.Printf("Ã°Å¸â€Å’ Consensus stream closed with %s\n", s.Conn().RemotePeer())
 	}
 }
+
+// joinGossipTopics implements the join gossip topics helper.
 func (n *Node) joinGossipTopics() {
+	// `ctx` stores the context controlling this operation.
 	ctx := n.RootContext()
 	// Block topic
 	blockTopic := TopicBlock
+	// `blockSub` and `err` store the error produced by this operation.
 	blockSub, err := n.PubSub.Subscribe(blockTopic)
 	if err == nil {
 		go n.handleBlockGossip(blockSub)
 	}
 	// Transaction topic
 	txTopic := TopicTx
+	// `txSub` and `err` store the error produced by this operation.
 	txSub, err := n.PubSub.Subscribe(txTopic)
 	if err == nil {
 		go n.handleTransactionGossip(txSub)
 	}
 	// Validator gossip topic
 	valTopic := TopicValidator
+	// `valSub` and `err` store the error produced by this operation.
 	valSub, err := n.PubSub.Subscribe(valTopic)
 	if err == nil {
 		go n.handleValidatorGossip(valSub)
 	}
 	// Snapshot meta gossip topic
 	snapshotMetaTopic := TopicSnapshotMeta
+	// `snapshotMetaSub` and `err` store the error produced by this operation.
 	snapshotMetaSub, err := n.PubSub.Subscribe(snapshotMetaTopic)
 	if err == nil {
 		go n.handleSnapshotMetaGossip(snapshotMetaSub)
 	}
 	// Snapshot chunk gossip topic
 	snapshotChunkTopic := TopicSnapshotChunk
+	// `snapshotChunkSub` and `err` store the error produced by this operation.
 	snapshotChunkSub, err := n.PubSub.Subscribe(snapshotChunkTopic)
 	if err == nil {
 		go n.handleSnapshotChunkGossip(snapshotChunkSub)
 	}
 	// Snapshot proof gossip topic
 	snapshotProofTopic := TopicSnapshotProof
+	// `snapshotProofSub` and `err` store the error produced by this operation.
 	snapshotProofSub, err := n.PubSub.Subscribe(snapshotProofTopic)
 	if err == nil {
 		go n.handleSnapshotProofGossip(snapshotProofSub)
 	}
 	// Consensus gossip topic
 	consensusTopic := TopicConsensus
+	// `consensusSub` and `err` store the error produced by this operation.
 	consensusSub, err := n.PubSub.Subscribe(consensusTopic)
 	if err == nil {
 		go n.handleConsensusGossip(consensusSub)
@@ -12708,11 +15727,14 @@ func (n *Node) joinGossipTopics() {
 	go n.listenTx(ctx)
 	go n.listenConsensus(ctx)
 }
+
+// listenBlocks implements the listen blocks helper.
 func (n *Node) listenBlocks(ctx context.Context) {
 	// =====================================================
 	// Ã°Å¸â€œÂ¡ SUBSCRIPTION INITIALIZATION
 	// =====================================================
 	var sub *pubsub.Subscription
+	// `err` stores the error produced by this operation.
 	var err error
 	// Try BlockTopic first
 	if n.BlockTopic != nil {
@@ -12760,17 +15782,25 @@ func (n *Node) listenBlocks(ctx context.Context) {
 	// Ã°Å¸â€œÅ  METRICS AND STATE
 	// =====================================================
 	var (
-		blockCount  int
+		// `blockCount` stores the block data handled by this operation.
+		blockCount int
+		// `lastLogTime` stores the value used by this operation.
 		lastLogTime = time.Now()
+		// `seenBlockMu` stores the synchronization state protecting shared data.
 		seenBlockMu sync.RWMutex
-		seenBlocks  = make(map[string]time.Time)
-		lastHeight  uint64
+		// `seenBlocks` stores the value used by this operation.
+		seenBlocks = make(map[string]time.Time)
+		// `lastHeight` stores the value used by this operation.
+		lastHeight uint64
+		// `heightJumps` stores the value used by this operation.
 		heightJumps int
 	)
+	// `cleanupDone` stores the value produced by this operation.
 	cleanupDone := make(chan struct{})
 	defer close(cleanupDone)
 	// Cleanup goroutine for seen blocks cache
 	go func() {
+		// `ticker` stores the value produced by this operation.
 		ticker := time.NewTicker(10 * time.Minute)
 		defer ticker.Stop()
 		for {
@@ -12783,7 +15813,9 @@ func (n *Node) listenBlocks(ctx context.Context) {
 				return
 			case <-ticker.C:
 				seenBlockMu.Lock()
+				// `now` stores the value produced by this operation.
 				now := time.Now()
+				// `hash` and `seenTime` track the digest used to identify or verify the related data.
 				for hash, seenTime := range seenBlocks {
 					if now.Sub(seenTime) > 30*time.Minute {
 						delete(seenBlocks, hash)
@@ -12823,6 +15855,7 @@ func (n *Node) listenBlocks(ctx context.Context) {
 				time.Sleep(500 * time.Millisecond) // Longer delay for blocks
 				continue
 			}
+			// `receivedAt` stores the value produced by this operation.
 			receivedAt := time.Now()
 			// =================================================
 			// Ã°Å¸â„¢â€¦ SELF-MESSAGE FILTERING
@@ -12838,12 +15871,16 @@ func (n *Node) listenBlocks(ctx context.Context) {
 			// Ã°Å¸Â§Â© MESSAGE PARSING
 			// =================================================
 			var block Block
+			// `parseErr` stores the error produced by this operation.
 			var parseErr error
 			// Try Message wrapper format first
 			var m Message
+			// `err` stores the error produced by this operation.
 			if err := UnmarshalP2PMessage(msg.Data, &m); err == nil && m.Type != "" {
 				if m.Type == MsgLeaderBlock {
+					// `leader` stores the value used by this operation.
 					var leader Block
+					// `err` stores the error produced by this operation.
 					if err := json.Unmarshal(m.Data, &leader); err == nil {
 						_ = n.submitLeaderBlockOnConsensusLane(leader, msg.ReceivedFrom.String())
 						n.observeBlockPropagation(leader, receivedAt)
@@ -12894,6 +15931,7 @@ func (n *Node) listenBlocks(ctx context.Context) {
 			// Ã°Å¸â€â€ž DEDUPLICATION
 			// =================================================
 			seenBlockMu.RLock()
+			// `seenTime` and `exists` store whether the related condition is satisfied.
 			seenTime, exists := seenBlocks[block.BlockHash]
 			seenBlockMu.RUnlock()
 			if exists && time.Since(seenTime) < 5*time.Minute {
@@ -12942,11 +15980,14 @@ func (n *Node) listenBlocks(ctx context.Context) {
 		}
 	}
 }
+
+// listenTx implements the listen tx helper.
 func (n *Node) listenTx(ctx context.Context) {
 	// =====================================================
 	// Ã°Å¸â€œÂ¡ SUBSCRIPTION INITIALIZATION
 	// =====================================================
 	var sub *pubsub.Subscription
+	// `err` stores the error produced by this operation.
 	var err error
 	// Try TxTopic first, fallback to PubSub
 	if n.TxTopic != nil {
@@ -12995,16 +16036,26 @@ func (n *Node) listenTx(ctx context.Context) {
 	// Ã°Å¸â€œÅ  METRICS AND RATE LIMITING
 	// =====================================================
 	var (
-		txCount             int
-		lastLogTime         = time.Now()
-		globalRate          = TxGossipGlobalRatePerSecond
-		peerRate            = TxGossipPeerRatePerSecond
-		peerBurst           = TxGossipPeerBurst
-		peerLimiterTTL      = TxGossipPeerLimiterTTL
-		seenTxCache         = make(map[string]time.Time)
-		peerLimiters        = make(map[string]*rate.Limiter)
+		// `txCount` stores the transaction data handled by this operation.
+		txCount int
+		// `lastLogTime` stores the value used by this operation.
+		lastLogTime = time.Now()
+		// `globalRate` stores the value used by this operation.
+		globalRate = TxGossipGlobalRatePerSecond
+		// `peerRate` stores the value used by this operation.
+		peerRate = TxGossipPeerRatePerSecond
+		// `peerBurst` stores the value used by this operation.
+		peerBurst = TxGossipPeerBurst
+		// `peerLimiterTTL` stores the value used by this operation.
+		peerLimiterTTL = TxGossipPeerLimiterTTL
+		// `seenTxCache` stores the value used by this operation.
+		seenTxCache = make(map[string]time.Time)
+		// `peerLimiters` stores the value used by this operation.
+		peerLimiters = make(map[string]*rate.Limiter)
+		// `peerLimiterLastSeen` stores the value used by this operation.
 		peerLimiterLastSeen = make(map[string]time.Time)
-		cacheCleanup        = time.NewTicker(5 * time.Minute)
+		// `cacheCleanup` stores the value used by this operation.
+		cacheCleanup = time.NewTicker(5 * time.Minute)
 	)
 	if globalRate <= 0 {
 		globalRate = 1000
@@ -13018,6 +16069,7 @@ func (n *Node) listenTx(ctx context.Context) {
 	if peerLimiterTTL <= 0 {
 		peerLimiterTTL = 10 * time.Minute
 	}
+	// `rateLimiter` stores the value produced by this operation.
 	rateLimiter := rate.NewLimiter(rate.Every(time.Second/time.Duration(globalRate)), globalRate)
 	defer cacheCleanup.Stop()
 	// =====================================================
@@ -13038,11 +16090,13 @@ func (n *Node) listenTx(ctx context.Context) {
 		case <-cacheCleanup.C:
 			// Clean old entries from cache
 			now := time.Now()
+			// `txID` and `seenTime` track the transaction data handled by this operation.
 			for txID, seenTime := range seenTxCache {
 				if now.Sub(seenTime) > 10*time.Minute {
 					delete(seenTxCache, txID)
 				}
 			}
+			// `peerID` and `seenTime` track the current values while iterating.
 			for peerID, seenTime := range peerLimiterLastSeen {
 				if now.Sub(seenTime) > peerLimiterTTL {
 					delete(peerLimiters, peerID)
@@ -13110,10 +16164,13 @@ func (n *Node) listenTx(ctx context.Context) {
 				}
 				continue
 			}
+			// `tx` stores the transaction data handled by this operation.
 			var tx Transaction
+			// `parseErr` stores the error produced by this operation.
 			var parseErr error
 			// Try Message wrapper format first
 			var m Message
+			// `err` stores the error produced by this operation.
 			if err := UnmarshalP2PMessage(msg.Data, &m); err == nil && m.Type == MsgTx {
 				parseErr = UnmarshalTransactionWire(m.Data, &tx)
 			} else {
@@ -13133,6 +16190,15 @@ func (n *Node) listenTx(ctx context.Context) {
 			// Ã°Å¸Å½Â¯ BASIC VALIDATION
 			// =================================================
 			normalizeIncomingTx(&tx)
+			// `err` stores the error produced by this operation.
+			if err := validateRemovedVMEnvelope(tx); err != nil {
+				n.recordPeerSecurityFault(peerKey, "tx_gossip_evm_removed")
+				if DebugNet {
+					fmt.Printf("Invalid removed EVM transaction surface: %v\n", err)
+				}
+				continue
+			}
+			// `err` stores the error produced by this operation.
 			if err := validateTransactionShape(tx); err != nil {
 				n.recordPeerSecurityFault(peerKey, "tx_gossip_shape")
 				if DebugNet {
@@ -13144,10 +16210,12 @@ func (n *Node) listenTx(ctx context.Context) {
 			// Ã°Å¸â€â€ž DEDUPLICATION CACHE
 			// =================================================
 			now := time.Now()
+			// `dedupeID` stores the value produced by this operation.
 			dedupeID := tx.ID
 			if dedupeID == "" {
 				dedupeID = ComputeTxID(tx)
 			}
+			// `seenTime` and `exists` store whether the related condition is satisfied.
 			if seenTime, exists := seenTxCache[dedupeID]; exists {
 				if now.Sub(seenTime) < 1*time.Minute {
 					// Recently seen, skip

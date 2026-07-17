@@ -1,0 +1,154 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email == "admin@msc.com"
+        && request.auth.token.firebase.sign_in_provider == "password";
+    }
+
+    function ownsInfluencerProfile(influencerId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/msc_ambassador_influencers/$(influencerId))
+        && get(/databases/$(database)/documents/msc_ambassador_influencers/$(influencerId)).data.email == request.auth.token.email;
+    }
+
+    function activeAmbassador(code) {
+      return exists(/databases/$(database)/documents/msc_ambassador_ambassadors/$(code))
+        && get(/databases/$(database)/documents/msc_ambassador_ambassadors/$(code)).data.status != "suspended"
+        && get(/databases/$(database)/documents/msc_ambassador_ambassadors/$(code)).data.status != "banned";
+    }
+
+    match /msc_ambassador_applications/{applicationId} {
+      allow create: if request.resource.data.status == "pending"
+        && request.resource.data.email is string
+        && request.resource.data.fullName is string
+        && request.resource.data.followers is int
+        && request.resource.data.followers >= 1000
+        && request.resource.data.followers <= 20000;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_ambassadors/{ambassadorCode} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_influencers/{influencerId} {
+      allow read: if isAdmin() || ownsInfluencerProfile(influencerId);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (ownsInfluencerProfile(influencerId)
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.reputation == resource.data.reputation
+          && request.resource.data.referrals == resource.data.referrals);
+    }
+
+    match /msc_ambassador_referral_codes/{code} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_referrals/{referralId} {
+      allow read: if true;
+      allow create: if request.resource.data.emailHash is string
+        && request.resource.data.code is string
+        && activeAmbassador(request.resource.data.code)
+        && request.resource.data.rewardUser == 10
+        && request.resource.data.rewardAmbassador == 5;
+      allow update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_referral_claims/{referralId} {
+      allow create: if request.resource.data.email is string
+        && request.resource.data.emailHash is string
+        && request.resource.data.userName is string
+        && request.resource.data.code is string
+        && activeAmbassador(request.resource.data.code);
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_influencer_referrals/{referralId} {
+      allow read: if isAdmin() || ownsInfluencerProfile(resource.data.code);
+      allow create: if request.resource.data.emailHash is string
+        && request.resource.data.code is string
+        && activeAmbassador(request.resource.data.code);
+      allow update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_users/{userId} {
+      allow create: if request.resource.data.name is string
+        && request.resource.data.email is string
+        && request.resource.data.emailHash is string
+        && request.resource.data.referredBy is string
+        && activeAmbassador(request.resource.data.referredBy);
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_rewards/{rewardId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.influencerEmail == request.auth.token.email);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_influencer_rewards/{rewardId} {
+      allow read: if isAdmin() || ownsInfluencerProfile(resource.data.code);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_campaigns/{campaignId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_campaign_members/{campaignId_code} {
+      allow read: if isAdmin() || ownsInfluencerProfile(resource.data.code);
+      allow create: if isAdmin()
+        || (request.resource.data.code is string
+          && ownsInfluencerProfile(request.resource.data.code)
+          && get(/databases/$(database)/documents/msc_ambassador_influencers/$(request.resource.data.code)).data.status == "active");
+      allow update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_settings/{settingsId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_announcements/{announcementId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_contacts/{contactId} {
+      allow create: if request.resource.data.email is string
+        && request.resource.data.message is string;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_bug_reports/{reportId} {
+      allow create: if request.resource.data.status == "submitted"
+        && request.resource.data.reportTitle is string
+        && request.resource.data.category is string
+        && request.resource.data.severity in ["low", "medium", "high", "critical"]
+        && request.resource.data.description is string
+        && request.resource.data.stepsToReproduce is string
+        && request.resource.data.expectedResult is string
+        && request.resource.data.actualResult is string
+        && request.resource.data.reporterEmail is string;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /msc_ambassador_admins/{uid} {
+      allow read: if isAdmin() && request.auth.uid == uid;
+      allow create, update: if isAdmin()
+        && request.auth.uid == uid
+        && request.resource.data.email == "admin@msc.com";
+      allow delete: if false;
+    }
+  }
+}

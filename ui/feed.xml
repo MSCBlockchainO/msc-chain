@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>MSC Chain Blog</title>
+    <link>https://mscblockexplorer.in/blog/</link>
+    <description>Research, guides, explainers, and technical references for MSC Chain.</description>
+    <language>en</language>
+    <lastBuildDate>Thu, 18 Jun 2026 00:00:00 GMT</lastBuildDate>
+    <image>
+      <url>https://mscblockexplorer.in/assets/msc-logo-512.png</url>
+      <title>MSC Chain Blog</title>
+      <link>https://mscblockexplorer.in/blog/</link>
+    </image>
+    <item>
+      <title>What Is MSC Chain? A Practical Network Overview</title>
+      <link>https://mscblockexplorer.in/docs/what-is-msc-chain.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/what-is-msc-chain.html</guid>
+      <description>Understand MSC Chain as a Layer-1 blockchain, including its validators, native MSC coin, explorer, wallet, governance, APIs, and verification model.</description>
+      <category>Fundamentals</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Tokenomics: Supply, Fees, Rewards and Burn</title>
+      <link>https://mscblockexplorer.in/docs/msc-tokenomics.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-tokenomics.html</guid>
+      <description>Learn how MSC supply, transaction fees, validator rewards, staking, treasury flows, and burn policy fit into the network economy.</description>
+      <category>Economics</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>How to Run an MSC Validator</title>
+      <link>https://mscblockexplorer.in/docs/run-msc-validator.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/run-msc-validator.html</guid>
+      <description>Plan, install, secure, monitor, and maintain an MSC validator with reliable keys, peers, storage, backups, and upgrade procedures.</description>
+      <category>Operators</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>How to Run an MSC Full Node</title>
+      <link>https://mscblockexplorer.in/docs/run-msc-node.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/run-msc-node.html</guid>
+      <description>Install and operate an MSC full node for independent verification, wallet access, RPC service, explorer support, or network resilience.</description>
+      <category>Operators</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Wallet Guide: Create, Receive and Send Safely</title>
+      <link>https://mscblockexplorer.in/docs/msc-wallet-guide.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-wallet-guide.html</guid>
+      <description>Use the official MSC self-custody wallet to create an account, protect recovery material, receive MSC, send transactions, and review activity.</description>
+      <category>Wallet</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC RPC API Documentation and Integration Guide</title>
+      <link>https://mscblockexplorer.in/docs/msc-rpc-api.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-rpc-api.html</guid>
+      <description>Integrate with MSC Chain through public JSON-RPC, REST, explorer, balance, status, validator, governance, and WebSocket endpoints.</description>
+      <category>Developers</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Explorer Guide: Verify Blocks and Transactions</title>
+      <link>https://mscblockexplorer.in/docs/msc-explorer-guide.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-explorer-guide.html</guid>
+      <description>Learn how to use MSC Explorer to verify blocks, transactions, addresses, validators, network health, tokenomics, and governance.</description>
+      <category>Fundamentals</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Governance: Proposals, Voting and Upgrades</title>
+      <link>https://mscblockexplorer.in/docs/msc-governance.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-governance.html</guid>
+      <description>Understand MSC Chain proposals, voting, treasury context, council boundaries, upgrade activation, and transparent decision evidence.</description>
+      <category>Governance</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Chain Roadmap: Network, Ecosystem and Operations</title>
+      <link>https://mscblockexplorer.in/docs/msc-roadmap.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-roadmap.html</guid>
+      <description>Review the MSC Chain roadmap across consensus reliability, validators, wallets, developer tooling, governance, interoperability, and ecosystem growth.</description>
+      <category>Governance</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Chain Whitepaper: Architecture and Economic Design</title>
+      <link>https://mscblockexplorer.in/docs/msc-whitepaper.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-whitepaper.html</guid>
+      <description>Read a structured guide to MSC Chain architecture, consensus, networking, storage, execution, validator security, economics, and governance.</description>
+      <category>Fundamentals</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Chain vs Ethereum: Technical Comparison</title>
+      <link>https://mscblockexplorer.in/docs/msc-vs-ethereum.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-vs-ethereum.html</guid>
+      <description>Compare MSC Chain and Ethereum across consensus, validators, execution, fees, tooling, decentralization, maturity, and suitable use cases.</description>
+      <category>Comparisons</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Chain vs Solana: Architecture and Use Cases</title>
+      <link>https://mscblockexplorer.in/docs/msc-vs-solana.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-vs-solana.html</guid>
+      <description>Compare MSC Chain and Solana across consensus, execution, performance, validator requirements, tooling, operations, and ecosystem maturity.</description>
+      <category>Comparisons</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Validator Rewards: How Earnings and Costs Work</title>
+      <link>https://mscblockexplorer.in/docs/msc-validator-rewards.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-validator-rewards.html</guid>
+      <description>Understand MSC validator reward sources, eligibility, participation, fees, operating costs, penalties, and responsible return estimates.</description>
+      <category>Economics</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Build DApps on MSC Chain: Architecture and Workflow</title>
+      <link>https://mscblockexplorer.in/docs/build-dapps-on-msc.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/build-dapps-on-msc.html</guid>
+      <description>Plan, build, test, secure, and operate decentralized applications using MSC Chain wallets, transactions, RPC, events, and explorer APIs.</description>
+      <category>Developers</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Explorer Tutorial: A Step-by-Step Walkthrough</title>
+      <link>https://mscblockexplorer.in/docs/msc-explorer-tutorial.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-explorer-tutorial.html</guid>
+      <description>Follow a practical MSC Explorer walkthrough for searching blocks, transactions, addresses, validators, governance, and network status.</description>
+      <category>Fundamentals</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Token Creation Guide: Design Before Deployment</title>
+      <link>https://mscblockexplorer.in/docs/msc-token-creation-guide.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-token-creation-guide.html</guid>
+      <description>Plan an MSC-based token with clear supply, permissions, distribution, metadata, security, testing, and governance decisions.</description>
+      <category>Developers</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Testnet Guide: Wallets, Faucet, Nodes and Testing</title>
+      <link>https://mscblockexplorer.in/docs/msc-testnet-guide.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-testnet-guide.html</guid>
+      <description>Use MSC testnet to create wallets, request test MSC, submit transactions, run nodes, test APIs, and validate applications safely.</description>
+      <category>Developers</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Staking Guide: Validators, Delegation and Risk</title>
+      <link>https://mscblockexplorer.in/docs/msc-staking-guide.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-staking-guide.html</guid>
+      <description>Understand MSC staking, validator selection, delegation, activation, rewards, unstaking, governance, and operational risk.</description>
+      <category>Economics</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Wallet Security: Recovery Phrase and Key Protection</title>
+      <link>https://mscblockexplorer.in/docs/msc-wallet-security.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-wallet-security.html</guid>
+      <description>Protect MSC wallet recovery phrases, private keys, passwords, devices, backups, addresses, and transaction approvals.</description>
+      <category>Wallet</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Node Monitoring: Health, Peers and Finality</title>
+      <link>https://mscblockexplorer.in/docs/msc-node-monitoring.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-node-monitoring.html</guid>
+      <description>Monitor MSC node process health, synchronization, peers, finality, consensus mode, storage, memory, latency, and public RPC service.</description>
+      <category>Operators</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Validator Security: Keys, Sentries and Operations</title>
+      <link>https://mscblockexplorer.in/docs/msc-validator-security.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-validator-security.html</guid>
+      <description>Secure an MSC validator with protected signing keys, restricted RPC, sentry topology, backups, monitoring, access control, and incident response.</description>
+      <category>Operators</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Consensus Explained: Proposers, Votes and Quorum</title>
+      <link>https://mscblockexplorer.in/docs/msc-consensus-explained.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-consensus-explained.html</guid>
+      <description>Understand MSC Chain proposer selection, validator committees, execution results, quorum, block commitment, finality, and recovery behavior.</description>
+      <category>Protocol</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Finality Explained: Confirmations and Safety</title>
+      <link>https://mscblockexplorer.in/docs/msc-finality-explained.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-finality-explained.html</guid>
+      <description>Learn how MSC Chain finalized height, confirmation count, quorum evidence, block age, and network health affect transaction confidence.</description>
+      <category>Protocol</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Transaction Lifecycle: From Signing to Finality</title>
+      <link>https://mscblockexplorer.in/docs/msc-transaction-lifecycle.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-transaction-lifecycle.html</guid>
+      <description>Follow an MSC transaction through creation, signing, submission, mempool admission, block inclusion, execution, receipt, and finality.</description>
+      <category>Protocol</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Transaction Fees: Estimation and Verification</title>
+      <link>https://mscblockexplorer.in/docs/msc-fees-guide.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-fees-guide.html</guid>
+      <description>Understand MSC Chain fee inputs, estimation, payment, proposer and validator distribution, treasury policy, and explorer verification.</description>
+      <category>Economics</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Bridge Guide: Routes, Risks and Verification</title>
+      <link>https://mscblockexplorer.in/docs/msc-bridge-guide.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-bridge-guide.html</guid>
+      <description>Understand MSC bridge readiness, supported routes, lock or mint flows, confirmations, relayers, limits, fees, and security checks.</description>
+      <category>Wallet</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Governance Voting Guide</title>
+      <link>https://mscblockexplorer.in/docs/msc-governance-voting-guide.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-governance-voting-guide.html</guid>
+      <description>Review proposals, understand voting choices, verify wallet readiness, submit a vote, and confirm governance participation on MSC Chain.</description>
+      <category>Governance</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Public Node API and Health Guide</title>
+      <link>https://mscblockexplorer.in/docs/msc-public-node-api.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-public-node-api.html</guid>
+      <description>Use MSC public node discovery and health data to select RPC services, compare height and latency, and implement safe client failover.</description>
+      <category>Developers</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Snapshot and Node Recovery Guide</title>
+      <link>https://mscblockexplorer.in/docs/msc-snapshot-recovery.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-snapshot-recovery.html</guid>
+      <description>Use verified MSC snapshots, manifests, chunks, state commitments, backups, and recovery checks to restore a node safely.</description>
+      <category>Operators</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>MSC Developer Getting Started Guide</title>
+      <link>https://mscblockexplorer.in/docs/msc-developer-getting-started.html</link>
+      <guid isPermaLink="true">https://mscblockexplorer.in/docs/msc-developer-getting-started.html</guid>
+      <description>Set up an MSC Chain development workflow with documentation, testnet wallet, faucet, RPC access, transactions, explorer verification, and monitoring.</description>
+      <category>Developers</category>
+      <pubDate>Thu, 18 Jun 2026 00:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

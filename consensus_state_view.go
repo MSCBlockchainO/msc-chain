@@ -2,6 +2,7 @@ package main
 
 import "strings"
 
+// ensureExecVotesLocked implements the ensure exec votes locked helper.
 func (cs *ConsensusState) ensureExecVotesLocked() {
 	if cs == nil {
 		return
@@ -11,11 +12,13 @@ func (cs *ConsensusState) ensureExecVotesLocked() {
 	}
 }
 
+// clearActiveExecutionViewLocked implements the clear active execution view locked helper.
 func (cs *ConsensusState) clearActiveExecutionViewLocked() {
 	if cs == nil {
 		return
 	}
 	cs.ensureExecVotesLocked()
+	// `blockHash` tracks the block data handled by this operation.
 	for blockHash := range cs.ExecVotes {
 		delete(cs.ExecVotes, blockHash)
 	}
@@ -25,11 +28,13 @@ func (cs *ConsensusState) clearActiveExecutionViewLocked() {
 	cs.Committed = false
 }
 
+// RecordExecVote implements the record exec vote helper.
 func (cs *ConsensusState) RecordExecVote(height uint64, blockHash string, vote ExecutionResult) bool {
 	if cs == nil || height == 0 {
 		return false
 	}
 	blockHash = strings.TrimSpace(blockHash)
+	// `signer` stores the value produced by this operation.
 	signer := normalizeValidatorID(vote.Signer)
 	if blockHash == "" || signer == "" {
 		return false
@@ -40,6 +45,7 @@ func (cs *ConsensusState) RecordExecVote(height uint64, blockHash string, vote E
 		return false
 	}
 	cs.ensureExecVotesLocked()
+	// `ok` stores whether the related condition is satisfied.
 	if _, ok := cs.ExecVotes[blockHash]; !ok {
 		cs.ExecVotes[blockHash] = make(map[string]ExecutionResult)
 	}
@@ -51,6 +57,7 @@ func (cs *ConsensusState) RecordExecVote(height uint64, blockHash string, vote E
 	return true
 }
 
+// SetLockedBlock sets locked block.
 func (cs *ConsensusState) SetLockedBlock(height uint64, blockHash string, round uint32) bool {
 	if cs == nil || height == 0 {
 		return false
@@ -71,6 +78,7 @@ func (cs *ConsensusState) SetLockedBlock(height uint64, blockHash string, round 
 	return true
 }
 
+// ClearLockedBlock clears locked block.
 func (cs *ConsensusState) ClearLockedBlock(height uint64) bool {
 	if cs == nil || height == 0 {
 		return false
@@ -86,6 +94,7 @@ func (cs *ConsensusState) ClearLockedBlock(height uint64) bool {
 	return true
 }
 
+// MarkCommitted marks committed.
 func (cs *ConsensusState) MarkCommitted(height uint64) bool {
 	if cs == nil || height == 0 {
 		return false
@@ -99,6 +108,7 @@ func (cs *ConsensusState) MarkCommitted(height uint64) bool {
 	return true
 }
 
+// mirrorConsensusExecVote implements the mirror consensus exec vote helper.
 func (n *Node) mirrorConsensusExecVote(height uint64, blockHash string, vote ExecutionResult) bool {
 	if n == nil || n.Consensus == nil {
 		return false
@@ -106,10 +116,12 @@ func (n *Node) mirrorConsensusExecVote(height uint64, blockHash string, vote Exe
 	return n.Consensus.RecordExecVote(height, blockHash, vote)
 }
 
+// syncConsensusLockedBlock implements the sync consensus locked block helper.
 func (n *Node) syncConsensusLockedBlock(block Block) bool {
 	if n == nil || n.Consensus == nil || block.ID == 0 {
 		return false
 	}
+	// `ok` stores whether the related condition is satisfied.
 	ok := n.Consensus.SetLockedBlock(block.ID, block.BlockHash, block.Round)
 	if ok {
 		n.persistConsensusSafetyStateAsync("locked_block")
@@ -124,10 +136,12 @@ func (n *Node) syncConsensusLockedBlock(block Block) bool {
 	return ok
 }
 
+// clearConsensusLockedBlock implements the clear consensus locked block helper.
 func (n *Node) clearConsensusLockedBlock(height uint64) bool {
 	if n == nil || n.Consensus == nil {
 		return false
 	}
+	// `ok` stores whether the related condition is satisfied.
 	ok := n.Consensus.ClearLockedBlock(height)
 	if ok {
 		n.persistConsensusSafetyStateAsync("clear_locked_block")
@@ -140,10 +154,12 @@ func (n *Node) clearConsensusLockedBlock(height uint64) bool {
 	return ok
 }
 
+// markConsensusCommittedHeight implements the mark consensus committed height helper.
 func (n *Node) markConsensusCommittedHeight(height uint64) bool {
 	if n == nil || n.Consensus == nil {
 		return false
 	}
+	// `ok` stores whether the related condition is satisfied.
 	ok := n.Consensus.MarkCommitted(height)
 	if ok {
 		n.persistConsensusSafetyStateAsync("consensus_committed")

@@ -3,18 +3,33 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MSC Wallet Security</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="wallet_pages.css?v=20260602h" />
+  <title>MSC Wallet Security - Protect Keys and Recovery Words</title>
+  <meta name="description" content="Learn how to secure an MSC wallet, recovery phrase, private keys, passwords, devices, and transaction approvals." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/security.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Wallet Security - Protect Keys and Recovery Words" />
+  <meta property="og:description" content="Learn how to secure an MSC wallet, recovery phrase, private keys, passwords, devices, and transaction approvals." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/security.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Wallet Security - Protect Keys and Recovery Words" />
+  <meta name="twitter:description" content="Learn how to secure an MSC wallet, recovery phrase, private keys, passwords, devices, and transaction approvals." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
 </head>
 <body data-page="security">
   <main class="content">
     <section class="page-hero">
       <div class="eyebrow">Key Safety</div>
       <h1>Security</h1>
-      <p class="muted">Wallet encryption, backup status, MPC, HSM, and session status.</p>
+      <p class="muted">Wallet encryption, seed backup status, recovery kit export, backup verification, and session status.</p>
     </section>
     <section class="grid">
       <div class="card"><div class="label">Wallet Encryption</div><div id="securityEncryption" class="value">-</div></div>
@@ -24,9 +39,84 @@
       <div class="card"><div class="label">Session Status</div><div id="securitySession" class="value">-</div></div>
       <div class="card"><div class="label">RPC Policy</div><div class="value">Full-node gateway</div></div>
     </section>
+    <section class="recovery-grid">
+      <div class="card">
+        <div class="section-title">
+          <div>
+            <div class="label">Recovery Kit</div>
+            <h2>Encrypted JSON backup</h2>
+          </div>
+          <span id="recoveryKitState" class="pill">-</span>
+        </div>
+        <p class="muted">Downloads your encrypted wallet data, public address, encrypted private key, and encrypted seed backup when available.</p>
+        <button id="downloadRecoveryKit" class="primary" type="button"><i data-lucide="download"></i>Download Recovery Kit</button>
+        <div id="recoveryKitStatus" class="safe-note">Store the kit offline with your password. The password is not inside the file.</div>
+      </div>
+      <div class="card danger-zone">
+        <div class="section-title">
+          <div>
+            <div class="label">Seed Phrase</div>
+            <h2>Reveal encrypted seed</h2>
+          </div>
+          <span id="recoverySeedState" class="pill">-</span>
+        </div>
+        <form id="revealRecoverySeedForm">
+          <div class="field"><label for="recoverySeedPassword">Wallet password</label><input id="recoverySeedPassword" type="password" autocomplete="current-password" /></div>
+          <button type="submit"><i data-lucide="eye"></i>Reveal Seed</button>
+        </form>
+        <div class="field">
+          <label for="recoveryPhraseOutput">Seed phrase output</label>
+          <textarea id="recoveryPhraseOutput" class="seed-entry-textarea" rows="3" readonly placeholder="Seed phrase appears here only after password verification."></textarea>
+        </div>
+        <div class="action-row">
+          <button id="copyRecoveryPhrase" type="button"><i data-lucide="copy"></i>Copy</button>
+          <button id="downloadRecoveryPhrase" type="button"><i data-lucide="download"></i>Download Text</button>
+        </div>
+        <div id="recoverySeedStatus" class="safe-note">Only reveal seed words in a private offline-safe place.</div>
+      </div>
+      <div class="card">
+        <div class="section-title">
+          <div>
+            <div class="label">Backup Drill</div>
+            <h2>Verify seed matches this wallet</h2>
+          </div>
+        </div>
+        <form id="verifySeedForm">
+          <div class="field">
+            <div class="field-head"><label for="verifySeedPhrase">Seed phrase</label><span id="verifySeedCounter" class="seed-counter">0/12 words</span></div>
+            <textarea id="verifySeedPhrase" class="seed-entry-textarea" rows="3" autocomplete="off" spellcheck="false" placeholder="Enter your saved 12 or 24 words"></textarea>
+            <div id="verifySeedWordChips" class="seed-word-preview"><em>No seed words entered.</em></div>
+          </div>
+          <button type="submit"><i data-lucide="shield-check"></i>Verify Backup</button>
+        </form>
+        <div id="verifySeedStatus" class="safe-note">Verification derives the address locally and compares it with your current wallet.</div>
+      </div>
+    </section>
+    <section class="card">
+      <div class="section-title">
+        <div>
+          <div class="label">Production Ready</div>
+          <h2>Security Features</h2>
+        </div>
+      </div>
+      <div class="security-feature-list">
+        <span><i data-lucide="check-circle"></i>12/24 Word Mnemonic</span>
+        <span><i data-lucide="check-circle"></i>Seed Phrase Recovery</span>
+        <span><i data-lucide="check-circle"></i>Encrypted Recovery Kit</span>
+        <span><i data-lucide="check-circle"></i>Offline Backup Verification</span>
+        <span><i data-lucide="check-circle"></i>AES-256 Wallet Encryption</span>
+        <span><i data-lucide="check-circle"></i>Password Protection</span>
+        <span><i data-lucide="check-circle"></i>Biometric Login</span>
+        <span><i data-lucide="check-circle"></i>Hardware Wallet Support</span>
+        <span><i data-lucide="check-circle"></i>Offline Signing</span>
+        <span><i data-lucide="check-circle"></i>QR Import/Export</span>
+        <span><i data-lucide="check-circle"></i>Multi-Sig Wallet</span>
+        <span><i data-lucide="check-circle"></i>MPC Wallet (Future)</span>
+      </div>
+    </section>
   </main>
   <script src="vendor/nacl.min.js"></script>
   <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
-  <script src="wallet_pages.js?v=20260603a"></script>
+  <script src="wallet_pages.js?v=20260714-vmremoved"></script>
 </body>
 </html>

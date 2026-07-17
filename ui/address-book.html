@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSC Address Book - Trusted Wallet Contacts</title>
+  <meta name="description" content="Save and manage trusted MSC Chain wallet addresses for safer transfers from the official self-custody wallet." />
+  <meta name="robots" content="noindex,follow" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/address-book.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Address Book - Trusted Wallet Contacts" />
+  <meta property="og:description" content="Save and manage trusted MSC Chain wallet addresses for safer transfers from the official self-custody wallet." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/address-book.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Address Book - Trusted Wallet Contacts" />
+  <meta name="twitter:description" content="Save and manage trusted MSC Chain wallet addresses for safer transfers from the official self-custody wallet." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
+</head>
+<body data-page="address-book">
+  <main class="content">
+    <section class="page-hero">
+      <div class="eyebrow">Contacts</div>
+      <h1>Address Book</h1>
+      <p class="muted">Save trusted MSC addresses locally in this browser for faster send and receive workflows.</p>
+    </section>
+    <section class="two-col">
+      <div class="card">
+        <div id="addressBookStatus" class="pill">Ready</div>
+        <form id="addressBookForm">
+          <div class="field"><label for="contactName">Name</label><input id="contactName" placeholder="Validator payout, exchange, friend" /></div>
+          <div class="field"><label for="contactAddress">MSC Address</label><input id="contactAddress" placeholder="MSC..." /></div>
+          <button class="primary" type="submit"><i data-lucide="plus-circle"></i>Save Contact</button>
+        </form>
+      </div>
+      <div class="card">
+        <div class="section-title">
+          <div>
+            <div class="label">Saved Contacts</div>
+            <h2>Local address list</h2>
+          </div>
+        </div>
+        <div id="addressBookList" class="list"><div class="list-item">Loading contacts.</div></div>
+      </div>
+    </section>
+  </main>
+  <script src="vendor/nacl.min.js"></script>
+  <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
+  <script src="wallet_pages.js?v=20260714-vmremoved"></script>
+</body>
+</html>

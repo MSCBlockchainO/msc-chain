@@ -3,24 +3,57 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Send MSC</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="wallet_pages.css?v=20260602h" />
+  <title>Send MSC - Prepare a Secure Wallet Transfer</title>
+  <meta name="description" content="Prepare and review an MSC Chain transfer with recipient, amount, fee, password, and confirmation checks." />
+  <meta name="robots" content="noindex,follow" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/send.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="Send MSC - Prepare a Secure Wallet Transfer" />
+  <meta property="og:description" content="Prepare and review an MSC Chain transfer with recipient, amount, fee, password, and confirmation checks." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/send.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Send MSC - Prepare a Secure Wallet Transfer" />
+  <meta name="twitter:description" content="Prepare and review an MSC Chain transfer with recipient, amount, fee, password, and confirmation checks." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
 </head>
 <body data-page="send">
   <main class="content">
     <section class="page-hero">
       <div class="eyebrow">Transfer</div>
-      <h1>Send</h1>
-      <p class="muted">Create, sign, and submit an MSC transaction from your unlocked browser wallet.</p>
+      <h1>Send MSC</h1>
+      <p class="muted">Enter the recipient and amount. You will need to unlock your wallet before sending.</p>
     </section>
     <section class="card">
       <div id="sendStatus" class="pill">Ready</div>
       <form id="sendForm">
         <div class="field"><label>From</label><input id="sendFrom" readonly /></div>
-        <div class="field"><label for="sendTo">Recipient Address</label><input id="sendTo" placeholder="MSC..." /></div>
+        <div class="field"><label for="sendTo">Recipient Address</label><input id="sendTo" placeholder="MSC..." autocomplete="off" autocapitalize="off" spellcheck="false" /></div>
+        <div class="qr-scan-card">
+          <div class="section-head">
+            <div>
+              <div class="label">QR Scan</div>
+              <strong>Fill recipient from QR</strong>
+            </div>
+            <span id="qrScanStatus" class="pill" role="status" aria-live="polite">Idle</span>
+          </div>
+          <div class="qr-scan-actions">
+            <button id="startQrScan" type="button"><i data-lucide="scan-line"></i>Scan Camera</button>
+            <button id="stopQrScan" type="button" hidden><i data-lucide="square"></i>Stop</button>
+            <label class="button" for="qrImageUpload"><i data-lucide="upload"></i>Upload QR</label>
+            <input id="qrImageUpload" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload a QR code image" hidden />
+          </div>
+          <video id="qrScanVideo" class="qr-scan-video" aria-label="QR camera preview" playsinline muted hidden></video>
+          <canvas id="qrScanCanvas" hidden></canvas>
+          <div id="qrScanResult" class="result" role="status" aria-live="polite">Scan a wallet QR or upload a QR image. Address will auto-fill after you confirm it.</div>
+        </div>
         <div class="row">
           <div class="field"><label for="sendAmount">Amount</label><input id="sendAmount" type="number" min="1" value="10" /></div>
           <div class="field"><label for="sendCoin">Coin</label><input id="sendCoin" value="MSC" /></div>
@@ -30,12 +63,14 @@
           <div><div class="label">Total</div><strong id="sendTotal">11 MSC</strong></div>
           <div><div class="label">Network</div><strong>91938</strong></div>
         </div>
-        <button class="primary" type="submit">Send Transaction</button>
+        <div class="safe-note">Double-check the recipient address. Blockchain transfers cannot be undone.</div>
+        <button class="primary" type="submit"><i data-lucide="send"></i>Send MSC</button>
       </form>
     </section>
   </main>
   <script src="vendor/nacl.min.js"></script>
   <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
-  <script src="wallet_pages.js?v=20260603a"></script>
+  <script src="vendor/jsQR.js?v=20260711a"></script>
+  <script src="wallet_pages.js?v=20260716-qr1"></script>
 </body>
 </html>

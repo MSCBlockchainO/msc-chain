@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MSC Validators - Performance, Quorum and Uptime</title>
+  <meta name="description" content="Compare MSC Chain validators by status, participation, stake, performance, quorum readiness, and reliability." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://explorer.mscblockexplorer.in/explorer-validators.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Validators - Performance, Quorum and Uptime" />
+  <meta property="og:description" content="Compare MSC Chain validators by status, participation, stake, performance, quorum readiness, and reliability." />
+  <meta property="og:url" content="https://explorer.mscblockexplorer.in/explorer-validators.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Validators - Performance, Quorum and Uptime" />
+  <meta name="twitter:description" content="Compare MSC Chain validators by status, participation, stake, performance, quorum readiness, and reliability." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="explorer.css?v=20260713b" />
+</head>
+<body data-explorer-page="validators">
+  <main class="explorer-content">
+    <section class="page-heading">
+      <div><div class="eyebrow">Consensus</div><h1>Validators</h1><p>Monitor validator readiness, committee membership, pending changes, and quorum requirements.</p></div>
+      <a class="button" href="portal/validator.html"><i data-lucide="server-cog"></i>Run validator</a>
+    </section>
+
+    <nav class="page-tabs" aria-label="Validator sections"><a href="#active-validators">Active validators</a><a href="#validator-performance">Performance</a><a href="#validator-uptime">Uptime</a><a href="#voting-power">Voting power</a></nav>
+
+    <section class="metric-grid">
+      <article class="metric"><div class="metric-top"><span>Active committee</span><span class="metric-icon"><i data-lucide="shield"></i></span></div><div id="validatorTotal" class="metric-value">-</div><div class="metric-foot">Epoch-frozen consensus set</div></article>
+      <article id="validator-uptime" class="metric"><div class="metric-top"><span>Online</span><span class="metric-icon"><i data-lucide="circle-check-big"></i></span></div><div id="validatorOnline" class="metric-value">-</div><div class="metric-foot">Live heartbeat</div></article>
+      <article class="metric"><div class="metric-top"><span>Offline</span><span class="metric-icon"><i data-lucide="circle-x"></i></span></div><div id="validatorOffline" class="metric-value">-</div><div class="metric-foot">Missing heartbeat</div></article>
+      <article class="metric"><div class="metric-top"><span>Pending changes</span><span class="metric-icon"><i data-lucide="git-pull-request-arrow"></i></span></div><div id="validatorPending" class="metric-value">-</div><div class="metric-foot">Applied at the epoch boundary</div></article>
+    </section>
+
+    <section id="validator-performance" class="chart-grid compact">
+      <div id="validatorQuorumDonut" class="chart-card"></div>
+      <div id="validatorReadinessChart" class="chart-card wide"></div>
+      <div id="validatorPendingChart" class="chart-card"></div>
+    </section>
+
+    <section class="workspace">
+      <div id="active-validators" class="panel">
+        <div class="panel-head"><h2>Validator roster</h2><span class="badge good">Live state</span></div>
+        <div id="validatorList" class="validator-list"><div class="empty-state">Loading validators...</div></div>
+      </div>
+      <aside id="voting-power" class="panel">
+        <div class="panel-head"><h2>Quorum summary</h2><span id="metricMode" class="badge">-</span></div>
+        <div id="quorumSummary" class="side-stack"><div class="empty-state">Loading quorum...</div></div>
+      </aside>
+    </section>
+  </main>
+  <script defer src="vendor/lucide.min.js?v=20260618a"></script>
+  <script defer src="explorer.js?v=20260716a"></script>
+</body>
+</html>

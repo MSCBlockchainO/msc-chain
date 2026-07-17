@@ -1,0 +1,27 @@
+{
+  "version": "msc-bridge-dtl-authority-snapshot-v1",
+  "captured_at_unix": 0,
+  "msc_height": 0,
+  "msc_state_root": "REPLACE_WITH_64_HEX_STATE_ROOT",
+  "token_id": "REPLACE_WITH_MSC_WRAPPED_TOKEN_ID",
+  "local_denom": "mscUSDT",
+  "symbol": "mscUSDT",
+  "decimals": 6,
+  "total_supply_raw": "0",
+  "max_supply_raw": "REPLACE_WITH_MAX_SUPPLY_RAW",
+  "paused": true,
+  "authority_signers": [
+    "REPLACE_WITH_MSC_ADDRESS_1",
+    "REPLACE_WITH_MSC_ADDRESS_2",
+    "REPLACE_WITH_MSC_ADDRESS_3",
+    "REPLACE_WITH_MSC_ADDRESS_4",
+    "REPLACE_WITH_MSC_ADDRESS_5"
+  ],
+  "authority_threshold": 4,
+  "attestations": [
+    { "address": "REPLACE_WITH_MSC_ADDRESS_1", "public_key": "REPLACE_WITH_DTL_ED25519_PUBLIC_KEY_1", "signature": "REPLACE_WITH_ED25519_SIGNATURE_1" },
+    { "address": "REPLACE_WITH_MSC_ADDRESS_2", "public_key": "REPLACE_WITH_DTL_ED25519_PUBLIC_KEY_2", "signature": "REPLACE_WITH_ED25519_SIGNATURE_2" },
+    { "address": "REPLACE_WITH_MSC_ADDRESS_3", "public_key": "REPLACE_WITH_DTL_ED25519_PUBLIC_KEY_3", "signature": "REPLACE_WITH_ED25519_SIGNATURE_3" },
+    { "address": "REPLACE_WITH_MSC_ADDRESS_4", "public_key": "REPLACE_WITH_DTL_ED25519_PUBLIC_KEY_4", "signature": "REPLACE_WITH_ED25519_SIGNATURE_4" }
+  ]
+}

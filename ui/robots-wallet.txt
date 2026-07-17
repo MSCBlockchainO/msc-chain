@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /create-wallet.html
+Disallow: /login.html
+Disallow: /send.html
+Disallow: /receive.html
+Disallow: /transactions.html
+Disallow: /settings.html
+
+Sitemap: https://wallet.mscblockexplorer.in/sitemap.xml

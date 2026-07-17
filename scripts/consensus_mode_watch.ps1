@@ -1,5 +1,5 @@
 param(
-    [string]$Target = "https://mscblockexplorer.in",
+    [string]$Target = "https://explorer.mscblockexplorer.in",
     [int]$DurationSeconds = 180,
     [int]$IntervalSeconds = 2,
     [int]$MaxErrors = 3,

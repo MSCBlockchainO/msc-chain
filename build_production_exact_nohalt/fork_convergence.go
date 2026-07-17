@@ -1,0 +1,168 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+const tipHashConvergenceLogCooldown = 10 * time.Second
+
+func (n *Node) maybeConvergeTipFromPeerHello(peerAddr string, hello PeerHello) {
+	if n == nil || n.Blockchain == nil || hello.Height == 0 {
+		return
+	}
+	peerTip := strings.TrimSpace(hello.TipHash)
+	if peerTip == "" {
+		return
+	}
+	localHeight := n.Blockchain.Height()
+	if hello.Height != localHeight || localHeight <= 1 {
+		return
+	}
+	localTip := strings.TrimSpace(n.Blockchain.LastBlock().BlockHash)
+	if localTip == "" || strings.EqualFold(localTip, peerTip) {
+		return
+	}
+
+	type voteInfo struct {
+		votes int
+		peers []string
+	}
+	counts := make(map[string]*voteInfo)
+	totalSamples := 1
+	counts[localTip] = &voteInfo{votes: 1, peers: []string{"self"}}
+
+	n.peerStateMu.Lock()
+	for pid, height := range n.peerAckHeight {
+		if height != localHeight || !n.peerHelloOK[pid] {
+			continue
+		}
+		hash := strings.TrimSpace(n.peerTipHash[pid])
+		if hash == "" {
+			continue
+		}
+		info := counts[hash]
+		if info == nil {
+			info = &voteInfo{}
+			counts[hash] = info
+		}
+		info.votes++
+		info.peers = append(info.peers, pid)
+		totalSamples++
+	}
+	n.peerStateMu.Unlock()
+
+	bestHash := ""
+	bestVotes := 0
+	bestPeers := []string(nil)
+	localVotes := counts[localTip].votes
+	for hash, info := range counts {
+		if strings.EqualFold(hash, localTip) {
+			continue
+		}
+		if info.votes > bestVotes || (info.votes == bestVotes && hash < bestHash) {
+			bestHash = hash
+			bestVotes = info.votes
+			bestPeers = info.peers
+		}
+	}
+	if bestHash == "" || bestVotes <= localVotes || bestVotes*2 <= totalSamples {
+		return
+	}
+
+	key := fmt.Sprintf("tip_hash_convergence:%d:%s", localHeight, bestHash)
+	if !n.shouldLogLivenessReason(key, tipHashConvergenceLogCooldown) {
+		return
+	}
+	fmt.Printf("[FORK-CONVERGE] local=%d local_tip=%s local_votes=%d best_tip=%s best_votes=%d samples=%d trigger_peer=%s peers=%d action=rewind_and_sync\n",
+		localHeight,
+		ShortHash(localTip),
+		localVotes,
+		ShortHash(bestHash),
+		bestVotes,
+		totalSamples,
+		ShortID(peerAddr),
+		len(bestPeers),
+	)
+
+	if n.rewindLocalChainToHeight(localHeight-1, "tip_hash_majority") {
+		n.maybeSyncToBestObservedHeight("tip_hash_majority_rewind")
+		n.maybeRecoverMissingBlock(localHeight, "tip_hash_majority_rewind")
+	}
+}
+
+func (n *Node) maybeConvergeTipFromLeaderPrev(sourcePeer string, block Block, reason string) {
+	if n == nil || n.Blockchain == nil || block.ID == 0 {
+		return
+	}
+	prevHash := strings.TrimSpace(block.PrevHash)
+	if prevHash == "" {
+		return
+	}
+	localHeight := n.Blockchain.Height()
+	if block.ID != localHeight+1 || localHeight <= 1 {
+		return
+	}
+	localTip := strings.TrimSpace(n.Blockchain.LastBlock().BlockHash)
+	if localTip == "" || strings.EqualFold(localTip, prevHash) {
+		return
+	}
+
+	peerKey := strings.TrimSpace(sourcePeer)
+	if peerKey == "" {
+		proposer := normalizeValidatorID(block.Proposer)
+		if proposer != "" {
+			n.peerStateMu.Lock()
+			for existingPeer, validatorID := range n.peerToValidator {
+				if normalizeValidatorID(validatorID) != proposer {
+					continue
+				}
+				if n.peerAckHeight[existingPeer] == localHeight && strings.EqualFold(strings.TrimSpace(n.peerTipHash[existingPeer]), prevHash) {
+					n.peerStateMu.Unlock()
+					n.maybeConvergeTipFromPeerHello(existingPeer, PeerHello{
+						Height:  localHeight,
+						TipHash: prevHash,
+					})
+					return
+				}
+			}
+			n.peerStateMu.Unlock()
+		}
+		peerKey = fmt.Sprintf("proposal:%s:%d:%d:%s", proposer, block.ID, block.Round, strings.TrimSpace(block.BlockHash))
+	}
+	n.peerStateMu.Lock()
+	if n.peerTipHash == nil {
+		n.peerTipHash = make(map[string]string)
+	}
+	if n.peerAckHeight == nil {
+		n.peerAckHeight = make(map[string]uint64)
+	}
+	if n.peerHelloOK == nil {
+		n.peerHelloOK = make(map[string]bool)
+	}
+	n.peerTipHash[peerKey] = prevHash
+	n.peerAckHeight[peerKey] = localHeight
+	n.peerHelloOK[peerKey] = true
+	n.peerStateMu.Unlock()
+
+	if reason = strings.TrimSpace(reason); reason == "" {
+		reason = "leader_prev_mismatch"
+	}
+	key := fmt.Sprintf("tip_hash_observed_prev:%d:%s:%s", localHeight, prevHash, reason)
+	if n.shouldLogLivenessReason(key, tipHashConvergenceLogCooldown) {
+		fmt.Printf("[FORK-CONVERGE] local=%d local_tip=%s observed_tip=%s source=%s proposer=%s block=%s reason=%s action=sample\n",
+			localHeight,
+			ShortHash(localTip),
+			ShortHash(prevHash),
+			ShortID(sourcePeer),
+			ShortID(block.Proposer),
+			ShortHash(block.BlockHash),
+			reason,
+		)
+	}
+	n.maybeConvergeTipFromPeerHello(peerKey, PeerHello{
+		Height:  localHeight,
+		TipHash: prevHash,
+	})
+}

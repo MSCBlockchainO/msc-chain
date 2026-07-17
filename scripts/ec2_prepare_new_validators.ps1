@@ -136,7 +136,7 @@ echo "[ready] node=\$NODE_ID mpc_public_key=\$PUBKEY"
 echo "[logs] tail -f ~/msc-chain/runtime-logs/distributed/\$NODE_ID.node.log"
 echo "[sync check] ./msc-node sync-status --rpc http://127.0.0.1:\$RPC_PORT"
 echo "[activate only after synced]"
-echo "  ./msc-node stake --wallet ~/.msc/secure_wallet.json --validator \$NODE_ID --validator-pubkey \$PUBKEY --amount 100 --rpc https://mscblockexplorer.in"
+echo "  ./msc-node stake --wallet ~/.msc/secure_wallet.json --validator \$NODE_ID --validator-pubkey \$PUBKEY --amount 100 --rpc https://wallet.mscblockexplorer.in"
 echo "[activation order] H -> wait stable -> I -> wait stable -> J -> wait stable -> K"
 '@
 

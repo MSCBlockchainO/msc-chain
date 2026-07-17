@@ -22,7 +22,7 @@ fi
 
 main_pid="$(
   ps -eo pid=,args= |
-    awk -v id="$NODE_ID" '$0 ~ /\.\/msc-node --mode=full/ && $0 ~ ("--id=" id "([[:space:]]|$)") {print $1; exit}'
+    awk -v id="$NODE_ID" '$0 ~ /(^|[[:space:]\/])msc-node([[:space:]]|$)/ && $0 ~ /--mode=full([[:space:]]|$)/ && $0 ~ ("--id=" id "([[:space:]]|$)") {print $1; exit}'
 )"
 if [[ -z "$main_pid" || ! -r "/proc/$main_pid/cmdline" ]]; then
   printf 'no running node command found for id=%s\n' "$NODE_ID" >&2
@@ -93,7 +93,7 @@ done
 kill -KILL "$main_pid" 2>/dev/null || true
 
 for _ in $(seq 1 10); do
-  if ! ps -eo args= | awk -v id="$NODE_ID" '$0 ~ /\.\/msc-node --mode=full/ && $0 ~ ("--id=" id "([[:space:]]|$)") {found=1} END {exit found ? 0 : 1}'; then
+  if ! ps -eo args= | awk -v id="$NODE_ID" '$0 ~ /(^|[[:space:]\/])msc-node([[:space:]]|$)/ && $0 ~ /--mode=full([[:space:]]|$)/ && $0 ~ ("--id=" id "([[:space:]]|$)") {found=1} END {exit found ? 0 : 1}'; then
     break
   fi
   sleep 1

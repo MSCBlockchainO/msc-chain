@@ -3,11 +3,26 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MSC Public Status</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="wallet_pages.css?v=20260603b" />
+  <title>MSC Wallet Network Status - RPC, Nodes and Finality</title>
+  <meta name="description" content="Check MSC wallet connectivity, RPC health, public nodes, finality, block age, and consensus status." />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+  <meta name="theme-color" content="#05070c" />
+  <link rel="canonical" href="https://wallet.mscblockexplorer.in/status.html" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="MSC Chain" />
+  <meta property="og:title" content="MSC Wallet Network Status - RPC, Nodes and Finality" />
+  <meta property="og:description" content="Check MSC wallet connectivity, RPC health, public nodes, finality, block age, and consensus status." />
+  <meta property="og:url" content="https://wallet.mscblockexplorer.in/status.html" />
+  <meta property="og:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <meta property="og:image:alt" content="MSC Chain logo" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="MSC Wallet Network Status - RPC, Nodes and Finality" />
+  <meta name="twitter:description" content="Check MSC wallet connectivity, RPC health, public nodes, finality, block age, and consensus status." />
+  <meta name="twitter:image" content="https://mscblockexplorer.in/assets/msc-logo-512.png" />
+  <link rel="icon" type="image/png" href="assets/msc-app-icon-64.png" />
+  <link rel="apple-touch-icon" href="assets/msc-app-icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="wallet_pages.css?v=20260713c" />
 </head>
 <body data-page="status">
   <main class="content">
@@ -24,6 +39,12 @@
       <div class="card"><div class="label">Last Block Age</div><div id="statusLastBlockAge" class="value">-</div></div>
       <div class="card"><div class="label">CMD</div><div id="statusCMD" class="value">-</div></div>
       <div class="card"><div class="label">Network</div><div id="statusNetwork" class="value">-</div></div>
+    </section>
+
+    <section class="wallet-chart-grid compact">
+      <div id="statusFinalityChart" class="chart-card"></div>
+      <div id="statusRpcChart" class="chart-card wide"></div>
+      <div id="statusServiceChart" class="chart-card"></div>
     </section>
 
     <section class="grid">
@@ -75,6 +96,6 @@
   </main>
   <script src="vendor/nacl.min.js"></script>
   <script src="vendor/msc_crypto_fallback.js?v=20260524b"></script>
-  <script src="wallet_pages.js?v=20260603b"></script>
+  <script src="wallet_pages.js?v=20260714-vmremoved"></script>
 </body>
 </html>
